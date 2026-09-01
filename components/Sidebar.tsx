@@ -28,7 +28,7 @@ export default function Sidebar({ role, currentPath }: SidebarProps) {
   const navItems = [
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, roles: ["ceo", "hr"] },
     { name: "Employees", href: "/dashboard/employees", icon: Users, roles: ["ceo", "hr"] },
-    { name: "Add Employee", href: "/dashboard/employees/new", icon: UserPlus, roles: ["hr"] },
+    { name: "Add Employee", href: "/dashboard/employees/add", icon: UserPlus, roles: ["hr"] },
   ];
 
   const visibleItems = navItems.filter(item => item.roles.includes(role));
@@ -44,7 +44,11 @@ export default function Sidebar({ role, currentPath }: SidebarProps) {
 
       <div className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
         {visibleItems.map((item) => {
-          const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
+          const isEmployeeSection = item.href === "/dashboard/employees";
+          const isEmployeeChild = isEmployeeSection && pathname.startsWith(`${item.href}/`)
+            && !pathname.startsWith(`${item.href}/add`)
+            && !pathname.startsWith(`${item.href}/new`);
+          const isActive = pathname === item.href || isEmployeeChild;
           return (
             <Link
               key={item.name}

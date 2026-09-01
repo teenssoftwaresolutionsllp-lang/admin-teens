@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { v2 as cloudinary } from 'cloudinary';
 import { createClient } from '@/lib/supabase-server';
+import { revalidatePath } from 'next/cache';
 
 cloudinary.config({
   cloud_name: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME,
@@ -62,8 +63,13 @@ export async function POST(request: Request) {
 
     if (error) {
       console.error('Error saving document record:', error);
-      return NextResponse.json({ error: 'File uploaded but document record could not be saved' }, { status: 500 });
+      return NextResponse.json(
+        { error: `File uploaded but document record could not be saved: ${error.message}` },
+        { status: 500 }
+      );
     }
+
+    revalidatePath(`/dashboard/employees/${employee_id}`);
 
     return NextResponse.json({
       url: uploadResult.secure_url,

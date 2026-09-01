@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { EmployeeDocument } from "@/lib/types";
 import { Upload, FileText, Trash2, Download, Eye, Loader2 } from "lucide-react";
 
@@ -12,11 +13,16 @@ interface DocumentUploadProps {
 }
 
 export default function DocumentUpload({ employeeId, documents: initialDocs, onUpload, canUpload = true }: DocumentUploadProps) {
+  const router = useRouter();
   const [documents, setDocuments] = useState<EmployeeDocument[]>(initialDocs);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [docType, setDocType] = useState<string>("Resume");
   const [documentName, setDocumentName] = useState("");
+
+  useEffect(() => {
+    setDocuments(initialDocs);
+  }, [initialDocs]);
 
   const docTypes = [
     "10th Certificate",
@@ -71,6 +77,7 @@ export default function DocumentUpload({ employeeId, documents: initialDocs, onU
       setDocuments(prev => [...prev, newDoc]);
       if (onUpload) onUpload(newDoc);
       setDocumentName("");
+      router.refresh();
     } catch (err: any) {
       setError(err.message || "Failed to upload file");
     } finally {

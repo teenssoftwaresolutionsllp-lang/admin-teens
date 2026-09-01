@@ -14,7 +14,7 @@ export default function Header({ profile }: HeaderProps) {
   const getPageTitle = () => {
     if (pathname === "/dashboard") return "Dashboard";
     if (pathname === "/dashboard/employees") return "Employees";
-    if (pathname === "/dashboard/employees/new") return "Add Employee";
+    if (pathname === "/dashboard/employees/add" || pathname === "/dashboard/employees/new") return "Add Employee";
     if (pathname.includes("/dashboard/employees/")) return "Employee Details";
     return "Dashboard";
   };
