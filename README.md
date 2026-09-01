@@ -1,36 +1,79 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Teens Software Solutions - Admin Portal
 
-## Getting Started
+HR Management SaaS for managing employee data, documents, and more.
 
-First, run the development server:
+## Tech Stack
+- **Framework:** Next.js 16 (App Router)
+- **Database/Auth:** Supabase
+- **Storage/Media:** Cloudinary
+- **Styling:** Tailwind CSS v4
+- **Language:** TypeScript
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## Prerequisites
+- Node.js 18+
+- Supabase Project (Database, Auth, Storage)
+- Cloudinary Account (for Document Storage)
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Setup Instructions
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+1. **Clone the repo**
+   ```bash
+   git clone <repository-url>
+   cd admin-teens
+   ```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+2. **Install dependencies**
+   ```bash
+   npm install
+   ```
 
-## Learn More
+3. **Create Environment Variables**
+   Create a `.env.local` file in the root directory:
+   ```env
+   NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+   SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
 
-To learn more about Next.js, take a look at the following resources:
+   NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME=your_cloudinary_cloud_name
+   CLOUDINARY_API_KEY=your_cloudinary_api_key
+   CLOUDINARY_API_SECRET=your_cloudinary_api_secret
+   ```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+4. **Initialize Database Schema**
+   - Go to your Supabase Dashboard > SQL Editor
+   - Copy and paste the contents of `schema.sql` (create this file with tables needed)
+   - Click 'Run' to execute the migration
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+5. **Start the Development Server**
+   ```bash
+   npm run dev
+   ```
 
-## Deploy on Vercel
+6. **Seed Initial Data**
+   Run the following command or visit the URL using an API client to generate the default admin accounts and sample employees:
+   ```bash
+   curl -X POST http://localhost:3000/api/seed
+   ```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+7. **Login Credentials (After Seeding)**
+   - CEO: `ceo@teenssoftware.com` / `Admin@123`
+   - HR: `hr@teenssoftware.com` / `Admin@123`
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Features
+- **Role-Based Access Control:** Differentiated access levels for CEO and HR.
+- **Employee Management:** Complete CRUD operations for employee records.
+- **Document Management:** Securely upload and manage employee documents using Cloudinary.
+- **Dashboard Analytics:** High-level metrics and overviews.
+- **Search & Filtering:** Easily locate employees based on various criteria.
+
+## Folder Structure
+- `/app`: Next.js 16 App Router pages, layouts, and API routes.
+- `/components`: Reusable UI components.
+- `/lib`: Utilities, shared types, and configuration files (like Supabase clients).
+- `/public`: Static assets like the organization logo.
+
+## Database Schema Overview
+- `profiles`: Extended user data (role, full_name).
+- `departments`: Organization departments.
+- `employees`: Core employee information, relationships to departments.
+- `employee_documents`: References to securely stored documents.
