@@ -4,11 +4,12 @@ import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { notFound, redirect } from "next/navigation";
 import { Employee, EmployeeDocument, UserRole } from "@/lib/types";
-import { PageProps } from "../../../../.next/types/app/dashboard/employees/[id]/page";
 
-// Note: Ensure types match or use correct Next.js 15+ patterns for props.
-// Assuming Next.js App Router structure where params is a Promise
-export default async function EmployeeDetailPage(props: any) {
+type EmployeeDetailPageProps = {
+  params: Promise<{ id: string }>;
+};
+
+export default async function EmployeeDetailPage(props: EmployeeDetailPageProps) {
   const params = await props.params;
   const { id } = params;
 
