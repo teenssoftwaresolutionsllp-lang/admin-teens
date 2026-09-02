@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
 import Header from "@/components/Header";
 
-export default async function DashboardLayout(props: LayoutProps<"/dashboard">) {
+export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
   
   const { data: { user } } = await supabase.auth.getUser();
@@ -33,7 +33,7 @@ export default async function DashboardLayout(props: LayoutProps<"/dashboard">) 
         
         <main className="flex-1 overflow-y-auto p-4 sm:p-6">
           <div className="animate-fade-in h-full">
-            {props.children}
+            {children}
           </div>
         </main>
       </div>

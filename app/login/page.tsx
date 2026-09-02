@@ -1,7 +1,7 @@
 import LoginForm from "@/components/LoginForm";
 import Image from "next/image";
 
-export default async function LoginPage(props: PageProps<"/login">) {
+export default async function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
       <div className="max-w-md w-full space-y-8 animate-fade-in">
