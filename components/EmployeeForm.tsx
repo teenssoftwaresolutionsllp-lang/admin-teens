@@ -2,18 +2,19 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Department, Employee, UserRole, EmployeeDocument } from "@/lib/types";
+import { Department, Employee, UserRole, EmployeeDocument, Project } from "@/lib/types";
 import { User, MapPin, Briefcase, CreditCard, FileText, Loader2, KeyRound } from "lucide-react";
 import DocumentUpload from "./DocumentUpload";
 
 interface EmployeeFormProps {
   employee?: Employee;
   departments: Department[];
+  projects: Project[];
   mode: "add" | "edit";
   role: UserRole;
 }
 
-export default function EmployeeForm({ employee, departments, mode, role }: EmployeeFormProps) {
+export default function EmployeeForm({ employee, departments, projects, mode, role }: EmployeeFormProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
@@ -38,6 +39,7 @@ export default function EmployeeForm({ employee, departments, mode, role }: Empl
     emergency_contact_phone: employee?.emergency_contact_phone || "",
     emergency_contact_relation: employee?.emergency_contact_relation || "",
     department_id: employee?.department_id || "",
+    project_id: employee?.project_id || projects[0]?.id || "",
     designation: employee?.designation || "",
     employment_type: employee?.employment_type || null,
     joining_date: employee?.joining_date?.split("T")[0] || "",
@@ -266,6 +268,20 @@ export default function EmployeeForm({ employee, departments, mode, role }: Empl
                   <option key={dept.id} value={dept.id}>{dept.name}</option>
                 ))}
               </select>
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Project & Work Calendar</label>
+              <select name="project_id" value={formData.project_id || ""} onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none">
+                <option value="">Select Project</option>
+                {projects.map(project => (
+                  <option key={project.id} value={project.id}>
+                    {project.name} | {project.timezone} | {project.shift_start_time}-{project.shift_end_time}
+                  </option>
+                ))}
+              </select>
+              <p className="text-[11px] text-slate-500 mt-1.5">
+                The selected project's timezone, shift rules, and linked holiday calendar will apply to this employee.
+              </p>
             </div>
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Designation</label>

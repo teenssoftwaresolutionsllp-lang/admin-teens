@@ -41,6 +41,8 @@ export default async function EditEmployeePage(props: any) {
     notFound();
   }
 
+  const projects = await DataStore.getProjects();
+
   let departments: Department[] = [];
   try {
     const adminClient = await createAdminClient();
@@ -82,6 +84,7 @@ export default async function EditEmployeePage(props: any) {
         mode="edit" 
         employee={employee as Employee} 
         departments={departments} 
+        projects={projects}
         role={role} 
       />
     </div>

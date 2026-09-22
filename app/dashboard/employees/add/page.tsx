@@ -26,6 +26,7 @@ export default async function AddEmployeePage() {
   }
 
   const role = (user?.user_metadata?.role as UserRole) || "hr";
+  const projects = await DataStore.getProjects();
 
   let departments: Department[] = [];
   try {
@@ -61,7 +62,7 @@ export default async function AddEmployeePage() {
         <p className="text-xs text-slate-500 mt-1">Fill in the details to add a new employee to the organization and provision portal credentials.</p>
       </div>
 
-      <EmployeeForm mode="add" departments={departments} role={role} />
+      <EmployeeForm mode="add" departments={departments} projects={projects} role={role} />
     </div>
   );
 }
