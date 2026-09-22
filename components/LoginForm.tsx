@@ -30,13 +30,19 @@ export default function LoginForm() {
         throw new Error(data.error || "Failed to sign in");
       }
 
-      router.push("/dashboard");
+      const data = await res.json();
+      router.push(data.redirectTo || "/dashboard");
       router.refresh();
     } catch (err: any) {
       setError(err.message || "An error occurred during sign in");
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleQuickLogin = (quickEmail: string, quickPass: string) => {
+    setEmail(quickEmail);
+    setPassword(quickPass);
   };
 
   return (
@@ -104,6 +110,35 @@ export default function LoginForm() {
           </>
         )}
       </button>
+
+      <div className="pt-4 border-t border-slate-200">
+        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 text-center">
+          Quick Demo Logins
+        </p>
+        <div className="grid grid-cols-3 gap-2">
+          <button
+            type="button"
+            onClick={() => handleQuickLogin("ceo@teenssoftware.com", "Admin@123")}
+            className="py-1.5 px-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-xs font-medium text-center border border-slate-200 transition-colors"
+          >
+            CEO Demo
+          </button>
+          <button
+            type="button"
+            onClick={() => handleQuickLogin("hr@teenssoftware.com", "Admin@123")}
+            className="py-1.5 px-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded text-xs font-medium text-center border border-indigo-200 transition-colors"
+          >
+            HR Demo
+          </button>
+          <button
+            type="button"
+            onClick={() => handleQuickLogin("employee@teenssoftware.com", "Employee@123")}
+            className="py-1.5 px-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded text-xs font-medium text-center border border-emerald-200 transition-colors"
+          >
+            Employee Demo
+          </button>
+        </div>
+      </div>
     </form>
   );
 }

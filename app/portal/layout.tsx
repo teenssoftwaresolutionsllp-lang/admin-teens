@@ -4,7 +4,7 @@ import Sidebar from "@/components/Sidebar";
 import Header from "@/components/Header";
 import { Profile, UserRole } from "@/lib/types";
 
-export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
+export default async function PortalLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
 
   const {
@@ -24,26 +24,21 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const profile: Profile = dbProfile || {
     id: user.id,
     email: user.email || "",
-    full_name: user.user_metadata?.full_name || user.email?.split("@")[0] || "User",
-    role: (user.user_metadata?.role as UserRole) || "hr",
+    full_name: user.user_metadata?.full_name || "Balaji Marpally",
+    role: (user.user_metadata?.role as UserRole) || "employee",
     avatar_url: null,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };
 
-  // If this user is an employee, redirect them to the employee portal
-  if (profile.role === "employee") {
-    redirect("/portal");
-  }
-
   return (
     <div className="flex flex-col md:flex-row h-screen overflow-hidden bg-slate-50">
       <div className="hidden md:block">
-        <Sidebar role={profile.role} />
+        <Sidebar role="employee" />
       </div>
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <Header profile={profile} />
+        <Header profile={{ ...profile, role: "employee" }} />
 
         <main className="flex-1 overflow-y-auto p-4 sm:p-6">
           <div className="animate-fade-in h-full">{children}</div>

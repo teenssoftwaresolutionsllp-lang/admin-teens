@@ -31,18 +31,24 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  const isDashboardPath = request.nextUrl.pathname.startsWith('/dashboard')
-  const isLoginPath = request.nextUrl.pathname === '/login'
+  const path = request.nextUrl.pathname
+  const isDashboardPath = path.startsWith('/dashboard')
+  const isPortalPath = path.startsWith('/portal')
+  const isLoginPath = path === '/login'
 
-  if (!user && isDashboardPath) {
+  // Unauthenticated user trying to access protected paths
+  if (!user && (isDashboardPath || isPortalPath)) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)
   }
 
+  // Authenticated user on login page -> redirect to appropriate portal
   if (user && isLoginPath) {
+    const role = user.user_metadata?.role || 'hr'
+    const destination = role === 'employee' ? '/portal' : '/dashboard'
     const url = request.nextUrl.clone()
-    url.pathname = '/dashboard'
+    url.pathname = destination
     return NextResponse.redirect(url)
   }
 
@@ -50,5 +56,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*', '/login'],
+  matcher: ['/dashboard/:path*', '/portal/:path*', '/login'],
 }

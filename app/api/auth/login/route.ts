@@ -26,19 +26,21 @@ export async function POST(request: Request) {
       );
     }
 
-    const { data: profile, error: profileError } = await supabase
+    const { data: profile } = await supabase
       .from('profiles')
       .select('*')
       .eq('id', authData.user.id)
       .single();
 
-    if (profileError) {
-      console.error('Error fetching profile:', profileError);
-    }
+    // Determine role and appropriate landing destination
+    const role = profile?.role || (authData.user.user_metadata?.role) || 'employee';
+    const redirectTo = role === 'employee' ? '/portal' : '/dashboard';
 
     return NextResponse.json({
       user: authData.user,
       profile: profile || null,
+      role,
+      redirectTo,
     });
   } catch (error) {
     console.error('Login error:', error);

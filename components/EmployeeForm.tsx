@@ -55,7 +55,8 @@ export default function EmployeeForm({ employee, departments, mode, role }: Empl
     aadhar_number: employee?.aadhar_number || "",
     uan_number: employee?.uan_number || "",
     esi_number: employee?.esi_number || "",
-  });
+    initial_password: "Employee@123",
+  } as any);
 
   const [documents, setDocuments] = useState<EmployeeDocument[]>([]);
 
@@ -143,13 +144,31 @@ export default function EmployeeForm({ employee, departments, mode, role }: Empl
               <input required type="text" name="last_name" value={formData.last_name || ""} onChange={handleChange} className="w-full rounded-md border border-slate-300 px-3 py-2 text-slate-900 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Email *</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Email (Official Login ID) *</label>
               <input required type="email" name="email" value={formData.email || ""} onChange={handleChange} className="w-full rounded-md border border-slate-300 px-3 py-2 text-slate-900 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500" />
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Phone</label>
               <input type="tel" name="phone" value={formData.phone || ""} onChange={handleChange} className="w-full rounded-md border border-slate-300 px-3 py-2 text-slate-900 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500" />
             </div>
+
+            {mode === "add" && (
+              <div className="md:col-span-2 p-4 bg-indigo-50/80 border border-indigo-200 rounded-lg">
+                <label className="block text-xs font-bold text-indigo-900 uppercase tracking-wider mb-1">
+                  Initial Employee Login Password *
+                </label>
+                <input
+                  type="text"
+                  name="initial_password"
+                  value={(formData as any).initial_password || "Employee@123"}
+                  onChange={handleChange}
+                  className="w-full max-w-sm rounded-md border border-indigo-300 bg-white px-3 py-2 text-sm font-mono text-indigo-950 font-semibold"
+                />
+                <p className="text-xs text-indigo-700 mt-1.5 leading-relaxed">
+                  Provide these credentials to the employee. They will log in to their self-service portal, fill remaining KYC/Bank details, and track their profile completion progress bar until it turns 100% solid green!
+                </p>
+              </div>
+            )}
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Date of Birth</label>
               <input type="date" name="date_of_birth" value={formData.date_of_birth || ""} onChange={handleChange} className="w-full rounded-md border border-slate-300 px-3 py-2 text-slate-900 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500" />
