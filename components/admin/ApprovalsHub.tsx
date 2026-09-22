@@ -53,6 +53,9 @@ export default function ApprovalsHub({
           msg: `Profile request ${status} successfully. Master record updated.`,
           type: "success",
         });
+      } else {
+        const data = await res.json().catch(() => null);
+        setFeedback({ msg: data?.error || "Action failed. Please try again.", type: "error" });
       }
     } catch {
       setFeedback({ msg: "Action failed. Please try again.", type: "error" });

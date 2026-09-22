@@ -730,62 +730,70 @@ export class DataStore {
     rejectionReason?: string;
   }): Promise<boolean> {
     const cache = getCache();
-    const req = cache.changeRequests.find((r) => r.id === requestId);
-
-    if (req) {
-      req.status = status;
-      req.reviewed_by = reviewerId;
-      req.reviewed_at = new Date().toISOString();
-      if (rejectionReason) req.rejection_reason = rejectionReason;
-
-      // If approved, update official employee record in cache
-      if (status === "approved" && req.employee_id) {
-        const emp = cache.employees.find((e) => e.id === req.employee_id || e.employee_id === req.employee_id);
-        if (emp) {
-          Object.assign(emp, req.requested_changes);
-          emp.updated_at = new Date().toISOString();
-        }
-
-        try {
-          const supabase = await createAdminClient();
-          await supabase
-            .from("employees")
-            .update(req.requested_changes)
-            .eq("id", req.employee_id);
-        } catch (e) {
-          console.warn("Direct update error:", e);
-        }
-      }
-    }
-
     try {
       const supabase = await createAdminClient();
-      const { data: dbReq } = await supabase
+      const { data: dbReq, error: requestError } = await supabase
         .from("profile_change_requests")
         .select("*")
         .eq("id", requestId)
         .single();
 
+      if (requestError) throw requestError;
+
       if (dbReq) {
-        await supabase
+        const reviewedAt = new Date().toISOString();
+        const { error: reviewError } = await supabase
           .from("profile_change_requests")
           .update({
             status,
             reviewed_by: reviewerId,
-            reviewed_at: new Date().toISOString(),
+            reviewed_at: reviewedAt,
             rejection_reason: rejectionReason || null,
           })
           .eq("id", requestId);
 
+        if (reviewError) throw reviewError;
+
         if (status === "approved") {
-          await supabase
+          const { error: employeeError } = await supabase
             .from("employees")
             .update(dbReq.requested_changes)
             .eq("id", dbReq.employee_id);
+
+          if (employeeError) throw employeeError;
         }
+
+        const cachedRequest = cache.changeRequests.find((r) => r.id === requestId);
+        if (cachedRequest) {
+          cachedRequest.status = status;
+          cachedRequest.reviewed_by = reviewerId;
+          cachedRequest.reviewed_at = reviewedAt;
+          cachedRequest.rejection_reason = rejectionReason || null;
+        }
+
+        return true;
       }
     } catch (e) {
-      console.warn("reviewProfileChangeRequest fallback update:", e);
+      if (!cache.changeRequests.some((r) => r.id === requestId)) {
+        console.error("reviewProfileChangeRequest database update failed:", e);
+        throw e;
+      }
+    }
+
+    const req = cache.changeRequests.find((r) => r.id === requestId);
+    if (!req) return false;
+
+    req.status = status;
+    req.reviewed_by = reviewerId;
+    req.reviewed_at = new Date().toISOString();
+    req.rejection_reason = rejectionReason || null;
+
+    if (status === "approved" && req.employee_id) {
+      const emp = cache.employees.find((e) => e.id === req.employee_id || e.employee_id === req.employee_id);
+      if (emp) {
+        Object.assign(emp, req.requested_changes);
+        emp.updated_at = new Date().toISOString();
+      }
     }
 
     return true;
