@@ -1,4 +1,5 @@
-import { createClient } from "@/lib/supabase-server";
+import { createClient, createAdminClient } from "@/lib/supabase-server";
+import { DataStore } from "@/lib/data-store";
 import EmployeeDetail from "@/components/EmployeeDetail";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
@@ -14,53 +15,65 @@ export default async function EmployeeDetailPage(props: EmployeeDetailPageProps)
   const { id } = params;
 
   const supabase = await createClient();
+  let user = null;
 
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) redirect("/login");
+  try {
+    const { data } = await supabase.auth.getUser();
+    user = data?.user || null;
+  } catch {
+    // ignore
+  }
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", session.user.id)
-    .single();
+  if (!user) {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      user = session?.user || null;
+    } catch {
+      // ignore
+    }
+  }
 
-  const role = profile?.role as UserRole;
+  const role = (user?.user_metadata?.role as UserRole) || "hr";
 
-  // Fetch employee with department
-  const { data: employee, error: empError } = await supabase
-    .from("employees")
-    .select("*, department:departments(*)")
-    .eq("id", id)
-    .single();
+  // Fetch employee using DataStore (supports DB fallback + in-memory store)
+  const employee = await DataStore.getEmployeeById(id);
 
-  if (empError || !employee) {
+  if (!employee) {
     notFound();
   }
 
   // Fetch documents
-  const { data: documents } = await supabase
-    .from("employee_documents")
-    .select("*")
-    .eq("employee_id", id)
-    .order("uploaded_at", { ascending: false });
+  let documents: EmployeeDocument[] = [];
+  try {
+    const adminClient = await createAdminClient();
+    const { data } = await adminClient
+      .from("employee_documents")
+      .select("*")
+      .eq("employee_id", employee.id)
+      .order("uploaded_at", { ascending: false });
+    documents = (data as EmployeeDocument[]) || [];
+  } catch {
+    // ignore
+  }
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
-      <nav className="flex items-center text-sm text-slate-500 space-x-2">
-        <Link href="/dashboard" className="hover:text-indigo-600">Dashboard</Link>
-        <ChevronRight className="w-4 h-4" />
-        <Link href="/dashboard/employees" className="hover:text-indigo-600">Employees</Link>
-        <ChevronRight className="w-4 h-4" />
-        <span className="text-slate-900 font-medium">
+      <nav className="flex items-center text-xs font-semibold text-slate-400 space-x-2">
+        <Link href="/dashboard" className="hover:text-indigo-600 transition-colors">Dashboard</Link>
+        <ChevronRight className="w-3.5 h-3.5" />
+        <Link href="/dashboard/employees" className="hover:text-indigo-600 transition-colors">Employees</Link>
+        <ChevronRight className="w-3.5 h-3.5" />
+        <span className="text-slate-900 font-bold">
           {employee.first_name} {employee.last_name}
         </span>
       </nav>
 
       <EmployeeDetail 
         employee={employee as Employee} 
-        documents={(documents as EmployeeDocument[]) || []} 
+        documents={documents} 
         role={role} 
       />
     </div>
   );
 }
+

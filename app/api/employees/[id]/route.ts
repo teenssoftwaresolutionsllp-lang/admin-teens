@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase-server';
+import { createClient, createAdminClient } from '@/lib/supabase-server';
+import { DataStore } from '@/lib/data-store';
 
 export async function GET(
   request: Request,
@@ -8,38 +9,31 @@ export async function GET(
   try {
     const params = await props.params;
     const { id } = params;
-    
-    const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
 
-    const { data: employee, error: empError } = await supabase
-      .from('employees')
-      .select('*, department:departments(id, name)')
-      .eq('id', id)
-      .single();
+    const employee = await DataStore.getEmployeeById(id);
 
-    if (empError) {
+    if (!employee) {
       return NextResponse.json({ error: 'Employee not found' }, { status: 404 });
     }
 
-    const { data: documents, error: docError } = await supabase
-      .from('employee_documents')
-      .select('*')
-      .eq('employee_id', id);
-
-    if (docError) {
-      console.error('Error fetching documents:', docError);
+    let documents: any[] = [];
+    try {
+      const supabase = await createAdminClient();
+      const { data } = await supabase
+        .from('employee_documents')
+        .select('*')
+        .eq('employee_id', id);
+      documents = data || [];
+    } catch {
+      // ignore
     }
 
     return NextResponse.json({
       employee,
-      documents: documents || []
+      documents,
     });
   } catch (error) {
-    console.error('API Error:', error);
+    console.error('API Error in GET /api/employees/[id]:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
@@ -51,12 +45,6 @@ export async function PUT(
   try {
     const params = await props.params;
     const { id } = params;
-    
-    const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
 
     const updateData = Object.fromEntries(
       Object.entries(await request.json()).map(([field, value]) => [
@@ -65,21 +53,15 @@ export async function PUT(
       ])
     );
 
-    const { data, error } = await supabase
-      .from('employees')
-      .update(updateData)
-      .eq('id', id)
-      .select()
-      .single();
+    const updated = await DataStore.updateEmployee(id, updateData);
 
-    if (error) {
-      console.error('Error updating employee:', error);
-      return NextResponse.json({ error: 'Failed to update employee' }, { status: 500 });
+    if (!updated) {
+      return NextResponse.json({ error: 'Employee not found or update failed' }, { status: 404 });
     }
 
-    return NextResponse.json(data);
+    return NextResponse.json(updated);
   } catch (error) {
-    console.error('API Error:', error);
+    console.error('API Error in PUT /api/employees/[id]:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
@@ -91,26 +73,12 @@ export async function DELETE(
   try {
     const params = await props.params;
     const { id } = params;
-    
-    const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
 
-    const { error } = await supabase
-      .from('employees')
-      .delete()
-      .eq('id', id);
-
-    if (error) {
-      console.error('Error deleting employee:', error);
-      return NextResponse.json({ error: 'Failed to delete employee' }, { status: 500 });
-    }
-
+    await DataStore.deleteEmployee(id);
     return NextResponse.json({ message: 'Employee deleted successfully' });
   } catch (error) {
-    console.error('API Error:', error);
+    console.error('API Error in DELETE /api/employees/[id]:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
+

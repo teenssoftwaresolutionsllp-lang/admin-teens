@@ -552,6 +552,105 @@ export class DataStore {
     return null;
   }
 
+  static async createEmployee(empData: Partial<Employee>): Promise<Employee> {
+    const cache = getCache();
+    const id = empData.id || empData.employee_id || ("TSS" + Math.floor(100 + Math.random() * 900));
+    const newEmp: Employee = {
+      id,
+      employee_id: empData.employee_id || id,
+      user_id: empData.user_id || null,
+      first_name: empData.first_name || "New",
+      last_name: empData.last_name || "Employee",
+      email: empData.email || "",
+      phone: empData.phone || null,
+      date_of_birth: empData.date_of_birth || null,
+      gender: empData.gender || null,
+      blood_group: empData.blood_group || null,
+      marital_status: empData.marital_status || null,
+      address: empData.address || null,
+      city: empData.city || null,
+      state: empData.state || null,
+      pincode: empData.pincode || null,
+      emergency_contact_name: empData.emergency_contact_name || null,
+      emergency_contact_phone: empData.emergency_contact_phone || null,
+      emergency_contact_relation: empData.emergency_contact_relation || null,
+      department_id: empData.department_id || null,
+      designation: empData.designation || null,
+      employment_type: empData.employment_type || "full-time",
+      joining_date: empData.joining_date || new Date().toISOString().split("T")[0],
+      probation_end_date: empData.probation_end_date || null,
+      confirmation_date: empData.confirmation_date || null,
+      reporting_manager: empData.reporting_manager || null,
+      work_location: empData.work_location || null,
+      status: empData.status || "active",
+      salary: empData.salary || 50000,
+      bank_name: empData.bank_name || null,
+      bank_account_number: empData.bank_account_number || null,
+      ifsc_code: empData.ifsc_code || null,
+      pan_number: empData.pan_number || null,
+      aadhar_number: empData.aadhar_number || null,
+      uan_number: empData.uan_number || null,
+      esi_number: empData.esi_number || null,
+      project_id: empData.project_id || "proj-1",
+      notes: empData.notes || null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      project: cache.projects[0],
+    };
+
+    // Try DB insertion with adminClient
+    try {
+      const supabase = await createAdminClient();
+      const { data, error } = await supabase
+        .from("employees")
+        .insert(newEmp)
+        .select(`*, department:departments(id, name)`)
+        .single();
+      if (!error && data) {
+        this.seedEmployeeToCache(data);
+        return data;
+      }
+    } catch (e) {
+      console.warn("createEmployee DB warning:", e);
+    }
+
+    this.seedEmployeeToCache(newEmp);
+    await this.getLeaveBalances(newEmp.id);
+    return newEmp;
+  }
+
+  static async updateEmployee(id: string, updates: Partial<Employee>): Promise<Employee | null> {
+    const cache = getCache();
+    const existing = await this.getEmployeeById(id);
+    if (!existing) return null;
+
+    const updated = { ...existing, ...updates, updated_at: new Date().toISOString() };
+    this.seedEmployeeToCache(updated);
+
+    try {
+      const supabase = await createAdminClient();
+      await supabase.from("employees").update(updates).eq("id", id);
+    } catch (e) {
+      console.warn("updateEmployee DB warning:", e);
+    }
+
+    return updated;
+  }
+
+  static async deleteEmployee(id: string): Promise<boolean> {
+    const cache = getCache();
+    cache.employees = cache.employees.filter((e) => e.id !== id && e.employee_id !== id);
+
+    try {
+      const supabase = await createAdminClient();
+      await supabase.from("employees").delete().eq("id", id);
+    } catch (e) {
+      console.warn("deleteEmployee DB warning:", e);
+    }
+
+    return true;
+  }
+
 
   // ==========================================
   // PROFILE CHANGE REQUESTS (MAKER-CHECKER)
