@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase-server'
+import { DataStore } from '@/lib/data-store'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { PlusCircle } from 'lucide-react'
@@ -18,15 +19,16 @@ export default async function EmployeesPage() {
     .eq('id', user.id)
     .single()
 
-  const role = profile?.role || 'hr'
+  const role = profile?.role || (user.user_metadata?.role) || 'hr'
 
-  const [employeesRes, departmentsRes] = await Promise.all([
-    supabase.from('employees').select('*, department:departments(*)').order('created_at', { ascending: false }),
-    supabase.from('departments').select('*').order('name')
-  ])
-
-  const employees = employeesRes.data || []
-  const departments = departmentsRes.data || []
+  const employees = await DataStore.getEmployees()
+  const { data: dbDepartments } = await supabase.from('departments').select('*').order('name')
+  const departments = dbDepartments && dbDepartments.length > 0 ? dbDepartments : [
+    { id: 'd1', name: 'Engineering', description: 'Software development' },
+    { id: 'd2', name: 'Design', description: 'UI/UX and product design' },
+    { id: 'd3', name: 'HR', description: 'Human Resources' },
+    { id: 'd4', name: 'Finance', description: 'Finance and payroll' },
+  ]
 
   return (
     <div className="flex-1 space-y-6 p-8">

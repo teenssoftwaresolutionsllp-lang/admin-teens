@@ -35,30 +35,17 @@ export default async function DashboardPage() {
     redirect('/portal');
   }
 
-  // Fetch stats concurrently
-  const [
-    { count: totalEmployees },
-    { count: activeEmployees },
-    { count: departmentsCount },
-    { count: onNotice },
-  ] = await Promise.all([
-    supabase.from('employees').select('*', { count: 'exact', head: true }),
-    supabase.from('employees').select('*', { count: 'exact', head: true }).eq('status', 'active'),
-    supabase.from('departments').select('*', { count: 'exact', head: true }),
-    supabase.from('employees').select('*', { count: 'exact', head: true }).eq('status', 'on_notice'),
-  ]);
-
-  // Recent 5 employees
-  const { data: recentEmployees } = await supabase
-    .from('employees')
-    .select('*, department:departments(*)')
-    .order('created_at', { ascending: false })
-    .limit(5);
+  // Fetch employees and calculate live stats
+  const allEmployees = await DataStore.getEmployees();
+  const totalEmployees = allEmployees.length;
+  const activeEmployees = allEmployees.filter(e => e.status === 'active').length;
+  const onNotice = allEmployees.filter(e => e.status === 'on_notice').length;
+  const recentEmployees = allEmployees.slice(0, 5);
 
   const stats = {
     totalEmployees: totalEmployees || 3,
     activeEmployees: activeEmployees || 3,
-    departments: departmentsCount || 7,
+    departments: 7,
     newHires: 1,
     onNotice: onNotice || 0,
     recentEmployees: recentEmployees || [],

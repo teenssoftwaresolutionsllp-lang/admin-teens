@@ -26,7 +26,7 @@ export default function DashboardStats({ stats, role }: DashboardStatsProps) {
     }
   }
 
-  const formatDate = (dateStr: string | null) => {
+  const formatDate = (dateStr?: string | null) => {
     if (!dateStr) return 'N/A'
     return new Date(dateStr).toLocaleDateString('en-US', {
       month: 'short',

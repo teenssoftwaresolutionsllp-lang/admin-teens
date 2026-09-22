@@ -27,7 +27,7 @@ export default function EmployeeTable({ employees, departments, role }: Employee
     }
   }
 
-  const formatDate = (dateStr: string | null) => {
+  const formatDate = (dateStr?: string | null) => {
     if (!dateStr) return 'N/A'
     return new Date(dateStr).toLocaleDateString('en-US', {
       month: 'short',

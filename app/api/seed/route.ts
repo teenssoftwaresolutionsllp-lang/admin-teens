@@ -87,7 +87,7 @@ export async function POST() {
         city: 'Hyderabad',
         state: 'Telangana',
         pincode: '500081',
-        emergency_contact_name: 'Ramesh Patel',
+        emergency_contact_name: 'Ramesh Marpally',
         emergency_contact_phone: '+91 9876543219',
         emergency_contact_relation: 'Father',
         designation: 'Senior Full Stack Developer',
@@ -153,6 +153,19 @@ export async function POST() {
       }
     }
 
+    // Always seed employees into in-memory cache regardless of DB success
+    // This ensures the app works even when DB has permission issues
+    for (const emp of sampleEmployees) {
+      const cacheEmp = {
+        ...emp,
+        id: emp.employee_id, // Use employee_id as the in-memory id
+        user_id: emp.user_id || null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      } as any;
+      DataStore.seedEmployeeToCache(cacheEmp);
+    }
+
     // Seed initial demo data in DataStore (payroll runs, sample leaves, profile change request)
     const employees = await DataStore.getEmployees();
     const targetEmp = employees.find(e => e.employee_id === 'TSS001') || employees[0];
@@ -211,7 +224,7 @@ export async function POST() {
   } catch (error: any) {
     console.error('Seed error:', error);
     return NextResponse.json(
-      { error: error.message || 'An error occurred during seeding' },
+      { error: error.message || 'An error occurred during seeding', stack: error.stack },
       { status: 500 }
     );
   }
