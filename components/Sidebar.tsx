@@ -60,6 +60,9 @@ export default function Sidebar({ role }: SidebarProps) {
 
   const items = role === "employee" ? employeeNavItems : adminNavItems;
   const visibleItems = items.filter((item) => item.roles.includes(role));
+  const activeItem = visibleItems
+    .filter((item) => pathname === item.href || pathname.startsWith(`${item.href}/`))
+    .sort((a, b) => b.href.length - a.href.length)[0];
 
   return (
     <aside className="flex flex-col w-full bg-slate-900 text-white flex-shrink-0 shadow-lg z-20 md:h-screen md:w-64">
@@ -86,9 +89,7 @@ export default function Sidebar({ role }: SidebarProps) {
 
       <div className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
         {visibleItems.map((item) => {
-          const isActive =
-            pathname === item.href ||
-            (item.href !== "/dashboard" && item.href !== "/portal" && pathname.startsWith(item.href));
+          const isActive = activeItem?.href === item.href;
 
           return (
             <Link
