@@ -208,3 +208,24 @@ admin-teens/
 │   └── types.ts                 # Full TypeScript interfaces
 └── schema.sql                   # Complete PostgreSQL DDL with RLS policies
 ```
+
+
+Deployment :
+
+cd "D:\Balaji Marpally\admin-teens"
+
+npm install
+npm install -g vercel
+
+
+
+vercel link admin-teens --scope prolicious-team
+Login succeeded. `vercel` alone is unavailable because it is not on your Windows `PATH`; continue using `npx`:
+
+```powershell
+npx vercel whoami
+npx vercel link --project admin-teens --scope prolicious-team
+npx vercel --prod --scope prolicious-team
+```
+
+Do not run `vercel whoami`; use `npx vercel whoami`.
