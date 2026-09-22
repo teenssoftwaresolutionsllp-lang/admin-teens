@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Mail, Lock, LogIn, Loader2 } from "lucide-react";
+import { Mail, Lock, LogIn, Loader2, Sparkles } from "lucide-react";
 
 export default function LoginForm() {
   const [email, setEmail] = useState("");
@@ -46,20 +46,20 @@ export default function LoginForm() {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form onSubmit={handleSubmit} className="space-y-5">
       {error && (
-        <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-6">
-          <p className="text-sm text-red-700">{error}</p>
+        <div className="bg-rose-50 border border-rose-200 p-3.5 rounded-xl">
+          <p className="text-xs font-bold text-rose-700">{error}</p>
         </div>
       )}
 
       <div>
-        <label htmlFor="email" className="block text-sm font-medium text-slate-700 mb-1">
+        <label htmlFor="email" className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
           Email Address
         </label>
         <div className="relative">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <Mail className="h-5 w-5 text-slate-400" />
+          <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+            <Mail className="h-4 w-4 text-slate-400" />
           </div>
           <input
             id="email"
@@ -67,19 +67,19 @@ export default function LoginForm() {
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="block w-full pl-10 pr-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm transition-colors"
-            placeholder="you@teenssoft.com"
+            className="block w-full pl-10 pr-4 py-2.5 bg-slate-50/50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-600 transition-all"
+            placeholder="you@teenssoftware.com"
           />
         </div>
       </div>
 
       <div>
-        <label htmlFor="password" className="block text-sm font-medium text-slate-700 mb-1">
+        <label htmlFor="password" className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
           Password
         </label>
         <div className="relative">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <Lock className="h-5 w-5 text-slate-400" />
+          <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+            <Lock className="h-4 w-4 text-slate-400" />
           </div>
           <input
             id="password"
@@ -87,7 +87,7 @@ export default function LoginForm() {
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="block w-full pl-10 pr-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm transition-colors"
+            className="block w-full pl-10 pr-4 py-2.5 bg-slate-50/50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-600 transition-all"
             placeholder="••••••••"
           />
         </div>
@@ -96,44 +96,47 @@ export default function LoginForm() {
       <button
         type="submit"
         disabled={loading}
-        className="w-full flex justify-center items-center py-2.5 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-70 disabled:cursor-not-allowed transition-colors"
+        className="w-full flex justify-center items-center py-3 px-4 rounded-xl shadow-sm text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-70 disabled:cursor-not-allowed transition-all hover:shadow"
       >
         {loading ? (
           <>
-            <Loader2 className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" />
-            Signing in...
+            <Loader2 className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" />
+            <span>Signing in...</span>
           </>
         ) : (
           <>
-            <LogIn className="-ml-1 mr-2 h-5 w-5 text-white" />
-            Sign in
+            <LogIn className="-ml-1 mr-2 h-4 w-4 text-white" />
+            <span>Sign in to Workspace</span>
           </>
         )}
       </button>
 
-      <div className="pt-4 border-t border-slate-200">
-        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 text-center">
-          Quick Demo Logins
-        </p>
+      <div className="pt-5 border-t border-slate-100">
+        <div className="flex items-center justify-center gap-1.5 mb-3">
+          <Sparkles className="h-3.5 w-3.5 text-indigo-500" />
+          <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider text-center">
+            1-Click Demo Profiles
+          </p>
+        </div>
         <div className="grid grid-cols-3 gap-2">
           <button
             type="button"
             onClick={() => handleQuickLogin("ceo@teenssoftware.com", "Admin@123")}
-            className="py-1.5 px-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-xs font-medium text-center border border-slate-200 transition-colors"
+            className="py-2 px-2.5 bg-slate-100/70 hover:bg-slate-200/80 text-slate-800 rounded-xl text-xs font-bold text-center border border-slate-200 transition-all shadow-2xs"
           >
             CEO Demo
           </button>
           <button
             type="button"
             onClick={() => handleQuickLogin("hr@teenssoftware.com", "Admin@123")}
-            className="py-1.5 px-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded text-xs font-medium text-center border border-indigo-200 transition-colors"
+            className="py-2 px-2.5 bg-indigo-50/80 hover:bg-indigo-100 text-indigo-700 rounded-xl text-xs font-bold text-center border border-indigo-200/80 transition-all shadow-2xs"
           >
             HR Demo
           </button>
           <button
             type="button"
             onClick={() => handleQuickLogin("employee@teenssoftware.com", "Employee@123")}
-            className="py-1.5 px-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded text-xs font-medium text-center border border-emerald-200 transition-colors"
+            className="py-2 px-2.5 bg-emerald-50/80 hover:bg-emerald-100 text-emerald-700 rounded-xl text-xs font-bold text-center border border-emerald-200/80 transition-all shadow-2xs"
           >
             Employee Demo
           </button>
@@ -142,3 +145,4 @@ export default function LoginForm() {
     </form>
   );
 }
+

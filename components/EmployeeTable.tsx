@@ -18,12 +18,16 @@ export default function EmployeeTable({ employees, departments, role }: Employee
   const [statusFilter, setStatusFilter] = useState('all')
   const [typeFilter, setTypeFilter] = useState('all')
 
-  const getStatusColor = (status: string) => {
+  const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'active': return 'bg-green-100 text-green-700'
-      case 'terminated': return 'bg-red-100 text-red-700'
-      case 'on_notice': return 'bg-yellow-100 text-yellow-700'
-      default: return 'bg-gray-100 text-gray-700'
+      case 'active':
+        return 'bg-emerald-50 text-emerald-700 border-emerald-200'
+      case 'terminated':
+        return 'bg-rose-50 text-rose-700 border-rose-200'
+      case 'on_notice':
+        return 'bg-amber-50 text-amber-700 border-amber-200'
+      default:
+        return 'bg-slate-50 text-slate-700 border-slate-200'
     }
   }
 
@@ -55,27 +59,27 @@ export default function EmployeeTable({ employees, departments, role }: Employee
   })
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {/* Filters & Search */}
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between bg-white p-4 rounded-2xl border border-slate-200/90 shadow-sm">
         <div className="relative max-w-md flex-1">
-          <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+          <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5">
             <Search className="h-4 w-4 text-slate-400" />
           </div>
           <input
             type="text"
-            className="block w-full rounded-lg border border-slate-300 bg-white py-2 pl-10 pr-3 text-sm placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-sm"
-            placeholder="Search by name, email or ID..."
+            className="block w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2.5 pl-10 pr-4 text-sm font-medium placeholder:text-slate-400 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 transition-all"
+            placeholder="Search by name, email or employee ID..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm">
-            <Filter className="h-4 w-4 text-slate-400" />
+        <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm">
+            <Filter className="h-3.5 w-3.5 text-slate-400" />
             <select
-              className="bg-transparent focus:outline-none cursor-pointer"
+              className="bg-transparent focus:outline-none cursor-pointer text-xs font-semibold"
               value={deptFilter}
               onChange={(e) => setDeptFilter(e.target.value)}
             >
@@ -87,7 +91,7 @@ export default function EmployeeTable({ employees, departments, role }: Employee
           </div>
 
           <select
-            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+            className="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-sm focus:border-indigo-500 focus:outline-none cursor-pointer"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
           >
@@ -99,7 +103,7 @@ export default function EmployeeTable({ employees, departments, role }: Employee
           </select>
 
           <select
-            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+            className="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-sm focus:border-indigo-500 focus:outline-none cursor-pointer"
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value)}
           >
@@ -113,63 +117,67 @@ export default function EmployeeTable({ employees, departments, role }: Employee
       </div>
 
       {/* Table */}
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm text-slate-600">
-            <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+            <thead className="bg-slate-50/75 text-[11px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100">
               <tr>
-                <th className="px-6 py-4 font-semibold">Employee</th>
-                <th className="px-6 py-4 font-semibold">ID</th>
-                <th className="px-6 py-4 font-semibold">Department</th>
-                <th className="px-6 py-4 font-semibold">Designation</th>
-                <th className="px-6 py-4 font-semibold">Joining Date</th>
-                <th className="px-6 py-4 font-semibold">Status</th>
-                <th className="px-6 py-4 text-right font-semibold">Actions</th>
+                <th className="px-6 py-4">Employee</th>
+                <th className="px-6 py-4">ID</th>
+                <th className="px-6 py-4">Department</th>
+                <th className="px-6 py-4">Designation</th>
+                <th className="px-6 py-4">Joining Date</th>
+                <th className="px-6 py-4">Status</th>
+                <th className="px-6 py-4 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-200 bg-white">
+            <tbody className="divide-y divide-slate-100 bg-white">
               {filteredEmployees.length > 0 ? (
                 filteredEmployees.map((emp) => (
-                  <tr key={emp.id} className="hover:bg-slate-50 transition-colors">
+                  <tr key={emp.id} className="hover:bg-slate-50/80 transition-colors">
                     <td className="whitespace-nowrap px-6 py-4">
                       <div className="flex items-center gap-3">
                         {emp.profile_photo_url ? (
-                          <div className="relative h-9 w-9 overflow-hidden rounded-full border border-slate-200 bg-slate-100">
+                          <div className="relative h-10 w-10 overflow-hidden rounded-full border border-slate-200 bg-slate-100">
                             <Image src={emp.profile_photo_url} alt={`${emp.first_name} ${emp.last_name}`} fill className="object-cover" />
                           </div>
                         ) : (
-                          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-indigo-50 text-xs font-semibold text-indigo-600 border border-indigo-100">
+                          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-tr from-indigo-500 to-indigo-600 text-xs font-bold text-white shadow-sm">
                             {getInitials(emp.first_name, emp.last_name)}
                           </div>
                         )}
                         <div>
-                          <p className="font-medium text-slate-900">{emp.first_name} {emp.last_name}</p>
-                          <p className="text-xs text-slate-500">{emp.email}</p>
+                          <Link href={`/dashboard/employees/${emp.id}`} className="font-bold text-slate-900 hover:text-indigo-600 transition-colors">
+                            {emp.first_name} {emp.last_name}
+                          </Link>
+                          <p className="text-xs text-slate-400">{emp.email}</p>
                         </div>
                       </div>
                     </td>
-                    <td className="whitespace-nowrap px-6 py-4 font-mono text-xs text-slate-500">
+                    <td className="whitespace-nowrap px-6 py-4 font-mono text-xs font-semibold text-slate-600">
                       {emp.employee_id}
                     </td>
-                    <td className="whitespace-nowrap px-6 py-4 text-slate-700">
-                      {emp.department?.name || '-'}
+                    <td className="whitespace-nowrap px-6 py-4">
+                      <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700">
+                        {emp.department?.name || 'General'}
+                      </span>
                     </td>
-                    <td className="whitespace-nowrap px-6 py-4 text-slate-700">
+                    <td className="whitespace-nowrap px-6 py-4 font-medium text-slate-800">
                       {emp.designation || '-'}
                     </td>
-                    <td className="whitespace-nowrap px-6 py-4 text-slate-700">
+                    <td className="whitespace-nowrap px-6 py-4 text-xs font-medium text-slate-500">
                       {formatDate(emp.joining_date)}
                     </td>
                     <td className="whitespace-nowrap px-6 py-4">
-                      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${getStatusColor(emp.status)}`}>
+                      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider border ${getStatusBadge(emp.status)}`}>
                         {emp.status.replace('_', ' ')}
                       </span>
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-right">
-                      <div className="flex items-center justify-end gap-2">
+                      <div className="flex items-center justify-end gap-1.5">
                         <Link
                           href={`/dashboard/employees/${emp.id}`}
-                          className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-indigo-600 transition-colors"
+                          className="rounded-xl p-2 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
                           title="View Details"
                         >
                           <Eye className="h-4 w-4" />
@@ -177,7 +185,7 @@ export default function EmployeeTable({ employees, departments, role }: Employee
                         {role === 'ceo' && (
                           <Link
                             href={`/dashboard/employees/${emp.id}/edit`}
-                            className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-indigo-600 transition-colors"
+                            className="rounded-xl p-2 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
                             title="Edit Employee"
                           >
                             <Pencil className="h-4 w-4" />
@@ -189,11 +197,13 @@ export default function EmployeeTable({ employees, departments, role }: Employee
                 ))
               ) : (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-slate-500">
+                  <td colSpan={7} className="px-6 py-16 text-center text-slate-500">
                     <div className="flex flex-col items-center justify-center">
-                      <UserCircle className="h-10 w-10 text-slate-300 mb-3" />
-                      <p className="text-base font-medium text-slate-900">No employees found</p>
-                      <p className="text-sm mt-1">Adjust your filters or search query to find what you're looking for.</p>
+                      <div className="h-12 w-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 mb-3">
+                        <UserCircle className="h-6 w-6" />
+                      </div>
+                      <p className="text-base font-bold text-slate-800">No employees found</p>
+                      <p className="text-xs text-slate-400 mt-1 max-w-sm">Adjust your search query or reset filter selections to view registered employees.</p>
                     </div>
                   </td>
                 </tr>
@@ -205,3 +215,4 @@ export default function EmployeeTable({ employees, departments, role }: Employee
     </div>
   )
 }
+

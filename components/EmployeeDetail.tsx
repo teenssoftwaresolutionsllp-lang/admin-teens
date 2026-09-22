@@ -1,7 +1,7 @@
 "use client";
 
 import { Employee, EmployeeDocument, UserRole } from "@/lib/types";
-import { User, MapPin, Briefcase, CreditCard, FileText, Download, Edit } from "lucide-react";
+import { User, MapPin, Briefcase, CreditCard, FileText, Download, Edit, Building, Calendar, Phone, Mail } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import DocumentUpload from "./DocumentUpload";
@@ -26,11 +26,17 @@ export default function EmployeeDetail({ employee, documents, role }: EmployeeDe
     return new Date(dateStr).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
   };
 
-  const statusColors = {
-    active: "bg-green-100 text-green-800",
-    inactive: "bg-gray-100 text-gray-800",
-    terminated: "bg-red-100 text-red-800",
-    on_notice: "bg-yellow-100 text-yellow-800",
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case "active":
+        return "bg-emerald-50 text-emerald-700 border-emerald-200";
+      case "terminated":
+        return "bg-rose-50 text-rose-700 border-rose-200";
+      case "on_notice":
+        return "bg-amber-50 text-amber-700 border-amber-200";
+      default:
+        return "bg-slate-50 text-slate-700 border-slate-200";
+    }
   };
 
   const tabs = [
@@ -41,35 +47,37 @@ export default function EmployeeDetail({ employee, documents, role }: EmployeeDe
     { name: "Documents", icon: FileText },
   ];
 
-  const DetailItem = ({ label, value }: { label: string; value: React.ReactNode }) => (
-    <div className="mb-4">
-      <dt className="text-sm font-medium text-slate-500 mb-1">{label}</dt>
-      <dd className="text-sm text-slate-900">{value || "N/A"}</dd>
+  const DetailTile = ({ label, value }: { label: string; value: React.ReactNode }) => (
+    <div className="bg-slate-50/70 p-4 rounded-xl border border-slate-100/90">
+      <dt className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">{label}</dt>
+      <dd className="text-sm font-semibold text-slate-900 break-words">{value || "N/A"}</dd>
     </div>
   );
 
   return (
     <div className="space-y-6">
       {/* Profile Header */}
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div className="flex items-center gap-6">
-          <div className="w-20 h-20 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center text-2xl font-bold">
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200/90 p-6 sm:p-7 flex flex-col md:flex-row items-start md:items-center justify-between gap-5">
+        <div className="flex items-center gap-5">
+          <div className="w-18 h-18 sm:w-20 sm:h-20 bg-gradient-to-tr from-indigo-500 to-indigo-600 text-white rounded-2xl flex items-center justify-center text-2xl font-bold shadow-md shadow-indigo-100">
             {employee.first_name[0]}{employee.last_name[0]}
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
               {employee.first_name} {employee.last_name}
             </h1>
-            <div className="text-slate-500 mt-1 flex items-center gap-2 text-sm">
-              <span>{employee.designation || "No Designation"}</span>
+            <div className="text-slate-500 mt-1 flex flex-wrap items-center gap-2.5 text-xs sm:text-sm font-medium">
+              <span className="text-indigo-600 font-semibold">{employee.designation || "No Designation"}</span>
               <span>&bull;</span>
-              <span>{employee.department?.name || "No Department"}</span>
+              <span>{employee.department?.name || "General"}</span>
+              <span>&bull;</span>
+              <span className="font-mono text-slate-400">{employee.email}</span>
             </div>
-            <div className="mt-2 flex items-center gap-3 text-sm">
-              <span className={`px-2.5 py-0.5 rounded-full font-medium text-xs ${statusColors[employee.status]}`}>
-                {employee.status.replace("_", " ").toUpperCase()}
+            <div className="mt-3 flex items-center gap-2.5">
+              <span className={`px-2.5 py-0.5 rounded-full font-bold text-[10px] uppercase tracking-wider border ${getStatusBadge(employee.status)}`}>
+                {employee.status.replace("_", " ")}
               </span>
-              <span className="text-slate-500 border border-slate-200 rounded px-2 py-0.5 bg-slate-50">
+              <span className="font-mono text-xs font-semibold px-2.5 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200">
                 {employee.employee_id}
               </span>
             </div>
@@ -79,72 +87,73 @@ export default function EmployeeDetail({ employee, documents, role }: EmployeeDe
         {role === "ceo" && (
           <Link
             href={`/dashboard/employees/${employee.id}/edit`}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 transition-colors"
+            className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-sm hover:shadow transition-all"
           >
             <Edit className="w-4 h-4" />
-            Edit Employee
+            <span>Edit Profile</span>
           </Link>
         )}
       </div>
 
       {/* Tabs Layout */}
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-        <div className="flex border-b border-slate-200 overflow-x-auto">
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200/90 overflow-hidden">
+        <div className="flex border-b border-slate-100 bg-slate-50/50 px-3 pt-2 overflow-x-auto gap-2">
           {tabs.map((tab, idx) => {
             const Icon = tab.icon;
+            const isActive = activeTab === idx;
             return (
               <button
                 key={tab.name}
                 onClick={() => setActiveTab(idx)}
-                className={`flex items-center space-x-2 px-6 py-4 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
-                  activeTab === idx
-                    ? "border-indigo-600 text-indigo-600"
-                    : "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300"
+                className={`flex items-center gap-2 px-4 py-3 text-xs font-bold rounded-t-xl transition-all whitespace-nowrap ${
+                  isActive
+                    ? "bg-white text-indigo-600 border-t-2 border-indigo-600 shadow-sm"
+                    : "text-slate-500 hover:text-slate-800 hover:bg-slate-100/60"
                 }`}
               >
-                <Icon className="w-4 h-4" />
+                <Icon className={`w-4 h-4 ${isActive ? "text-indigo-600" : "text-slate-400"}`} />
                 <span>{tab.name}</span>
               </button>
             );
           })}
         </div>
 
-        <div className="p-6">
+        <div className="p-6 sm:p-7">
           {/* Personal */}
           {activeTab === 0 && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-y-4 gap-x-8">
-              <DetailItem label="First Name" value={employee.first_name} />
-              <DetailItem label="Last Name" value={employee.last_name} />
-              <DetailItem label="Email" value={employee.email} />
-              <DetailItem label="Phone" value={employee.phone} />
-              <DetailItem label="Date of Birth" value={formatDate(employee.date_of_birth)} />
-              <DetailItem label="Gender" value={<span className="capitalize">{employee.gender || "N/A"}</span>} />
-              <DetailItem label="Blood Group" value={employee.blood_group} />
-              <DetailItem label="Marital Status" value={<span className="capitalize">{employee.marital_status || "N/A"}</span>} />
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <DetailTile label="First Name" value={employee.first_name} />
+              <DetailTile label="Last Name" value={employee.last_name} />
+              <DetailTile label="Email Address" value={employee.email} />
+              <DetailTile label="Phone Number" value={employee.phone} />
+              <DetailTile label="Date of Birth" value={formatDate(employee.date_of_birth)} />
+              <DetailTile label="Gender" value={<span className="capitalize">{employee.gender || "N/A"}</span>} />
+              <DetailTile label="Blood Group" value={employee.blood_group} />
+              <DetailTile label="Marital Status" value={<span className="capitalize">{employee.marital_status || "N/A"}</span>} />
             </div>
           )}
 
           {/* Address & Emergency */}
           {activeTab === 1 && (
-            <div className="space-y-8">
+            <div className="space-y-6">
               <div>
-                <h3 className="text-lg font-medium text-slate-900 mb-4 pb-2 border-b">Current Address</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-y-4 gap-x-8">
+                <h3 className="text-sm font-bold text-slate-900 mb-3 uppercase tracking-wider text-slate-400">Residential Address</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   <div className="md:col-span-2">
-                    <DetailItem label="Address" value={employee.address} />
+                    <DetailTile label="Address Line" value={employee.address} />
                   </div>
-                  <DetailItem label="City" value={employee.city} />
-                  <DetailItem label="State" value={employee.state} />
-                  <DetailItem label="Pincode" value={employee.pincode} />
+                  <DetailTile label="City" value={employee.city} />
+                  <DetailTile label="State" value={employee.state} />
+                  <DetailTile label="Pincode" value={employee.pincode} />
                 </div>
               </div>
 
-              <div>
-                <h3 className="text-lg font-medium text-slate-900 mb-4 pb-2 border-b">Emergency Contact</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-y-4 gap-x-8">
-                  <DetailItem label="Name" value={employee.emergency_contact_name} />
-                  <DetailItem label="Phone" value={employee.emergency_contact_phone} />
-                  <DetailItem label="Relation" value={employee.emergency_contact_relation} />
+              <div className="pt-2 border-t border-slate-100">
+                <h3 className="text-sm font-bold text-slate-900 mb-3 uppercase tracking-wider text-slate-400">Emergency Contact</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <DetailTile label="Contact Name" value={employee.emergency_contact_name} />
+                  <DetailTile label="Phone Number" value={employee.emergency_contact_phone} />
+                  <DetailTile label="Relationship" value={employee.emergency_contact_relation} />
                 </div>
               </div>
             </div>
@@ -152,42 +161,44 @@ export default function EmployeeDetail({ employee, documents, role }: EmployeeDe
 
           {/* Employment */}
           {activeTab === 2 && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-y-4 gap-x-8">
-              <DetailItem label="Employee ID" value={employee.employee_id} />
-              <DetailItem label="Department" value={employee.department?.name} />
-              <DetailItem label="Designation" value={employee.designation} />
-              <DetailItem label="Employment Type" value={<span className="capitalize">{employee.employment_type?.replace("-", " ") || "N/A"}</span>} />
-              <DetailItem label="Joining Date" value={formatDate(employee.joining_date)} />
-              <DetailItem label="Probation End Date" value={formatDate(employee.probation_end_date)} />
-              <DetailItem label="Confirmation Date" value={formatDate(employee.confirmation_date)} />
-              <DetailItem label="Reporting Manager" value={employee.reporting_manager} />
-              <DetailItem label="Work Location" value={employee.work_location} />
-              <div className="md:col-span-3">
-                <DetailItem label="Notes" value={employee.notes} />
-              </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <DetailTile label="Employee ID" value={employee.employee_id} />
+              <DetailTile label="Department" value={employee.department?.name} />
+              <DetailTile label="Designation" value={employee.designation} />
+              <DetailTile label="Employment Type" value={<span className="capitalize">{employee.employment_type?.replace("-", " ") || "N/A"}</span>} />
+              <DetailTile label="Joining Date" value={formatDate(employee.joining_date)} />
+              <DetailTile label="Probation End Date" value={formatDate(employee.probation_end_date)} />
+              <DetailTile label="Confirmation Date" value={formatDate(employee.confirmation_date)} />
+              <DetailTile label="Reporting Manager" value={employee.reporting_manager} />
+              <DetailTile label="Work Location" value={employee.work_location} />
+              {employee.notes && (
+                <div className="md:col-span-3">
+                  <DetailTile label="Internal Notes" value={employee.notes} />
+                </div>
+              )}
             </div>
           )}
 
           {/* Bank & Identity */}
           {activeTab === 3 && (
-            <div className="space-y-8">
+            <div className="space-y-6">
               <div>
-                <h3 className="text-lg font-medium text-slate-900 mb-4 pb-2 border-b">Financial Details</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-y-4 gap-x-8">
-                  <DetailItem label="Salary" value={employee.salary ? `₹${employee.salary.toLocaleString('en-IN')}` : "N/A"} />
-                  <DetailItem label="Bank Name" value={employee.bank_name} />
-                  <DetailItem label="Bank Account Number" value={maskString(employee.bank_account_number, 4)} />
-                  <DetailItem label="IFSC Code" value={employee.ifsc_code} />
+                <h3 className="text-sm font-bold text-slate-900 mb-3 uppercase tracking-wider text-slate-400">Financial Details</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <DetailTile label="Monthly Fixed Salary" value={employee.salary ? `₹${employee.salary.toLocaleString('en-IN')}` : "N/A"} />
+                  <DetailTile label="Bank Name" value={employee.bank_name} />
+                  <DetailTile label="Bank Account Number" value={maskString(employee.bank_account_number, 4)} />
+                  <DetailTile label="IFSC Code" value={employee.ifsc_code} />
                 </div>
               </div>
 
-              <div>
-                <h3 className="text-lg font-medium text-slate-900 mb-4 pb-2 border-b">Identity Details</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-y-4 gap-x-8">
-                  <DetailItem label="PAN Number" value={maskString(employee.pan_number, 4)} />
-                  <DetailItem label="Aadhar Number" value={maskString(employee.aadhar_number, 4)} />
-                  <DetailItem label="UAN Number" value={employee.uan_number} />
-                  <DetailItem label="ESI Number" value={employee.esi_number} />
+              <div className="pt-2 border-t border-slate-100">
+                <h3 className="text-sm font-bold text-slate-900 mb-3 uppercase tracking-wider text-slate-400">Statutory & Identity</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <DetailTile label="PAN Number" value={maskString(employee.pan_number, 4)} />
+                  <DetailTile label="Aadhaar Number" value={maskString(employee.aadhar_number, 4)} />
+                  <DetailTile label="UAN Number" value={employee.uan_number} />
+                  <DetailTile label="ESI Number" value={employee.esi_number} />
                 </div>
               </div>
             </div>
@@ -208,3 +219,4 @@ export default function EmployeeDetail({ employee, documents, role }: EmployeeDe
     </div>
   );
 }
+

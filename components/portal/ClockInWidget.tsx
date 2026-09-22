@@ -60,72 +60,72 @@ export default function ClockInWidget({ employeeId, initialLog, project }: Clock
   const graceMinutes = project?.grace_period_minutes || 30;
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm flex flex-col justify-between">
+    <div className="bg-white rounded-2xl border border-slate-200/90 p-6 sm:p-7 shadow-sm flex flex-col justify-between space-y-6">
       <div>
-        <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-4">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-5 mb-5 gap-4">
+          <div className="flex items-center gap-3.5">
+            <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl shadow-xs border border-indigo-100/80">
               <Clock className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-bold text-slate-900 text-sm">Attendance & Shift Punch</h3>
-              <p className="text-xs text-slate-500">
-                Shift: {shiftStart} - {shiftEnd} ({project?.timezone || "Asia/Kolkata"})
+              <h3 className="font-bold text-slate-900 text-base">Attendance & Shift Punch</h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Shift: <span className="font-semibold text-slate-700">{shiftStart} - {shiftEnd}</span> ({project?.timezone || "Asia/Kolkata"})
               </p>
             </div>
           </div>
 
-          <div className="text-right">
-            <span className="text-lg font-mono font-bold text-indigo-700 block">
+          <div className="sm:text-right bg-slate-50 sm:bg-transparent p-3 sm:p-0 rounded-xl border sm:border-0 border-slate-100">
+            <span className="text-2xl font-mono font-bold text-indigo-700 block tracking-tight">
               {currentTime || "--:--:--"}
             </span>
-            <span className="text-[10px] text-slate-400 font-medium">
-              Grace Period: {graceMinutes}m
+            <span className="text-[11px] text-slate-400 font-medium">
+              Grace Window: {graceMinutes} mins
             </span>
           </div>
         </div>
 
         {/* Current Punch Status */}
-        <div className="space-y-3">
-          <div className="flex items-center justify-between text-xs bg-slate-50 p-3 rounded-lg border border-slate-100">
-            <span className="text-slate-600 font-medium">Status for Today:</span>
+        <div className="space-y-4">
+          <div className="flex items-center justify-between text-xs bg-slate-50/80 p-3.5 rounded-xl border border-slate-200/70">
+            <span className="text-slate-600 font-semibold">Today&apos;s Status:</span>
             {!isCheckedIn ? (
-              <span className="font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+              <span className="font-semibold text-amber-800 bg-amber-50 px-3 py-1 rounded-full border border-amber-200/80 text-[11px]">
                 Not Checked In
               </span>
             ) : isCheckedOut ? (
-              <span className="font-semibold text-slate-700 bg-slate-200 px-2 py-0.5 rounded">
+              <span className="font-semibold text-slate-800 bg-slate-200 px-3 py-1 rounded-full text-[11px]">
                 Completed ({log?.total_hours || 0} hrs)
               </span>
             ) : log?.status === "half_day" ? (
-              <span className="font-semibold text-amber-800 bg-amber-100 px-2 py-0.5 rounded flex items-center gap-1">
-                <AlertTriangle className="w-3.5 h-3.5" /> Half Day
+              <span className="font-semibold text-amber-900 bg-amber-100 px-3 py-1 rounded-full flex items-center gap-1.5 text-[11px]">
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-600" /> Half Day
               </span>
             ) : log?.is_late ? (
-              <span className="font-semibold text-orange-800 bg-orange-100 px-2 py-0.5 rounded">
-                Present (Late)
+              <span className="font-semibold text-orange-900 bg-orange-100 px-3 py-1 rounded-full text-[11px]">
+                Present (Late Punch)
               </span>
             ) : (
-              <span className="font-semibold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded flex items-center gap-1">
-                <CheckCircle2 className="w-3.5 h-3.5" /> Present (On Time)
+              <span className="font-semibold text-emerald-900 bg-emerald-100 px-3 py-1 rounded-full flex items-center gap-1.5 text-[11px]">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Present (On Time)
               </span>
             )}
           </div>
 
           {isCheckedIn && (
-            <div className="grid grid-cols-2 gap-2 text-xs text-slate-600">
-              <div className="p-2.5 bg-slate-50 rounded border border-slate-100">
-                <span className="block text-[10px] text-slate-400 uppercase font-semibold">Check-In</span>
-                <span className="font-bold text-slate-800">
+            <div className="grid grid-cols-2 gap-3 text-xs text-slate-600">
+              <div className="p-3 bg-slate-50/90 rounded-xl border border-slate-200/70">
+                <span className="block text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-0.5">Check-In Time</span>
+                <span className="font-bold text-slate-900 text-sm font-mono">
                   {new Date(log!.check_in_time!).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </span>
               </div>
-              <div className="p-2.5 bg-slate-50 rounded border border-slate-100">
-                <span className="block text-[10px] text-slate-400 uppercase font-semibold">Check-Out</span>
-                <span className="font-bold text-slate-800">
+              <div className="p-3 bg-slate-50/90 rounded-xl border border-slate-200/70">
+                <span className="block text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-0.5">Check-Out Time</span>
+                <span className="font-bold text-slate-900 text-sm font-mono">
                   {isCheckedOut
                     ? new Date(log!.check_out_time!).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                    : "Active"}
+                    : "Active Session"}
                 </span>
               </div>
             </div>
@@ -133,12 +133,12 @@ export default function ClockInWidget({ employeeId, initialLog, project }: Clock
         </div>
       </div>
 
-      <div className="mt-5 space-y-2">
+      <div className="space-y-3 pt-2">
         {!isCheckedIn ? (
           <button
             onClick={() => handlePunch("in")}
             disabled={loading}
-            className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 shadow-sm transition-colors disabled:opacity-50"
+            className="w-full flex items-center justify-center gap-2 py-3 px-5 rounded-xl text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 shadow-sm hover:shadow transition-all disabled:opacity-50 cursor-pointer"
           >
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <LogIn className="w-4 h-4" />}
             <span>Clock In Now</span>
@@ -147,24 +147,24 @@ export default function ClockInWidget({ employeeId, initialLog, project }: Clock
           <button
             onClick={() => handlePunch("out")}
             disabled={loading}
-            className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg text-sm font-semibold text-white bg-rose-600 hover:bg-rose-700 shadow-sm transition-colors disabled:opacity-50"
+            className="w-full flex items-center justify-center gap-2 py-3 px-5 rounded-xl text-sm font-bold text-white bg-rose-600 hover:bg-rose-700 active:bg-rose-800 shadow-sm hover:shadow transition-all disabled:opacity-50 cursor-pointer"
           >
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <LogOut className="w-4 h-4" />}
             <span>Clock Out Now</span>
           </button>
         ) : (
-          <div className="text-center py-2 text-xs text-slate-500 font-medium bg-slate-50 rounded-lg">
-            Attendance recorded for today.
+          <div className="text-center py-2.5 text-xs text-slate-600 font-medium bg-slate-50 rounded-xl border border-slate-200/70">
+            Attendance recorded successfully for today.
           </div>
         )}
 
-        <div className="text-center pt-1">
+        <div className="text-center pt-0.5">
           <Link
             href="/portal/attendance"
-            className="text-[11px] text-indigo-600 hover:text-indigo-800 font-medium inline-flex items-center gap-0.5"
+            className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold inline-flex items-center gap-1 transition-colors"
           >
             <span>Missed punch? Request Regularization</span>
-            <ArrowUpRight className="w-3 h-3" />
+            <ArrowUpRight className="w-3.5 h-3.5" />
           </Link>
         </div>
       </div>

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { EmployeeDocument } from "@/lib/types";
-import { Upload, FileText, Trash2, Download, Eye, Loader2 } from "lucide-react";
+import { Upload, FileText, Trash2, Download, Eye, Loader2, Plus } from "lucide-react";
 
 interface DocumentUploadProps {
   employeeId?: string;
@@ -87,7 +87,6 @@ export default function DocumentUpload({ employeeId, documents: initialDocs, onU
   };
 
   const handleDelete = async (id: string) => {
-    // Implement delete logic against your API
     try {
       const res = await fetch(`/api/documents/${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Delete failed");
@@ -100,84 +99,94 @@ export default function DocumentUpload({ employeeId, documents: initialDocs, onU
   return (
     <div className="space-y-6">
       {canUpload && (
-        <div className="border-2 border-dashed border-slate-300 rounded-lg p-6 bg-slate-50">
-          <div className="flex flex-col items-center justify-center space-y-4">
-          <div className="w-full max-w-xs">
-            <label className="block text-sm font-medium text-slate-700 mb-1">Document Type</label>
-            <select
-              value={docType}
-              onChange={(e) => setDocType(e.target.value)}
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm bg-white"
-            >
-              {docTypes.map(type => (
-                <option key={type} value={type}>{type}</option>
-              ))}
-            </select>
-          </div>
+        <div className="bg-slate-50/70 border-2 border-dashed border-slate-200 rounded-2xl p-6 sm:p-7">
+          <div className="max-w-xl mx-auto space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Document Type</label>
+                <select
+                  value={docType}
+                  onChange={(e) => setDocType(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-xs font-semibold bg-white text-slate-800 shadow-sm focus:outline-none focus:border-indigo-500"
+                >
+                  {docTypes.map(type => (
+                    <option key={type} value={type}>{type}</option>
+                  ))}
+                </select>
+              </div>
 
-          <div className="w-full max-w-xs">
-            <label htmlFor="document-name" className="block text-sm font-medium text-slate-700 mb-1">
-              Document Name <span className="font-normal text-slate-500">(optional)</span>
-            </label>
-            <input
-              id="document-name"
-              type="text"
-              value={documentName}
-              onChange={(e) => setDocumentName(e.target.value)}
-              placeholder="Defaults to the file name"
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm bg-white"
-              disabled={isUploading}
-            />
-          </div>
+              <div>
+                <label htmlFor="document-name" className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Custom Label <span className="font-normal text-slate-400 normal-case">(optional)</span>
+                </label>
+                <input
+                  id="document-name"
+                  type="text"
+                  value={documentName}
+                  onChange={(e) => setDocumentName(e.target.value)}
+                  placeholder="Defaults to filename"
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-xs font-semibold bg-white text-slate-800 shadow-sm focus:outline-none focus:border-indigo-500"
+                  disabled={isUploading}
+                />
+              </div>
+            </div>
 
-            <label className="flex flex-col items-center justify-center w-full max-w-xs h-32 px-4 transition bg-white border-2 border-slate-300 border-dashed rounded-md appearance-none cursor-pointer hover:border-indigo-400 focus:outline-none">
-              <span className="flex items-center space-x-2">
+            <label className="flex flex-col items-center justify-center w-full py-8 px-4 bg-white border border-slate-200 rounded-2xl shadow-sm hover:border-indigo-400 hover:shadow-md transition-all cursor-pointer">
+              <div className="h-12 w-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mb-3">
                 {isUploading ? (
-                  <Loader2 className="w-6 h-6 text-indigo-600 animate-spin" />
+                  <Loader2 className="w-6 h-6 animate-spin" />
                 ) : (
-                  <Upload className="w-6 h-6 text-slate-500" />
+                  <Upload className="w-6 h-6" />
                 )}
-                <span className="font-medium text-slate-600">
-                  {isUploading ? "Uploading..." : "Click to upload"}
-                </span>
+              </div>
+              <span className="text-sm font-bold text-slate-800">
+                {isUploading ? "Uploading Document..." : "Choose Document to Upload"}
               </span>
-              <span className="text-xs text-slate-500 mt-2">PDF, PNG, JPG up to 5MB</span>
+              <span className="text-xs text-slate-400 mt-1 font-medium">Supports PDF, PNG, JPG files up to 5MB</span>
               <input type="file" name="file_upload" className="hidden" accept=".pdf,image/*" onChange={handleFileChange} disabled={isUploading} />
             </label>
           </div>
-          {error && <p className="mt-2 text-sm text-red-600 text-center">{error}</p>}
+          {error && <p className="mt-3 text-xs font-bold text-rose-600 text-center">{error}</p>}
         </div>
       )}
 
       {/* Document List */}
       <div className="space-y-3">
-        <h4 className="text-sm font-medium text-slate-900">Uploaded Documents ({documents.length})</h4>
+        <div className="flex items-center justify-between">
+          <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+            Verified Documents ({documents.length})
+          </h4>
+        </div>
         {documents.length === 0 ? (
-          <p className="text-sm text-slate-500 italic">No documents uploaded yet.</p>
+          <div className="text-center py-10 bg-slate-50/50 rounded-2xl border border-slate-100">
+            <p className="text-xs text-slate-400 font-medium">No documents uploaded yet for this employee record.</p>
+          </div>
         ) : (
-          <ul className="divide-y divide-slate-200 border border-slate-200 rounded-lg overflow-hidden">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {documents.map((doc) => (
-              <li key={doc.id} className="flex items-center justify-between p-4 bg-white hover:bg-slate-50">
-                <div className="flex items-center space-x-3">
-                  <FileText className="w-5 h-5 text-indigo-500" />
-                  <div>
-                    <p className="text-sm font-medium text-slate-900">{doc.document_name}</p>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <span className="text-xs px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full">
+              <div key={doc.id} className="flex items-center justify-between p-4 bg-white rounded-xl border border-slate-200/90 shadow-2xs hover:shadow-sm transition-all">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="h-10 w-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                    <FileText className="w-5 h-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-slate-900 truncate">{doc.document_name}</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-[10px] font-bold px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md">
                         {doc.document_type}
                       </span>
-                      <span className="text-xs text-slate-500">
+                      <span className="text-[10px] text-slate-400 font-mono">
                         {new Date(doc.uploaded_at).toLocaleDateString()}
                       </span>
                     </div>
                   </div>
                 </div>
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center gap-1 shrink-0 ml-3">
                   <a
                     href={doc.document_url}
                     target="_blank"
                     rel="noreferrer"
-                    className="p-2 text-slate-400 hover:text-indigo-600 transition"
+                    className="p-1.5 rounded-lg text-slate-400 hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
                     title="View"
                   >
                     <Eye className="w-4 h-4" />
@@ -185,24 +194,25 @@ export default function DocumentUpload({ employeeId, documents: initialDocs, onU
                   <a
                     href={doc.document_url}
                     download
-                    className="p-2 text-slate-400 hover:text-indigo-600 transition"
+                    className="p-1.5 rounded-lg text-slate-400 hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
                     title="Download"
                   >
                     <Download className="w-4 h-4" />
                   </a>
                   <button
                     onClick={() => handleDelete(doc.id)}
-                    className="p-2 text-slate-400 hover:text-red-600 transition"
+                    className="p-1.5 rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-colors"
                     title="Delete"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
-              </li>
+              </div>
             ))}
-          </ul>
+          </div>
         )}
       </div>
     </div>
   );
 }
+

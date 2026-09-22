@@ -1,6 +1,6 @@
 "use client"
 
-import { Users, UserCheck, Building2, UserPlus, AlertTriangle } from 'lucide-react'
+import { Users, UserCheck, Building2, UserPlus, AlertTriangle, ArrowUpRight } from 'lucide-react'
 import Link from 'next/link'
 import { UserRole, Employee } from '@/lib/types'
 
@@ -17,12 +17,16 @@ interface DashboardStatsProps {
 }
 
 export default function DashboardStats({ stats, role }: DashboardStatsProps) {
-  const getStatusColor = (status: string) => {
+  const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'active': return 'bg-green-100 text-green-700'
-      case 'terminated': return 'bg-red-100 text-red-700'
-      case 'on_notice': return 'bg-yellow-100 text-yellow-700'
-      default: return 'bg-gray-100 text-gray-700'
+      case 'active':
+        return 'bg-emerald-50 text-emerald-700 border-emerald-200'
+      case 'terminated':
+        return 'bg-rose-50 text-rose-700 border-rose-200'
+      case 'on_notice':
+        return 'bg-amber-50 text-amber-700 border-amber-200'
+      default:
+        return 'bg-slate-50 text-slate-700 border-slate-200'
     }
   }
 
@@ -38,104 +42,150 @@ export default function DashboardStats({ stats, role }: DashboardStatsProps) {
   return (
     <div className="space-y-8">
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="flex items-center rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-indigo-100 text-indigo-600">
-            <Users className="h-6 w-6" />
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="bg-white p-6 rounded-2xl border border-slate-200/90 shadow-sm hover:shadow-md transition-all">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Total Headcount</span>
+            <div className="h-10 w-10 flex items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-100">
+              <Users className="h-5 w-5" />
+            </div>
           </div>
-          <div className="ml-4">
-            <p className="text-sm font-medium text-slate-600">Total Employees</p>
-            <h3 className="text-2xl font-bold text-slate-900">{stats.totalEmployees}</h3>
-          </div>
-        </div>
-
-        <div className="flex items-center rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-green-100 text-green-600">
-            <UserCheck className="h-6 w-6" />
-          </div>
-          <div className="ml-4">
-            <p className="text-sm font-medium text-slate-600">Active Employees</p>
-            <h3 className="text-2xl font-bold text-slate-900">{stats.activeEmployees}</h3>
+          <div className="mt-4">
+            <h3 className="text-3xl font-extrabold text-slate-900 tracking-tight">{stats.totalEmployees}</h3>
+            <p className="text-xs text-slate-500 font-medium mt-1">Across all branches & teams</p>
           </div>
         </div>
 
-        <div className="flex items-center rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-purple-100 text-purple-600">
-            <Building2 className="h-6 w-6" />
+        <div className="bg-white p-6 rounded-2xl border border-slate-200/90 shadow-sm hover:shadow-md transition-all">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Active Staff</span>
+            <div className="h-10 w-10 flex items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-100">
+              <UserCheck className="h-5 w-5" />
+            </div>
           </div>
-          <div className="ml-4">
-            <p className="text-sm font-medium text-slate-600">Departments</p>
-            <h3 className="text-2xl font-bold text-slate-900">{stats.departments}</h3>
+          <div className="mt-4">
+            <h3 className="text-3xl font-extrabold text-slate-900 tracking-tight">{stats.activeEmployees}</h3>
+            <p className="text-xs text-emerald-600 font-medium mt-1">Currently on active payroll</p>
           </div>
         </div>
 
-        <div className="flex items-center rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-100 text-blue-600">
-            <UserPlus className="h-6 w-6" />
+        <div className="bg-white p-6 rounded-2xl border border-slate-200/90 shadow-sm hover:shadow-md transition-all">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Departments</span>
+            <div className="h-10 w-10 flex items-center justify-center rounded-xl bg-violet-50 text-violet-600 border border-violet-100">
+              <Building2 className="h-5 w-5" />
+            </div>
           </div>
-          <div className="ml-4">
-            <p className="text-sm font-medium text-slate-600">New Hires (Month)</p>
-            <h3 className="text-2xl font-bold text-slate-900">{stats.newHires}</h3>
+          <div className="mt-4">
+            <h3 className="text-3xl font-extrabold text-slate-900 tracking-tight">{stats.departments}</h3>
+            <p className="text-xs text-slate-500 font-medium mt-1">Functional business units</p>
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-2xl border border-slate-200/90 shadow-sm hover:shadow-md transition-all">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">New Hires</span>
+            <div className="h-10 w-10 flex items-center justify-center rounded-xl bg-blue-50 text-blue-600 border border-blue-100">
+              <UserPlus className="h-5 w-5" />
+            </div>
+          </div>
+          <div className="mt-4">
+            <h3 className="text-3xl font-extrabold text-slate-900 tracking-tight">{stats.newHires}</h3>
+            <p className="text-xs text-blue-600 font-medium mt-1">Joined in last 30 days</p>
           </div>
         </div>
 
         {stats.onNotice > 0 && (
-          <div className="flex items-center rounded-xl border border-slate-200 bg-white p-6 shadow-sm sm:col-span-2 lg:col-span-1">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 text-amber-600">
-              <AlertTriangle className="h-6 w-6" />
+          <div className="bg-amber-50/70 p-6 rounded-2xl border border-amber-200/80 shadow-sm sm:col-span-2 lg:col-span-4 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="h-11 w-11 flex items-center justify-center rounded-xl bg-amber-100 text-amber-700">
+                <AlertTriangle className="h-6 w-6" />
+              </div>
+              <div>
+                <h4 className="font-bold text-amber-900 text-base">{stats.onNotice} Employee(s) Currently on Notice Period</h4>
+                <p className="text-xs text-amber-700 font-medium mt-0.5">Please initiate handover procedures and exit checklist verification.</p>
+              </div>
             </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-slate-600">On Notice</p>
-              <h3 className="text-2xl font-bold text-slate-900">{stats.onNotice}</h3>
-            </div>
+            <Link href="/dashboard/employees" className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow-sm transition-all">
+              View Staff
+            </Link>
           </div>
         )}
       </div>
 
       {/* Recent Employees Table */}
-      <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-200 px-6 py-4">
-          <h2 className="text-lg font-semibold text-slate-900">Recent Employees</h2>
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden">
+        <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-bold text-slate-900">Recent Onboarded Employees</h2>
+            <p className="text-xs text-slate-500 mt-0.5">Recently added staff profiles and joining status</p>
+          </div>
+          <Link
+            href="/dashboard/employees"
+            className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100/80 px-3.5 py-2 rounded-xl transition-all"
+          >
+            <span>View All Staff</span>
+            <ArrowUpRight className="h-3.5 w-3.5" />
+          </Link>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm text-slate-600">
-            <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+            <thead className="bg-slate-50/75 text-[11px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100">
               <tr>
-                <th className="px-6 py-3">Name</th>
-                <th className="px-6 py-3">Department</th>
-                <th className="px-6 py-3">Designation</th>
-                <th className="px-6 py-3">Joining Date</th>
-                <th className="px-6 py-3">Status</th>
+                <th className="px-6 py-3.5">Employee</th>
+                <th className="px-6 py-3.5">Department</th>
+                <th className="px-6 py-3.5">Designation</th>
+                <th className="px-6 py-3.5">Joining Date</th>
+                <th className="px-6 py-3.5">Status</th>
+                <th className="px-6 py-3.5 text-right">Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-200 bg-white">
+            <tbody className="divide-y divide-slate-100 bg-white">
               {stats.recentEmployees.length > 0 ? (
                 stats.recentEmployees.map((emp) => (
-                  <tr key={emp.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="whitespace-nowrap px-6 py-4 font-medium text-slate-900">
-                      <Link href={`/dashboard/employees/${emp.id}`} className="hover:text-indigo-600">
-                        {emp.first_name} {emp.last_name}
-                      </Link>
+                  <tr key={emp.id} className="hover:bg-slate-50/80 transition-colors">
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="h-9 w-9 rounded-full bg-gradient-to-tr from-indigo-500 to-indigo-600 text-white font-bold text-xs flex items-center justify-center shadow-sm">
+                          {emp.first_name[0]}{emp.last_name[0]}
+                        </div>
+                        <div>
+                          <Link href={`/dashboard/employees/${emp.id}`} className="font-bold text-slate-900 hover:text-indigo-600 transition-colors block">
+                            {emp.first_name} {emp.last_name}
+                          </Link>
+                          <span className="text-xs text-slate-400 font-mono">{emp.employee_id}</span>
+                        </div>
+                      </div>
                     </td>
-                    <td className="whitespace-nowrap px-6 py-4">
-                      {emp.department?.name || 'N/A'}
+                    <td className="px-6 py-4">
+                      <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700">
+                        {emp.department?.name || 'General'}
+                      </span>
                     </td>
-                    <td className="whitespace-nowrap px-6 py-4">
+                    <td className="px-6 py-4 font-medium text-slate-800">
                       {emp.designation || 'N/A'}
                     </td>
-                    <td className="whitespace-nowrap px-6 py-4">
+                    <td className="px-6 py-4 text-xs font-medium text-slate-500">
                       {formatDate(emp.joining_date)}
                     </td>
-                    <td className="whitespace-nowrap px-6 py-4">
-                      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${getStatusColor(emp.status)}`}>
+                    <td className="px-6 py-4">
+                      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider border ${getStatusBadge(emp.status)}`}>
                         {emp.status.replace('_', ' ')}
                       </span>
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <Link
+                        href={`/dashboard/employees/${emp.id}`}
+                        className="text-xs font-bold text-indigo-600 hover:text-indigo-800 hover:underline"
+                      >
+                        Details
+                      </Link>
                     </td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={5} className="px-6 py-8 text-center text-slate-500">
+                  <td colSpan={6} className="px-6 py-12 text-center text-slate-400 font-medium">
                     No recent employees found.
                   </td>
                 </tr>
@@ -147,3 +197,4 @@ export default function DashboardStats({ stats, role }: DashboardStatsProps) {
     </div>
   )
 }
+

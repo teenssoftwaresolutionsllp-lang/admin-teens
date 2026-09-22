@@ -142,32 +142,37 @@ export default function EmployeeProfileView({
       )}
 
       {/* 3. Main Profile Header Card */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="p-6 sm:p-8 bg-gradient-to-r from-slate-900 to-indigo-950 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-6">
-          <div className="flex items-center gap-5">
-            <div className="w-20 h-20 rounded-full bg-indigo-500/30 border-2 border-indigo-400/50 flex items-center justify-center text-white font-bold text-2xl shadow-inner">
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden">
+        <div className="p-6 sm:p-8 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-5">
+            <div className="w-20 h-20 rounded-2xl bg-indigo-500/20 border-2 border-indigo-400/40 flex items-center justify-center text-white font-bold text-2xl shadow-inner shrink-0 backdrop-blur-xs">
               {employee.first_name[0]}
               {employee.last_name[0]}
             </div>
-            <div>
-              <h2 className="text-2xl font-bold text-white">
-                {employee.first_name} {employee.last_name}
-              </h2>
-              <p className="text-indigo-200 text-sm font-medium mt-0.5">
-                {employee.designation || "Staff Engineer"} &bull; ID:{" "}
-                <span className="font-mono">{employee.employee_id}</span>
+            <div className="space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
+                  {employee.first_name} {employee.last_name}
+                </h2>
+                <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 uppercase tracking-wider">
+                  {employee.status || "Active"}
+                </span>
+              </div>
+              <p className="text-indigo-200 text-sm font-medium">
+                {employee.designation || "Senior Software Engineer"} &bull; ID:{" "}
+                <span className="font-mono font-bold text-white">{employee.employee_id}</span>
               </p>
-              <div className="flex flex-wrap items-center gap-2 mt-2 text-xs text-slate-300">
-                <span className="inline-flex items-center gap-1">
-                  <Mail className="w-3.5 h-3.5" /> {employee.email}
+              <div className="flex flex-wrap items-center gap-4 pt-1 text-xs text-slate-300">
+                <span className="inline-flex items-center gap-1.5">
+                  <Mail className="w-3.5 h-3.5 text-indigo-300" /> {employee.email}
                 </span>
                 {employee.phone && (
-                  <span className="inline-flex items-center gap-1">
-                    <Phone className="w-3.5 h-3.5" /> {employee.phone}
+                  <span className="inline-flex items-center gap-1.5">
+                    <Phone className="w-3.5 h-3.5 text-indigo-300" /> {employee.phone}
                   </span>
                 )}
-                <span className="inline-flex items-center gap-1">
-                  <Building className="w-3.5 h-3.5" /> {employee.work_location || "Hyderabad (HQ)"}
+                <span className="inline-flex items-center gap-1.5">
+                  <Building className="w-3.5 h-3.5 text-indigo-300" /> {employee.work_location || "Hyderabad HQ"}
                 </span>
               </div>
             </div>
@@ -175,7 +180,7 @@ export default function EmployeeProfileView({
 
           <button
             onClick={() => setIsEditModalOpen(true)}
-            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold shadow-md transition-colors shrink-0"
+            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white rounded-xl text-xs font-bold shadow-md hover:shadow-lg transition-all shrink-0 cursor-pointer"
           >
             <Edit3 className="w-4 h-4" />
             <span>Request Profile Edit</span>
@@ -183,12 +188,12 @@ export default function EmployeeProfileView({
         </div>
 
         {/* Profile Tabs */}
-        <div className="border-b border-slate-200 flex overflow-x-auto bg-slate-50/50">
+        <div className="border-b border-slate-200 flex overflow-x-auto bg-slate-50/80 px-4 pt-2 gap-2">
           {[
             { id: "personal", label: "Personal Details", icon: User },
             { id: "address", label: "Address & Emergency", icon: MapPin },
-            { id: "bank", label: "Bank & KYC Identity", icon: CreditCard },
-            { id: "employment", label: "Employment & Project", icon: Briefcase },
+            { id: "bank", label: "Bank & Statutory KYC", icon: CreditCard },
+            { id: "employment", label: "Employment & Shift", icon: Briefcase },
           ].map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -196,10 +201,10 @@ export default function EmployeeProfileView({
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as any)}
-                className={`flex items-center gap-2 px-6 py-4 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap ${
+                className={`flex items-center gap-2 px-5 py-3.5 text-xs font-bold rounded-t-xl transition-all whitespace-nowrap cursor-pointer ${
                   isActive
-                    ? "border-indigo-600 text-indigo-600 bg-white"
-                    : "border-transparent text-slate-500 hover:text-slate-800"
+                    ? "bg-white text-indigo-700 border-t-2 border-indigo-600 shadow-xs"
+                    : "text-slate-500 hover:text-slate-800 hover:bg-slate-100/60"
                 }`}
               >
                 <Icon className="w-4 h-4" />
@@ -212,38 +217,38 @@ export default function EmployeeProfileView({
         {/* Tab Contents */}
         <div className="p-6 sm:p-8">
           {activeTab === "personal" && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
-              <div>
-                <span className="text-xs text-slate-400 font-semibold block uppercase">First Name</span>
-                <span className="font-medium text-slate-800">{employee.first_name}</span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 text-sm">
+              <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
+                <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">First Name</span>
+                <span className="font-bold text-slate-900 text-base">{employee.first_name}</span>
               </div>
-              <div>
-                <span className="text-xs text-slate-400 font-semibold block uppercase">Last Name</span>
-                <span className="font-medium text-slate-800">{employee.last_name}</span>
+              <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
+                <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">Last Name</span>
+                <span className="font-bold text-slate-900 text-base">{employee.last_name}</span>
               </div>
-              <div>
-                <span className="text-xs text-slate-400 font-semibold block uppercase">Official Email</span>
-                <span className="font-medium text-slate-800">{employee.email}</span>
+              <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
+                <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">Official Email</span>
+                <span className="font-medium text-slate-900 font-mono text-xs">{employee.email}</span>
               </div>
-              <div>
-                <span className="text-xs text-slate-400 font-semibold block uppercase">Phone Number</span>
-                <span className="font-medium text-slate-800">{employee.phone || "Not specified"}</span>
+              <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
+                <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">Phone Number</span>
+                <span className="font-semibold text-slate-900">{employee.phone || "Not specified"}</span>
               </div>
-              <div>
-                <span className="text-xs text-slate-400 font-semibold block uppercase">Date of Birth</span>
-                <span className="font-medium text-slate-800">{employee.date_of_birth || "Not specified"}</span>
+              <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
+                <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">Date of Birth</span>
+                <span className="font-semibold text-slate-900 font-mono">{employee.date_of_birth || "Not specified"}</span>
               </div>
-              <div>
-                <span className="text-xs text-slate-400 font-semibold block uppercase">Gender</span>
-                <span className="font-medium text-slate-800 capitalize">{employee.gender || "Not specified"}</span>
+              <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
+                <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">Gender</span>
+                <span className="font-semibold text-slate-900 capitalize">{employee.gender || "Not specified"}</span>
               </div>
-              <div>
-                <span className="text-xs text-slate-400 font-semibold block uppercase">Blood Group</span>
-                <span className="font-medium text-slate-800">{employee.blood_group || "Not specified"}</span>
+              <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
+                <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">Blood Group</span>
+                <span className="font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md inline-block">{employee.blood_group || "Not specified"}</span>
               </div>
-              <div>
-                <span className="text-xs text-slate-400 font-semibold block uppercase">Marital Status</span>
-                <span className="font-medium text-slate-800 capitalize">{employee.marital_status || "Single"}</span>
+              <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
+                <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">Marital Status</span>
+                <span className="font-semibold text-slate-900 capitalize">{employee.marital_status || "Single"}</span>
               </div>
             </div>
           )}
@@ -251,43 +256,47 @@ export default function EmployeeProfileView({
           {activeTab === "address" && (
             <div className="space-y-6">
               <div>
-                <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-3">
-                  Residential Address
+                <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-4 flex items-center gap-2">
+                  <MapPin className="w-4 h-4 text-indigo-600" />
+                  <span>Residential Address</span>
                 </h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
-                  <div className="md:col-span-2">
-                    <span className="text-xs text-slate-400 font-semibold block uppercase">Street Address</span>
-                    <span className="font-medium text-slate-800">{employee.address || "Not specified"}</span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5 text-sm">
+                  <div className="sm:col-span-2 md:col-span-3 p-4 bg-slate-50/70 rounded-xl border border-slate-100">
+                    <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">Street Address</span>
+                    <span className="font-semibold text-slate-800">{employee.address || "Not specified"}</span>
                   </div>
-                  <div>
-                    <span className="text-xs text-slate-400 font-semibold block uppercase">City & State</span>
-                    <span className="font-medium text-slate-800">
-                      {employee.city || ""}, {employee.state || ""}
-                    </span>
+                  <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
+                    <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">City</span>
+                    <span className="font-semibold text-slate-800">{employee.city || "Not specified"}</span>
                   </div>
-                  <div>
-                    <span className="text-xs text-slate-400 font-semibold block uppercase">Postal Pincode</span>
-                    <span className="font-medium text-slate-800">{employee.pincode || "Not specified"}</span>
+                  <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
+                    <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">State</span>
+                    <span className="font-semibold text-slate-800">{employee.state || "Not specified"}</span>
+                  </div>
+                  <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
+                    <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">Postal Pincode</span>
+                    <span className="font-semibold text-slate-800 font-mono">{employee.pincode || "Not specified"}</span>
                   </div>
                 </div>
               </div>
 
-              <div className="border-t border-slate-100 pt-6">
-                <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-3">
-                  Emergency Contact
+              <div className="border-t border-slate-200/80 pt-6">
+                <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-4 flex items-center gap-2">
+                  <Phone className="w-4 h-4 text-indigo-600" />
+                  <span>Emergency Contact Details</span>
                 </h4>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
-                  <div>
-                    <span className="text-xs text-slate-400 font-semibold block uppercase">Contact Name</span>
-                    <span className="font-medium text-slate-800">{employee.emergency_contact_name || "Not specified"}</span>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 text-sm">
+                  <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
+                    <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">Contact Name</span>
+                    <span className="font-bold text-slate-900">{employee.emergency_contact_name || "Not specified"}</span>
                   </div>
-                  <div>
-                    <span className="text-xs text-slate-400 font-semibold block uppercase">Contact Phone</span>
-                    <span className="font-medium text-slate-800">{employee.emergency_contact_phone || "Not specified"}</span>
+                  <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
+                    <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">Contact Phone</span>
+                    <span className="font-semibold text-slate-900">{employee.emergency_contact_phone || "Not specified"}</span>
                   </div>
-                  <div>
-                    <span className="text-xs text-slate-400 font-semibold block uppercase">Relationship</span>
-                    <span className="font-medium text-slate-800">{employee.emergency_contact_relation || "Not specified"}</span>
+                  <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
+                    <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">Relationship</span>
+                    <span className="font-semibold text-indigo-700">{employee.emergency_contact_relation || "Not specified"}</span>
                   </div>
                 </div>
               </div>
@@ -295,63 +304,65 @@ export default function EmployeeProfileView({
           )}
 
           {activeTab === "bank" && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
-              <div>
-                <span className="text-xs text-slate-400 font-semibold block uppercase">Bank Name</span>
-                <span className="font-medium text-slate-800">{employee.bank_name || "Not specified"}</span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5 text-sm">
+              <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
+                <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">Bank Name</span>
+                <span className="font-bold text-slate-900">{employee.bank_name || "Not specified"}</span>
               </div>
-              <div>
-                <span className="text-xs text-slate-400 font-semibold block uppercase">Account Number</span>
-                <span className="font-mono font-medium text-slate-800">
+              <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
+                <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">Account Number</span>
+                <span className="font-mono font-bold text-slate-900 text-sm">
                   {employee.bank_account_number ? `•••• •••• ${employee.bank_account_number.slice(-4)}` : "Not specified"}
                 </span>
               </div>
-              <div>
-                <span className="text-xs text-slate-400 font-semibold block uppercase">IFSC Code</span>
-                <span className="font-mono font-medium text-slate-800">{employee.ifsc_code || "Not specified"}</span>
+              <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
+                <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">IFSC Code</span>
+                <span className="font-mono font-bold text-indigo-700">{employee.ifsc_code || "Not specified"}</span>
               </div>
-              <div>
-                <span className="text-xs text-slate-400 font-semibold block uppercase">PAN Number</span>
-                <span className="font-mono font-medium text-slate-800">{employee.pan_number || "Not specified"}</span>
+              <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
+                <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">PAN Number</span>
+                <span className="font-mono font-bold text-slate-900">{employee.pan_number || "Not specified"}</span>
               </div>
-              <div>
-                <span className="text-xs text-slate-400 font-semibold block uppercase">Aadhaar Number</span>
-                <span className="font-mono font-medium text-slate-800">
+              <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
+                <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">Aadhaar Number</span>
+                <span className="font-mono font-bold text-slate-900">
                   {employee.aadhar_number ? `•••• •••• ${employee.aadhar_number.slice(-4)}` : "Not specified"}
                 </span>
               </div>
-              <div>
-                <span className="text-xs text-slate-400 font-semibold block uppercase">UAN (PF Number)</span>
-                <span className="font-mono font-medium text-slate-800">{employee.uan_number || "Auto-assigned by HR"}</span>
+              <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
+                <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">UAN (PF Number)</span>
+                <span className="font-mono font-bold text-slate-900">{employee.uan_number || "Auto-assigned by HR"}</span>
               </div>
             </div>
           )}
 
           {activeTab === "employment" && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
-              <div>
-                <span className="text-xs text-slate-400 font-semibold block uppercase">Department</span>
-                <span className="font-medium text-slate-800">{employee.department?.name || "Engineering"}</span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5 text-sm">
+              <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
+                <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">Department</span>
+                <span className="font-bold text-slate-900">{employee.department?.name || "Engineering"}</span>
               </div>
-              <div>
-                <span className="text-xs text-slate-400 font-semibold block uppercase">Designation</span>
-                <span className="font-medium text-slate-800">{employee.designation || "Software Engineer"}</span>
+              <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
+                <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">Designation</span>
+                <span className="font-bold text-slate-900">{employee.designation || "Senior Software Engineer"}</span>
               </div>
-              <div>
-                <span className="text-xs text-slate-400 font-semibold block uppercase">Employment Type</span>
-                <span className="font-medium text-slate-800 capitalize">{employee.employment_type || "Full-time"}</span>
+              <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
+                <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">Employment Type</span>
+                <span className="font-bold text-emerald-700 capitalize bg-emerald-50 px-2 py-0.5 rounded inline-block">{employee.employment_type || "Full-time"}</span>
               </div>
-              <div>
-                <span className="text-xs text-slate-400 font-semibold block uppercase">Joining Date</span>
-                <span className="font-medium text-slate-800">{employee.joining_date || "2023-01-15"}</span>
+              <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
+                <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">Joining Date</span>
+                <span className="font-mono font-semibold text-slate-900">{employee.joining_date || "2023-01-15"}</span>
               </div>
-              <div>
-                <span className="text-xs text-slate-400 font-semibold block uppercase">Assigned Project</span>
-                <span className="font-medium text-slate-800">{employee.project?.name || "Internal Platform"}</span>
+              <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
+                <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">Assigned Client Project</span>
+                <span className="font-bold text-indigo-700">{employee.project?.name || "FinTech Enterprise Platform"}</span>
               </div>
-              <div>
-                <span className="text-xs text-slate-400 font-semibold block uppercase">Project Timezone</span>
-                <span className="font-medium text-slate-800">{employee.project?.timezone || "Asia/Kolkata"}</span>
+              <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
+                <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">Shift Schedule</span>
+                <span className="font-mono font-semibold text-slate-900">
+                  {employee.project?.shift_start_time || "09:00"} - {employee.project?.shift_end_time || "18:00"} ({employee.project?.timezone || "Asia/Kolkata"})
+                </span>
               </div>
             </div>
           )}

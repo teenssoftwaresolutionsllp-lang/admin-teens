@@ -121,25 +121,25 @@ export default function EmployeeAttendanceView({
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
       {/* Top Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-        <div>
-          <h2 className="text-xl font-bold text-slate-900">Attendance & Shift Timing</h2>
-          <p className="text-xs text-slate-500 mt-1">
-            Assigned Shift: {project.shift_start_time} - {project.shift_end_time} &bull; Grace Period:{" "}
-            {project.grace_period_minutes} mins &bull; Late check-in beyond 2.5 hrs is evaluated as Half Day.
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 sm:p-7 rounded-2xl border border-slate-200/90 shadow-sm">
+        <div className="space-y-1">
+          <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">Attendance & Shift Timing</h2>
+          <p className="text-xs sm:text-sm text-slate-500">
+            Assigned Shift: <span className="font-semibold text-slate-700">{project.shift_start_time} - {project.shift_end_time}</span> &bull; Grace Period:{" "}
+            <span className="font-semibold text-slate-700">{project.grace_period_minutes} mins</span> &bull; Late check-in beyond 2.5 hrs is evaluated as Half Day.
           </p>
         </div>
 
         <button
           onClick={() => setIsModalOpen(true)}
-          className="px-4 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm transition-colors shrink-0"
+          className="px-5 py-2.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 rounded-xl shadow-sm hover:shadow transition-all shrink-0 cursor-pointer"
         >
           Request Regularization
         </button>
       </div>
 
       {successMsg && (
-        <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-semibold flex items-center gap-2">
+        <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl text-xs font-semibold flex items-center gap-2">
           <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
           <span>{successMsg}</span>
         </div>
@@ -151,38 +151,38 @@ export default function EmployeeAttendanceView({
       {/* Attendance History & Regularization Requests */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Attendance Log Table */}
-        <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="p-4 border-b border-slate-200 flex items-center justify-between">
+        <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden">
+          <div className="p-5 border-b border-slate-100 flex items-center justify-between">
             <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
               <Calendar className="w-4 h-4 text-indigo-600" />
               <span>Attendance History</span>
             </h3>
-            <span className="text-xs text-slate-400">Past Records</span>
+            <span className="text-xs font-semibold text-slate-400">Past Punches</span>
           </div>
 
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs text-slate-600">
-              <thead className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200">
+              <thead className="bg-slate-50/80 text-slate-500 font-bold border-b border-slate-200/80 uppercase text-[11px] tracking-wider">
                 <tr>
-                  <th className="py-3 px-4">Date</th>
-                  <th className="py-3 px-4">Check-In</th>
-                  <th className="py-3 px-4">Check-Out</th>
-                  <th className="py-3 px-4">Total Hours</th>
-                  <th className="py-3 px-4">Status</th>
+                  <th className="py-3.5 px-5">Date</th>
+                  <th className="py-3.5 px-5">Check-In</th>
+                  <th className="py-3.5 px-5">Check-Out</th>
+                  <th className="py-3.5 px-5">Total Hours</th>
+                  <th className="py-3.5 px-5">Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {logs.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="text-center py-6 text-slate-400">
+                    <td colSpan={5} className="text-center py-8 text-slate-400">
                       No attendance records found yet. Check in above!
                     </td>
                   </tr>
                 ) : (
                   logs.map((item) => (
-                    <tr key={item.id} className="hover:bg-slate-50/70">
-                      <td className="py-3 px-4 font-semibold text-slate-900">{item.attendance_date}</td>
-                      <td className="py-3 px-4 font-mono">
+                    <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="py-3.5 px-5 font-bold text-slate-900">{item.attendance_date}</td>
+                      <td className="py-3.5 px-5 font-mono text-slate-700">
                         {item.check_in_time
                           ? new Date(item.check_in_time).toLocaleTimeString([], {
                               hour: "2-digit",
@@ -190,7 +190,7 @@ export default function EmployeeAttendanceView({
                             })
                           : "--:--"}
                       </td>
-                      <td className="py-3 px-4 font-mono">
+                      <td className="py-3.5 px-5 font-mono text-slate-700">
                         {item.check_out_time
                           ? new Date(item.check_out_time).toLocaleTimeString([], {
                               hour: "2-digit",
@@ -198,10 +198,10 @@ export default function EmployeeAttendanceView({
                             })
                           : "--:--"}
                       </td>
-                      <td className="py-3 px-4 font-mono font-medium">
+                      <td className="py-3.5 px-5 font-mono font-bold text-slate-800">
                         {item.total_hours ? `${item.total_hours} hrs` : "--"}
                       </td>
-                      <td className="py-3 px-4">{getStatusBadge(item)}</td>
+                      <td className="py-3.5 px-5">{getStatusBadge(item)}</td>
                     </tr>
                   ))
                 )}
@@ -211,24 +211,27 @@ export default function EmployeeAttendanceView({
         </div>
 
         {/* Regularization Requests Tracker */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
-          <h3 className="text-sm font-bold text-slate-900 mb-3 flex items-center gap-1.5">
-            <Clock className="w-4 h-4 text-indigo-600" />
-            <span>Regularization Requests</span>
-          </h3>
+        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-5 space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+              <Clock className="w-4 h-4 text-indigo-600" />
+              <span>Regularizations</span>
+            </h3>
+            <span className="text-[11px] font-bold text-slate-400">{regs.length} Submitted</span>
+          </div>
 
           <div className="space-y-3">
             {regs.length === 0 ? (
-              <p className="text-xs text-slate-400 text-center py-6">
+              <p className="text-xs text-slate-400 text-center py-8">
                 No regularization requests submitted.
               </p>
             ) : (
               regs.map((r) => (
-                <div key={r.id} className="p-3 bg-slate-50 border border-slate-100 rounded-lg text-xs space-y-1.5">
+                <div key={r.id} className="p-3.5 bg-slate-50/80 border border-slate-200/70 rounded-xl text-xs space-y-1.5">
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-slate-800">{r.attendance_date}</span>
+                    <span className="font-bold text-slate-900">{r.attendance_date}</span>
                     <span
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${
+                      className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase ${
                         r.status === "approved"
                           ? "bg-emerald-100 text-emerald-800"
                           : r.status === "rejected"
@@ -240,9 +243,9 @@ export default function EmployeeAttendanceView({
                     </span>
                   </div>
                   <p className="text-slate-600 font-mono text-[11px]">
-                    Punch: {r.proposed_check_in} - {r.proposed_check_out}
+                    Punch: <span className="font-semibold text-indigo-700">{r.proposed_check_in} - {r.proposed_check_out}</span>
                   </p>
-                  <p className="text-slate-500 text-[11px] italic">&quot;{r.reason}&quot;</p>
+                  <p className="text-slate-500 text-[11px] italic bg-white p-2 rounded-lg border border-slate-100">&quot;{r.reason}&quot;</p>
                 </div>
               ))
             )}

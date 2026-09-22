@@ -105,25 +105,30 @@ export default function PayrollManager({
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
       {/* Top Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 sm:p-7 rounded-2xl border border-slate-200/90 shadow-sm">
         <div>
-          <h2 className="text-xl font-bold text-slate-900">Payroll & Payslip Engine</h2>
-          <p className="text-xs text-slate-500 mt-1">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shrink-0">
+              <Banknote className="w-5 h-5" />
+            </div>
+            <h2 className="text-xl font-bold text-slate-900 tracking-tight">Payroll & Payslip Engine</h2>
+          </div>
+          <p className="text-xs text-slate-500 mt-1.5 leading-relaxed pl-11">
             Configure customizable salary heads (earnings & statutory deductions), process monthly payroll with automated LOP deductions, and generate official payslips.
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
           <button
             onClick={() => setActiveTab("components")}
-            className="px-3.5 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg flex items-center gap-1.5 transition-colors"
+            className="px-3.5 py-2.5 text-xs font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl flex items-center gap-1.5 transition-colors shadow-xs"
           >
             <Sliders className="w-3.5 h-3.5" />
             <span>Customize Heads</span>
           </button>
           <button
             onClick={() => setActiveTab("runner")}
-            className="px-4 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm flex items-center gap-1.5 transition-colors"
+            className="px-4 py-2.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-sm flex items-center gap-2 transition-all hover:shadow"
           >
             <Play className="w-3.5 h-3.5" />
             <span>Run Payroll</span>
@@ -132,7 +137,7 @@ export default function PayrollManager({
       </div>
 
       {successMsg && (
-        <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-semibold flex items-center gap-2">
+        <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl text-xs font-semibold flex items-center gap-2.5 shadow-xs animate-in fade-in duration-200">
           <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
           <span>{successMsg}</span>
         </div>
@@ -140,46 +145,46 @@ export default function PayrollManager({
 
       {/* Metrics Row */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">
+        <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/90 shadow-sm hover:shadow-md transition-shadow">
+          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
             Net Monthly Payout ({monthNames[selectedMonth - 1]})
           </span>
-          <span className="text-2xl font-black font-mono text-indigo-700 mt-1 block">
+          <span className="text-3xl font-black font-mono text-indigo-700 mt-1.5 block tracking-tight">
             ₹{totalPayrollSpend.toLocaleString("en-IN")}
           </span>
-          <span className="text-[11px] text-slate-400">Total bank disbursement liability</span>
+          <span className="text-[11px] font-medium text-slate-400 mt-1 block">Total bank disbursement liability</span>
         </div>
 
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">
+        <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/90 shadow-sm hover:shadow-md transition-shadow">
+          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
             Automated LOP Deductions
           </span>
-          <span className="text-2xl font-black font-mono text-amber-700 mt-1 block">
+          <span className="text-3xl font-black font-mono text-amber-700 mt-1.5 block tracking-tight">
             ₹{totalLopDeductions.toLocaleString("en-IN")}
           </span>
-          <span className="text-[11px] text-slate-400">Deducted for unpaid leaves & half-days</span>
+          <span className="text-[11px] font-medium text-slate-400 mt-1 block">Deducted for unpaid leaves & half-days</span>
         </div>
 
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">
+        <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/90 shadow-sm hover:shadow-md transition-shadow">
+          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
             Active Salary Heads
           </span>
-          <span className="text-2xl font-black text-emerald-600 mt-1 block">
+          <span className="text-3xl font-black font-mono text-emerald-600 mt-1.5 block tracking-tight">
             {components.filter((c) => c.is_active).length} / {components.length}
           </span>
-          <span className="text-[11px] text-slate-400">HR customizable components active</span>
+          <span className="text-[11px] font-medium text-slate-400 mt-1 block">HR customizable components active</span>
         </div>
       </div>
 
       {/* Main Tabs Container */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="border-b border-slate-200 flex overflow-x-auto bg-slate-50/50">
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden">
+        <div className="border-b border-slate-200/80 flex overflow-x-auto bg-slate-50/60">
           <button
             onClick={() => setActiveTab("runner")}
-            className={`flex items-center gap-2 px-6 py-4 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap ${
+            className={`flex items-center gap-2.5 px-6 py-4 text-xs font-bold border-b-2 transition-all whitespace-nowrap ${
               activeTab === "runner"
-                ? "border-indigo-600 text-indigo-600 bg-white"
-                : "border-transparent text-slate-500 hover:text-slate-800"
+                ? "border-indigo-600 text-indigo-600 bg-white shadow-xs"
+                : "border-transparent text-slate-500 hover:text-slate-900 hover:bg-slate-100/50"
             }`}
           >
             <Play className="w-4 h-4" />
@@ -188,10 +193,10 @@ export default function PayrollManager({
 
           <button
             onClick={() => setActiveTab("components")}
-            className={`flex items-center gap-2 px-6 py-4 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap ${
+            className={`flex items-center gap-2.5 px-6 py-4 text-xs font-bold border-b-2 transition-all whitespace-nowrap ${
               activeTab === "components"
-                ? "border-indigo-600 text-indigo-600 bg-white"
-                : "border-transparent text-slate-500 hover:text-slate-800"
+                ? "border-indigo-600 text-indigo-600 bg-white shadow-xs"
+                : "border-transparent text-slate-500 hover:text-slate-900 hover:bg-slate-100/50"
             }`}
           >
             <Settings className="w-4 h-4" />
@@ -200,10 +205,10 @@ export default function PayrollManager({
 
           <button
             onClick={() => setActiveTab("slips")}
-            className={`flex items-center gap-2 px-6 py-4 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap ${
+            className={`flex items-center gap-2.5 px-6 py-4 text-xs font-bold border-b-2 transition-all whitespace-nowrap ${
               activeTab === "slips"
-                ? "border-indigo-600 text-indigo-600 bg-white"
-                : "border-transparent text-slate-500 hover:text-slate-800"
+                ? "border-indigo-600 text-indigo-600 bg-white shadow-xs"
+                : "border-transparent text-slate-500 hover:text-slate-900 hover:bg-slate-100/50"
             }`}
           >
             <FileText className="w-4 h-4" />
@@ -213,13 +218,13 @@ export default function PayrollManager({
 
         {/* Tab 1: Process Monthly Payroll */}
         {activeTab === "runner" && (
-          <div className="p-8 space-y-6">
-            <div className="max-w-xl mx-auto bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-5">
-              <div className="text-center space-y-1">
-                <div className="w-12 h-12 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center mx-auto">
-                  <Banknote className="w-6 h-6" />
+          <div className="p-8 sm:p-10 space-y-6">
+            <div className="max-w-xl mx-auto bg-slate-50/80 p-7 rounded-3xl border border-slate-200/80 space-y-6 shadow-xs">
+              <div className="text-center space-y-1.5">
+                <div className="w-14 h-14 rounded-2xl bg-indigo-100 text-indigo-700 flex items-center justify-center mx-auto shadow-xs">
+                  <Banknote className="w-7 h-7" />
                 </div>
-                <h3 className="text-base font-bold text-slate-900">Run Monthly Payroll</h3>
+                <h3 className="text-lg font-bold text-slate-900 tracking-tight">Run Monthly Payroll</h3>
                 <p className="text-xs text-slate-500">
                   Select the pay period to compute earnings, apply LOP leave deductions, and generate official payslips.
                 </p>
@@ -227,11 +232,11 @@ export default function PayrollManager({
 
               <div className="grid grid-cols-2 gap-4 text-xs">
                 <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Select Month</label>
+                  <label className="font-bold text-slate-700 block mb-1.5">Select Month</label>
                   <select
                     value={selectedMonth}
                     onChange={(e) => setSelectedMonth(Number(e.target.value))}
-                    className="w-full px-3 py-2 border rounded-lg focus:ring-1 focus:ring-indigo-500 font-medium"
+                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 font-semibold bg-white shadow-xs"
                   >
                     {monthNames.map((name, idx) => (
                       <option key={name} value={idx + 1}>
@@ -242,11 +247,11 @@ export default function PayrollManager({
                 </div>
 
                 <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Select Year</label>
+                  <label className="font-bold text-slate-700 block mb-1.5">Select Year</label>
                   <select
                     value={selectedYear}
                     onChange={(e) => setSelectedYear(Number(e.target.value))}
-                    className="w-full px-3 py-2 border rounded-lg focus:ring-1 focus:ring-indigo-500 font-medium"
+                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 font-semibold bg-white shadow-xs"
                   >
                     <option value={2026}>2026</option>
                     <option value={2025}>2025</option>
@@ -254,15 +259,15 @@ export default function PayrollManager({
                 </div>
               </div>
 
-              <div className="p-4 bg-indigo-50/70 border border-indigo-200 rounded-xl text-xs text-indigo-900 space-y-1.5">
-                <span className="font-bold block">Engine Automation Highlights:</span>
-                <ul className="list-disc pl-4 space-y-0.5 text-indigo-800 text-[11px]">
+              <div className="p-5 bg-gradient-to-br from-indigo-50 to-blue-50/50 border border-indigo-100 rounded-2xl text-xs text-indigo-950 space-y-2">
+                <span className="font-bold block tracking-wide">Engine Automation Highlights:</span>
+                <ul className="list-disc pl-4 space-y-1 text-indigo-900 text-[11px] leading-relaxed">
                   <li>
-                    Automatically pulls approved <strong>Loss of Pay (LOP)</strong> leaves and half-days from attendance.
+                    Automatically pulls approved <strong>Loss of Pay (LOP)</strong> leaves and half-days from attendance records.
                   </li>
                   <li>
                     Calculates daily deduction rate:{" "}
-                    <code className="bg-indigo-100 px-1 py-0.5 rounded font-mono">
+                    <code className="bg-indigo-100/80 px-1.5 py-0.5 rounded-md font-mono text-[11px] font-semibold text-indigo-900">
                       (Monthly Gross / Days in Month) × LOP Days
                     </code>
                     .
@@ -279,7 +284,7 @@ export default function PayrollManager({
               <button
                 onClick={handleRunPayroll}
                 disabled={running}
-                className="w-full py-3 px-4 rounded-xl text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                className="w-full py-3.5 px-5 rounded-2xl text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50"
               >
                 {running ? (
                   <>
@@ -301,76 +306,76 @@ export default function PayrollManager({
 
         {/* Tab 2: Customizable Salary Components */}
         {activeTab === "components" && (
-          <div className="p-6 space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+          <div className="p-6 sm:p-7 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div>
-                <h3 className="text-sm font-bold text-slate-900">Configurable Salary Heads</h3>
-                <p className="text-xs text-slate-500">
+                <h3 className="text-sm font-bold text-slate-900 tracking-tight">Configurable Salary Heads</h3>
+                <p className="text-xs text-slate-500 mt-0.5">
                   HR can toggle components ON or OFF. Formulas are pre-programmed; when active, they automatically impact payroll.
                 </p>
               </div>
             </div>
 
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto rounded-xl border border-slate-100">
               <table className="w-full text-left text-xs text-slate-600">
-                <thead className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200">
+                <thead className="bg-slate-50/80 text-slate-700 font-bold border-b border-slate-200/80 uppercase tracking-wider text-[11px]">
                   <tr>
-                    <th className="py-3 px-4">Component Name</th>
-                    <th className="py-3 px-4">Code</th>
-                    <th className="py-3 px-4">Type</th>
-                    <th className="py-3 px-4">Calculation Formula</th>
-                    <th className="py-3 px-4">LOP Impact</th>
-                    <th className="py-3 px-4">Status</th>
-                    <th className="py-3 px-4 text-right">Action</th>
+                    <th className="py-3.5 px-4">Component Name</th>
+                    <th className="py-3.5 px-4">Code</th>
+                    <th className="py-3.5 px-4">Type</th>
+                    <th className="py-3.5 px-4">Calculation Formula</th>
+                    <th className="py-3.5 px-4">LOP Impact</th>
+                    <th className="py-3.5 px-4">Status</th>
+                    <th className="py-3.5 px-4 text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {components.map((comp) => (
-                    <tr key={comp.id} className="hover:bg-slate-50/70">
-                      <td className="py-3 px-4 font-bold text-slate-900">
+                    <tr key={comp.id} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="py-3.5 px-4 font-bold text-slate-900">
                         {comp.name}
                         {comp.is_statutory && (
-                          <span className="ml-2 text-[10px] font-semibold bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">
+                          <span className="ml-2 text-[10px] font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full uppercase tracking-wider">
                             Statutory
                           </span>
                         )}
                       </td>
-                      <td className="py-3 px-4 font-mono font-medium text-slate-700">{comp.code}</td>
-                      <td className="py-3 px-4">
+                      <td className="py-3.5 px-4 font-mono font-bold text-slate-700">{comp.code}</td>
+                      <td className="py-3.5 px-4">
                         <span
-                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${
+                          className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
                             comp.type === "earning"
-                              ? "bg-emerald-100 text-emerald-800"
-                              : "bg-rose-100 text-rose-800"
+                              ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                              : "bg-rose-100 text-rose-800 border border-rose-200"
                           }`}
                         >
                           {comp.type}
                         </span>
                       </td>
-                      <td className="py-3 px-4 font-mono text-[11px] text-slate-800">
+                      <td className="py-3.5 px-4 font-mono text-[11px] text-slate-800 font-medium">
                         {comp.description}
                       </td>
-                      <td className="py-3 px-4">
+                      <td className="py-3.5 px-4">
                         {comp.affects_lop ? (
-                          <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded">
+                          <span className="text-[10px] font-bold text-amber-800 bg-amber-50 border border-amber-200/60 px-2 py-0.5 rounded">
                             Yes (Pro-rated)
                           </span>
                         ) : (
                           <span className="text-[10px] text-slate-400">No</span>
                         )}
                       </td>
-                      <td className="py-3 px-4">
+                      <td className="py-3.5 px-4">
                         <span
-                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${
+                          className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
                             comp.is_active
-                              ? "bg-emerald-100 text-emerald-800"
-                              : "bg-slate-100 text-slate-500"
+                              ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                              : "bg-slate-100 text-slate-500 border border-slate-200"
                           }`}
                         >
                           {comp.is_active ? "Active" : "Disabled"}
                         </span>
                       </td>
-                      <td className="py-3 px-4 text-right">
+                      <td className="py-3.5 px-4 text-right">
                         <button
                           onClick={() => handleToggleComponent(comp.id, comp.is_active)}
                           className={`px-3 py-1 text-xs font-semibold rounded-lg border transition-colors ${
@@ -393,24 +398,24 @@ export default function PayrollManager({
         {/* Tab 3: Generated Payslips Directory */}
         {activeTab === "slips" && (
           <div className="p-6">
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto rounded-xl border border-slate-100">
               <table className="w-full text-left text-xs text-slate-600">
-                <thead className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200">
+                <thead className="bg-slate-50/80 text-slate-700 font-bold border-b border-slate-200/80 uppercase tracking-wider text-[11px]">
                   <tr>
-                    <th className="py-3 px-4">Employee</th>
-                    <th className="py-3 px-4">Pay Period</th>
-                    <th className="py-3 px-4">Gross CTC</th>
-                    <th className="py-3 px-4">LOP Days</th>
-                    <th className="py-3 px-4">LOP Deduction</th>
-                    <th className="py-3 px-4">Total Deductions</th>
-                    <th className="py-3 px-4">Net Salary</th>
-                    <th className="py-3 px-4 text-right">Actions</th>
+                    <th className="py-3.5 px-4">Employee</th>
+                    <th className="py-3.5 px-4">Pay Period</th>
+                    <th className="py-3.5 px-4">Gross CTC</th>
+                    <th className="py-3.5 px-4">LOP Days</th>
+                    <th className="py-3.5 px-4">LOP Deduction</th>
+                    <th className="py-3.5 px-4">Total Deductions</th>
+                    <th className="py-3.5 px-4">Net Salary</th>
+                    <th className="py-3.5 px-4 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {payslips.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="text-center py-8 text-slate-400">
+                      <td colSpan={8} className="text-center py-12 text-slate-400 font-medium">
                         No payslips generated yet. Click &quot;Process Monthly Payroll&quot; above.
                       </td>
                     </tr>
@@ -418,41 +423,41 @@ export default function PayrollManager({
                     payslips.map((slip) => {
                       const emp = slip.employee;
                       return (
-                        <tr key={slip.id} className="hover:bg-slate-50/70">
-                          <td className="py-3 px-4 font-bold text-slate-900">
+                        <tr key={slip.id} className="hover:bg-slate-50/80 transition-colors">
+                          <td className="py-3.5 px-4 font-bold text-slate-900">
                             {emp ? `${emp.first_name} ${emp.last_name}` : "Employee"}
-                            <span className="text-[10px] text-slate-400 font-mono block">
+                            <span className="text-[10px] text-slate-400 font-mono font-medium block mt-0.5">
                               {emp?.employee_id || "TSS"}
                             </span>
                           </td>
-                          <td className="py-3 px-4 font-semibold text-slate-700">
+                          <td className="py-3.5 px-4 font-semibold text-slate-700">
                             {slip.month_name} {slip.payroll_year}
                           </td>
-                          <td className="py-3 px-4 font-mono font-medium text-slate-800">
+                          <td className="py-3.5 px-4 font-mono font-medium text-slate-800">
                             ₹{slip.gross_salary.toLocaleString("en-IN")}
                           </td>
-                          <td className="py-3 px-4 font-medium">
+                          <td className="py-3.5 px-4 font-medium">
                             {slip.lop_days > 0 ? (
-                              <span className="text-amber-800 font-bold bg-amber-50 px-2 py-0.5 rounded">
+                              <span className="text-amber-800 font-bold bg-amber-50 border border-amber-200/60 px-2 py-0.5 rounded">
                                 {slip.lop_days} day(s)
                               </span>
                             ) : (
                               <span className="text-slate-400">0</span>
                             )}
                           </td>
-                          <td className="py-3 px-4 font-mono text-amber-700 font-medium">
+                          <td className="py-3.5 px-4 font-mono text-amber-700 font-medium">
                             {slip.lop_deduction > 0 ? `-₹${slip.lop_deduction.toLocaleString("en-IN")}` : "₹0"}
                           </td>
-                          <td className="py-3 px-4 font-mono text-rose-600">
+                          <td className="py-3.5 px-4 font-mono text-rose-600 font-medium">
                             -₹{slip.total_deductions.toLocaleString("en-IN")}
                           </td>
-                          <td className="py-3 px-4 font-mono font-bold text-emerald-600 text-sm">
+                          <td className="py-3.5 px-4 font-mono font-bold text-emerald-600 text-sm">
                             ₹{slip.net_salary.toLocaleString("en-IN")}
                           </td>
-                          <td className="py-3 px-4 text-right">
+                          <td className="py-3.5 px-4 text-right">
                             <button
                               onClick={() => setPreviewSlip(slip)}
-                              className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-800"
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors"
                             >
                               <Eye className="w-3.5 h-3.5" />
                               <span>View Slip</span>
@@ -472,103 +477,105 @@ export default function PayrollManager({
       {/* Payslip View Modal */}
       {previewSlip && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto print:p-0 print:bg-white">
-          <div className="bg-white rounded-2xl max-w-3xl w-full p-8 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 my-8 print:shadow-none print:border-none print:m-0 print:p-0">
+          <div className="bg-white rounded-3xl max-w-3xl w-full p-6 sm:p-8 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 my-8 print:shadow-none print:border-none print:m-0 print:p-0">
             <div className="flex items-center justify-between pb-4 border-b border-slate-200 print:hidden mb-6">
-              <span className="text-xs font-semibold text-slate-500">
+              <span className="text-xs font-bold text-slate-700">
                 Payslip Preview &bull; {previewSlip.month_name} {previewSlip.payroll_year}
               </span>
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => window.print()}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg"
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-xl transition-colors border border-indigo-100"
                 >
-                  <Printer className="w-3.5 h-3.5" />
-                  <span>Print</span>
+                  <Printer className="w-4 h-4" />
+                  <span>Print / PDF</span>
                 </button>
                 <button
                   onClick={() => setPreviewSlip(null)}
-                  className="text-slate-400 hover:text-slate-600"
+                  className="text-slate-400 hover:text-slate-600 p-1 hover:bg-slate-100 rounded-lg transition-colors"
                 >
                   <XCircle className="w-5 h-5" />
                 </button>
               </div>
             </div>
 
-            <div className="border border-slate-300 p-6 rounded-xl space-y-6">
-              <div className="flex items-center justify-between border-b pb-4">
-                <div className="flex items-center gap-3">
-                  <Image
-                    src="/logo.png"
-                    alt="Logo"
-                    width={100}
-                    height={32}
-                    className="object-contain"
-                    style={{ height: "32px", width: "auto" }}
-                  />
+            <div className="border border-slate-200 p-6 rounded-2xl space-y-6 bg-white">
+              <div className="flex items-center justify-between border-b pb-5">
+                <div className="flex items-center gap-3.5">
+                  <div className="p-2 border border-slate-200 rounded-xl bg-slate-50">
+                    <Image
+                      src="/logo.png"
+                      alt="Logo"
+                      width={100}
+                      height={32}
+                      className="object-contain"
+                      style={{ height: "32px", width: "auto" }}
+                    />
+                  </div>
                   <div>
-                    <h2 className="text-base font-bold text-slate-900">Teens Software Solutions LLP</h2>
-                    <p className="text-[10px] text-slate-500">Hitec City, Hyderabad - 500081</p>
+                    <h2 className="text-base font-bold text-slate-900 tracking-tight">Teens Software Solutions LLP</h2>
+                    <p className="text-[10px] text-slate-500">Hitec City, Hyderabad - 500081 &bull; info@teenssoftware.com</p>
                   </div>
                 </div>
                 <div className="text-right">
-                  <span className="text-xs font-bold uppercase tracking-wider block">Official Payslip</span>
-                  <span className="text-xs font-medium text-indigo-700">
+                  <span className="text-xs font-bold uppercase tracking-wider block bg-slate-100 px-2.5 py-1 rounded-md">Official Payslip</span>
+                  <span className="text-xs font-semibold text-indigo-700 mt-1 block">
                     {previewSlip.month_name} {previewSlip.payroll_year}
                   </span>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs bg-slate-50 p-4 rounded-lg border">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs bg-slate-50/80 p-4.5 rounded-xl border border-slate-200/80">
                 <div>
-                  <span className="text-[10px] text-slate-400 uppercase block">Employee Name</span>
-                  <span className="font-bold text-slate-900">
+                  <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">Employee Name</span>
+                  <span className="font-bold text-slate-900 text-sm mt-0.5 block">
                     {previewSlip.employee?.first_name} {previewSlip.employee?.last_name}
                   </span>
                 </div>
                 <div>
-                  <span className="text-[10px] text-slate-400 uppercase block">Employee ID</span>
-                  <span className="font-mono font-bold text-slate-900">
+                  <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">Employee ID</span>
+                  <span className="font-mono font-bold text-slate-900 text-sm mt-0.5 block">
                     {previewSlip.employee?.employee_id}
                   </span>
                 </div>
                 <div>
-                  <span className="text-[10px] text-slate-400 uppercase block">Working Days</span>
-                  <span className="font-medium text-slate-800">{previewSlip.working_days} days</span>
+                  <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">Working Days</span>
+                  <span className="font-semibold text-slate-800 mt-0.5 block">{previewSlip.working_days} days</span>
                 </div>
                 <div>
-                  <span className="text-[10px] text-slate-400 uppercase block">LOP Unpaid Days</span>
-                  <span className="font-bold text-amber-700">{previewSlip.lop_days} day(s)</span>
+                  <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">LOP Unpaid Days</span>
+                  <span className="font-bold text-amber-700 mt-0.5 block">{previewSlip.lop_days} day(s)</span>
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                <div className="border rounded-lg overflow-hidden">
-                  <div className="bg-slate-100 p-2 font-bold flex justify-between">
+                <div className="border border-slate-200 rounded-xl overflow-hidden shadow-xs">
+                  <div className="bg-slate-100/90 px-3.5 py-2.5 font-bold text-slate-800 border-b border-slate-200 flex justify-between">
                     <span>Earnings</span>
                     <span>Amount (₹)</span>
                   </div>
-                  <div className="p-2 space-y-1 divide-y divide-slate-100">
+                  <div className="p-3 space-y-2 divide-y divide-slate-100">
                     {previewSlip.earnings_breakup.map((e) => (
-                      <div key={e.component_id} className="flex justify-between py-1">
+                      <div key={e.component_id} className="flex justify-between py-1 text-slate-700">
                         <span>{e.name}</span>
-                        <span className="font-mono">₹{e.amount.toLocaleString("en-IN")}</span>
+                        <span className="font-mono font-medium">₹{e.amount.toLocaleString("en-IN")}</span>
                       </div>
                     ))}
                   </div>
                 </div>
 
-                <div className="border rounded-lg overflow-hidden">
-                  <div className="bg-slate-100 p-2 font-bold flex justify-between">
+                <div className="border border-slate-200 rounded-xl overflow-hidden shadow-xs">
+                  <div className="bg-slate-100/90 px-3.5 py-2.5 font-bold text-slate-800 border-b border-slate-200 flex justify-between">
                     <span>Deductions</span>
                     <span>Amount (₹)</span>
                   </div>
-                  <div className="p-2 space-y-1 divide-y divide-slate-100">
+                  <div className="p-3 space-y-2 divide-y divide-slate-100">
                     {previewSlip.deductions_breakup.map((d) => (
-                      <div key={d.component_id} className="flex justify-between py-1">
-                        <span className={d.code === "LOP" ? "text-amber-800 font-semibold" : ""}>
+                      <div key={d.component_id} className="flex justify-between py-1 text-slate-700">
+                        <span className={d.code === "LOP" ? "text-amber-800 font-bold" : ""}>
                           {d.name}
                         </span>
-                        <span className="font-mono text-rose-600">
+                        <span className="font-mono font-medium text-rose-600">
                           ₹{d.amount.toLocaleString("en-IN")}
                         </span>
                       </div>
@@ -577,14 +584,14 @@ export default function PayrollManager({
                 </div>
               </div>
 
-              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex items-center justify-between">
+              <div className="bg-gradient-to-br from-emerald-50 to-teal-50/60 border border-emerald-200/80 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                  <span className="text-xs font-semibold text-emerald-800 block">Take-Home Net Pay</span>
-                  <p className="text-xs text-slate-600 italic">
+                  <span className="text-xs font-bold uppercase tracking-wider text-emerald-800 block">Take-Home Net Pay</span>
+                  <p className="text-xs font-medium text-slate-600 italic mt-1">
                     {numberToWordsIndian(previewSlip.net_salary)}
                   </p>
                 </div>
-                <span className="text-2xl font-black font-mono text-emerald-700">
+                <span className="text-3xl font-black font-mono text-emerald-700 tracking-tight">
                   ₹{previewSlip.net_salary.toLocaleString("en-IN")}
                 </span>
               </div>
