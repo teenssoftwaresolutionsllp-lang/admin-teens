@@ -50,11 +50,12 @@ export default async function EditEmployeePage(props: any) {
       .order("name");
     departments = (data as Department[]) || [];
   } catch {
+    const createdAt = new Date().toISOString();
     departments = [
-      { id: "d1", name: "Engineering", description: "Software development" },
-      { id: "d2", name: "Design", description: "UI/UX design" },
-      { id: "d3", name: "HR", description: "Human Resources" },
-      { id: "d4", name: "Finance", description: "Finance and Accounts" },
+      { id: "d1", name: "Engineering", description: "Software development", created_at: createdAt },
+      { id: "d2", name: "Design", description: "UI/UX design", created_at: createdAt },
+      { id: "d3", name: "HR", description: "Human Resources", created_at: createdAt },
+      { id: "d4", name: "Finance", description: "Finance and Accounts", created_at: createdAt },
     ];
   }
 
