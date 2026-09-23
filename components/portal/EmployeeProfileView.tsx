@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Employee, ProfileChangeRequest } from "@/lib/types";
+import { Department, Employee, ProfileChangeRequest } from "@/lib/types";
 import {
   User,
   MapPin,
@@ -21,11 +21,13 @@ import ProfileProgressBar from "./ProfileProgressBar";
 interface EmployeeProfileViewProps {
   employee: Employee;
   pendingRequest: ProfileChangeRequest | null;
+  departments: Department[];
 }
 
 export default function EmployeeProfileView({
   employee,
   pendingRequest: initialPendingRequest,
+  departments,
 }: EmployeeProfileViewProps) {
   const [activeTab, setActiveTab] = useState<"personal" | "address" | "bank" | "employment">("personal");
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -36,6 +38,8 @@ export default function EmployeeProfileView({
   // Form state for editing
   const [editFormData, setEditFormData] = useState({
     phone: employee.phone || "",
+    date_of_birth: employee.date_of_birth || "",
+    gender: employee.gender || "",
     blood_group: employee.blood_group || "",
     marital_status: employee.marital_status || "single",
     address: employee.address || "",
@@ -45,11 +49,20 @@ export default function EmployeeProfileView({
     emergency_contact_name: employee.emergency_contact_name || "",
     emergency_contact_phone: employee.emergency_contact_phone || "",
     emergency_contact_relation: employee.emergency_contact_relation || "",
+    department_id: employee.department_id || "",
+    designation: employee.designation || "",
+    probation_end_date: employee.probation_end_date || "",
+    confirmation_date: employee.confirmation_date || "",
+    reporting_manager: employee.reporting_manager || "",
+    work_location: employee.work_location || "",
     bank_name: employee.bank_name || "",
     bank_account_number: employee.bank_account_number || "",
     ifsc_code: employee.ifsc_code || "",
     pan_number: employee.pan_number || "",
     aadhar_number: employee.aadhar_number || "",
+    uan_number: employee.uan_number || "",
+    esi_number: employee.esi_number || "",
+    notes: employee.notes || "",
   });
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -63,19 +76,29 @@ export default function EmployeeProfileView({
     setSuccessMessage(null);
 
     try {
+      const changedFields = Object.fromEntries(
+        Object.entries(editFormData).filter(([key, value]) => {
+          const currentValue = employee[key as keyof Employee] ?? "";
+          return String(value ?? "") !== String(currentValue);
+        })
+      );
+      const previousValues = Object.fromEntries(
+        Object.keys(changedFields).map((key) => [key, employee[key as keyof Employee] ?? ""])
+      );
+
+      if (Object.keys(changedFields).length === 0) {
+        setSuccessMessage("No profile changes were made.");
+        setLoading(false);
+        return;
+      }
+
       const res = await fetch("/api/profile-change-requests", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           employeeId: employee.id,
-          requestedChanges: editFormData,
-          previousValues: {
-            phone: employee.phone,
-            address: employee.address,
-            bank_account_number: employee.bank_account_number,
-            pan_number: employee.pan_number,
-            aadhar_number: employee.aadhar_number,
-          },
+          requestedChanges: changedFields,
+          previousValues,
         }),
       });
 
@@ -95,7 +118,7 @@ export default function EmployeeProfileView({
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
       {/* 1. Profile Completion Progress Bar */}
-      <ProfileProgressBar employee={employee} />
+      <ProfileProgressBar employee={employee} onCompleteProfile={() => setIsEditModalOpen(true)} />
 
       {/* Success Notification */}
       {successMessage && (
@@ -401,6 +424,19 @@ export default function EmployeeProfileView({
                   />
                 </div>
                 <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Date of Birth</label>
+                  <input type="date" name="date_of_birth" value={editFormData.date_of_birth} onChange={handleInputChange} className="w-full px-3 py-2 border rounded-lg focus:ring-1 focus:ring-indigo-500" />
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Gender</label>
+                  <select name="gender" value={editFormData.gender} onChange={handleInputChange} className="w-full px-3 py-2 border rounded-lg focus:ring-1 focus:ring-indigo-500">
+                    <option value="">Select Gender</option>
+                    <option value="male">Male</option>
+                    <option value="female">Female</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+                <div>
                   <label className="font-semibold text-slate-700 block mb-1">Blood Group</label>
                   <select
                     name="blood_group"
@@ -417,6 +453,16 @@ export default function EmployeeProfileView({
                     <option value="O-">O-</option>
                     <option value="AB+">AB+</option>
                     <option value="AB-">AB-</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Marital Status</label>
+                  <select name="marital_status" value={editFormData.marital_status} onChange={handleInputChange} className="w-full px-3 py-2 border rounded-lg focus:ring-1 focus:ring-indigo-500">
+                    <option value="">Select Marital Status</option>
+                    <option value="single">Single</option>
+                    <option value="married">Married</option>
+                    <option value="divorced">Divorced</option>
+                    <option value="widowed">Widowed</option>
                   </select>
                 </div>
 
@@ -472,6 +518,43 @@ export default function EmployeeProfileView({
                     className="w-full px-3 py-2 border rounded-lg focus:ring-1 focus:ring-indigo-500"
                   />
                 </div>
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Emergency Contact Relation</label>
+                  <input type="text" name="emergency_contact_relation" value={editFormData.emergency_contact_relation} onChange={handleInputChange} className="w-full px-3 py-2 border rounded-lg focus:ring-1 focus:ring-indigo-500" />
+                </div>
+
+                <div className="md:col-span-2 border-t pt-3">
+                  <h4 className="font-bold text-slate-800 text-xs mb-2">Employment Details</h4>
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Department</label>
+                  <select name="department_id" value={editFormData.department_id} onChange={handleInputChange} className="w-full px-3 py-2 border rounded-lg focus:ring-1 focus:ring-indigo-500">
+                    <option value="">Select Department</option>
+                    {departments.map((department) => (
+                      <option key={department.id} value={department.id}>{department.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Designation</label>
+                  <input type="text" name="designation" value={editFormData.designation} onChange={handleInputChange} className="w-full px-3 py-2 border rounded-lg focus:ring-1 focus:ring-indigo-500" />
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Probation End Date</label>
+                  <input type="date" name="probation_end_date" value={editFormData.probation_end_date} onChange={handleInputChange} className="w-full px-3 py-2 border rounded-lg focus:ring-1 focus:ring-indigo-500" />
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Confirmation Date</label>
+                  <input type="date" name="confirmation_date" value={editFormData.confirmation_date} onChange={handleInputChange} className="w-full px-3 py-2 border rounded-lg focus:ring-1 focus:ring-indigo-500" />
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Reporting Manager</label>
+                  <input type="text" name="reporting_manager" value={editFormData.reporting_manager} onChange={handleInputChange} className="w-full px-3 py-2 border rounded-lg focus:ring-1 focus:ring-indigo-500" />
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Work Location</label>
+                  <input type="text" name="work_location" value={editFormData.work_location} onChange={handleInputChange} className="w-full px-3 py-2 border rounded-lg focus:ring-1 focus:ring-indigo-500" />
+                </div>
 
                 <div className="md:col-span-2 border-t pt-3">
                   <h4 className="font-bold text-slate-800 text-xs mb-2">Bank & KYC Information</h4>
@@ -526,6 +609,18 @@ export default function EmployeeProfileView({
                     onChange={handleInputChange}
                     className="w-full px-3 py-2 border rounded-lg focus:ring-1 focus:ring-indigo-500 font-mono"
                   />
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">UAN Number</label>
+                  <input type="text" name="uan_number" value={editFormData.uan_number} onChange={handleInputChange} className="w-full px-3 py-2 border rounded-lg focus:ring-1 focus:ring-indigo-500 font-mono" />
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">ESI Number</label>
+                  <input type="text" name="esi_number" value={editFormData.esi_number} onChange={handleInputChange} className="w-full px-3 py-2 border rounded-lg focus:ring-1 focus:ring-indigo-500 font-mono" />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="font-semibold text-slate-700 block mb-1">Notes</label>
+                  <textarea name="notes" rows={2} value={editFormData.notes} onChange={handleInputChange} className="w-full px-3 py-2 border rounded-lg focus:ring-1 focus:ring-indigo-500" />
                 </div>
               </div>
 

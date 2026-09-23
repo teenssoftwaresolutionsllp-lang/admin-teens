@@ -9,28 +9,37 @@ interface ClockInWidgetProps {
   employeeId: string;
   initialLog: AttendanceLog | null;
   project?: Project;
+  compact?: boolean;
 }
 
-export default function ClockInWidget({ employeeId, initialLog, project }: ClockInWidgetProps) {
+export default function ClockInWidget({ employeeId, initialLog, project, compact = false }: ClockInWidgetProps) {
   const [log, setLog] = useState<AttendanceLog | null>(initialLog);
   const [loading, setLoading] = useState(false);
   const [currentTime, setCurrentTime] = useState<string>("");
+  const [workedMinutes, setWorkedMinutes] = useState(0);
 
   useEffect(() => {
     const update = () => {
+      const now = new Date();
       setCurrentTime(
-        new Date().toLocaleTimeString("en-US", {
+        now.toLocaleTimeString("en-US", {
           hour: "2-digit",
           minute: "2-digit",
           second: "2-digit",
           hour12: true,
         })
       );
+      if (log?.check_in_time) {
+        const end = log.check_out_time ? new Date(log.check_out_time) : now;
+        setWorkedMinutes(Math.max(0, Math.floor((end.getTime() - new Date(log.check_in_time).getTime()) / 60000)));
+      } else {
+        setWorkedMinutes(0);
+      }
     };
     update();
     const timer = setInterval(update, 1000);
     return () => clearInterval(timer);
-  }, []);
+  }, [log]);
 
   const handlePunch = async (action: "in" | "out") => {
     setLoading(true);
@@ -60,23 +69,23 @@ export default function ClockInWidget({ employeeId, initialLog, project }: Clock
   const graceMinutes = project?.grace_period_minutes || 30;
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200/90 p-6 sm:p-7 shadow-sm flex flex-col justify-between space-y-6">
+    <div className={`${compact ? "p-4 sm:p-5 space-y-4" : "p-6 sm:p-7 space-y-6"} bg-white rounded-2xl border border-slate-200/90 shadow-sm flex flex-col justify-between`}>
       <div>
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-5 mb-5 gap-4">
-          <div className="flex items-center gap-3.5">
-            <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl shadow-xs border border-indigo-100/80">
-              <Clock className="w-5 h-5" />
+        <div className={`${compact ? "pb-3 mb-3 gap-3" : "pb-5 mb-5 gap-4"} flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100`}>
+          <div className="flex items-center gap-3">
+            <div className={`${compact ? "p-2" : "p-3"} bg-indigo-50 text-indigo-600 rounded-xl shadow-xs border border-indigo-100/80`}>
+              <Clock className={compact ? "w-4 h-4" : "w-5 h-5"} />
             </div>
             <div>
-              <h3 className="font-bold text-slate-900 text-base">Attendance & Shift Punch</h3>
-              <p className="text-xs text-slate-500 mt-0.5">
+              <h3 className={`${compact ? "text-sm" : "text-base"} font-bold text-slate-900`}>Attendance & Shift Punch</h3>
+              <p className="text-[11px] text-slate-500 mt-0.5">
                 Shift: <span className="font-semibold text-slate-700">{shiftStart} - {shiftEnd}</span> ({project?.timezone || "Asia/Kolkata"})
               </p>
             </div>
           </div>
 
-          <div className="sm:text-right bg-slate-50 sm:bg-transparent p-3 sm:p-0 rounded-xl border sm:border-0 border-slate-100">
-            <span className="text-2xl font-mono font-bold text-indigo-700 block tracking-tight">
+          <div className="sm:text-right bg-slate-50 sm:bg-transparent p-2 sm:p-0 rounded-xl border sm:border-0 border-slate-100">
+            <span className={`${compact ? "text-xl" : "text-2xl"} font-mono font-bold text-indigo-700 block tracking-tight`}>
               {currentTime || "--:--:--"}
             </span>
             <span className="text-[11px] text-slate-400 font-medium">
@@ -87,7 +96,7 @@ export default function ClockInWidget({ employeeId, initialLog, project }: Clock
 
         {/* Current Punch Status */}
         <div className="space-y-4">
-          <div className="flex items-center justify-between text-xs bg-slate-50/80 p-3.5 rounded-xl border border-slate-200/70">
+          <div className="flex items-center justify-between text-xs bg-slate-50/80 p-3 rounded-xl border border-slate-200/70">
             <span className="text-slate-600 font-semibold">Today&apos;s Status:</span>
             {!isCheckedIn ? (
               <span className="font-semibold text-amber-800 bg-amber-50 px-3 py-1 rounded-full border border-amber-200/80 text-[11px]">
@@ -112,7 +121,22 @@ export default function ClockInWidget({ employeeId, initialLog, project }: Clock
             )}
           </div>
 
-          {isCheckedIn && (
+          {compact && isCheckedIn && (
+            <div className="grid grid-cols-2 gap-3 text-xs text-slate-600">
+              <div className="p-3 bg-indigo-50/60 rounded-xl border border-indigo-100">
+                <span className="block text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-0.5">Time Worked</span>
+                <span className="font-bold text-indigo-700 text-lg font-mono">{Math.floor(workedMinutes / 60)}h {workedMinutes % 60}m</span>
+              </div>
+              <div className="p-3 bg-slate-50/90 rounded-xl border border-slate-200/70">
+                <span className="block text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-0.5">Clock In</span>
+                <span className="font-bold text-slate-900 text-sm font-mono">
+                  {formatPunchTime(log.check_in_time!)}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {isCheckedIn && !compact && (
             <div className="grid grid-cols-2 gap-3 text-xs text-slate-600">
               <div className="p-3 bg-slate-50/90 rounded-xl border border-slate-200/70">
                 <span className="block text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-0.5">Check-In Time</span>
@@ -124,7 +148,7 @@ export default function ClockInWidget({ employeeId, initialLog, project }: Clock
                 <span className="block text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-0.5">Check-Out Time</span>
                 <span className="font-bold text-slate-900 text-sm font-mono">
                   {isCheckedOut
-                    ? new Date(log!.check_out_time!).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                    ? formatPunchTime(log!.check_out_time!)
                     : "Active Session"}
                 </span>
               </div>
@@ -133,7 +157,7 @@ export default function ClockInWidget({ employeeId, initialLog, project }: Clock
         </div>
       </div>
 
-      <div className="space-y-3 pt-2">
+      <div className="space-y-2 pt-1">
         {!isCheckedIn ? (
           <button
             onClick={() => handlePunch("in")}
@@ -170,4 +194,12 @@ export default function ClockInWidget({ employeeId, initialLog, project }: Clock
       </div>
     </div>
   );
+}
+
+function formatPunchTime(value: string) {
+  return new Date(value).toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
 }

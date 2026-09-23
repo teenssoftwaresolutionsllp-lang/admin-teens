@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase-server";
 import { DataStore } from "@/lib/data-store";
 import ProfileProgressBar from "@/components/portal/ProfileProgressBar";
 import ClockInWidget from "@/components/portal/ClockInWidget";
+import AttendanceCalendar from "@/components/portal/AttendanceCalendar";
 import Link from "next/link";
 import { Calendar, FileText, ArrowRight, Globe, AlertCircle, Briefcase } from "lucide-react";
 
@@ -25,6 +26,8 @@ export default async function EmployeePortalPage() {
 
   const employeeId = employee?.id || "TSS001";
   const todayAttendance = await DataStore.getTodayAttendance(employeeId);
+  const attendanceLogs = await DataStore.getAttendanceLogs(employeeId);
+  const leaveRequests = await DataStore.getLeaveRequests(employeeId);
   const leaveBalances = await DataStore.getLeaveBalances(employeeId);
   const payslips = await DataStore.getPayslips(employeeId);
   const latestPayslip = payslips[0] || null;
@@ -32,35 +35,37 @@ export default async function EmployeePortalPage() {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
-      {/* Top Welcome Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+      {/* Compact welcome line and primary actions */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-1">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
-            Welcome back, {employee?.first_name || "Colleague"} 👋
+          <h1 className="text-xl font-bold text-slate-900 tracking-tight">
+            Welcome back, {employee?.first_name || "Colleague"}
           </h1>
-          <p className="text-sm text-slate-500 mt-1">
+          <p className="text-xs text-slate-500 mt-1">
             {employee?.designation || "Software Engineer"} &bull; ID:{" "}
-            <span className="font-mono font-medium text-slate-700">
-              {employee?.employee_id || "TSS001"}
-            </span>{" "}
-            &bull; {employee?.employment_type || "Full-time"}
+            <span className="font-mono font-medium text-slate-700">{employee?.employee_id || "TSS001"}</span>
+            {" "}&bull; {employee?.employment_type || "Full-time"}
           </p>
         </div>
-
-        <div className="flex items-center gap-3">
-          <Link
-            href="/portal/profile"
-            className="px-4 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
-          >
+        <div className="flex items-center gap-2">
+          <Link href="/portal/profile" className="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg shadow-sm transition-colors">
             View My Profile
           </Link>
-          <Link
-            href="/portal/leaves"
-            className="px-4 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm transition-colors"
-          >
+          <Link href="/portal/leaves" className="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg shadow-sm transition-colors">
             Apply Leave
           </Link>
         </div>
+      </div>
+
+      {/* Attendance calendar replaces the large welcome card */}
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_430px] gap-5 items-stretch">
+        <AttendanceCalendar
+          logs={attendanceLogs}
+          leaveRequests={leaveRequests}
+          year={new Date().getFullYear()}
+          month={new Date().getMonth()}
+        />
+        <ClockInWidget employeeId={employeeId} initialLog={todayAttendance} project={project} compact />
       </div>
 
       {/* 1. Dynamic Profile Completion Bar (Turns full green at 100%) */}
@@ -68,13 +73,6 @@ export default async function EmployeePortalPage() {
 
       {/* 2. Grid: Attendance Punch + Leave Balance + Project Timezone */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Clock In / Out Widget */}
-        <ClockInWidget
-          employeeId={employeeId}
-          initialLog={todayAttendance}
-          project={project}
-        />
-
         {/* Leave Balances Card */}
         <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm flex flex-col justify-between">
           <div>

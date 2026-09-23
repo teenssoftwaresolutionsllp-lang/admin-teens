@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { CheckCircle2, AlertCircle, ArrowRight, ShieldCheck } from "lucide-react";
 import { calculateProfileCompletion } from "@/lib/calculations";
@@ -7,9 +8,11 @@ import { Employee } from "@/lib/types";
 
 interface ProfileProgressBarProps {
   employee: Partial<Employee> | null;
+  onCompleteProfile?: () => void;
 }
 
-export default function ProfileProgressBar({ employee }: ProfileProgressBarProps) {
+export default function ProfileProgressBar({ employee, onCompleteProfile }: ProfileProgressBarProps) {
+  const [showAllMissing, setShowAllMissing] = useState(false);
   const { percentage, missingFields, isComplete, completedFieldsCount, totalFieldsCount } =
     calculateProfileCompletion(employee);
 
@@ -63,6 +66,7 @@ export default function ProfileProgressBar({ employee }: ProfileProgressBarProps
         {!isComplete && (
           <Link
             href="/portal/profile"
+            onClick={onCompleteProfile ? (event) => { event.preventDefault(); onCompleteProfile(); } : undefined}
             className="inline-flex items-center justify-center gap-2 px-5 py-2.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 rounded-xl shadow-sm hover:shadow transition-all shrink-0"
           >
             <span>Complete Profile</span>
@@ -91,7 +95,7 @@ export default function ProfileProgressBar({ employee }: ProfileProgressBarProps
       {!isComplete && missingFields.length > 0 && (
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <span className="text-xs font-semibold text-slate-500">Pending details:</span>
-          {missingFields.slice(0, 5).map((field) => (
+          {(showAllMissing ? missingFields : missingFields.slice(0, 5)).map((field) => (
             <span
               key={field}
               className="text-[11px] font-medium bg-amber-50 text-amber-800 border border-amber-200/80 px-2.5 py-0.5 rounded-lg"
@@ -100,9 +104,13 @@ export default function ProfileProgressBar({ employee }: ProfileProgressBarProps
             </span>
           ))}
           {missingFields.length > 5 && (
-            <span className="text-[11px] text-slate-400 font-medium">
-              +{missingFields.length - 5} more
-            </span>
+            <button
+              type="button"
+              onClick={() => setShowAllMissing((visible) => !visible)}
+              className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800"
+            >
+              {showAllMissing ? "Show less" : `Show all ${missingFields.length}`}
+            </button>
           )}
         </div>
       )}
