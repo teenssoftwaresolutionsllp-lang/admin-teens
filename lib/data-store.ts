@@ -556,6 +556,9 @@ export class DataStore {
     const cache = getCache();
     const employeeId = empData.employee_id || await this.getNextEmployeeId();
     const id = empData.id || crypto.randomUUID();
+    const isUuid = (value: unknown): value is string =>
+      typeof value === "string" &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
     const newEmp: Employee = {
       id,
       employee_id: employeeId,
@@ -575,7 +578,7 @@ export class DataStore {
       emergency_contact_name: empData.emergency_contact_name || null,
       emergency_contact_phone: empData.emergency_contact_phone || null,
       emergency_contact_relation: empData.emergency_contact_relation || null,
-      department_id: empData.department_id || null,
+      department_id: isUuid(empData.department_id) ? empData.department_id : null,
       designation: empData.designation || null,
       employment_type: empData.employment_type || "full-time",
       joining_date: empData.joining_date || new Date().toISOString().split("T")[0],
@@ -592,27 +595,36 @@ export class DataStore {
       aadhar_number: empData.aadhar_number || null,
       uan_number: empData.uan_number || null,
       esi_number: empData.esi_number || null,
-      project_id: empData.project_id || "proj-1",
+      project_id: isUuid(empData.project_id) ? empData.project_id : null,
       notes: empData.notes || null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       project: cache.projects[0],
     };
 
-    // Try DB insertion with adminClient
+    const { project: _project, ...employeeRow } = newEmp;
+
+    // Persist only columns that exist in the employees table.
     try {
       const supabase = await createAdminClient();
       const { data, error } = await supabase
         .from("employees")
-        .insert(newEmp)
+        .insert(employeeRow)
         .select(`*, department:departments(id, name)`)
         .single();
-      if (!error && data) {
-        this.seedEmployeeToCache(data);
+      if (error) throw error;
+      if (data) {
+        this.seedEmployeeToCache({
+          ...data,
+          project: cache.projects.find((project) => project.id === data.project_id),
+        });
         return data;
       }
     } catch (e) {
       console.warn("createEmployee DB warning:", e);
+      if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+        throw e;
+      }
     }
 
     this.seedEmployeeToCache(newEmp);
@@ -824,10 +836,49 @@ export class DataStore {
   // ==========================================
   static async getProjects(): Promise<Project[]> {
     const cache = getCache();
-    return cache.projects.map((p) => ({
-      ...p,
-      calendar: cache.holidayCalendars.find((c) => c.id === p.calendar_id),
-    }));
+    try {
+      const supabase = await createAdminClient();
+      const { data, error } = await supabase
+        .from("projects")
+        .select("*, calendar:holiday_calendars(*)")
+        .order("name");
+
+      if (error) throw error;
+      if (data && data.length > 0) return data as Project[];
+
+      const calendarDefinitions = [
+        { name: "India Standard Holidays 2026", country_code: "IN", country_name: "India", timezone: "Asia/Kolkata" },
+        { name: "US Federal Holidays 2026", country_code: "US", country_name: "United States", timezone: "America/New_York" },
+      ];
+      const calendars: Record<string, string> = {};
+      for (const definition of calendarDefinitions) {
+        const { data: calendar, error: calendarError } = await supabase
+          .from("holiday_calendars")
+          .insert(definition)
+          .select("id")
+          .single();
+        if (calendarError) throw calendarError;
+        calendars[definition.country_code] = calendar.id;
+      }
+
+      const projectRows = [
+        { name: "FinTech Enterprise Platform", client_country: "India", timezone: "Asia/Kolkata", calendar_id: calendars.IN, shift_start_time: "09:00", shift_end_time: "18:00", grace_period_minutes: 30, half_day_cutoff_minutes: 150 },
+        { name: "US Healthcare Claims Engine", client_country: "United States", timezone: "America/New_York", calendar_id: calendars.US, shift_start_time: "18:30", shift_end_time: "03:30", grace_period_minutes: 30, half_day_cutoff_minutes: 150 },
+        { name: "Internal Engineering & Bench", client_country: "India", timezone: "Asia/Kolkata", calendar_id: calendars.IN, shift_start_time: "09:30", shift_end_time: "18:30", grace_period_minutes: 30, half_day_cutoff_minutes: 150 },
+      ];
+      const { data: createdProjects, error: projectError } = await supabase
+        .from("projects")
+        .insert(projectRows)
+        .select("*, calendar:holiday_calendars(*)");
+      if (projectError) throw projectError;
+      return (createdProjects || []) as Project[];
+    } catch (error) {
+      console.warn("getProjects database warning:", error);
+      return cache.projects.map((p) => ({
+        ...p,
+        calendar: cache.holidayCalendars.find((c) => c.id === p.calendar_id),
+      }));
+    }
   }
 
   static async saveProject(projectData: Partial<Project>): Promise<Project> {
