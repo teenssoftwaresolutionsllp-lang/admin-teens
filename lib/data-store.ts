@@ -620,7 +620,7 @@ export class DataStore {
     return newEmp;
   }
 
-  private static async getNextEmployeeId(): Promise<string> {
+  static async getNextEmployeeId(): Promise<string> {
     const now = new Date();
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, "0");
