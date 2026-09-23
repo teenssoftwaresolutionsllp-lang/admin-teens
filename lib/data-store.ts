@@ -884,30 +884,55 @@ export class DataStore {
   static async saveProject(projectData: Partial<Project>): Promise<Project> {
     const cache = getCache();
     if (projectData.id) {
-      const index = cache.projects.findIndex((p) => p.id === projectData.id);
-      if (index >= 0) {
-        cache.projects[index] = { ...cache.projects[index], ...projectData } as Project;
-        return cache.projects[index];
-      }
+      const { id, ...updates } = projectData;
+      const supabase = await createAdminClient();
+      const { data, error } = await supabase
+        .from("projects")
+        .update(updates)
+        .eq("id", id)
+        .select("*, calendar:holiday_calendars(*)")
+        .single();
+      if (error) throw error;
+      if (data) return data as Project;
     }
 
-    const newProject: Project = {
-      id: "proj-" + Date.now(),
-      name: projectData.name || "New Project",
-      client_country: projectData.client_country || "India",
-      timezone: projectData.timezone || "Asia/Kolkata",
-      calendar_id: projectData.calendar_id || "cal-in-2026",
-      shift_start_time: projectData.shift_start_time || "09:00",
-      shift_end_time: projectData.shift_end_time || "18:00",
-      grace_period_minutes: projectData.grace_period_minutes || 30,
-      half_day_cutoff_minutes: projectData.half_day_cutoff_minutes || 150,
-    };
+    const supabase = await createAdminClient();
+    const { data, error } = await supabase
+      .from("projects")
+      .insert({
+        name: projectData.name || "New Project",
+        client_country: projectData.client_country || "India",
+        timezone: projectData.timezone || "Asia/Kolkata",
+        calendar_id: projectData.calendar_id || null,
+        shift_start_time: projectData.shift_start_time || "09:00",
+        shift_end_time: projectData.shift_end_time || "18:00",
+        grace_period_minutes: projectData.grace_period_minutes ?? 30,
+        half_day_cutoff_minutes: projectData.half_day_cutoff_minutes ?? 150,
+      })
+      .select("*, calendar:holiday_calendars(*)")
+      .single();
+    if (error) throw error;
+    if (!data) throw new Error("Project was not returned after insert");
+
+    const newProject = data as Project;
     cache.projects.push(newProject);
     return newProject;
   }
 
   static async getHolidayCalendars(): Promise<HolidayCalendar[]> {
-    return getCache().holidayCalendars;
+    const cache = getCache();
+    try {
+      const supabase = await createAdminClient();
+      const { data, error } = await supabase
+        .from("holiday_calendars")
+        .select("*, holidays(*)")
+        .order("country_name");
+      if (error) throw error;
+      if (data && data.length > 0) return data as HolidayCalendar[];
+    } catch (error) {
+      console.warn("getHolidayCalendars database warning:", error);
+    }
+    return cache.holidayCalendars;
   }
 
   // ==========================================
@@ -1014,9 +1039,20 @@ export class DataStore {
   // ==========================================
   static async getAttendanceRegularizations(): Promise<AttendanceRegularization[]> {
     const cache = getCache();
-    return [...cache.regularizations].sort(
-      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-    );
+    try {
+      const supabase = await createAdminClient();
+      const { data, error } = await supabase
+        .from("attendance_regularizations")
+        .select("*, employee:employees(*)")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.warn("getAttendanceRegularizations database warning:", error);
+      return [...cache.regularizations].sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+    }
   }
 
   static async createAttendanceRegularization({
@@ -1047,8 +1083,22 @@ export class DataStore {
       employee: employee || undefined,
     };
 
-    cache.regularizations.unshift(reg);
-    return reg;
+    const supabase = await createAdminClient();
+    const { data, error } = await supabase
+      .from("attendance_regularizations")
+      .insert({
+        employee_id: employeeId,
+        attendance_date: attendanceDate,
+        proposed_check_in: proposedCheckIn,
+        proposed_check_out: proposedCheckOut,
+        reason,
+        status: "pending",
+      })
+      .select("*, employee:employees(*)")
+      .single();
+    if (error) throw error;
+    if (!data) throw new Error("Regularization was not returned after insert");
+    return data as AttendanceRegularization;
   }
 
   static async reviewAttendanceRegularization({
@@ -1111,7 +1161,16 @@ export class DataStore {
   // LEAVE MANAGEMENT
   // ==========================================
   static async getLeaveTypes(): Promise<LeaveType[]> {
-    return getCache().leaveTypes;
+    const cache = getCache();
+    try {
+      const supabase = await createAdminClient();
+      const { data, error } = await supabase.from("leave_types").select("*").order("name");
+      if (error) throw error;
+      if (data && data.length > 0) return data;
+    } catch (error) {
+      console.warn("getLeaveTypes database warning:", error);
+    }
+    return cache.leaveTypes;
   }
 
   static async updateLeaveType(id: string, updates: Partial<LeaveType>): Promise<LeaveType | null> {
@@ -1155,15 +1214,25 @@ export class DataStore {
 
   static async getLeaveRequests(employeeId?: string): Promise<LeaveRequest[]> {
     const cache = getCache();
-    let reqs = [...cache.leaveRequests];
-    if (employeeId) {
-      reqs = reqs.filter((r) => r.employee_id === employeeId);
+    try {
+      const supabase = await createAdminClient();
+      let query = supabase
+        .from("leave_requests")
+        .select("*, employee:employees(*), leave_type:leave_types(*)")
+        .order("created_at", { ascending: false });
+      if (employeeId) query = query.eq("employee_id", employeeId);
+      const { data, error } = await query;
+      if (error) throw error;
+      if (data) return data as LeaveRequest[];
+    } catch (error) {
+      console.warn("getLeaveRequests database warning:", error);
     }
+
+    let reqs = employeeId
+      ? cache.leaveRequests.filter((r) => r.employee_id === employeeId)
+      : [...cache.leaveRequests];
     return reqs
-      .map((r) => ({
-        ...r,
-        leave_type: cache.leaveTypes.find((lt) => lt.id === r.leave_type_id),
-      }))
+      .map((r) => ({ ...r, leave_type: cache.leaveTypes.find((lt) => lt.id === r.leave_type_id) }))
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   }
 
@@ -1203,8 +1272,24 @@ export class DataStore {
       leave_type: leaveType,
     };
 
-    cache.leaveRequests.unshift(newRequest);
-    return newRequest;
+    const supabase = await createAdminClient();
+    const { data, error } = await supabase
+      .from("leave_requests")
+      .insert({
+        employee_id: employeeId,
+        leave_type_id: leaveTypeId,
+        start_date: startDate,
+        end_date: endDate,
+        total_days: totalDays,
+        is_half_day: isHalfDay,
+        reason,
+        status: "pending",
+      })
+      .select("*, employee:employees(*), leave_type:leave_types(*)")
+      .single();
+    if (error) throw error;
+    if (!data) throw new Error("Leave request was not returned after insert");
+    return data as LeaveRequest;
   }
 
   static async reviewLeaveRequest({
