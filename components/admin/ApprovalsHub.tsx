@@ -261,7 +261,9 @@ export default function ApprovalsHub({
                             </span>
                           </div>
                           <p className="text-[11px] text-slate-400 mt-1">
-                            Requested on: {new Date(req.created_at).toLocaleString()}
+                            Requested on: {new Date(req.created_at).toLocaleString("en-US", {
+                              timeZone: "UTC",
+                            })}
                           </p>
                         </div>
 

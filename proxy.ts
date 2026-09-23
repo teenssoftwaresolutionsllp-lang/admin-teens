@@ -1,7 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
     request,
   })
@@ -15,7 +15,7 @@ export async function middleware(request: NextRequest) {
           return request.cookies.getAll()
         },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => request.cookies.set(name, value))
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
           supabaseResponse = NextResponse.next({
             request,
           })
@@ -36,14 +36,12 @@ export async function middleware(request: NextRequest) {
   const isPortalPath = path.startsWith('/portal')
   const isLoginPath = path === '/login'
 
-  // Unauthenticated user trying to access protected paths
   if (!user && (isDashboardPath || isPortalPath)) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)
   }
 
-  // Authenticated user on login page -> redirect to appropriate portal
   if (user && isLoginPath) {
     const role = user.user_metadata?.role || 'hr'
     const destination = role === 'employee' ? '/portal' : '/dashboard'
