@@ -554,10 +554,11 @@ export class DataStore {
 
   static async createEmployee(empData: Partial<Employee>): Promise<Employee> {
     const cache = getCache();
-    const id = empData.id || empData.employee_id || ("TSS" + Math.floor(100 + Math.random() * 900));
+    const employeeId = empData.employee_id || await this.getNextEmployeeId();
+    const id = empData.id || crypto.randomUUID();
     const newEmp: Employee = {
       id,
-      employee_id: empData.employee_id || id,
+      employee_id: employeeId,
       user_id: empData.user_id || null,
       first_name: empData.first_name || "New",
       last_name: empData.last_name || "Employee",
@@ -617,6 +618,25 @@ export class DataStore {
     this.seedEmployeeToCache(newEmp);
     await this.getLeaveBalances(newEmp.id);
     return newEmp;
+  }
+
+  private static async getNextEmployeeId(): Promise<string> {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    let employeeCount = getCache().employees.length;
+
+    try {
+      const supabase = await createAdminClient();
+      const { count, error } = await supabase
+        .from("employees")
+        .select("id", { count: "exact", head: true });
+      if (!error && count !== null) employeeCount = count;
+    } catch (e) {
+      console.warn("getNextEmployeeId database count warning:", e);
+    }
+
+    return `${year}${month}${String(employeeCount + 1).padStart(4, "0")}`;
   }
 
   static async updateEmployee(id: string, updates: Partial<Employee>): Promise<Employee | null> {

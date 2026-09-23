@@ -22,7 +22,7 @@ export default function EmployeeForm({ employee, departments, projects, mode, ro
   
   // Basic form state
   const [formData, setFormData] = useState<Partial<Employee>>({
-    employee_id: employee?.employee_id || (mode === "add" ? "TSS-" + Math.floor(1000 + Math.random() * 9000) : ""),
+    employee_id: employee?.employee_id || "",
     first_name: employee?.first_name || "",
     last_name: employee?.last_name || "",
     email: employee?.email || "",
@@ -258,7 +258,7 @@ export default function EmployeeForm({ employee, departments, projects, mode, ro
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Employee ID *</label>
-              <input required type="text" name="employee_id" value={formData.employee_id || ""} onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
+              <input type="text" name="employee_id" value={formData.employee_id || ""} readOnly={mode === "add"} placeholder={mode === "add" ? "Generated automatically on save" : "Employee ID"} onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none read-only:bg-slate-100 read-only:text-slate-500" />
             </div>
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Department</label>
