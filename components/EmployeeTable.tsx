@@ -44,6 +44,10 @@ export default function EmployeeTable({ employees, departments, role }: Employee
     return `${firstName?.charAt(0) || ''}${lastName?.charAt(0) || ''}`.toUpperCase()
   }
 
+  const getDepartmentName = (employee: Employee) => {
+    return employee.department?.name || departments.find((department) => department.id === employee.department_id)?.name || 'General'
+  }
+
   const filteredEmployees = employees.filter((emp) => {
     const searchString = searchTerm.toLowerCase()
     const matchesSearch = 
@@ -159,7 +163,7 @@ export default function EmployeeTable({ employees, departments, role }: Employee
                     </td>
                     <td className="whitespace-nowrap px-6 py-4">
                       <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700">
-                        {emp.department?.name || 'General'}
+                        {getDepartmentName(emp)}
                       </span>
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 font-medium text-slate-800">
