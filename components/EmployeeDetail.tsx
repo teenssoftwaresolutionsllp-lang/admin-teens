@@ -41,10 +41,10 @@ export default function EmployeeDetail({ employee, documents, role }: EmployeeDe
 
   const tabs = [
     { name: "Personal", icon: User },
-    { name: "Address & Emergency", icon: MapPin },
     { name: "Employment", icon: Briefcase },
     { name: "Bank & Identity", icon: CreditCard },
     { name: "Documents", icon: FileText },
+    { name: "Address & Emergency", icon: MapPin },
   ];
 
   const DetailTile = ({ label, value }: { label: string; value: React.ReactNode }) => (
@@ -133,34 +133,8 @@ export default function EmployeeDetail({ employee, documents, role }: EmployeeDe
             </div>
           )}
 
-          {/* Address & Emergency */}
-          {activeTab === 1 && (
-            <div className="space-y-6">
-              <div>
-                <h3 className="text-sm font-bold text-slate-900 mb-3 uppercase tracking-wider text-slate-400">Residential Address</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <div className="md:col-span-2">
-                    <DetailTile label="Address Line" value={employee.address} />
-                  </div>
-                  <DetailTile label="City" value={employee.city} />
-                  <DetailTile label="State" value={employee.state} />
-                  <DetailTile label="Pincode" value={employee.pincode} />
-                </div>
-              </div>
-
-              <div className="pt-2 border-t border-slate-100">
-                <h3 className="text-sm font-bold text-slate-900 mb-3 uppercase tracking-wider text-slate-400">Emergency Contact</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <DetailTile label="Contact Name" value={employee.emergency_contact_name} />
-                  <DetailTile label="Phone Number" value={employee.emergency_contact_phone} />
-                  <DetailTile label="Relationship" value={employee.emergency_contact_relation} />
-                </div>
-              </div>
-            </div>
-          )}
-
           {/* Employment */}
-          {activeTab === 2 && (
+          {activeTab === 1 && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <DetailTile label="Employee ID" value={employee.employee_id} />
               <DetailTile label="Department" value={employee.department?.name} />
@@ -180,7 +154,7 @@ export default function EmployeeDetail({ employee, documents, role }: EmployeeDe
           )}
 
           {/* Bank & Identity */}
-          {activeTab === 3 && (
+          {activeTab === 2 && (
             <div className="space-y-6">
               <div>
                 <h3 className="text-sm font-bold text-slate-900 mb-3 uppercase tracking-wider text-slate-400">Financial Details</h3>
@@ -205,7 +179,7 @@ export default function EmployeeDetail({ employee, documents, role }: EmployeeDe
           )}
 
           {/* Documents */}
-          {activeTab === 4 && (
+          {activeTab === 3 && (
             <div>
               <DocumentUpload
                 employeeId={employee.id}
@@ -214,9 +188,34 @@ export default function EmployeeDetail({ employee, documents, role }: EmployeeDe
               />
             </div>
           )}
+
+          {/* Address & Emergency */}
+          {activeTab === 4 && (
+            <div className="space-y-6">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 mb-3 uppercase tracking-wider text-slate-400">Residential Address</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div className="md:col-span-2">
+                    <DetailTile label="Address Line" value={employee.address} />
+                  </div>
+                  <DetailTile label="City" value={employee.city} />
+                  <DetailTile label="State" value={employee.state} />
+                  <DetailTile label="Pincode" value={employee.pincode} />
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-slate-100">
+                <h3 className="text-sm font-bold text-slate-900 mb-3 uppercase tracking-wider text-slate-400">Emergency Contact</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <DetailTile label="Contact Name" value={employee.emergency_contact_name} />
+                  <DetailTile label="Phone Number" value={employee.emergency_contact_phone} />
+                  <DetailTile label="Relationship" value={employee.emergency_contact_relation} />
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
   );
 }
-

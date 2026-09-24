@@ -554,7 +554,7 @@ export class DataStore {
 
   static async createEmployee(empData: Partial<Employee>): Promise<Employee> {
     const cache = getCache();
-    const id = empData.id || empData.employee_id || ("TSS" + Math.floor(100 + Math.random() * 900));
+    const id = empData.id || crypto.randomUUID();
     const newEmp: Employee = {
       id,
       employee_id: empData.employee_id || id,
@@ -591,7 +591,7 @@ export class DataStore {
       aadhar_number: empData.aadhar_number || null,
       uan_number: empData.uan_number || null,
       esi_number: empData.esi_number || null,
-      project_id: empData.project_id || "proj-1",
+      project_id: empData.project_id || null,
       notes: empData.notes || null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -601,22 +601,35 @@ export class DataStore {
     // Try DB insertion with adminClient
     try {
       const supabase = await createAdminClient();
+      const { project, ...employeeForDb } = newEmp;
       const { data, error } = await supabase
         .from("employees")
-        .insert(newEmp)
+        .insert(employeeForDb)
         .select(`*, department:departments(id, name)`)
         .single();
-      if (!error && data) {
+
+      if (error) {
+          console.error("========== EMPLOYEE INSERT ERROR ==========");
+          console.error(error);
+          console.error("Message:", error.message);
+          console.error("Details:", error.details);
+          console.error("Hint:", error.hint);
+          console.error("Code:", error.code);
+          console.error("==========================================");
+          throw error;
+      }
+
+      if (!data) {
+        throw new Error("Employee was not returned after insert");
+      }
+      
         this.seedEmployeeToCache(data);
         return data;
-      }
+
     } catch (e) {
       console.warn("createEmployee DB warning:", e);
+      throw e;
     }
-
-    this.seedEmployeeToCache(newEmp);
-    await this.getLeaveBalances(newEmp.id);
-    return newEmp;
   }
 
   static async updateEmployee(id: string, updates: Partial<Employee>): Promise<Employee | null> {

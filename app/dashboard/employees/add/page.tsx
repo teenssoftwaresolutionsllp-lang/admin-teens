@@ -27,6 +27,8 @@ export default async function AddEmployeePage() {
 
   const role = (user?.user_metadata?.role as UserRole) || "hr";
 
+
+
   let departments: Department[] = [];
   try {
     const adminClient = await createAdminClient();
@@ -37,10 +39,10 @@ export default async function AddEmployeePage() {
     departments = (data as Department[]) || [];
   } catch {
     departments = [
-      { id: "d1", name: "Engineering", description: "Software development" },
-      { id: "d2", name: "Design", description: "UI/UX design" },
-      { id: "d3", name: "HR", description: "Human Resources" },
-      { id: "d4", name: "Finance", description: "Finance and Accounts" },
+      { id: "d1", name: "Engineering", description: "Software development" ,created_at: new Date().toISOString()},
+      { id: "d2", name: "Design", description: "UI/UX design",created_at: new Date().toISOString() },
+      { id: "d3", name: "HR", description: "Human Resources" ,created_at: new Date().toISOString()},
+      { id: "d4", name: "Finance", description: "Finance and Accounts" ,created_at: new Date().toISOString()},
     ];
   }
 

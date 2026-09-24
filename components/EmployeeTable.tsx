@@ -1,10 +1,13 @@
 "use client"
 
 import { useState } from 'react'
-import { Search, Filter, Eye, Pencil, UserCircle } from 'lucide-react'
+import { Search, Filter, Eye, Pencil, UserCircle, Download } from 'lucide-react'
+import companiesData from '@/data/companies.json'
 import Link from 'next/link'
 import Image from 'next/image'
 import { Employee, Department, UserRole } from '@/lib/types'
+
+const companies = companiesData.companies
 
 interface EmployeeTableProps {
   employees: Employee[]
@@ -14,6 +17,7 @@ interface EmployeeTableProps {
 
 export default function EmployeeTable({ employees, departments, role }: EmployeeTableProps) {
   const [searchTerm, setSearchTerm] = useState('')
+  const [compFilter,setCompFilter] = useState('all')
   const [deptFilter, setDeptFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
   const [typeFilter, setTypeFilter] = useState('all')
@@ -44,18 +48,160 @@ export default function EmployeeTable({ employees, departments, role }: Employee
     return `${firstName?.charAt(0) || ''}${lastName?.charAt(0) || ''}`.toUpperCase()
   }
 
+  const handleDownloadEmployee = async (emp: Employee) => {
+  try {
+    const { Document, Packer, Paragraph, TextRun, HeadingLevel } = await import("docx");
+
+    const doc = new Document({
+      sections: [
+        {
+          children: [
+            new Paragraph({
+              text: "EMPLOYEE DETAILS",
+              heading: HeadingLevel.TITLE,
+            }),
+
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: "Personal Information",
+                  bold: true,
+                  size: 28,
+                }),
+              ],
+            }),
+
+            new Paragraph(`Employee ID: ${emp.employee_id || "N/A"}`),
+            new Paragraph(`First Name: ${emp.first_name || "N/A"}`),
+            new Paragraph(`Last Name: ${emp.last_name || "N/A"}`),
+            new Paragraph(`Email: ${emp.email || "N/A"}`),
+            new Paragraph(`Phone: ${emp.phone || "N/A"}`),
+            new Paragraph(`Date of Birth: ${formatDate(emp.date_of_birth)}`),
+            new Paragraph(`Gender: ${emp.gender || "N/A"}`),
+            new Paragraph(`Blood Group: ${emp.blood_group || "N/A"}`),
+            new Paragraph(`Marital Status: ${emp.marital_status || "N/A"}`),
+
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: "Employment Information",
+                  bold: true,
+                  size: 28,
+                }),
+              ],
+              spacing: {
+                before: 300,
+              },
+            }),
+
+            new Paragraph(`Department: ${emp.department?.name || "General"}`),
+            new Paragraph(`Designation: ${emp.designation || "N/A"}`),
+            new Paragraph(`Employment Type: ${emp.employment_type || "N/A"}`),
+            new Paragraph(`Joining Date: ${formatDate(emp.joining_date)}`),
+            new Paragraph(`Probation End Date: ${formatDate(emp.probation_end_date)}`),
+            new Paragraph(`Confirmation Date: ${formatDate(emp.confirmation_date)}`),
+            new Paragraph(`Reporting Manager: ${emp.reporting_manager || "N/A"}`),
+            new Paragraph(`Work Location: ${emp.work_location || "N/A"}`),
+            new Paragraph(`CTC: ₹${emp.salary || "N/A"}`),
+            new Paragraph(`ESI Number: ${emp.esi_number || "N/A"}`),
+            new Paragraph(`Status: ${emp.status || "N/A"}`),
+
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: "Bank & Identity Information",
+                  bold: true,
+                  size: 28,
+                }),
+              ],
+              spacing: {
+                before: 300,
+              },
+            }),
+
+            new Paragraph(`Bank Name: ${emp.bank_name || "N/A"}`),
+            new Paragraph(`Bank Account Number: ${emp.bank_account_number || "N/A"}`),
+            new Paragraph(`IFSC Code: ${emp.ifsc_code || "N/A"}`),
+            new Paragraph(`PAN Number: ${emp.pan_number || "N/A"}`),
+            new Paragraph(`Aadhaar Number: ${emp.aadhar_number || "N/A"}`),
+            new Paragraph(`UAN Number: ${emp.uan_number || "N/A"}`),
+
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: "Address Information",
+                  bold: true,
+                  size: 28,
+                }),
+              ],
+              spacing: {
+                before: 300,
+              },
+            }),
+
+            new Paragraph(`Address: ${emp.address || "N/A"}`),
+            new Paragraph(`City: ${emp.city || "N/A"}`),
+            new Paragraph(`State: ${emp.state || "N/A"}`),
+            new Paragraph(`Pincode: ${emp.pincode || "N/A"}`),
+
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: "Emergency Contact",
+                  bold: true,
+                  size: 28,
+                }),
+              ],
+              spacing: {
+                before: 300,
+              },
+            }),
+
+            new Paragraph(
+              `Contact Name: ${emp.emergency_contact_name || "N/A"}`
+            ),
+            new Paragraph(
+              `Contact Phone: ${emp.emergency_contact_phone || "N/A"}`
+            ),
+            new Paragraph(
+              `Relation: ${emp.emergency_contact_relation || "N/A"}`
+            ),
+          ],
+        },
+      ],
+    });
+
+    const blob = await Packer.toBlob(doc);
+
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+
+    link.href = url;
+    link.download = `${emp.employee_id || emp.first_name + "-" + emp.last_name}-Employee.docx`;
+
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    window.URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error("Failed to generate employee document:", error);
+  }
+};
+
   const filteredEmployees = employees.filter((emp) => {
     const searchString = searchTerm.toLowerCase()
     const matchesSearch = 
       `${emp.first_name} ${emp.last_name}`.toLowerCase().includes(searchString) ||
       (emp.email && emp.email.toLowerCase().includes(searchString)) ||
-      (emp.employee_id && emp.employee_id.toLowerCase().includes(searchString))
+      (emp.employee_id && emp.employee_id.toLowerCase().includes(searchString)) 
     
     const matchesDept = deptFilter === 'all' || emp.department_id === deptFilter
     const matchesStatus = statusFilter === 'all' || emp.status === statusFilter
     const matchesType = typeFilter === 'all' || emp.employment_type === typeFilter
+    const matchesCompany = compFilter === 'all' || emp.company_name === compFilter
 
-    return matchesSearch && matchesDept && matchesStatus && matchesType
+    return matchesSearch && matchesDept && matchesStatus && matchesType && matchesCompany
   })
 
   return (
@@ -75,7 +221,32 @@ export default function EmployeeTable({ employees, departments, role }: Employee
           />
         </div>
 
+        
+        
+
         <div className="flex flex-wrap items-center gap-2.5">
+
+
+          <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm">
+            <Filter className="h-3.5 w-3.5 text-slate-400" />
+            <select
+              className="bg-transparent focus:outline-none cursor-pointer text-xs font-semibold"
+              value={compFilter}
+              onChange={(e) => setCompFilter(e.target.value)}
+            >
+              <option value="all">All Companey</option>
+                {companies.map((company, index) => (
+                    <option
+                      key={`${company.company_name}-${index}`}
+                      value={company.company_name}
+                    >
+                      {company.company_name}
+                    </option>
+                  ))}
+            </select>
+          </div>
+
+
           <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm">
             <Filter className="h-3.5 w-3.5 text-slate-400" />
             <select
@@ -129,6 +300,7 @@ export default function EmployeeTable({ employees, departments, role }: Employee
                 <th className="px-6 py-4">Joining Date</th>
                 <th className="px-6 py-4">Status</th>
                 <th className="px-6 py-4 text-right">Actions</th>
+                <th className='px-6 py-4'>Download</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
@@ -193,11 +365,21 @@ export default function EmployeeTable({ employees, departments, role }: Employee
                         )}
                       </div>
                     </td>
+                    <td className="whitespace-nowrap px-6 py-4">
+                      <button
+                        type="button"
+                        onClick={() => handleDownloadEmployee(emp)}
+                        className="rounded-xl p-2 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
+                        title="Download Employee Document"
+                      >
+                        <Download className="h-4 w-4" />
+                      </button>
+                    </td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={7} className="px-6 py-16 text-center text-slate-500">
+                  <td colSpan={8} className="px-6 py-16 text-center text-slate-500">
                     <div className="flex flex-col items-center justify-center">
                       <div className="h-12 w-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 mb-3">
                         <UserCircle className="h-6 w-6" />

@@ -1,10 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useState , useEffect, useRef} from "react";
+import { toast } from "react-hot-toast"
+import { Toaster } from "react-hot-toast";
 import { useRouter } from "next/navigation";
 import { Department, Employee, UserRole, EmployeeDocument } from "@/lib/types";
 import { User, MapPin, Briefcase, CreditCard, FileText, Loader2, KeyRound } from "lucide-react";
 import DocumentUpload from "./DocumentUpload";
+import companiesData from "@/data/companies.json";
+
+const companies = companiesData.companies;
 
 interface EmployeeFormProps {
   employee?: Employee;
@@ -13,15 +18,31 @@ interface EmployeeFormProps {
   role: UserRole;
 }
 
+
+
 export default function EmployeeForm({ employee, departments, mode, role }: EmployeeFormProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string []>([]);
+
+  const [companySearch, setCompanySearch] = useState(
+    employee?.company_name || ""
+  );
+
+  const [showCompanyDropdown, setShowCompanyDropdown] = useState(false);
+
+  const companyRef = useRef<HTMLDivElement>(null);
+
+  const filteredCompanies = companies.filter((company) =>
+    company.company_name
+      .toLowerCase()
+      .startsWith(companySearch.toLowerCase())
+  );
   
   // Basic form state
   const [formData, setFormData] = useState<Partial<Employee>>({
-    employee_id: employee?.employee_id || (mode === "add" ? "TSS-" + Math.floor(1000 + Math.random() * 9000) : ""),
+    employee_id: employee?.employee_id || "",
     first_name: employee?.first_name || "",
     last_name: employee?.last_name || "",
     email: employee?.email || "",
@@ -58,6 +79,24 @@ export default function EmployeeForm({ employee, departments, mode, role }: Empl
     initial_password: "Employee@123",
   } as any);
 
+  useEffect(() => {
+  if (mode === "add") {
+    fetch("/api/employees/next-id")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.employee_id) {
+          setFormData((prev) => ({
+            ...prev,
+            employee_id: data.employee_id,
+          }));
+        }
+      })
+      .catch((error) => {
+        console.error("Failed to generate employee ID:", error);
+      });
+  }
+}, [mode]);
+
   const [documents, setDocuments] = useState<EmployeeDocument[]>([]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -65,42 +104,138 @@ export default function EmployeeForm({ employee, departments, mode, role }: Empl
     setFormData((prev) => ({ ...prev, [name]: value === "" ? null : value }));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setIsLoading(true);
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  setError([]);
 
-    try {
-      const url = mode === "add" ? "/api/employees" : `/api/employees/${employee?.id}`;
-      const method = mode === "add" ? "POST" : "PUT";
+  if (mode === "add") {
+    const missingFields: string[] = [];
 
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
-      });
-
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Failed to save employee");
-      }
-
-      const savedEmployee = await res.json();
-      router.push(`/dashboard/employees/${mode === "add" ? savedEmployee.id : employee?.id}`);
-      router.refresh();
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setIsLoading(false);
+    // Personal Info
+    if (!formData.first_name?.trim()) {
+      missingFields.push("First Name");
     }
-  };
 
-  const tabs = [
+    if (!formData.last_name?.trim()) {
+      missingFields.push("Last Name");
+    }
+
+    if (!formData.email?.trim()) {
+      missingFields.push("Email");
+    }
+
+    if (!formData.phone?.trim() || formData.phone.trim().length < 10) {
+      missingFields.push("Phone (10 digits)");
+    }
+
+    if (!formData.employee_id?.trim()) {
+      missingFields.push("Employee ID");
+    }
+
+
+    // Employment
+    if (!formData.department_id) {
+      missingFields.push("Department");
+    }
+
+    if (!formData.designation?.trim()) {
+      missingFields.push("Designation");
+    }
+
+    if (!formData.employment_type) {
+      missingFields.push("Employment Type");
+    }
+
+    if (!formData.joining_date) {
+      missingFields.push("Joining Date");
+    }
+
+    if (!formData.probation_end_date) {
+      missingFields.push("Probation End Date");
+    }
+
+    if (!formData.confirmation_date) {
+      missingFields.push("Confirmation Date");
+    }
+
+    if (!formData.work_location?.trim()) {
+      missingFields.push("Work Location");
+    }
+
+    if (
+      formData.salary === undefined ||
+      formData.salary === null
+    ) {
+      missingFields.push("CTC Months ");
+    }
+
+    if (missingFields.length > 0) {
+      setError(missingFields);
+      setActiveTab(missingFields.some(field =>
+        [
+          "Department",
+          "Designation",
+          "Employment Type",
+          "Joining Date",
+          "Probation End Date",
+          "Confirmation Date",
+          "Work Location",
+          "CTC Months ",
+        ].includes(field)) ? 1 : 0);
+      return;
+    }
+  }
+
+  setIsLoading(true);
+
+  try {
+    const url =
+      mode === "add"
+        ? "/api/employees"
+        : `/api/employees/${employee?.id}`;
+
+    const method = mode === "add" ? "POST" : "PUT";
+
+    const res = await fetch(url, {
+      method,
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(formData),
+    });
+
+    if (!res.ok) {
+      const data = await res.json();
+      throw new Error(data.error || "Failed to save employee");
+    }
+
+    const savedEmployee = await res.json();
+
+    router.push(
+      `/dashboard/employees/${
+        mode === "add" ? savedEmployee.id : employee?.id
+      }`
+    );
+
+    router.refresh();
+  } catch (err: any) {
+    const message = err?.message || "Failed to save employee";
+    setError([message]);
+    toast.error(message);
+  } finally {
+    setIsLoading(false);
+  }
+};
+
+  const tabs = mode==="add"?[
     { name: "Personal Info", icon: User },
-    { name: "Address & Emergency", icon: MapPin },
+    { name: "Employment", icon: Briefcase },]:
+  [
+    { name: "Personal Info", icon: User },
     { name: "Employment", icon: Briefcase },
     { name: "Bank & Identity", icon: CreditCard },
     { name: "Documents", icon: FileText },
+    { name: "Address & Emergency", icon: MapPin },
   ];
 
   return (
@@ -129,9 +264,27 @@ export default function EmployeeForm({ employee, departments, mode, role }: Empl
       </div>
 
       <form onSubmit={handleSubmit} className="p-6 sm:p-7">
-        {error && (
-          <div className="mb-6 p-4 bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold rounded-xl flex items-center gap-3">
-            <span>{error}</span>
+        {error.length > 0 && (
+          <div className="mb-5 p-4 bg-rose-50 border border-rose-300 text-rose-700 rounded-xl">
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0 w-5 h-5 rounded-full bg-rose-500 text-white flex items-center justify-center text-xs font-bold mt-0.5">
+                ×
+              </div>
+
+              <div>
+                <p className="text-sm font-semibold mb-2">
+                  Please fill the following required fields:
+                </p>
+
+                <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs font-semibold">
+                  {error.map((field, index) => (
+                    <span key={`${field}-${index}`}>
+                      • {field}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
@@ -140,11 +293,11 @@ export default function EmployeeForm({ employee, departments, mode, role }: Empl
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">First Name *</label>
-              <input required type="text" name="first_name" value={formData.first_name || ""} onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
+              <input required type="text"  name="first_name" value={formData.first_name || ""} onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
             </div>
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Last Name *</label>
-              <input required type="text" name="last_name" value={formData.last_name || ""} onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
+              <input required type="text" name="last_name"  value={formData.last_name || ""} onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
             </div>
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Email (Official Login ID) *</label>
@@ -152,7 +305,7 @@ export default function EmployeeForm({ employee, departments, mode, role }: Empl
             </div>
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Phone Number</label>
-              <input type="tel" name="phone" value={formData.phone || ""} onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
+              <input type="tel" name="phone" value={formData.phone || ""} onChange={handleChange} minLength={10} required className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
             </div>
 
             {mode === "add" && (
@@ -214,8 +367,183 @@ export default function EmployeeForm({ employee, departments, mode, role }: Empl
           </div>
         </div>
 
-        {/* Tab 1: Address */}
+
+        {/* Tab 1: Employment */}
         <div className={activeTab === 1 ? "block" : "hidden"}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Employee ID </label>
+              <input required type="text" name="employee_id" value={formData.employee_id || ""} readOnly className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Department</label>
+              <select name="department_id" value={formData.department_id || ""} onChange={handleChange} required className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none">
+                <option value="">Select Department</option>
+                {departments.map(dept => (
+                  <option key={dept.id} value={dept.id}>{dept.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Designation</label>
+              <input type="text" name="designation" value={formData.designation || ""} onChange={handleChange} required className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Employment Type</label>
+              <select name="employment_type" value={formData.employment_type || ""} onChange={handleChange} required className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none">
+                <option value="">Select Type</option>
+                <option value="full-time">Full-time</option>
+                <option value="part-time">Part-time</option>
+                <option value="contract">Contract</option>
+                <option value="intern">Intern</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Joining Date</label>
+              <input type="date" name="joining_date" value={formData.joining_date || ""} onChange={handleChange} required className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Probation End Date</label>
+              <input type="date" name="probation_end_date" value={formData.probation_end_date || ""} required onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Confirmation Date</label>
+              <input type="date" name="confirmation_date" value={formData.confirmation_date || ""} required onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Reporting Manager</label>
+              <input type="text" name="reporting_manager" value={formData.reporting_manager || ""} onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Work Location</label>
+              <input type="text" name="work_location" value={formData.work_location || ""} required onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">CTC(₹)</label>
+              <input type="number" name="salary" value={formData.salary || ""} onChange={handleChange} required className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">ESI Number</label>
+              <input type="text" name="esi_number" value={formData.esi_number || ""} onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
+            </div>
+
+            <div ref={companyRef} className="relative">
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                Company Name
+              </label>
+
+              <input
+                type="text"
+                name="company_name"
+                value={companySearch}
+                onChange={(e) => {
+                  const value = e.target.value;
+
+                  setCompanySearch(value);
+
+                  setFormData((prev) => ({
+                    ...prev,
+                    company_name: value ,
+                  }));
+
+                  setShowCompanyDropdown(true);
+                }}
+                onFocus={() => setShowCompanyDropdown(true)}
+                placeholder="Search company"
+                autoComplete="off"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
+              />
+
+              {showCompanyDropdown && companySearch && (
+                <div className="absolute z-50 mt-1 w-full max-h-60 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg">
+
+                  {filteredCompanies.length > 0 ? (
+                    filteredCompanies.map((company, index) => (
+                      <button
+                        key={`${company.company_name}-${index}`}
+                        type="button"
+                        onClick={() => {
+                          setCompanySearch(company.company_name);
+
+                          setFormData((prev) => ({
+                            ...prev,
+                            company_name: company.company_name,
+                          }));
+
+                          setShowCompanyDropdown(false);
+                        }}
+                        className="w-full px-4 py-2.5 text-left text-sm font-medium text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
+                      >
+                        {company.company_name}
+                      </button>
+                    ))
+                  ) : (
+                    <div className="px-4 py-3 text-sm text-slate-500">
+                      No companies found
+                    </div>
+                  )}
+
+                </div>
+              )}
+            </div>
+            {mode === "edit" && (
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Status</label>
+                <select name="status" value={formData.status || "active"} onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none">
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                  <option value="terminated">Terminated</option>
+                  <option value="on_notice">On Notice</option>
+                </select>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Tab 2: Bank & Identity */}
+        <div className={activeTab === 2 ? "block" : "hidden"}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Bank Name</label>
+              <input type="text" name="bank_name" value={formData.bank_name || ""} onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Bank Account Number</label>
+              <input type="text" name="bank_account_number" value={formData.bank_account_number || ""} onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">IFSC Code</label>
+              <input type="text" name="ifsc_code" value={formData.ifsc_code || ""} onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">PAN Number</label>
+              <input type="text" name="pan_number" value={formData.pan_number || ""} onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Aadhaar Number</label>
+              <input type="text" name="aadhar_number" value={formData.aadhar_number || ""} onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">UAN Number</label>
+              <input type="text" name="uan_number" value={formData.uan_number || ""} onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
+            </div>
+          </div>
+        </div>
+
+        {/* Tab 3: Documents */}
+        <div className={activeTab === 3 ? "block" : "hidden"}>
+          {mode === "add" ? (
+            <div className="p-10 text-center text-slate-500 bg-slate-50/70 rounded-2xl border border-dashed border-slate-300">
+              <p className="text-sm font-semibold text-slate-700">Save this employee record first</p>
+              <p className="text-xs text-slate-400 mt-1">Once created, you and the employee can upload compliance documents, offer letters, and KYC proofs.</p>
+            </div>
+          ) : (
+            <DocumentUpload employeeId={employee?.id} documents={documents} />
+          )}
+        </div>
+
+        {/* Tab 4: Address */}
+        <div className={activeTab === 4 ? "block" : "hidden"}>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div className="md:col-span-2">
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Street Address</label>
@@ -251,126 +579,10 @@ export default function EmployeeForm({ employee, departments, mode, role }: Empl
           </div>
         </div>
 
-        {/* Tab 2: Employment */}
-        <div className={activeTab === 2 ? "block" : "hidden"}>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Employee ID *</label>
-              <input required type="text" name="employee_id" value={formData.employee_id || ""} onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Department</label>
-              <select name="department_id" value={formData.department_id || ""} onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none">
-                <option value="">Select Department</option>
-                {departments.map(dept => (
-                  <option key={dept.id} value={dept.id}>{dept.name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Designation</label>
-              <input type="text" name="designation" value={formData.designation || ""} onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Employment Type</label>
-              <select name="employment_type" value={formData.employment_type || ""} onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none">
-                <option value="">Select Type</option>
-                <option value="full-time">Full-time</option>
-                <option value="part-time">Part-time</option>
-                <option value="contract">Contract</option>
-                <option value="intern">Intern</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Joining Date</label>
-              <input type="date" name="joining_date" value={formData.joining_date || ""} onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Probation End Date</label>
-              <input type="date" name="probation_end_date" value={formData.probation_end_date || ""} onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Confirmation Date</label>
-              <input type="date" name="confirmation_date" value={formData.confirmation_date || ""} onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Reporting Manager</label>
-              <input type="text" name="reporting_manager" value={formData.reporting_manager || ""} onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Work Location</label>
-              <input type="text" name="work_location" value={formData.work_location || ""} onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
-            </div>
-            {mode === "edit" && (
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Status</label>
-                <select name="status" value={formData.status || "active"} onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none">
-                  <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
-                  <option value="terminated">Terminated</option>
-                  <option value="on_notice">On Notice</option>
-                </select>
-              </div>
-            )}
-            <div className="md:col-span-2">
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Notes</label>
-              <textarea name="notes" rows={3} value={formData.notes || ""} onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
-            </div>
-          </div>
-        </div>
-
-        {/* Tab 3: Bank & Identity */}
-        <div className={activeTab === 3 ? "block" : "hidden"}>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Base Monthly Salary (₹)</label>
-              <input type="number" name="salary" value={formData.salary || ""} onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Bank Name</label>
-              <input type="text" name="bank_name" value={formData.bank_name || ""} onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Bank Account Number</label>
-              <input type="text" name="bank_account_number" value={formData.bank_account_number || ""} onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">IFSC Code</label>
-              <input type="text" name="ifsc_code" value={formData.ifsc_code || ""} onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">PAN Number</label>
-              <input type="text" name="pan_number" value={formData.pan_number || ""} onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Aadhaar Number</label>
-              <input type="text" name="aadhar_number" value={formData.aadhar_number || ""} onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">UAN Number</label>
-              <input type="text" name="uan_number" value={formData.uan_number || ""} onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">ESI Number</label>
-              <input type="text" name="esi_number" value={formData.esi_number || ""} onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
-            </div>
-          </div>
-        </div>
-
-        {/* Tab 4: Documents */}
-        <div className={activeTab === 4 ? "block" : "hidden"}>
-          {mode === "add" ? (
-            <div className="p-10 text-center text-slate-500 bg-slate-50/70 rounded-2xl border border-dashed border-slate-300">
-              <p className="text-sm font-semibold text-slate-700">Save this employee record first</p>
-              <p className="text-xs text-slate-400 mt-1">Once created, you and the employee can upload compliance documents, offer letters, and KYC proofs.</p>
-            </div>
-          ) : (
-            <DocumentUpload employeeId={employee?.id} documents={documents} />
-          )}
-        </div>
 
         {/* Footer Actions */}
         <div className="mt-8 flex justify-end items-center gap-3 border-t border-slate-100 pt-6">
+
           <button
             type="button"
             onClick={() => router.back()}
@@ -378,14 +590,71 @@ export default function EmployeeForm({ employee, departments, mode, role }: Empl
           >
             Cancel
           </button>
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="flex items-center gap-2 px-6 py-2.5 text-xs font-bold text-white bg-indigo-600 rounded-xl shadow-sm hover:bg-indigo-700 hover:shadow disabled:opacity-50 transition-all"
-          >
-            {isLoading && <Loader2 className="w-4 h-4 animate-spin" />}
-            <span>{mode === "add" ? "Save & Create Employee" : "Update Profile"}</span>
-          </button>
+
+          {mode === "add" && activeTab === 0 && (
+            <button
+              type="button"
+              onClick={() => {const missingFields: string[] = [];
+                  if (!formData.first_name?.trim()) {
+                    missingFields.push("First Name");
+                  }
+                  if (!formData.last_name?.trim()) {
+                    missingFields.push("Last Name");
+                  }
+                  if (!formData.email?.trim()) {
+                    missingFields.push("Email");
+                  }
+                  if (!formData.phone?.trim()) {
+                    missingFields.push("Phone");
+                  }
+                  if (missingFields.length > 0) {
+                    setError(missingFields);
+
+                    return;
+                  }
+                  setError([]);
+                  setActiveTab(1);
+                }}
+              className="flex items-center gap-2 px-6 py-2.5 text-xs font-bold text-white bg-indigo-600 rounded-xl shadow-sm hover:bg-indigo-700 transition-all"
+            >
+              Next
+              <span>→</span>
+            </button>
+          )}
+
+          {mode === "add" && activeTab === 1 && (
+            <>
+              <button
+                type="button"
+                onClick={() => setActiveTab(0)}
+                className="px-5 py-2.5 text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-all"
+              >
+                Back
+              </button>
+
+              <button
+                type="submit"
+                formNoValidate
+                disabled={isLoading}
+                className="flex items-center gap-2 px-6 py-2.5 text-xs font-bold text-white bg-indigo-600 rounded-xl shadow-sm hover:bg-indigo-700 hover:shadow disabled:opacity-50 transition-all"
+              >
+                {isLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+                <span>Create Employee</span>
+              </button>
+            </>
+          )}
+
+          {mode === "edit" && (
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="flex items-center gap-2 px-6 py-2.5 text-xs font-bold text-white bg-indigo-600 rounded-xl shadow-sm hover:bg-indigo-700 hover:shadow disabled:opacity-50 transition-all"
+            >
+              {isLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+              <span>Update Profile</span>
+            </button>
+          )}
+
         </div>
       </form>
     </div>

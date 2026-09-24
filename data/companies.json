@@ -1,0 +1,593 @@
+{
+  "dataset_name": "Indian IT and Software Companies - Curated List",
+  "created": "2026-09-23",
+  "record_count": 117,
+  "description": "Curated starter dataset of Indian IT, software, SaaS and technology companies.",
+  "companies": [
+    {
+      "company_name": "Tata Consultancy Services",
+      "category": "IT Services",
+      "country": "India"
+    },
+    {
+      "company_name": "Infosys",
+      "category": "IT Services",
+      "country": "India"
+    },
+    {
+      "company_name": "HCLTech",
+      "category": "IT Services",
+      "country": "India"
+    },
+    {
+      "company_name": "Wipro",
+      "category": "IT Services",
+      "country": "India"
+    },
+    {
+      "company_name": "Tech Mahindra",
+      "category": "IT Services",
+      "country": "India"
+    },
+    {
+      "company_name": "LTIMindtree",
+      "category": "IT Services",
+      "country": "India"
+    },
+    {
+      "company_name": "Mphasis",
+      "category": "IT Services",
+      "country": "India"
+    },
+    {
+      "company_name": "Persistent Systems",
+      "category": "IT Services",
+      "country": "India"
+    },
+    {
+      "company_name": "Coforge",
+      "category": "IT Services",
+      "country": "India"
+    },
+    {
+      "company_name": "L&T Technology Services",
+      "category": "Engineering & IT Services",
+      "country": "India"
+    },
+    {
+      "company_name": "Hexaware Technologies",
+      "category": "IT Services",
+      "country": "India"
+    },
+    {
+      "company_name": "Birlasoft",
+      "category": "IT Services",
+      "country": "India"
+    },
+    {
+      "company_name": "Zensar Technologies",
+      "category": "IT Services",
+      "country": "India"
+    },
+    {
+      "company_name": "Cyient",
+      "category": "IT Services",
+      "country": "India"
+    },
+    {
+      "company_name": "KPIT Technologies",
+      "category": "Automotive Software",
+      "country": "India"
+    },
+    {
+      "company_name": "Tata Elxsi",
+      "category": "Engineering & Software",
+      "country": "India"
+    },
+    {
+      "company_name": "Sonata Software",
+      "category": "IT Services",
+      "country": "India"
+    },
+    {
+      "company_name": "Happiest Minds Technologies",
+      "category": "IT Services",
+      "country": "India"
+    },
+    {
+      "company_name": "Mastek",
+      "category": "IT Services",
+      "country": "India"
+    },
+    {
+      "company_name": "Newgen Software",
+      "category": "Enterprise Software",
+      "country": "India"
+    },
+    {
+      "company_name": "Oracle Financial Services Software",
+      "category": "Enterprise Software",
+      "country": "India"
+    },
+    {
+      "company_name": "Intellect Design Arena",
+      "category": "Financial Software",
+      "country": "India"
+    },
+    {
+      "company_name": "Ramco Systems",
+      "category": "Enterprise Software",
+      "country": "India"
+    },
+    {
+      "company_name": "Zoho",
+      "category": "SaaS",
+      "country": "India"
+    },
+    {
+      "company_name": "Freshworks",
+      "category": "SaaS",
+      "country": "India"
+    },
+    {
+      "company_name": "BrowserStack",
+      "category": "Developer Tools",
+      "country": "India"
+    },
+    {
+      "company_name": "Postman",
+      "category": "Developer Tools",
+      "country": "India"
+    },
+    {
+      "company_name": "Chargebee",
+      "category": "SaaS",
+      "country": "India"
+    },
+    {
+      "company_name": "Druva",
+      "category": "Cloud Software",
+      "country": "India"
+    },
+    {
+      "company_name": "Whatfix",
+      "category": "SaaS",
+      "country": "India"
+    },
+    {
+      "company_name": "Darwinbox",
+      "category": "HR Tech / SaaS",
+      "country": "India"
+    },
+    {
+      "company_name": "HighRadius",
+      "category": "FinTech / SaaS",
+      "country": "India"
+    },
+    {
+      "company_name": "CleverTap",
+      "category": "MarTech / SaaS",
+      "country": "India"
+    },
+    {
+      "company_name": "MoEngage",
+      "category": "MarTech / SaaS",
+      "country": "India"
+    },
+    {
+      "company_name": "Razorpay",
+      "category": "FinTech",
+      "country": "India"
+    },
+    {
+      "company_name": "Pine Labs",
+      "category": "FinTech",
+      "country": "India"
+    },
+    {
+      "company_name": "Zerodha",
+      "category": "FinTech",
+      "country": "India"
+    },
+    {
+      "company_name": "Groww",
+      "category": "FinTech",
+      "country": "India"
+    },
+    {
+      "company_name": "CRED",
+      "category": "FinTech",
+      "country": "India"
+    },
+    {
+      "company_name": "PhonePe",
+      "category": "FinTech",
+      "country": "India"
+    },
+    {
+      "company_name": "Paytm",
+      "category": "FinTech",
+      "country": "India"
+    },
+    {
+      "company_name": "Policybazaar",
+      "category": "InsurTech",
+      "country": "India"
+    },
+    {
+      "company_name": "Navi Technologies",
+      "category": "FinTech",
+      "country": "India"
+    },
+    {
+      "company_name": "MobiKwik",
+      "category": "FinTech",
+      "country": "India"
+    },
+    {
+      "company_name": "Dream11",
+      "category": "Gaming Technology",
+      "country": "India"
+    },
+    {
+      "company_name": "Swiggy",
+      "category": "Consumer Technology",
+      "country": "India"
+    },
+    {
+      "company_name": "Zomato",
+      "category": "Consumer Technology",
+      "country": "India"
+    },
+    {
+      "company_name": "Flipkart",
+      "category": "E-commerce Technology",
+      "country": "India"
+    },
+    {
+      "company_name": "Meesho",
+      "category": "E-commerce Technology",
+      "country": "India"
+    },
+    {
+      "company_name": "Myntra",
+      "category": "E-commerce Technology",
+      "country": "India"
+    },
+    {
+      "company_name": "BigBasket",
+      "category": "E-commerce Technology",
+      "country": "India"
+    },
+    {
+      "company_name": "Ola",
+      "category": "Mobility Technology",
+      "country": "India"
+    },
+    {
+      "company_name": "Rapido",
+      "category": "Mobility Technology",
+      "country": "India"
+    },
+    {
+      "company_name": "Delhivery",
+      "category": "Logistics Technology",
+      "country": "India"
+    },
+    {
+      "company_name": "Udaan",
+      "category": "B2B E-commerce",
+      "country": "India"
+    },
+    {
+      "company_name": "Urban Company",
+      "category": "Consumer Technology",
+      "country": "India"
+    },
+    {
+      "company_name": "InMobi",
+      "category": "AdTech",
+      "country": "India"
+    },
+    {
+      "company_name": "Info Edge India",
+      "category": "Internet Technology",
+      "country": "India"
+    },
+    {
+      "company_name": "MakeMyTrip",
+      "category": "Travel Technology",
+      "country": "India"
+    },
+    {
+      "company_name": "IndiaMART",
+      "category": "B2B Technology",
+      "country": "India"
+    },
+    {
+      "company_name": "Justdial",
+      "category": "Internet Services",
+      "country": "India"
+    },
+    {
+      "company_name": "Tanla Platforms",
+      "category": "CPaaS",
+      "country": "India"
+    },
+    {
+      "company_name": "Route Mobile",
+      "category": "CPaaS",
+      "country": "India"
+    },
+    {
+      "company_name": "Mindtickle",
+      "category": "SaaS",
+      "country": "India"
+    },
+    {
+      "company_name": "Icertis",
+      "category": "SaaS",
+      "country": "India"
+    },
+    {
+      "company_name": "Uniphore",
+      "category": "AI / Enterprise Software",
+      "country": "India"
+    },
+    {
+      "company_name": "Yellow.ai",
+      "category": "AI / Conversational AI",
+      "country": "India"
+    },
+    {
+      "company_name": "Haptik",
+      "category": "AI / Conversational AI",
+      "country": "India"
+    },
+    {
+      "company_name": "Fractal Analytics",
+      "category": "AI / Analytics",
+      "country": "India"
+    },
+    {
+      "company_name": "Mu Sigma",
+      "category": "Analytics",
+      "country": "India"
+    },
+    {
+      "company_name": "Tiger Analytics",
+      "category": "AI / Analytics",
+      "country": "India"
+    },
+    {
+      "company_name": "LatentView Analytics",
+      "category": "Analytics",
+      "country": "India"
+    },
+    {
+      "company_name": "Quantiphi",
+      "category": "AI / Cloud",
+      "country": "India"
+    },
+    {
+      "company_name": "Tredence",
+      "category": "AI / Analytics",
+      "country": "India"
+    },
+    {
+      "company_name": "ValueLabs",
+      "category": "IT Services",
+      "country": "India"
+    },
+    {
+      "company_name": "UST",
+      "category": "IT Services",
+      "country": "India"
+    },
+    {
+      "company_name": "CitiusTech",
+      "category": "Healthcare Technology",
+      "country": "India"
+    },
+    {
+      "company_name": "Indium Software",
+      "category": "IT Services",
+      "country": "India"
+    },
+    {
+      "company_name": "Sasken Technologies",
+      "category": "Engineering & IT Services",
+      "country": "India"
+    },
+    {
+      "company_name": "eInfochips",
+      "category": "Engineering & IT Services",
+      "country": "India"
+    },
+    {
+      "company_name": "3i Infotech",
+      "category": "IT Services",
+      "country": "India"
+    },
+    {
+      "company_name": "Nucleus Software",
+      "category": "Enterprise Software",
+      "country": "India"
+    },
+    {
+      "company_name": "Subex",
+      "category": "Telecom Software",
+      "country": "India"
+    },
+    {
+      "company_name": "Datamatics Global Services",
+      "category": "IT Services",
+      "country": "India"
+    },
+    {
+      "company_name": "Nazara Technologies",
+      "category": "Gaming Technology",
+      "country": "India"
+    },
+    {
+      "company_name": "Games24x7",
+      "category": "Gaming Technology",
+      "country": "India"
+    },
+    {
+      "company_name": "Dream Sports",
+      "category": "Sports Technology",
+      "country": "India"
+    },
+    {
+      "company_name": "Ather Energy",
+      "category": "Mobility Technology",
+      "country": "India"
+    },
+    {
+      "company_name": "Wingify",
+      "category": "SaaS",
+      "country": "India"
+    },
+    {
+      "company_name": "Kissflow",
+      "category": "SaaS",
+      "country": "India"
+    },
+    {
+      "company_name": "WebEngage",
+      "category": "SaaS / MarTech",
+      "country": "India"
+    },
+    {
+      "company_name": "LeadSquared",
+      "category": "SaaS / CRM",
+      "country": "India"
+    },
+    {
+      "company_name": "Keka",
+      "category": "HR Tech / SaaS",
+      "country": "India"
+    },
+    {
+      "company_name": "LambdaTest",
+      "category": "Developer Tools",
+      "country": "India"
+    },
+    {
+      "company_name": "Scalefusion",
+      "category": "SaaS / Device Management",
+      "country": "India"
+    },
+    {
+      "company_name": "Practo",
+      "category": "Health Technology",
+      "country": "India"
+    },
+    {
+      "company_name": "PharmEasy",
+      "category": "Health Technology",
+      "country": "India"
+    },
+    {
+      "company_name": "Innovaccer",
+      "category": "Health Technology / AI",
+      "country": "India"
+    },
+    {
+      "company_name": "Moglix",
+      "category": "B2B E-commerce",
+      "country": "India"
+    },
+    {
+      "company_name": "BlackBuck",
+      "category": "Logistics Technology",
+      "country": "India"
+    },
+    {
+      "company_name": "Porter",
+      "category": "Logistics Technology",
+      "country": "India"
+    },
+    {
+      "company_name": "Shiprocket",
+      "category": "Logistics Technology",
+      "country": "India"
+    },
+    {
+      "company_name": "Cashfree Payments",
+      "category": "FinTech",
+      "country": "India"
+    },
+    {
+      "company_name": "Juspay",
+      "category": "FinTech",
+      "country": "India"
+    },
+    {
+      "company_name": "Perfios",
+      "category": "FinTech Software",
+      "country": "India"
+    },
+    {
+      "company_name": "M2P Fintech",
+      "category": "FinTech Infrastructure",
+      "country": "India"
+    },
+    {
+      "company_name": "Yubi",
+      "category": "FinTech",
+      "country": "India"
+    },
+    {
+      "company_name": "Acko",
+      "category": "InsurTech",
+      "country": "India"
+    },
+    {
+      "company_name": "Livspace",
+      "category": "Home Technology",
+      "country": "India"
+    },
+    {
+      "company_name": "NoBroker",
+      "category": "PropTech",
+      "country": "India"
+    },
+    {
+      "company_name": "ShareChat",
+      "category": "Social Technology",
+      "country": "India"
+    },
+    {
+      "company_name": "VerSe Innovation",
+      "category": "Digital Media Technology",
+      "country": "India"
+    },
+    {
+      "company_name": "Physics Wallah",
+      "category": "EdTech",
+      "country": "India"
+    },
+    {
+      "company_name": "Unacademy",
+      "category": "EdTech",
+      "country": "India"
+    },
+    {
+      "company_name": "upGrad",
+      "category": "EdTech",
+      "country": "India"
+    },
+    {
+      "company_name": "Simplilearn",
+      "category": "EdTech",
+      "country": "India"
+    },
+    {
+      "company_name": "Amagi",
+      "category": "Media Technology",
+      "country": "India"
+    }
+  ]
+}

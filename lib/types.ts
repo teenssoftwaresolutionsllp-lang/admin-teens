@@ -76,6 +76,7 @@ export interface Employee {
   reporting_manager?: string | null;
   work_location?: string | null;
   salary?: number | null;
+  company_name?: string;
   bank_name?: string | null;
   bank_account_number?: string | null;
   ifsc_code?: string | null;

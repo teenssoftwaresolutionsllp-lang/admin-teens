@@ -25,6 +25,7 @@ export async function GET(request: Request) {
 
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search');
+    const company = searchParams.get('company');
     const department = searchParams.get('department');
     const status = searchParams.get('status');
     const employment_type = searchParams.get('employment_type');
@@ -92,10 +93,46 @@ export async function POST(request: Request) {
         typeof value === 'string' && value.trim() === '' ? null : value,
       ])
     );
+    const adminClient = await createAdminClient();
+
+    //gen emp ud
+    if (!employeeData.employee_id) {
+    const { data: existingEmployees, error: employeeIdError } = await adminClient
+      .from('employees')
+      .select('employee_id')
+      .like('employee_id', 'TN%');
+
+    if (employeeIdError) {
+      throw new Error(
+        `Failed to generate employee ID: ${employeeIdError.message}`
+      );
+    }
+
+  let nextNumber = 5000;
+
+  if (existingEmployees && existingEmployees.length > 0) {
+    const numbers = existingEmployees
+      .map((employee) => {
+        const match = employee.employee_id?.match(/^TN(\d+)$/);
+        return match ? Number(match[1]) : null;
+      })
+      .filter((number): number is number => number !== null);
+
+    if (numbers.length > 0) {
+      nextNumber = Math.max(...numbers) + 1;
+    }
+  }
+
+  employeeData.employee_id = `TN${nextNumber}`;
+}
+
+
+    
 
     // Create Supabase Auth account for the employee so they can log in
     let authUserId = null;
-    const adminClient = await createAdminClient();
+    
+    
 
     if (employeeData.email) {
       const passwordToSet = initial_password || 'Employee@123';
