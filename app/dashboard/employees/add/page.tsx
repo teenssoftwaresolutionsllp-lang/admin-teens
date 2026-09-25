@@ -1,4 +1,5 @@
 import { createClient, createAdminClient } from "@/lib/supabase-server";
+import { DataStore } from "@/lib/data-store";
 import EmployeeForm from "@/components/EmployeeForm";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
@@ -26,8 +27,8 @@ export default async function AddEmployeePage() {
   }
 
   const role = (user?.user_metadata?.role as UserRole) || "hr";
-
-
+  const projects = await DataStore.getProjects();
+  const generatedEmployeeId = await DataStore.getNextEmployeeId();
 
   let departments: Department[] = [];
   try {
@@ -37,12 +38,28 @@ export default async function AddEmployeePage() {
       .select("*")
       .order("name");
     departments = (data as Department[]) || [];
+    if (departments.length === 0) {
+      const createdAt = new Date().toISOString();
+      departments = [
+        { id: "d1", name: "Engineering", description: "Software development and engineering", created_at: createdAt },
+        { id: "d2", name: "Design", description: "UI/UX and product design", created_at: createdAt },
+        { id: "d3", name: "Marketing", description: "Marketing and communications", created_at: createdAt },
+        { id: "d4", name: "Sales", description: "Sales and business development", created_at: createdAt },
+        { id: "d5", name: "HR", description: "Human Resources and Operations", created_at: createdAt },
+        { id: "d6", name: "Finance", description: "Finance and Accounting", created_at: createdAt },
+        { id: "d7", name: "Operations", description: "Business operations", created_at: createdAt },
+      ];
+    }
   } catch {
+    const createdAt = new Date().toISOString();
     departments = [
-      { id: "d1", name: "Engineering", description: "Software development" ,created_at: new Date().toISOString()},
-      { id: "d2", name: "Design", description: "UI/UX design",created_at: new Date().toISOString() },
-      { id: "d3", name: "HR", description: "Human Resources" ,created_at: new Date().toISOString()},
-      { id: "d4", name: "Finance", description: "Finance and Accounts" ,created_at: new Date().toISOString()},
+      { id: "d1", name: "Engineering", description: "Software development and engineering", created_at: createdAt },
+      { id: "d2", name: "Design", description: "UI/UX and product design", created_at: createdAt },
+      { id: "d3", name: "Marketing", description: "Marketing and communications", created_at: createdAt },
+      { id: "d4", name: "Sales", description: "Sales and business development", created_at: createdAt },
+      { id: "d5", name: "HR", description: "Human Resources and Operations", created_at: createdAt },
+      { id: "d6", name: "Finance", description: "Finance and Accounting", created_at: createdAt },
+      { id: "d7", name: "Operations", description: "Business operations", created_at: createdAt },
     ];
   }
 
@@ -62,7 +79,7 @@ export default async function AddEmployeePage() {
         <p className="text-xs text-slate-500 mt-1">Fill in the details to add a new employee to the organization and provision portal credentials.</p>
       </div>
 
-      <EmployeeForm mode="add" departments={departments} role={role} />
+      <EmployeeForm mode="add" departments={departments} projects={projects} generatedEmployeeId={generatedEmployeeId} role={role} />
     </div>
   );
 }

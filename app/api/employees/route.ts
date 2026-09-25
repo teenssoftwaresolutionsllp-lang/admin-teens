@@ -85,7 +85,7 @@ export async function POST(request: Request) {
     }
 
     const rawBody = await request.json();
-    const { initial_password, ...fields } = rawBody;
+    const { initial_password, employee_id: _providedEmployeeId, ...fields } = rawBody;
 
     const employeeData = Object.fromEntries(
       Object.entries(fields).map(([field, value]) => [

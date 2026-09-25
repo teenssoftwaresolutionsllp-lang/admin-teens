@@ -71,6 +71,7 @@ export interface Employee {
   designation?: string | null;
   employment_type?: 'full-time' | 'part-time' | 'contract' | 'intern' | null;
   joining_date?: string | null;
+  probation_duration?: number;
   probation_end_date?: string | null;
   confirmation_date?: string | null;
   reporting_manager?: string | null;

@@ -17,6 +17,7 @@ export default function ProjectsManager({
 }: ProjectsManagerProps) {
   const [projects, setProjects] = useState<Project[]>(initialProjects);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [selectedCalendarTab, setSelectedCalendarTab] = useState<string>(calendars[0]?.id || "");
 
   const [formData, setFormData] = useState({
@@ -30,25 +31,33 @@ export default function ProjectsManager({
     half_day_cutoff_minutes: 150,
   });
 
-  const handleCreateProject = (e: React.FormEvent) => {
+  const handleCreateProject = async (e: React.FormEvent) => {
     e.preventDefault();
-    const newProj: Project = {
-      id: "proj-" + Date.now(),
-      ...formData,
-      calendar: calendars.find((c) => c.id === formData.calendar_id),
-    };
-    setProjects([...projects, newProj]);
-    setIsModalOpen(false);
-    setFormData({
-      name: "",
-      client_country: "India",
-      timezone: "Asia/Kolkata",
-      calendar_id: calendars[0]?.id || "",
-      shift_start_time: "09:00",
-      shift_end_time: "18:00",
-      grace_period_minutes: 30,
-      half_day_cutoff_minutes: 150,
-    });
+    setError(null);
+    try {
+      const response = await fetch("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Failed to create project");
+
+      setProjects((current) => [...current, result.project]);
+      setIsModalOpen(false);
+      setFormData({
+        name: "",
+        client_country: "India",
+        timezone: "Asia/Kolkata",
+        calendar_id: calendars[0]?.id || "",
+        shift_start_time: "09:00",
+        shift_end_time: "18:00",
+        grace_period_minutes: 30,
+        half_day_cutoff_minutes: 150,
+      });
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Failed to create project");
+    }
   };
 
   const activeCalendar = calendars.find((c) => c.id === selectedCalendarTab) || calendars[0];
@@ -209,6 +218,7 @@ export default function ProjectsManager({
             </div>
 
             <form onSubmit={handleCreateProject} className="mt-4 space-y-3.5 text-xs">
+              {error && <p className="rounded-xl border border-rose-200 bg-rose-50 p-3 font-semibold text-rose-700">{error}</p>}
               <div>
                 <label className="font-bold text-slate-700 block mb-1">Project Name</label>
                 <input

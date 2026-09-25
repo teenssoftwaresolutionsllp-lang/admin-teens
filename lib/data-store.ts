@@ -598,7 +598,9 @@ export class DataStore {
       project: cache.projects[0],
     };
 
-    // Try DB insertion with adminClient
+    const { project: _project, ...employeeRow } = newEmp;
+
+    // Persist only columns that exist in the employees table.
     try {
       const supabase = await createAdminClient();
       const { project, ...employeeForDb } = newEmp;
@@ -628,8 +630,33 @@ export class DataStore {
 
     } catch (e) {
       console.warn("createEmployee DB warning:", e);
-      throw e;
+      if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+        throw e;
+      }
     }
+
+    this.seedEmployeeToCache(newEmp);
+    await this.getLeaveBalances(newEmp.id);
+    return newEmp;
+  }
+
+  static async getNextEmployeeId(): Promise<string> {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    let employeeCount = getCache().employees.length;
+
+    try {
+      const supabase = await createAdminClient();
+      const { count, error } = await supabase
+        .from("employees")
+        .select("id", { count: "exact", head: true });
+      if (!error && count !== null) employeeCount = count;
+    } catch (e) {
+      console.warn("getNextEmployeeId database count warning:", e);
+    }
+
+    return `${year}${month}${String(employeeCount + 1).padStart(4, "0")}`;
   }
 
   static async updateEmployee(id: string, updates: Partial<Employee>): Promise<Employee | null> {
@@ -743,62 +770,70 @@ export class DataStore {
     rejectionReason?: string;
   }): Promise<boolean> {
     const cache = getCache();
-    const req = cache.changeRequests.find((r) => r.id === requestId);
-
-    if (req) {
-      req.status = status;
-      req.reviewed_by = reviewerId;
-      req.reviewed_at = new Date().toISOString();
-      if (rejectionReason) req.rejection_reason = rejectionReason;
-
-      // If approved, update official employee record in cache
-      if (status === "approved" && req.employee_id) {
-        const emp = cache.employees.find((e) => e.id === req.employee_id || e.employee_id === req.employee_id);
-        if (emp) {
-          Object.assign(emp, req.requested_changes);
-          emp.updated_at = new Date().toISOString();
-        }
-
-        try {
-          const supabase = await createAdminClient();
-          await supabase
-            .from("employees")
-            .update(req.requested_changes)
-            .eq("id", req.employee_id);
-        } catch (e) {
-          console.warn("Direct update error:", e);
-        }
-      }
-    }
-
     try {
       const supabase = await createAdminClient();
-      const { data: dbReq } = await supabase
+      const { data: dbReq, error: requestError } = await supabase
         .from("profile_change_requests")
         .select("*")
         .eq("id", requestId)
         .single();
 
+      if (requestError) throw requestError;
+
       if (dbReq) {
-        await supabase
+        const reviewedAt = new Date().toISOString();
+        const { error: reviewError } = await supabase
           .from("profile_change_requests")
           .update({
             status,
             reviewed_by: reviewerId,
-            reviewed_at: new Date().toISOString(),
+            reviewed_at: reviewedAt,
             rejection_reason: rejectionReason || null,
           })
           .eq("id", requestId);
 
+        if (reviewError) throw reviewError;
+
         if (status === "approved") {
-          await supabase
+          const { error: employeeError } = await supabase
             .from("employees")
             .update(dbReq.requested_changes)
             .eq("id", dbReq.employee_id);
+
+          if (employeeError) throw employeeError;
         }
+
+        const cachedRequest = cache.changeRequests.find((r) => r.id === requestId);
+        if (cachedRequest) {
+          cachedRequest.status = status;
+          cachedRequest.reviewed_by = reviewerId;
+          cachedRequest.reviewed_at = reviewedAt;
+          cachedRequest.rejection_reason = rejectionReason || null;
+        }
+
+        return true;
       }
     } catch (e) {
-      console.warn("reviewProfileChangeRequest fallback update:", e);
+      if (!cache.changeRequests.some((r) => r.id === requestId)) {
+        console.error("reviewProfileChangeRequest database update failed:", e);
+        throw e;
+      }
+    }
+
+    const req = cache.changeRequests.find((r) => r.id === requestId);
+    if (!req) return false;
+
+    req.status = status;
+    req.reviewed_by = reviewerId;
+    req.reviewed_at = new Date().toISOString();
+    req.rejection_reason = rejectionReason || null;
+
+    if (status === "approved" && req.employee_id) {
+      const emp = cache.employees.find((e) => e.id === req.employee_id || e.employee_id === req.employee_id);
+      if (emp) {
+        Object.assign(emp, req.requested_changes);
+        emp.updated_at = new Date().toISOString();
+      }
     }
 
     return true;
@@ -809,39 +844,103 @@ export class DataStore {
   // ==========================================
   static async getProjects(): Promise<Project[]> {
     const cache = getCache();
-    return cache.projects.map((p) => ({
-      ...p,
-      calendar: cache.holidayCalendars.find((c) => c.id === p.calendar_id),
-    }));
+    try {
+      const supabase = await createAdminClient();
+      const { data, error } = await supabase
+        .from("projects")
+        .select("*, calendar:holiday_calendars(*)")
+        .order("name");
+
+      if (error) throw error;
+      if (data && data.length > 0) return data as Project[];
+
+      const calendarDefinitions = [
+        { name: "India Standard Holidays 2026", country_code: "IN", country_name: "India", timezone: "Asia/Kolkata" },
+        { name: "US Federal Holidays 2026", country_code: "US", country_name: "United States", timezone: "America/New_York" },
+      ];
+      const calendars: Record<string, string> = {};
+      for (const definition of calendarDefinitions) {
+        const { data: calendar, error: calendarError } = await supabase
+          .from("holiday_calendars")
+          .insert(definition)
+          .select("id")
+          .single();
+        if (calendarError) throw calendarError;
+        calendars[definition.country_code] = calendar.id;
+      }
+
+      const projectRows = [
+        { name: "FinTech Enterprise Platform", client_country: "India", timezone: "Asia/Kolkata", calendar_id: calendars.IN, shift_start_time: "09:00", shift_end_time: "18:00", grace_period_minutes: 30, half_day_cutoff_minutes: 150 },
+        { name: "US Healthcare Claims Engine", client_country: "United States", timezone: "America/New_York", calendar_id: calendars.US, shift_start_time: "18:30", shift_end_time: "03:30", grace_period_minutes: 30, half_day_cutoff_minutes: 150 },
+        { name: "Internal Engineering & Bench", client_country: "India", timezone: "Asia/Kolkata", calendar_id: calendars.IN, shift_start_time: "09:30", shift_end_time: "18:30", grace_period_minutes: 30, half_day_cutoff_minutes: 150 },
+      ];
+      const { data: createdProjects, error: projectError } = await supabase
+        .from("projects")
+        .insert(projectRows)
+        .select("*, calendar:holiday_calendars(*)");
+      if (projectError) throw projectError;
+      return (createdProjects || []) as Project[];
+    } catch (error) {
+      console.warn("getProjects database warning:", error);
+      return cache.projects.map((p) => ({
+        ...p,
+        calendar: cache.holidayCalendars.find((c) => c.id === p.calendar_id),
+      }));
+    }
   }
 
   static async saveProject(projectData: Partial<Project>): Promise<Project> {
     const cache = getCache();
     if (projectData.id) {
-      const index = cache.projects.findIndex((p) => p.id === projectData.id);
-      if (index >= 0) {
-        cache.projects[index] = { ...cache.projects[index], ...projectData } as Project;
-        return cache.projects[index];
-      }
+      const { id, ...updates } = projectData;
+      const supabase = await createAdminClient();
+      const { data, error } = await supabase
+        .from("projects")
+        .update(updates)
+        .eq("id", id)
+        .select("*, calendar:holiday_calendars(*)")
+        .single();
+      if (error) throw error;
+      if (data) return data as Project;
     }
 
-    const newProject: Project = {
-      id: "proj-" + Date.now(),
-      name: projectData.name || "New Project",
-      client_country: projectData.client_country || "India",
-      timezone: projectData.timezone || "Asia/Kolkata",
-      calendar_id: projectData.calendar_id || "cal-in-2026",
-      shift_start_time: projectData.shift_start_time || "09:00",
-      shift_end_time: projectData.shift_end_time || "18:00",
-      grace_period_minutes: projectData.grace_period_minutes || 30,
-      half_day_cutoff_minutes: projectData.half_day_cutoff_minutes || 150,
-    };
+    const supabase = await createAdminClient();
+    const { data, error } = await supabase
+      .from("projects")
+      .insert({
+        name: projectData.name || "New Project",
+        client_country: projectData.client_country || "India",
+        timezone: projectData.timezone || "Asia/Kolkata",
+        calendar_id: projectData.calendar_id || null,
+        shift_start_time: projectData.shift_start_time || "09:00",
+        shift_end_time: projectData.shift_end_time || "18:00",
+        grace_period_minutes: projectData.grace_period_minutes ?? 30,
+        half_day_cutoff_minutes: projectData.half_day_cutoff_minutes ?? 150,
+      })
+      .select("*, calendar:holiday_calendars(*)")
+      .single();
+    if (error) throw error;
+    if (!data) throw new Error("Project was not returned after insert");
+
+    const newProject = data as Project;
     cache.projects.push(newProject);
     return newProject;
   }
 
   static async getHolidayCalendars(): Promise<HolidayCalendar[]> {
-    return getCache().holidayCalendars;
+    const cache = getCache();
+    try {
+      const supabase = await createAdminClient();
+      const { data, error } = await supabase
+        .from("holiday_calendars")
+        .select("*, holidays(*)")
+        .order("country_name");
+      if (error) throw error;
+      if (data && data.length > 0) return data as HolidayCalendar[];
+    } catch (error) {
+      console.warn("getHolidayCalendars database warning:", error);
+    }
+    return cache.holidayCalendars;
   }
 
   // ==========================================
@@ -948,9 +1047,20 @@ export class DataStore {
   // ==========================================
   static async getAttendanceRegularizations(): Promise<AttendanceRegularization[]> {
     const cache = getCache();
-    return [...cache.regularizations].sort(
-      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-    );
+    try {
+      const supabase = await createAdminClient();
+      const { data, error } = await supabase
+        .from("attendance_regularizations")
+        .select("*, employee:employees(*)")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.warn("getAttendanceRegularizations database warning:", error);
+      return [...cache.regularizations].sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+    }
   }
 
   static async createAttendanceRegularization({
@@ -981,8 +1091,22 @@ export class DataStore {
       employee: employee || undefined,
     };
 
-    cache.regularizations.unshift(reg);
-    return reg;
+    const supabase = await createAdminClient();
+    const { data, error } = await supabase
+      .from("attendance_regularizations")
+      .insert({
+        employee_id: employeeId,
+        attendance_date: attendanceDate,
+        proposed_check_in: proposedCheckIn,
+        proposed_check_out: proposedCheckOut,
+        reason,
+        status: "pending",
+      })
+      .select("*, employee:employees(*)")
+      .single();
+    if (error) throw error;
+    if (!data) throw new Error("Regularization was not returned after insert");
+    return data as AttendanceRegularization;
   }
 
   static async reviewAttendanceRegularization({
@@ -1045,7 +1169,16 @@ export class DataStore {
   // LEAVE MANAGEMENT
   // ==========================================
   static async getLeaveTypes(): Promise<LeaveType[]> {
-    return getCache().leaveTypes;
+    const cache = getCache();
+    try {
+      const supabase = await createAdminClient();
+      const { data, error } = await supabase.from("leave_types").select("*").order("name");
+      if (error) throw error;
+      if (data && data.length > 0) return data;
+    } catch (error) {
+      console.warn("getLeaveTypes database warning:", error);
+    }
+    return cache.leaveTypes;
   }
 
   static async updateLeaveType(id: string, updates: Partial<LeaveType>): Promise<LeaveType | null> {
@@ -1089,15 +1222,25 @@ export class DataStore {
 
   static async getLeaveRequests(employeeId?: string): Promise<LeaveRequest[]> {
     const cache = getCache();
-    let reqs = [...cache.leaveRequests];
-    if (employeeId) {
-      reqs = reqs.filter((r) => r.employee_id === employeeId);
+    try {
+      const supabase = await createAdminClient();
+      let query = supabase
+        .from("leave_requests")
+        .select("*, employee:employees(*), leave_type:leave_types(*)")
+        .order("created_at", { ascending: false });
+      if (employeeId) query = query.eq("employee_id", employeeId);
+      const { data, error } = await query;
+      if (error) throw error;
+      if (data) return data as LeaveRequest[];
+    } catch (error) {
+      console.warn("getLeaveRequests database warning:", error);
     }
+
+    let reqs = employeeId
+      ? cache.leaveRequests.filter((r) => r.employee_id === employeeId)
+      : [...cache.leaveRequests];
     return reqs
-      .map((r) => ({
-        ...r,
-        leave_type: cache.leaveTypes.find((lt) => lt.id === r.leave_type_id),
-      }))
+      .map((r) => ({ ...r, leave_type: cache.leaveTypes.find((lt) => lt.id === r.leave_type_id) }))
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   }
 
@@ -1137,8 +1280,24 @@ export class DataStore {
       leave_type: leaveType,
     };
 
-    cache.leaveRequests.unshift(newRequest);
-    return newRequest;
+    const supabase = await createAdminClient();
+    const { data, error } = await supabase
+      .from("leave_requests")
+      .insert({
+        employee_id: employeeId,
+        leave_type_id: leaveTypeId,
+        start_date: startDate,
+        end_date: endDate,
+        total_days: totalDays,
+        is_half_day: isHalfDay,
+        reason,
+        status: "pending",
+      })
+      .select("*, employee:employees(*), leave_type:leave_types(*)")
+      .single();
+    if (error) throw error;
+    if (!data) throw new Error("Leave request was not returned after insert");
+    return data as LeaveRequest;
   }
 
   static async reviewLeaveRequest({

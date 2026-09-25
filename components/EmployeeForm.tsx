@@ -4,7 +4,7 @@ import { useState , useEffect, useRef} from "react";
 import { toast } from "react-hot-toast"
 import { Toaster } from "react-hot-toast";
 import { useRouter } from "next/navigation";
-import { Department, Employee, UserRole, EmployeeDocument } from "@/lib/types";
+import { Department, Employee, UserRole, EmployeeDocument, Project } from "@/lib/types";
 import { User, MapPin, Briefcase, CreditCard, FileText, Loader2, KeyRound } from "lucide-react";
 import DocumentUpload from "./DocumentUpload";
 import companiesData from "@/data/companies.json";
@@ -14,15 +14,18 @@ const companies = companiesData.companies;
 interface EmployeeFormProps {
   employee?: Employee;
   departments: Department[];
+  projects: Project[];
+  generatedEmployeeId?: string;
   mode: "add" | "edit";
   role: UserRole;
 }
 
 
-
-export default function EmployeeForm({ employee, departments, mode, role }: EmployeeFormProps) {
+export default function EmployeeForm({ employee, departments, projects, generatedEmployeeId, mode, role }: EmployeeFormProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState(0);
+  const [isEmailEditing, setIsEmailEditing] = useState(false);
+  const [emailWarning, setEmailWarning] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string []>([]);
 
@@ -59,9 +62,11 @@ export default function EmployeeForm({ employee, departments, mode, role }: Empl
     emergency_contact_phone: employee?.emergency_contact_phone || "",
     emergency_contact_relation: employee?.emergency_contact_relation || "",
     department_id: employee?.department_id || "",
+    project_id: employee?.project_id || projects[0]?.id || "",
     designation: employee?.designation || "",
     employment_type: employee?.employment_type || null,
     joining_date: employee?.joining_date?.split("T")[0] || "",
+    probation_duration: employee?.probation_duration || 6,
     probation_end_date: employee?.probation_end_date?.split("T")[0] || "",
     confirmation_date: employee?.confirmation_date?.split("T")[0] || "",
     reporting_manager: employee?.reporting_manager || "",
@@ -103,6 +108,62 @@ export default function EmployeeForm({ employee, departments, mode, role }: Empl
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value === "" ? null : value }));
   };
+
+  const genrateEmail = (firstName: string, lastName: string)=>{
+    const first = firstName.trim().toLowerCase().replace(/\s+/g, "");
+    const last = lastName.trim().toLowerCase().replace(/\s+/g, "").slice(0,1);
+
+    if(!first || !last){
+      return("")
+    }
+    return `${first}.${last}@teenss.com`;
+  }
+
+  const calculatephrobDate = (joiningDate: string,duration :number)=>{
+     if (!joiningDate || !duration) return "";
+     const date = new Date(joiningDate);
+     date.setMonth(date.getMonth() + duration);
+
+     return date.toISOString().split("T")[0];
+  }
+
+  const checkDuplicateName = async (
+  firstName: string,
+  lastName: string
+) => {
+  if (!firstName.trim() || !lastName.trim() || mode !== "add") {
+    setEmailWarning("");
+    return;
+  }
+
+  try {
+    const response = await fetch("/api/employees");
+    const data = await response.json();
+
+    const employees = data.employees || data;
+
+    const duplicate = employees.some((employee: Employee) => {
+      return (
+        employee.first_name?.trim().toLowerCase() ===
+          firstName.trim().toLowerCase() &&
+        employee.last_name?.trim().toLowerCase() ===
+          lastName.trim().toLowerCase()
+      );
+    });
+
+    if (duplicate) {
+      setEmailWarning(
+        "An employee with this Given Name and Surname already exists. Please edit the email."
+      );
+      setIsEmailEditing(true);
+    } else {
+      setEmailWarning("");
+      setIsEmailEditing(false);
+    }
+  } catch (error) {
+    console.error("Error checking employee name:", error);
+  }
+};
 
 const handleSubmit = async (e: React.FormEvent) => {
   e.preventDefault();
@@ -154,10 +215,6 @@ const handleSubmit = async (e: React.FormEvent) => {
       missingFields.push("Probation End Date");
     }
 
-    if (!formData.confirmation_date) {
-      missingFields.push("Confirmation Date");
-    }
-
     if (!formData.work_location?.trim()) {
       missingFields.push("Work Location");
     }
@@ -178,7 +235,6 @@ const handleSubmit = async (e: React.FormEvent) => {
           "Employment Type",
           "Joining Date",
           "Probation End Date",
-          "Confirmation Date",
           "Work Location",
           "CTC Months ",
         ].includes(field)) ? 1 : 0);
@@ -229,7 +285,8 @@ const handleSubmit = async (e: React.FormEvent) => {
 
   const tabs = mode==="add"?[
     { name: "Personal Info", icon: User },
-    { name: "Employment", icon: Briefcase },]:
+    { name: "Employment", icon: Briefcase },
+  ]:
   [
     { name: "Personal Info", icon: User },
     { name: "Employment", icon: Briefcase },
@@ -291,17 +348,121 @@ const handleSubmit = async (e: React.FormEvent) => {
         {/* Tab 0: Personal */}
         <div className={activeTab === 0 ? "block" : "hidden"}>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Given Name *
+                </label>
+
+                <input
+                  required
+                  type="text"
+                  name="first_name"
+                  value={formData.first_name || ""}
+                  onChange={(e) => {
+                    const firstName = e.target.value;
+
+                    setFormData((prev) => {
+                      const lastName = prev.last_name || "";
+
+                      return {
+                        ...prev,
+                        first_name: firstName,
+                        email: mode === "add" && !isEmailEditing ? genrateEmail(firstName, lastName) : prev.email,
+                      };
+                    });
+                    setEmailWarning("");
+                  }}
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
+                />
+              </div>
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">First Name *</label>
-              <input required type="text"  name="first_name" value={formData.first_name || ""} onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Sur Name *
+                </label>
+
+                <input
+                  required
+                  type="text"
+                  name="last_name"
+                  value={formData.last_name || ""}
+                  onChange={(e) => {
+                    const lastName = e.target.value;
+
+                    setFormData((prev) => {
+                      const firstName = prev.first_name || "";
+
+                      return {
+                        ...prev,
+                        last_name: lastName,
+                        email: mode === "add" && !isEmailEditing ? genrateEmail(firstName, lastName) : prev.email,
+                      };
+                    });
+                    setEmailWarning("");
+                      checkDuplicateName(
+                        formData.first_name || "",
+                        lastName,
+                      );
+                  }}
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
+                />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Last Name *</label>
-              <input required type="text" name="last_name"  value={formData.last_name || ""} onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Email (Official Login ID) *</label>
-              <input required type="email" name="email" value={formData.email || ""} onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Email *</label>
+
+                {isEmailEditing ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsEmailEditing(false);
+
+                      setFormData((prev) => ({
+                        ...prev,
+                        email: genrateEmail(
+                          prev.first_name || "",
+                          prev.last_name || ""
+                        ),
+                      }));
+                    }}
+                    className="text-xs font-semibold text-indigo-600 hover:text-indigo-700"
+                  >
+                    Use Generated Email
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setIsEmailEditing(true)}
+                    className="text-xs font-semibold text-indigo-600 hover:text-indigo-700"
+                  >
+                    Edit Email
+                  </button>
+                )}
+              </div>
+
+              <input
+                required
+                type="email"
+                name="email"
+                value={formData.email || ""}
+                readOnly={!isEmailEditing}
+                onChange={(e) => {
+                  setFormData((prev) => ({
+                    ...prev,
+                    email: e.target.value,
+                  }));
+                }}
+                className={`w-full rounded-xl border px-3.5 py-2.5 text-sm font-semibold outline-none transition-all ${
+                  isEmailEditing
+                    ? "border-slate-200 bg-white text-slate-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                    : "border-slate-200 bg-slate-100 text-slate-600 cursor-not-allowed"
+                }`}
+              />
+
+              {emailWarning && (
+                <p className="mt-1.5 text-xs font-medium text-amber-600">
+                  ⚠️ {emailWarning}
+                </p>
+              )}
             </div>
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Phone Number</label>
@@ -399,16 +560,63 @@ const handleSubmit = async (e: React.FormEvent) => {
               </select>
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Joining Date</label>
-              <input type="date" name="joining_date" value={formData.joining_date || ""} onChange={handleChange} required className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                Joining Date
+              </label>
+
+              <input
+                type="date"
+                name="joining_date"
+                value={formData.joining_date || ""}
+                required
+                onChange={(e) => {
+                  const joiningDate = e.target.value;
+
+                  setFormData((prev) => ({
+                    ...prev,
+                    joining_date: joiningDate,
+                    probation_end_date: calculatephrobDate(
+                      joiningDate,
+                      Number(prev.probation_duration) || 6
+                    ),
+                  }));
+                }}
+                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                Probation Duration
+              </label>
+
+              <select
+                name="probation_duration"
+                value={formData.probation_duration || 6}
+                required
+                onChange={(e) => {
+                  const duration = Number(e.target.value);
+
+                  setFormData((prev) => ({
+                    ...prev,
+                    probation_duration: duration,
+                    probation_end_date: calculatephrobDate(
+                      prev.joining_date || "",
+                      duration
+                    ),
+                  }));
+                }}
+                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
+              >
+                <option value={3}>3 Months</option>
+                <option value={6}>6 Months</option>
+                <option value={9}>9 Months</option>
+                <option value={12}>12 Months</option>
+              </select>
             </div>
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Probation End Date</label>
-              <input type="date" name="probation_end_date" value={formData.probation_end_date || ""} required onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Confirmation Date</label>
-              <input type="date" name="confirmation_date" value={formData.confirmation_date || ""} required onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
+              <input type="date" name="probation_end_date" value={formData.probation_end_date || ""} readOnly className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
             </div>
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Reporting Manager</label>
@@ -485,6 +693,20 @@ const handleSubmit = async (e: React.FormEvent) => {
 
                 </div>
               )}
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Project & Work Calendar</label>
+              <select name="project_id" value={formData.project_id || ""} onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none">
+                <option value="">Select Project</option>
+                {projects.map(project => (
+                  <option key={project.id} value={project.id}>
+                    {project.name} | {project.timezone} | {project.shift_start_time}-{project.shift_end_time}
+                  </option>
+                ))}
+              </select>
+              <p className="text-[11px] text-slate-500 mt-1.5">
+                The selected project's timezone, shift rules, and linked holiday calendar will apply to this employee.
+              </p>
             </div>
             {mode === "edit" && (
               <div>
@@ -578,6 +800,16 @@ const handleSubmit = async (e: React.FormEvent) => {
             </div>
           </div>
         </div>
+
+        {/* {tab 5: options} */}
+        <div className={activeTab === 5 ? "block" : "hidden"}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <h1>Empolyment</h1>
+
+          </div>
+        </div>
+
+
 
 
         {/* Footer Actions */}

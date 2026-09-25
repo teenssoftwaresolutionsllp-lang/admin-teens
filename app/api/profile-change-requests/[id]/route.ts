@@ -28,7 +28,11 @@ export async function PATCH(
       rejectionReason,
     });
 
-    return NextResponse.json({ success });
+    if (!success) {
+      return NextResponse.json({ error: 'Profile change request not found' }, { status: 404 });
+    }
+
+    return NextResponse.json({ success: true });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

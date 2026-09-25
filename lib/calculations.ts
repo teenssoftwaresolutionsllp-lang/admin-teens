@@ -15,37 +15,10 @@ export function calculateProfileCompletion(employee: Partial<Employee> | null | 
     return { percentage: 0, missingFields: ["Employee Record"], completedFieldsCount: 0, totalFieldsCount: 1, isComplete: false };
   }
 
-  const checklist: { key: keyof Employee; label: string; weight: number }[] = [
-    // Personal Info (25%)
-    { key: "first_name", label: "First Name", weight: 4 },
-    { key: "last_name", label: "Last Name", weight: 4 },
-    { key: "email", label: "Official Email", weight: 4 },
-    { key: "phone", label: "Phone Number", weight: 4 },
-    { key: "date_of_birth", label: "Date of Birth", weight: 3 },
-    { key: "gender", label: "Gender", weight: 3 },
-    { key: "blood_group", label: "Blood Group", weight: 3 },
-
-    // Address & Emergency (25%)
-    { key: "address", label: "Address", weight: 7 },
-    { key: "city", label: "City", weight: 3 },
-    { key: "state", label: "State", weight: 3 },
-    { key: "pincode", label: "Pincode", weight: 4 },
-    { key: "emergency_contact_name", label: "Emergency Contact Name", weight: 4 },
-    { key: "emergency_contact_phone", label: "Emergency Contact Phone", weight: 4 },
-
-    // Bank & Identity KYC (30%)
-    { key: "bank_name", label: "Bank Name", weight: 6 },
-    { key: "bank_account_number", label: "Account Number", weight: 7 },
-    { key: "ifsc_code", label: "IFSC Code", weight: 5 },
-    { key: "pan_number", label: "PAN Card Number", weight: 6 },
-    { key: "aadhar_number", label: "Aadhaar Card Number", weight: 6 },
-
-    // Employment Details (20%)
-    { key: "department_id", label: "Department", weight: 5 },
-    { key: "designation", label: "Designation", weight: 5 },
-    { key: "joining_date", label: "Joining Date", weight: 5 },
-    { key: "employment_type", label: "Employment Type", weight: 5 },
-  ];
+  const ignoredKeys = new Set(["id", "user_id", "created_at", "updated_at", "department", "project"]);
+  const checklist = Object.keys(employee)
+    .filter((key) => !ignoredKeys.has(key))
+    .map((key) => ({ key, label: formatProfileFieldLabel(key), weight: 1 }));
 
   let earnedScore = 0;
   let totalScore = 0;
@@ -54,7 +27,7 @@ export function calculateProfileCompletion(employee: Partial<Employee> | null | 
 
   for (const item of checklist) {
     totalScore += item.weight;
-    const val = employee[item.key];
+    const val = employee[item.key as keyof Employee];
     const isFilled = val !== null && val !== undefined && String(val).trim().length > 0;
     if (isFilled) {
       earnedScore += item.weight;
@@ -74,6 +47,13 @@ export function calculateProfileCompletion(employee: Partial<Employee> | null | 
     totalFieldsCount: checklist.length,
     isComplete: percentage === 100,
   };
+}
+
+function formatProfileFieldLabel(key: string): string {
+  return key
+    .replace(/_id$/, "")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
 /**

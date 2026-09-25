@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import {
   LayoutDashboard,
   Users,
@@ -15,6 +16,8 @@ import {
   Calendar,
   FileText,
   LogOut,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 import Image from "next/image";
 import { UserRole } from "@/lib/types";
@@ -27,6 +30,19 @@ interface SidebarProps {
 export default function Sidebar({ role }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const [isCollapsed, setIsCollapsed] = useState(false);
+
+  useEffect(() => {
+    setIsCollapsed(window.localStorage.getItem("sidebar-collapsed") === "true");
+  }, []);
+
+  const toggleSidebar = () => {
+    setIsCollapsed((previous) => {
+      const next = !previous;
+      window.localStorage.setItem("sidebar-collapsed", String(next));
+      return next;
+    });
+  };
 
   const handleLogout = async () => {
     try {
@@ -60,10 +76,13 @@ export default function Sidebar({ role }: SidebarProps) {
 
   const items = role === "employee" ? employeeNavItems : adminNavItems;
   const visibleItems = items.filter((item) => item.roles.includes(role));
+  const activeItem = visibleItems
+    .filter((item) => pathname === item.href || pathname.startsWith(`${item.href}/`))
+    .sort((a, b) => b.href.length - a.href.length)[0];
 
   return (
-    <aside className="flex flex-col w-full bg-slate-900 text-white flex-shrink-0 shadow-lg z-20 md:h-screen md:w-64">
-      <div className="p-4 sm:p-5 flex items-center gap-3 border-b border-slate-800">
+    <aside className={`relative flex flex-col w-full bg-slate-900 text-white flex-shrink-0 shadow-lg z-20 md:h-screen transition-[width] duration-200 ${isCollapsed ? "md:w-[72px]" : "md:w-64"}`}>
+      <div className={`p-4 sm:p-5 flex items-center border-b border-slate-800 ${isCollapsed ? "justify-center" : "gap-3"}`}>
         <div className="bg-white rounded-lg p-1 shrink-0">
           <Image
             src="/logo.png"
@@ -74,7 +93,7 @@ export default function Sidebar({ role }: SidebarProps) {
             style={{ width: "30px", height: "auto" }}
           />
         </div>
-        <div>
+        <div className={isCollapsed ? "hidden" : ""}>
           <span className="font-semibold text-sm sm:text-base leading-tight block">
             Teens Software
           </span>
@@ -86,15 +105,14 @@ export default function Sidebar({ role }: SidebarProps) {
 
       <div className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
         {visibleItems.map((item) => {
-          const isActive =
-            pathname === item.href ||
-            (item.href !== "/dashboard" && item.href !== "/portal" && pathname.startsWith(item.href));
+          const isActive = activeItem?.href === item.href;
 
           return (
             <Link
               key={item.name}
               href={item.href}
-              className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-all duration-200 ${
+              title={isCollapsed ? item.name : undefined}
+              className={`flex w-full items-center rounded-lg py-2.5 text-left transition-all duration-200 ${isCollapsed ? "justify-center px-2" : "gap-3 px-3"} ${
                 isActive
                   ? "bg-indigo-600 text-white font-medium shadow-sm"
                   : "text-slate-300 hover:bg-slate-800 hover:text-white"
@@ -103,20 +121,32 @@ export default function Sidebar({ role }: SidebarProps) {
               <item.icon
                 className={`h-4 w-4 shrink-0 ${isActive ? "text-white" : "text-slate-400"}`}
               />
-              <span className="text-sm">{item.name}</span>
+              <span className={isCollapsed ? "sr-only" : "text-sm"}>{item.name}</span>
             </Link>
           );
         })}
       </div>
 
       <div className="p-3 border-t border-slate-800">
-        <button
-          onClick={handleLogout}
-          className="flex w-full items-center justify-start gap-3 rounded-lg px-3 py-2 text-left text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
-        >
-          <LogOut className="h-4 w-4 shrink-0 text-slate-400" />
-          <span className="text-sm font-medium leading-none">Sign Out</span>
-        </button>
+        <div className={`flex items-center ${isCollapsed ? "flex-col gap-2" : "gap-2"}`}>
+          <button
+            type="button"
+            onClick={toggleSidebar}
+            aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            className={`hidden md:inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white ${isCollapsed ? "" : "shrink-0"}`}
+          >
+            {isCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+          </button>
+          <button
+            onClick={handleLogout}
+            title={isCollapsed ? "Sign Out" : undefined}
+            className={`flex items-center rounded-lg py-2 text-left text-slate-300 transition-colors hover:bg-slate-800 hover:text-white ${isCollapsed ? "justify-center px-2" : "flex-1 justify-start gap-3 px-3"}`}
+          >
+            <LogOut className="h-4 w-4 shrink-0 text-slate-400" />
+            <span className={isCollapsed ? "sr-only" : "text-sm font-medium leading-none"}>Sign Out</span>
+          </button>
+        </div>
       </div>
     </aside>
   );

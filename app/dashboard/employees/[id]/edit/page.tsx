@@ -41,6 +41,8 @@ export default async function EditEmployeePage(props: any) {
     notFound();
   }
 
+  const projects = await DataStore.getProjects();
+
   let departments: Department[] = [];
   try {
     const adminClient = await createAdminClient();
@@ -49,12 +51,28 @@ export default async function EditEmployeePage(props: any) {
       .select("*")
       .order("name");
     departments = (data as Department[]) || [];
+    if (departments.length === 0) {
+      const createdAt = new Date().toISOString();
+      departments = [
+        { id: "d1", name: "Engineering", description: "Software development and engineering", created_at: createdAt },
+        { id: "d2", name: "Design", description: "UI/UX and product design", created_at: createdAt },
+        { id: "d3", name: "Marketing", description: "Marketing and communications", created_at: createdAt },
+        { id: "d4", name: "Sales", description: "Sales and business development", created_at: createdAt },
+        { id: "d5", name: "HR", description: "Human Resources and Operations", created_at: createdAt },
+        { id: "d6", name: "Finance", description: "Finance and Accounting", created_at: createdAt },
+        { id: "d7", name: "Operations", description: "Business operations", created_at: createdAt },
+      ];
+    }
   } catch {
+    const createdAt = new Date().toISOString();
     departments = [
-      { id: "d1", name: "Engineering", description: "Software development" ,created_at: new Date().toISOString()},
-      { id: "d2", name: "Design", description: "UI/UX design",created_at: new Date().toISOString() },
-      { id: "d3", name: "HR", description: "Human Resources",created_at: new Date().toISOString() },
-      { id: "d4", name: "Finance", description: "Finance and Accounts",created_at: new Date().toISOString()},
+      { id: "d1", name: "Engineering", description: "Software development and engineering", created_at: createdAt },
+      { id: "d2", name: "Design", description: "UI/UX and product design", created_at: createdAt },
+      { id: "d3", name: "Marketing", description: "Marketing and communications", created_at: createdAt },
+      { id: "d4", name: "Sales", description: "Sales and business development", created_at: createdAt },
+      { id: "d5", name: "HR", description: "Human Resources and Operations", created_at: createdAt },
+      { id: "d6", name: "Finance", description: "Finance and Accounting", created_at: createdAt },
+      { id: "d7", name: "Operations", description: "Business operations", created_at: createdAt },
     ];
   }
 
@@ -81,6 +99,7 @@ export default async function EditEmployeePage(props: any) {
         mode="edit" 
         employee={employee as Employee} 
         departments={departments} 
+        projects={projects}
         role={role} 
       />
     </div>

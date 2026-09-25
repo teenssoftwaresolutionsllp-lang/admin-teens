@@ -25,6 +25,8 @@ export default async function EmployeeProfilePage() {
   const pendingRequest = changeRequests.find(
     r => r.employee_id === employee?.id && r.status === "pending"
   ) || null;
+  const { data: departmentRows } = await supabase.from("departments").select("*").order("name");
+  const departments = departmentRows || [];
 
-  return <EmployeeProfileView employee={employee} pendingRequest={pendingRequest} />;
+  return <EmployeeProfileView employee={employee} pendingRequest={pendingRequest} departments={departments} />;
 }
