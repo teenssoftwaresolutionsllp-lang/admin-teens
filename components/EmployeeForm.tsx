@@ -5,9 +5,10 @@ import { toast } from "react-hot-toast"
 import { Toaster } from "react-hot-toast";
 import { useRouter } from "next/navigation";
 import { Department, Employee, UserRole, EmployeeDocument, Project } from "@/lib/types";
-import { User, MapPin, Briefcase, CreditCard, FileText, Loader2, KeyRound } from "lucide-react";
+import { User, MapPin, Briefcase, CreditCard, FileText, Loader2, KeyRound, DockIcon, File } from "lucide-react";
 import DocumentUpload from "./DocumentUpload";
 import companiesData from "@/data/companies.json";
+import { text } from "stream/consumers";
 
 const companies = companiesData.companies;
 
@@ -283,18 +284,11 @@ const handleSubmit = async (e: React.FormEvent) => {
   }
 };
 
-  const tabs = mode==="add"?[
+  const tabs = [
     { name: "Personal Info", icon: User },
     { name: "Employment", icon: Briefcase },
-  ]:
-  [
-    { name: "Personal Info", icon: User },
-    { name: "Employment", icon: Briefcase },
-    { name: "Bank & Identity", icon: CreditCard },
-    { name: "Documents", icon: FileText },
-    { name: "Address & Emergency", icon: MapPin },
-  ];
-
+    { name: "Documents", icon: File},
+  ]
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-200/90 overflow-hidden">
       {/* Tabs Bar */}
@@ -722,87 +716,8 @@ const handleSubmit = async (e: React.FormEvent) => {
           </div>
         </div>
 
-        {/* Tab 2: Bank & Identity */}
+        {/* {tab 2: options to selct eligabilty of pt ,tds} */}
         <div className={activeTab === 2 ? "block" : "hidden"}>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Bank Name</label>
-              <input type="text" name="bank_name" value={formData.bank_name || ""} onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Bank Account Number</label>
-              <input type="text" name="bank_account_number" value={formData.bank_account_number || ""} onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">IFSC Code</label>
-              <input type="text" name="ifsc_code" value={formData.ifsc_code || ""} onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">PAN Number</label>
-              <input type="text" name="pan_number" value={formData.pan_number || ""} onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Aadhaar Number</label>
-              <input type="text" name="aadhar_number" value={formData.aadhar_number || ""} onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">UAN Number</label>
-              <input type="text" name="uan_number" value={formData.uan_number || ""} onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
-            </div>
-          </div>
-        </div>
-
-        {/* Tab 3: Documents */}
-        <div className={activeTab === 3 ? "block" : "hidden"}>
-          {mode === "add" ? (
-            <div className="p-10 text-center text-slate-500 bg-slate-50/70 rounded-2xl border border-dashed border-slate-300">
-              <p className="text-sm font-semibold text-slate-700">Save this employee record first</p>
-              <p className="text-xs text-slate-400 mt-1">Once created, you and the employee can upload compliance documents, offer letters, and KYC proofs.</p>
-            </div>
-          ) : (
-            <DocumentUpload employeeId={employee?.id} documents={documents} />
-          )}
-        </div>
-
-        {/* Tab 4: Address */}
-        <div className={activeTab === 4 ? "block" : "hidden"}>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <div className="md:col-span-2">
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Street Address</label>
-              <textarea name="address" rows={3} value={formData.address || ""} onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">City</label>
-              <input type="text" name="city" value={formData.city || ""} onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">State</label>
-              <input type="text" name="state" value={formData.state || ""} onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Pincode</label>
-              <input type="text" name="pincode" value={formData.pincode || ""} onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
-            </div>
-            <div className="md:col-span-2 mt-4 pt-4 border-t border-slate-100">
-              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">Emergency Contact</h3>
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Contact Name</label>
-              <input type="text" name="emergency_contact_name" value={formData.emergency_contact_name || ""} onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Contact Phone</label>
-              <input type="tel" name="emergency_contact_phone" value={formData.emergency_contact_phone || ""} onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Relation</label>
-              <input type="text" name="emergency_contact_relation" value={formData.emergency_contact_relation || ""} onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
-            </div>
-          </div>
-        </div>
-
-        {/* {tab 5: options} */}
-        <div className={activeTab === 5 ? "block" : "hidden"}>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <h1>Empolyment</h1>
 
@@ -813,81 +728,119 @@ const handleSubmit = async (e: React.FormEvent) => {
 
 
         {/* Footer Actions */}
-        <div className="mt-8 flex justify-end items-center gap-3 border-t border-slate-100 pt-6">
+      <div className="mt-8 flex justify-end items-center gap-3 border-t border-slate-100 pt-6">
 
+        {/* Cancel - visible on all tabs */}
+        <button
+          type="button"
+          onClick={() => router.back()}
+          className="px-5 py-2.5 text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-all"
+        >
+          Cancel
+        </button>
+
+        {/* ADD MODE - TAB 1 */}
+        {mode === "add" && activeTab === 0 && (
           <button
             type="button"
-            onClick={() => router.back()}
-            className="px-5 py-2.5 text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-all"
-          >
-            Cancel
-          </button>
+            onClick={() => {
+              const missingFields: string[] = [];
 
-          {mode === "add" && activeTab === 0 && (
+              if (!formData.first_name?.trim()) {
+                missingFields.push("First Name");
+              }
+
+              if (!formData.last_name?.trim()) {
+                missingFields.push("Last Name");
+              }
+
+              if (!formData.email?.trim()) {
+                missingFields.push("Email");
+              }
+
+              if (!formData.phone?.trim()) {
+                missingFields.push("Phone");
+              }
+
+              if (missingFields.length > 0) {
+                setError(missingFields);
+                return;
+              }
+
+              setError([]);
+              setActiveTab(1);
+            }}
+            className="flex items-center gap-2 px-6 py-2.5 text-xs font-bold text-white bg-indigo-600 rounded-xl shadow-sm hover:bg-indigo-700 transition-all"
+          >
+            Next
+            <span>→</span>
+          </button>
+        )}
+
+        {/* ADD MODE - TAB 2 */}
+        {mode === "add" && activeTab === 1 && (
+          <>
             <button
               type="button"
-              onClick={() => {const missingFields: string[] = [];
-                  if (!formData.first_name?.trim()) {
-                    missingFields.push("First Name");
-                  }
-                  if (!formData.last_name?.trim()) {
-                    missingFields.push("Last Name");
-                  }
-                  if (!formData.email?.trim()) {
-                    missingFields.push("Email");
-                  }
-                  if (!formData.phone?.trim()) {
-                    missingFields.push("Phone");
-                  }
-                  if (missingFields.length > 0) {
-                    setError(missingFields);
+              onClick={() => setActiveTab(0)}
+              className="px-5 py-2.5 text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-all"
+            >
+              ← Back
+            </button>
 
-                    return;
-                  }
-                  setError([]);
-                  setActiveTab(1);
-                }}
+            <button
+              type="button"
+              onClick={() => setActiveTab(2)}
               className="flex items-center gap-2 px-6 py-2.5 text-xs font-bold text-white bg-indigo-600 rounded-xl shadow-sm hover:bg-indigo-700 transition-all"
             >
               Next
               <span>→</span>
             </button>
-          )}
+          </>
+        )}
 
-          {mode === "add" && activeTab === 1 && (
-            <>
-              <button
-                type="button"
-                onClick={() => setActiveTab(0)}
-                className="px-5 py-2.5 text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-all"
-              >
-                Back
-              </button>
+        {/* ADD MODE - TAB 3 */}
+        {mode === "add" && activeTab === 2 && (
+          <>
+            <button
+              type="button"
+              onClick={() => setActiveTab(1)}
+              className="px-5 py-2.5 text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-all"
+            >
+              ← Back
+            </button>
 
-              <button
-                type="submit"
-                formNoValidate
-                disabled={isLoading}
-                className="flex items-center gap-2 px-6 py-2.5 text-xs font-bold text-white bg-indigo-600 rounded-xl shadow-sm hover:bg-indigo-700 hover:shadow disabled:opacity-50 transition-all"
-              >
-                {isLoading && <Loader2 className="w-4 h-4 animate-spin" />}
-                <span>Create Employee</span>
-              </button>
-            </>
-          )}
-
-          {mode === "edit" && (
             <button
               type="submit"
+              formNoValidate
               disabled={isLoading}
               className="flex items-center gap-2 px-6 py-2.5 text-xs font-bold text-white bg-indigo-600 rounded-xl shadow-sm hover:bg-indigo-700 hover:shadow disabled:opacity-50 transition-all"
             >
-              {isLoading && <Loader2 className="w-4 h-4 animate-spin" />}
-              <span>Update Profile</span>
-            </button>
-          )}
+              {isLoading && (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              )}
 
-        </div>
+              <span>Create Employee</span>
+            </button>
+          </>
+        )}
+
+        {/* EDIT MODE */}
+        {mode === "edit" && (
+          <button
+            type="submit"
+            disabled={isLoading}
+            className="flex items-center gap-2 px-6 py-2.5 text-xs font-bold text-white bg-indigo-600 rounded-xl shadow-sm hover:bg-indigo-700 hover:shadow disabled:opacity-50 transition-all"
+          >
+            {isLoading && (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            )}
+
+            <span>Update Profile</span>
+          </button>
+        )}
+
+      </div>
       </form>
     </div>
   );
