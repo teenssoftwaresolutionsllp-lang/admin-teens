@@ -2,13 +2,10 @@
 
 import { useState , useEffect, useRef} from "react";
 import { toast } from "react-hot-toast"
-import { Toaster } from "react-hot-toast";
 import { useRouter } from "next/navigation";
 import { Department, Employee, UserRole, EmployeeDocument, Project } from "@/lib/types";
-import { User, MapPin, Briefcase, CreditCard, FileText, Loader2, KeyRound, DockIcon, File } from "lucide-react";
-import DocumentUpload from "./DocumentUpload";
+import { User, Briefcase, Loader2, KeyRound, File } from "lucide-react";
 import companiesData from "@/data/companies.json";
-import { text } from "stream/consumers";
 
 const companies = companiesData.companies;
 
@@ -28,6 +25,12 @@ export default function EmployeeForm({ employee, departments, projects, generate
   const [isEmailEditing, setIsEmailEditing] = useState(false);
   const [emailWarning, setEmailWarning] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [esiEligible, setEsiEligible] = useState(false);
+  const [esiNumber, setEsiNumber] = useState("");
+  const [pfEligible, setPfEligible] = useState(false);
+  const [ptEligible, setPtEligible] = useState(false);
+  const [ptNumber, setPtNumber] = useState("");
+  const [tdsEligible, setTdsEligible] = useState(false);
   const [error, setError] = useState<string []>([]);
 
   const [companySearch, setCompanySearch] = useState(
@@ -45,8 +48,9 @@ export default function EmployeeForm({ employee, departments, projects, generate
   );
   
   // Basic form state
-  const [formData, setFormData] = useState<Partial<Employee>>({
-    employee_id: employee?.employee_id || "",
+  const [formData, setFormData] = useState<Partial<Employee>& { initial_password?: string }>({
+
+    // Personal Information
     first_name: employee?.first_name || "",
     last_name: employee?.last_name || "",
     email: employee?.email || "",
@@ -55,15 +59,12 @@ export default function EmployeeForm({ employee, departments, projects, generate
     gender: employee?.gender || null,
     blood_group: employee?.blood_group || "",
     marital_status: employee?.marital_status || null,
-    address: employee?.address || "",
-    city: employee?.city || "",
-    state: employee?.state || "",
-    pincode: employee?.pincode || "",
-    emergency_contact_name: employee?.emergency_contact_name || "",
-    emergency_contact_phone: employee?.emergency_contact_phone || "",
-    emergency_contact_relation: employee?.emergency_contact_relation || "",
+
+
+    // Employment Information
+    employee_id: employee?.employee_id || "",
     department_id: employee?.department_id || "",
-    project_id: employee?.project_id || projects[0]?.id || "",
+    project_id: employee?.project_id || "",
     designation: employee?.designation || "",
     employment_type: employee?.employment_type || null,
     joining_date: employee?.joining_date?.split("T")[0] || "",
@@ -72,17 +73,30 @@ export default function EmployeeForm({ employee, departments, projects, generate
     confirmation_date: employee?.confirmation_date?.split("T")[0] || "",
     reporting_manager: employee?.reporting_manager || "",
     work_location: employee?.work_location || "",
-    status: employee?.status || "active",
-    notes: employee?.notes || "",
+
+    // Client / Project Information
+    client_type: employee?.client_type || "",
+    company_name: employee?.company_name || "",
+
+    // Salary Information
     salary: employee?.salary || undefined,
+
+    // Bank & Identity Information
     bank_name: employee?.bank_name || "",
     bank_account_number: employee?.bank_account_number || "",
     ifsc_code: employee?.ifsc_code || "",
     pan_number: employee?.pan_number || "",
     aadhar_number: employee?.aadhar_number || "",
-    uan_number: employee?.uan_number || "",
+
+    // Statutory Information
     esi_number: employee?.esi_number || "",
+
+    // Profile / Status
+    status: employee?.status || "active",
+
+    // Initial Login
     initial_password: "Employee@123",
+
   } as any);
 
   useEffect(() => {
@@ -101,7 +115,21 @@ export default function EmployeeForm({ employee, departments, projects, generate
         console.error("Failed to generate employee ID:", error);
       });
   }
-}, [mode]);
+  }, [mode]);
+
+  useEffect(() => {
+    if (!employee) return;
+
+    setEsiEligible(employee.esi_healthcare_eligible ?? false);
+    setEsiNumber(employee.esi_number ?? "");
+
+    setPfEligible(employee.pf_eligible ?? false);
+
+    setPtEligible(employee.pt_eligible ?? false);
+    setPtNumber(employee.pt_number ?? "");
+
+    setTdsEligible(employee.tds_eligible ?? false);
+  }, [employee]);
 
   const [documents, setDocuments] = useState<EmployeeDocument[]>([]);
 
@@ -216,29 +244,55 @@ const handleSubmit = async (e: React.FormEvent) => {
       missingFields.push("Probation End Date");
     }
 
-    if (!formData.work_location?.trim()) {
-      missingFields.push("Work Location");
-    }
+    // if (!formData.work_location?.trim()) {
+    //   missingFields.push("Work Location");
+    // }
 
     if (
       formData.salary === undefined ||
       formData.salary === null
     ) {
-      missingFields.push("CTC Months ");
+      missingFields.push("CTC");
+    }
+
+    if (esiEligible && !esiNumber.trim()) {
+      missingFields.push("ESI Number");
+    }
+
+    if (ptEligible && !ptNumber.trim()) {
+      missingFields.push("P.T Number");
     }
 
     if (missingFields.length > 0) {
       setError(missingFields);
-      setActiveTab(missingFields.some(field =>
-        [
-          "Department",
-          "Designation",
-          "Employment Type",
-          "Joining Date",
-          "Probation End Date",
-          "Work Location",
-          "CTC Months ",
-        ].includes(field)) ? 1 : 0);
+      const employmentFields = [
+        "Employee ID",
+        "Department",
+        "Designation",
+        "Employment Type",
+        "Joining Date",
+        "Probation End Date",
+        "Work Location",
+        "CTC",
+        "Client Type",
+        "Client Name",
+        "Project",
+      ];
+
+      const statutoryFields = [
+        "ESI Number",
+        "P.T Number",
+      ];
+
+      if (missingFields.some((field) => statutoryFields.includes(field))) {
+        setActiveTab(2);
+      }
+      else if (missingFields.some((field) => employmentFields.includes(field))) {
+        setActiveTab(1);
+      }
+      else{
+        setActiveTab(0);
+      }
       return;
     }
   }
@@ -258,7 +312,24 @@ const handleSubmit = async (e: React.FormEvent) => {
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(formData),
+      body: JSON.stringify({
+        ...formData,
+
+        client_type: formData.client_type,
+        company_name: formData.company_name,
+
+        esi_healthcare_eligible: esiEligible,
+        esi_number: esiEligible ? esiNumber : null,
+
+        pf_eligible: pfEligible,
+
+        pt_eligible: ptEligible,
+        pt_number: ptEligible ? ptNumber : null,
+
+        tds_eligible: tdsEligible,
+
+        initial_password: formData.initial_password,
+      }),
     });
 
     if (!res.ok) {
@@ -287,7 +358,7 @@ const handleSubmit = async (e: React.FormEvent) => {
   const tabs = [
     { name: "Personal Info", icon: User },
     { name: "Employment", icon: Briefcase },
-    { name: "Documents", icon: File},
+    { name: "Statutory", icon: File},
   ]
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-200/90 overflow-hidden">
@@ -526,26 +597,75 @@ const handleSubmit = async (e: React.FormEvent) => {
         {/* Tab 1: Employment */}
         <div className={activeTab === 1 ? "block" : "hidden"}>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+
+            {/* Employee ID */}
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Employee ID </label>
-              <input required type="text" name="employee_id" value={formData.employee_id || ""} readOnly className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                Employee ID
+              </label>
+
+              <input
+                required
+                type="text"
+                name="employee_id"
+                value={formData.employee_id || ""}
+                readOnly
+                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
+              />
             </div>
+
+            {/* Department */}
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Department</label>
-              <select name="department_id" value={formData.department_id || ""} onChange={handleChange} required className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none">
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                Department
+              </label>
+
+              <select
+                name="department_id"
+                value={formData.department_id || ""}
+                onChange={handleChange}
+                required
+                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
+              >
                 <option value="">Select Department</option>
-                {departments.map(dept => (
-                  <option key={dept.id} value={dept.id}>{dept.name}</option>
+
+                {departments.map((dept) => (
+                  <option key={dept.id} value={dept.id}>
+                    {dept.name}
+                  </option>
                 ))}
               </select>
             </div>
+
+            {/* Designation */}
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Designation</label>
-              <input type="text" name="designation" value={formData.designation || ""} onChange={handleChange} required className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                Designation
+              </label>
+
+              <input
+                type="text"
+                name="designation"
+                value={formData.designation || ""}
+                onChange={handleChange}
+                required
+                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
+              />
             </div>
+
+            {/* Employment Type */}
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Employment Type</label>
-              <select name="employment_type" value={formData.employment_type || ""} onChange={handleChange} required className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none">
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                Employment Type
+              </label>
+
+              <select
+                name="employment_type"
+                value={formData.employment_type || ""}
+                onChange={handleChange}
+                required
+                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
+              >
                 <option value="">Select Type</option>
                 <option value="full-time">Full-time</option>
                 <option value="part-time">Part-time</option>
@@ -553,6 +673,8 @@ const handleSubmit = async (e: React.FormEvent) => {
                 <option value="intern">Intern</option>
               </select>
             </div>
+
+            {/* Joining Date */}
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                 Joining Date
@@ -579,6 +701,7 @@ const handleSubmit = async (e: React.FormEvent) => {
               />
             </div>
 
+            {/* Probation Duration */}
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                 Probation Duration
@@ -608,27 +731,112 @@ const handleSubmit = async (e: React.FormEvent) => {
                 <option value={12}>12 Months</option>
               </select>
             </div>
+
+            {/* Probation End Date */}
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Probation End Date</label>
-              <input type="date" name="probation_end_date" value={formData.probation_end_date || ""} readOnly className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Reporting Manager</label>
-              <input type="text" name="reporting_manager" value={formData.reporting_manager || ""} onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Work Location</label>
-              <input type="text" name="work_location" value={formData.work_location || ""} required onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">CTC(₹)</label>
-              <input type="number" name="salary" value={formData.salary || ""} onChange={handleChange} required className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">ESI Number</label>
-              <input type="text" name="esi_number" value={formData.esi_number || ""} onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                Probation End Date
+              </label>
+
+              <input
+                type="date"
+                name="probation_end_date"
+                value={formData.probation_end_date || ""}
+                readOnly
+                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
+              />
             </div>
 
+            {/* Reporting Manager */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                Reporting Manager
+              </label>
+
+              <input
+                type="text"
+                name="reporting_manager"
+                value={formData.reporting_manager || ""}
+                onChange={handleChange}
+                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
+              />
+            </div>
+
+            {/* Work Location */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                Work Location
+              </label>
+
+              <select
+                name="work_location"
+                value={formData.work_location || ""}
+                onChange={handleChange}
+                required 
+                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
+                >
+                  <option value="">Select Work Location</option>
+                  <option value="Onsite">Onsite</option>
+                  <option value="Hybrid">Hybrid</option>
+                  <option value="Remote">Remote</option>
+              </select>
+            </div>
+
+            {/* CTC */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                CTC (Lakhs / Year)
+              </label>
+
+              <input
+                type="number"
+                name="salary"
+                value={formData.salary ?? ""}
+                onChange={(e)=>{
+                  const value = e.target.value;
+
+                  setFormData((prev) => ({
+                    ...prev,
+                    salary: value === "" ? undefined : Number(value),
+                  }))
+                }}
+                required
+                min="0"
+                step="0.01"
+                placeholder="e.g. 5.5"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
+              />
+              <p className="text-[11px] text-slate-500 mt-1.5">Enter annual CTC in lakhs. Example: 5.5 = ₹5.5 Lakhs per year. </p>
+            </div>
+            
+            {/* Client Type */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                Client Type
+              </label>
+
+              <select
+                name="client_type"
+                value={formData.client_type || ""}
+                required
+                onChange={(e) => {
+                  const value = e.target.value as "in-house" | "outsource";
+                  setFormData((prev) => ({
+                    ...prev,
+                    client_type: value,
+                    project_id:
+                      value === "outsource" ? "" : prev.project_id,
+                  }));
+                }}
+                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
+              >
+                <option value="">Select Client Type</option>
+                <option value="in-house">In-House</option>
+                <option value="outsource">Outsource</option>
+              </select>
+            </div>
+
+            {/* Client Name */}
             <div ref={companyRef} className="relative">
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                 Client Name
@@ -645,7 +853,7 @@ const handleSubmit = async (e: React.FormEvent) => {
 
                   setFormData((prev) => ({
                     ...prev,
-                    company_name: value ,
+                    company_name: value,
                   }));
 
                   setShowCompanyDropdown(true);
@@ -653,12 +861,12 @@ const handleSubmit = async (e: React.FormEvent) => {
                 onFocus={() => setShowCompanyDropdown(true)}
                 placeholder="Search company"
                 autoComplete="off"
+                required
                 className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
               />
 
               {showCompanyDropdown && companySearch && (
                 <div className="absolute z-50 mt-1 w-full max-h-60 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg">
-
                   {filteredCompanies.length > 0 ? (
                     filteredCompanies.map((company, index) => (
                       <button
@@ -684,28 +892,54 @@ const handleSubmit = async (e: React.FormEvent) => {
                       No companies found
                     </div>
                   )}
-
                 </div>
               )}
             </div>
-            <div className="md:col-span-2">
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Project & Work Calendar</label>
-              <select name="project_id" value={formData.project_id || ""} onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none">
-                <option value="">Select Project</option>
-                {projects.map(project => (
-                  <option key={project.id} value={project.id}>
-                    {project.name} | {project.timezone} | {project.shift_start_time}-{project.shift_end_time}
-                  </option>
-                ))}
-              </select>
-              <p className="text-[11px] text-slate-500 mt-1.5">
-                The selected project's timezone, shift rules, and linked holiday calendar will apply to this employee.
-              </p>
-            </div>
+
+            {/* Project - Only In-House */}
+            {formData.client_type === "in-house" && (
+              <div className="md:col-span-2">
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Project & Work Calendar
+                </label>
+
+                <select
+                  name="project_id"
+                  value={formData.project_id || ""}
+                  onChange={handleChange}
+                  required
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
+                >
+                  <option value="">Select Project</option>
+
+                  {projects.map((project) => (
+                    <option key={project.id} value={project.id}>
+                      {project.name} | {project.timezone} |{" "}
+                      {project.shift_start_time}-{project.shift_end_time}
+                    </option>
+                  ))}
+                </select>
+
+                <p className="text-[11px] text-slate-500 mt-1.5">
+                  The selected project's timezone, shift rules, and linked holiday
+                  calendar will apply to this employee.
+                </p>
+              </div>
+            )}
+
+            {/* Status - Edit Only */}
             {mode === "edit" && (
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Status</label>
-                <select name="status" value={formData.status || "active"} onChange={handleChange} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none">
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Status
+                </label>
+
+                <select
+                  name="status"
+                  value={formData.status || "active"}
+                  onChange={handleChange}
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
+                >
                   <option value="active">Active</option>
                   <option value="inactive">Inactive</option>
                   <option value="terminated">Terminated</option>
@@ -713,19 +947,121 @@ const handleSubmit = async (e: React.FormEvent) => {
                 </select>
               </div>
             )}
+
           </div>
         </div>
 
         {/* {tab 2: options to selct eligabilty of pt ,tds} */}
         <div className={activeTab === 2 ? "block" : "hidden"}>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <h1>Empolyment</h1>
+
+            {/* ESI */}
+            <div>
+              <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={esiEligible}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+
+                    setEsiEligible(checked);
+
+                    if (!checked) {
+                      setEsiNumber("");
+                    }
+                  }}
+                />
+
+                <span>Is he Eligible for ESI/Health Care</span>
+              </label>
+
+              {esiEligible && (
+                <div className="mt-3">
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    ESI Number
+                  </label>
+
+                  <input
+                    type="text"
+                    value={esiNumber}
+                    onChange={(e) => setEsiNumber(e.target.value)}
+                    required
+                    placeholder="Enter ESI Number"
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* PF */}
+            <div>
+              <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={pfEligible}
+                  onChange={(e) => {
+                    setPfEligible(e.target.checked);
+                  }}
+                />
+
+                <span>Is he Eligible for P.F</span>
+              </label>
+            </div>
+
+            {/* PT */}
+            <div>
+              <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={ptEligible}
+                  onChange={(e) => { 
+                    const checked = e.target.checked;
+                    setPtEligible(checked);
+
+                    if (!checked) {
+                      setPtNumber("");
+                    }
+                   }}
+                />
+
+                <span>Is he Eligible for P.T</span>
+              </label>
+
+              {ptEligible && (
+                <div className="mt-3">
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    P.T Number
+                  </label>
+
+                  <input
+                    type="text"
+                    value={ptNumber}
+                    onChange={(e) => setPtNumber(e.target.value)}
+                    required
+                    placeholder="Enter P.T Number"
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* TDS */}
+            <div>
+              <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={tdsEligible}
+                  onChange={(e) => {
+                    setTdsEligible(e.target.checked);
+                  }}
+                />
+
+                <span>Is he Eligible for T.D.S</span>
+              </label>
+            </div>
 
           </div>
         </div>
-
-
-
 
         {/* Footer Actions */}
       <div className="mt-8 flex justify-end items-center gap-3 border-t border-slate-100 pt-6">
@@ -758,8 +1094,8 @@ const handleSubmit = async (e: React.FormEvent) => {
                 missingFields.push("Email");
               }
 
-              if (!formData.phone?.trim()) {
-                missingFields.push("Phone");
+              if (!formData.phone?.trim() || formData.phone.trim().length !== 10) {
+                missingFields.push("Phone (10 digits)");
               }
 
               if (missingFields.length > 0) {
@@ -790,7 +1126,64 @@ const handleSubmit = async (e: React.FormEvent) => {
 
             <button
               type="button"
-              onClick={() => setActiveTab(2)}
+              onClick={() => {
+                const missingFields: string[] = [];
+
+                if (!formData.employee_id?.trim()) {
+                  missingFields.push("Employee ID");
+                }
+
+                if (!formData.department_id) {
+                  missingFields.push("Department");
+                }
+
+                if (!formData.designation?.trim()) {
+                  missingFields.push("Designation");
+                }
+
+                if (!formData.employment_type) {
+                  missingFields.push("Employment Type");
+                }
+
+                if (!formData.joining_date) {
+                  missingFields.push("Joining Date");
+                }
+
+                if (!formData.probation_end_date) {
+                  missingFields.push("Probation End Date");
+                }
+
+                if (!formData.work_location) {
+                  missingFields.push("Work Location");
+                }
+
+                if (formData.salary === undefined || formData.salary === null) {
+                  missingFields.push("CTC");
+                }
+
+                if (!formData.client_type) {
+                  missingFields.push("Client Type");
+                }
+
+                if (!formData.company_name?.trim()) {
+                  missingFields.push("Client Name");
+                }
+
+                if (
+                  formData.client_type === "in-house" &&
+                  !formData.project_id
+                ) {
+                  missingFields.push("Project");
+                }
+
+                if (missingFields.length > 0) {
+                  setError(missingFields);
+                  return;
+                }
+
+                setError([]);
+                setActiveTab(2);
+              }}
               className="flex items-center gap-2 px-6 py-2.5 text-xs font-bold text-white bg-indigo-600 rounded-xl shadow-sm hover:bg-indigo-700 transition-all"
             >
               Next

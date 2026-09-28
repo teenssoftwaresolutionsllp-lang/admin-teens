@@ -178,6 +178,11 @@ export async function POST(request: Request) {
       }
     }
 
+    console.log("EMPLOYEE DATA BEFORE CREATE:", {
+      client_type: employeeData.client_type,
+      company_name: employeeData.company_name,
+    });
+
     // Save employee using DataStore and adminClient (bypassing RLS issues)
     const saved = await DataStore.createEmployee(employeeData as any);
 

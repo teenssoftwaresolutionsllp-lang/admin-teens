@@ -481,6 +481,8 @@ export class DataStore {
       confirmation_date: empData.confirmation_date || null,
       reporting_manager: empData.reporting_manager || null,
       work_location: empData.work_location || null,
+      client_type: empData.client_type || null,
+      company_name: empData.company_name || null,
       status: empData.status || "active",
       salary: empData.salary || 50000,
       bank_name: empData.bank_name || null,
@@ -488,10 +490,8 @@ export class DataStore {
       ifsc_code: empData.ifsc_code || null,
       pan_number: empData.pan_number || null,
       aadhar_number: empData.aadhar_number || null,
-      uan_number: empData.uan_number || null,
       esi_number: empData.esi_number || null,
       project_id: empData.project_id || null,
-      notes: empData.notes || null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       project: cache.projects[0],
@@ -1595,19 +1595,6 @@ export class DataStore {
         leave_type: balance.leave_type,
       })) as EmployeeLeaveBalance[];
 
-    /*
-    * IMPORTANT:
-    * Load leave types from Supabase.
-    *
-    * This gives us UUIDs such as:
-    *
-    * 550e8400-e29b-41d4-a716-446655440000
-    *
-    * instead of:
-    *
-    * lt-cl
-    * lt-sl
-    */
     const activeLeaveTypes = (await this.getLeaveTypes()).filter(
       (lt) =>
         lt.is_active &&

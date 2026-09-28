@@ -166,6 +166,10 @@ CREATE TABLE IF NOT EXISTS public.employees (
 
     salary numeric(12,2) DEFAULT 50000.00,
 
+    client_type text CHECK (client_type IN ('in-house', 'outsource')),
+
+    company_name text,
+
     bank_name text,
     bank_account_number text,
     ifsc_code text,
@@ -173,13 +177,23 @@ CREATE TABLE IF NOT EXISTS public.employees (
     pan_number text,
     aadhar_number text,
     uan_number text,
-    esi_number text,
-
     profile_photo_url text,
 
     status text DEFAULT 'active',
 
-    notes text,
+    esi_healthcare_eligible boolean DEFAULT false,
+    esi_number text,
+
+    pf_eligible boolean DEFAULT false,
+
+    pt_eligible boolean DEFAULT false,
+    pt_number text,
+
+    tds_eligible boolean DEFAULT false,
+
+    profile_photo_url text,
+
+    status text DEFAULT 'active',
 
     -- Employee exit information
     exit_reason text,

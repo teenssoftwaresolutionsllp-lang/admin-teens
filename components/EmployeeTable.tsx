@@ -128,7 +128,6 @@ export default function EmployeeTable({ employees, departments, role }: Employee
             new Paragraph(`IFSC Code: ${emp.ifsc_code || "N/A"}`),
             new Paragraph(`PAN Number: ${emp.pan_number || "N/A"}`),
             new Paragraph(`Aadhaar Number: ${emp.aadhar_number || "N/A"}`),
-            new Paragraph(`UAN Number: ${emp.uan_number || "N/A"}`),
 
             new Paragraph({
               children: [

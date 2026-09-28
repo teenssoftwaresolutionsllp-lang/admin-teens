@@ -47,7 +47,11 @@ export interface Project {
   calendar?: HolidayCalendar;
 }
 
+
 export interface Employee {
+  // ==============================
+  // Basic Employee Information
+  // ==============================
   id: string;
   user_id?: string | null;
   employee_id: string;
@@ -56,48 +60,114 @@ export interface Employee {
   last_name: string;
   email: string;
   phone?: string | null;
+
   date_of_birth?: string | null;
-  gender?: 'male' | 'female' | 'other' | null;
+  gender?: "male" | "female" | "other" | null;
   blood_group?: string | null;
-  marital_status?: 'single' | 'married' | 'divorced' | 'widowed' | null;
+  marital_status?: "single" | "married" | "divorced" | "widowed" | null;
+
+  // ==============================
+  // Address Information
+  // ==============================
   address?: string | null;
   city?: string | null;
   state?: string | null;
   pincode?: string | null;
+
+  // ==============================
+  // Emergency Contact
+  // ==============================
   emergency_contact_name?: string | null;
   emergency_contact_phone?: string | null;
   emergency_contact_relation?: string | null;
+
+  // ==============================
+  // Employment Information
+  // ==============================
   department_id?: string | null;
   project_id?: string | null;
   designation?: string | null;
-  employment_type?: 'full-time' | 'part-time' | 'contract' | 'intern' | null;
+
+  employment_type?:
+    | "full-time"
+    | "part-time"
+    | "contract"
+    | "intern"
+    | null;
+
   joining_date?: string | null;
   probation_duration?: number;
   probation_end_date?: string | null;
   confirmation_date?: string | null;
+
   reporting_manager?: string | null;
+
+  // ==============================
+  // Client / Work Assignment
+  // ==============================
+  client_type?: "in-house" | "outsource" | null ;
+  company_name?: string | null;
+
   work_location?: string | null;
+
+  // ==============================
+  // Salary Information
+  // ==============================
   salary?: number | null;
-  company_name?: string;
+
+  // ==============================
+  // Bank & Identity Information
+  // ==============================
   bank_name?: string | null;
   bank_account_number?: string | null;
   ifsc_code?: string | null;
+
   pan_number?: string | null;
   aadhar_number?: string | null;
-  uan_number?: string | null;
+
+  // Statutory Information
+  esi_healthcare_eligible?: boolean;
   esi_number?: string | null;
+
+  pf_eligible?: boolean;
+
+  pt_eligible?: boolean;
+  pt_number?: string | null;
+
+  tds_eligible?: boolean;
+
+  // Profile & Status
   profile_photo_url?: string | null;
-  status: 'active' | 'inactive' | 'terminated'| "resigned"| 'on_notice' | "laid_off";
+
+  status:
+    | "active"
+    | "inactive"
+    | "terminated"
+    | "resigned"
+    | "on_notice"
+    | "laid_off";
+
+  // ==============================
+  // Exit Information
+  // ==============================
   exit_reason?: string | null;
   exit_document_url?: string | null;
   exit_document_name?: string | null;
   exit_date?: string | null;
-  notes?: string | null;
+
+  // ==============================
+  // Timestamps
+  // ==============================
   created_at: string;
   updated_at: string;
+
+  // ==============================
+  // Related Objects
+  // ==============================
   department?: Department;
   project?: Project;
 }
+
 
 export interface EmployeeDocument {
   id: string;
