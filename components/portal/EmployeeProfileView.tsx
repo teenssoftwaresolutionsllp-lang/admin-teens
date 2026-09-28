@@ -60,9 +60,7 @@ export default function EmployeeProfileView({
     ifsc_code: employee.ifsc_code || "",
     pan_number: employee.pan_number || "",
     aadhar_number: employee.aadhar_number || "",
-    uan_number: employee.uan_number || "",
     esi_number: employee.esi_number || "",
-    notes: employee.notes || "",
   });
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -352,10 +350,6 @@ export default function EmployeeProfileView({
                   {employee.aadhar_number ? `•••• •••• ${employee.aadhar_number.slice(-4)}` : "Not specified"}
                 </span>
               </div>
-              <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
-                <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">UAN (PF Number)</span>
-                <span className="font-mono font-bold text-slate-900">{employee.uan_number || "Auto-assigned by HR"}</span>
-              </div>
             </div>
           )}
 
@@ -611,16 +605,8 @@ export default function EmployeeProfileView({
                   />
                 </div>
                 <div>
-                  <label className="font-semibold text-slate-700 block mb-1">UAN Number</label>
-                  <input type="text" name="uan_number" value={editFormData.uan_number} onChange={handleInputChange} className="w-full px-3 py-2 border rounded-lg focus:ring-1 focus:ring-indigo-500 font-mono" />
-                </div>
-                <div>
                   <label className="font-semibold text-slate-700 block mb-1">ESI Number</label>
                   <input type="text" name="esi_number" value={editFormData.esi_number} onChange={handleInputChange} className="w-full px-3 py-2 border rounded-lg focus:ring-1 focus:ring-indigo-500 font-mono" />
-                </div>
-                <div className="md:col-span-2">
-                  <label className="font-semibold text-slate-700 block mb-1">Notes</label>
-                  <textarea name="notes" rows={2} value={editFormData.notes} onChange={handleInputChange} className="w-full px-3 py-2 border rounded-lg focus:ring-1 focus:ring-indigo-500" />
                 </div>
               </div>
 

@@ -607,6 +607,49 @@ export class DataStore {
     return updated;
   }
 
+  static async deleteEmployee(id: string): Promise<boolean> {
+  const cache = getCache();
+
+  const UUID_REGEX =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  try {
+    const supabase = await createAdminClient();
+
+    let query = supabase
+      .from("employees")
+      .delete();
+
+    if (UUID_REGEX.test(id)) {
+      query = query.eq("id", id);
+    } else {
+      query = query.eq("employee_id", id);
+    }
+
+    const { error } = await query;
+
+    if (error) {
+      throw error;
+    }
+
+    // Remove from in-memory cache
+    const index = cache.employees.findIndex(
+      (employee) =>
+        employee.id === id ||
+        employee.employee_id === id
+    );
+
+    if (index !== -1) {
+      cache.employees.splice(index, 1);
+    }
+
+    return true;
+  } catch (error) {
+    console.error("deleteEmployee DB error:", error);
+    throw error;
+  }
+  }
+
   static async terminateEmployee(
     id: string,
     exitType: "resigned" | "terminated" | "laid_off",

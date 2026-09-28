@@ -271,9 +271,9 @@ export default function EmployeeTable({ employees, departments, role }: Employee
           >
             <option value="all">All Status</option>
             <option value="active">Active</option>
-            <option value="on_notice">On Notice</option>
+            <option value="resigned">Resigned</option>
             <option value="terminated">Terminated</option>
-            <option value="inactive">Inactive</option>
+            <option value="laid_off">Lay off</option>
           </select>
 
           <select
