@@ -51,6 +51,7 @@ export interface Employee {
   id: string;
   user_id?: string | null;
   employee_id: string;
+
   first_name: string;
   last_name: string;
   email: string;
@@ -86,7 +87,11 @@ export interface Employee {
   uan_number?: string | null;
   esi_number?: string | null;
   profile_photo_url?: string | null;
-  status: 'active' | 'inactive' | 'terminated' | 'on_notice';
+  status: 'active' | 'inactive' | 'terminated'| "resigned"| 'on_notice' | "laid_off";
+  exit_reason?: string | null;
+  exit_document_url?: string | null;
+  exit_document_name?: string | null;
+  exit_date?: string | null;
   notes?: string | null;
   created_at: string;
   updated_at: string;

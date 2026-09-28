@@ -24,12 +24,12 @@ export default async function EmployeePortalPage() {
     employee = all.find((e) => e.email === user?.email) || all[0] || null;
   }
 
-  const employeeId = employee?.id || "TSS001";
-  const todayAttendance = await DataStore.getTodayAttendance(employeeId);
-  const attendanceLogs = await DataStore.getAttendanceLogs(employeeId);
-  const leaveRequests = await DataStore.getLeaveRequests(employeeId);
-  const leaveBalances = await DataStore.getLeaveBalances(employeeId);
-  const payslips = await DataStore.getPayslips(employeeId);
+  const employeeId = employee?.id;
+  const todayAttendance = employeeId ? await DataStore.getTodayAttendance(employeeId):null;
+  const attendanceLogs = employeeId ? await DataStore.getAttendanceLogs(employeeId):[];
+  const leaveRequests = employeeId ? await DataStore.getLeaveRequests(employeeId): [];
+  const leaveBalances = employeeId ? await DataStore.getLeaveBalances(employeeId):[];
+  const payslips = employeeId ? await DataStore.getPayslips(employeeId):[] ;
   const latestPayslip = payslips[0] || null;
   const project = employee?.project || (await DataStore.getProjects())[0];
 
@@ -56,6 +56,7 @@ export default async function EmployeePortalPage() {
           </Link>
         </div>
       </div>
+      
 
       {/* Attendance calendar replaces the large welcome card */}
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_430px] gap-5 items-stretch">

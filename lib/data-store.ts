@@ -85,8 +85,6 @@ const DEFAULT_PROJECTS: Project[] = [
 const DEFAULT_LEAVE_TYPES: LeaveType[] = [
   { id: "lt-cl", name: "Casual Leave", code: "CL", annual_quota: 12, is_paid: true, is_active: true, description: "For personal emergencies and errands" },
   { id: "lt-sl", name: "Sick Leave", code: "SL", annual_quota: 10, is_paid: true, is_active: true, description: "For medical recovery with prescription" },
-  { id: "lt-el", name: "Earned Leave", code: "EL", annual_quota: 15, is_paid: true, is_active: true, description: "Accrued annual vacation leave" },
-  { id: "lt-lop", name: "Loss of Pay", code: "LOP", annual_quota: 0, is_paid: false, is_active: true, description: "Unpaid leave causing per-day salary deduction" },
 ];
 
 const DEFAULT_SALARY_COMPONENTS: SalaryComponent[] = [
@@ -99,101 +97,101 @@ const DEFAULT_SALARY_COMPONENTS: SalaryComponent[] = [
   { id: "sc-tds", name: "Tax Deducted at Source (TDS)", code: "TDS", type: "deduction", calculation_type: "percentage_of_gross", value: 5, affects_lop: false, is_active: false, is_statutory: true, description: "Income Tax deduction" },
 ];
 
-const DEFAULT_EMPLOYEES: Employee[] = [
-  {
-    id: "TSS001",
-    employee_id: "TSS001",
-    user_id: null,
-    first_name: "Balaji",
-    last_name: "Marpally",
-    email: "employee@teenssoftware.com",
-    phone: "+91 9876543210",
-    date_of_birth: "1995-05-14",
-    gender: "male",
-    blood_group: "O+",
-    marital_status: "single",
-    address: "Flat 402, Greenfield Heights, Hitec City",
-    city: "Hyderabad",
-    state: "Telangana",
-    pincode: "500081",
-    emergency_contact_name: "Ramesh Marpally",
-    emergency_contact_phone: "+91 9876543219",
-    emergency_contact_relation: "Father",
-    designation: "Senior Full Stack Developer",
-    employment_type: "full-time",
-    status: "active",
-    salary: 75000,
-    joining_date: "2023-01-15",
-    bank_name: "HDFC Bank",
-    bank_account_number: "50100234567890",
-    ifsc_code: "HDFC0001234",
-    pan_number: "ABCDE1234F",
-    aadhar_number: "1234 5678 9012",
-    uan_number: "100904561234",
-    esi_number: "31000123456780001",
-    project_id: "proj-1",
-    notes: "Lead developer on FinTech project",
-    created_at: "2023-01-15T00:00:00.000Z",
-    updated_at: "2026-09-22T00:00:00.000Z",
-  },
-  {
-    id: "TSS002",
-    employee_id: "TSS002",
-    user_id: null,
-    first_name: "Sneha",
-    last_name: "Reddy",
-    email: "sneha.reddy@teenssoftware.com",
-    phone: "+91 9876543211",
-    date_of_birth: "1997-08-22",
-    gender: "female",
-    blood_group: "B+",
-    marital_status: "single",
-    address: "Plot 45, Jubilee Hills",
-    city: "Hyderabad",
-    state: "Telangana",
-    pincode: "500033",
-    designation: "UI/UX Product Designer",
-    employment_type: "full-time",
-    status: "active",
-    salary: 60000,
-    joining_date: "2023-03-10",
-    bank_name: "ICICI Bank",
-    bank_account_number: "102030405060",
-    ifsc_code: "ICIC0000102",
-    pan_number: "REDDY5678K",
-    aadhar_number: "9876 5432 1098",
-    project_id: "proj-1",
-    notes: "Product designer for Web & Mobile",
-    created_at: "2023-03-10T00:00:00.000Z",
-    updated_at: "2026-09-22T00:00:00.000Z",
-  },
-  {
-    id: "TSS003",
-    employee_id: "TSS003",
-    user_id: null,
-    first_name: "Vikram",
-    last_name: "Singh",
-    email: "vikram.singh@teenssoftware.com",
-    phone: "+91 9876543212",
-    date_of_birth: "1994-11-03",
-    gender: "male",
-    blood_group: "A+",
-    marital_status: "married",
-    address: "Flat 102, Cyber Towers Colony, Madhapur",
-    city: "Hyderabad",
-    state: "Telangana",
-    pincode: "500081",
-    designation: "QA Automation Engineer",
-    employment_type: "contract",
-    status: "active",
-    salary: 45000,
-    joining_date: "2023-06-01",
-    project_id: "proj-2",
-    notes: "Automation engineer for US client claims engine",
-    created_at: "2023-06-01T00:00:00.000Z",
-    updated_at: "2026-09-22T00:00:00.000Z",
-  },
-];
+// const DEFAULT_EMPLOYEES: Employee[] = [
+//   {
+//     id: "TSS001",
+//     employee_id: "TSS001",
+//     user_id: null,
+//     first_name: "Balaji",
+//     last_name: "Marpally",
+//     email: "employee@teenssoftware.com",
+//     phone: "+91 9876543210",
+//     date_of_birth: "1995-05-14",
+//     gender: "male",
+//     blood_group: "O+",
+//     marital_status: "single",
+//     address: "Flat 402, Greenfield Heights, Hitec City",
+//     city: "Hyderabad",
+//     state: "Telangana",
+//     pincode: "500081",
+//     emergency_contact_name: "Ramesh Marpally",
+//     emergency_contact_phone: "+91 9876543219",
+//     emergency_contact_relation: "Father",
+//     designation: "Senior Full Stack Developer",
+//     employment_type: "full-time",
+//     status: "active",
+//     salary: 75000,
+//     joining_date: "2023-01-15",
+//     bank_name: "HDFC Bank",
+//     bank_account_number: "50100234567890",
+//     ifsc_code: "HDFC0001234",
+//     pan_number: "ABCDE1234F",
+//     aadhar_number: "1234 5678 9012",
+//     uan_number: "100904561234",
+//     esi_number: "31000123456780001",
+//     project_id: "proj-1",
+//     notes: "Lead developer on FinTech project",
+//     created_at: "2023-01-15T00:00:00.000Z",
+//     updated_at: "2026-09-22T00:00:00.000Z",
+//   },
+//   {
+//     id: "TSS002",
+//     employee_id: "TSS002",
+//     user_id: null,
+//     first_name: "Sneha",
+//     last_name: "Reddy",
+//     email: "sneha.reddy@teenssoftware.com",
+//     phone: "+91 9876543211",
+//     date_of_birth: "1997-08-22",
+//     gender: "female",
+//     blood_group: "B+",
+//     marital_status: "single",
+//     address: "Plot 45, Jubilee Hills",
+//     city: "Hyderabad",
+//     state: "Telangana",
+//     pincode: "500033",
+//     designation: "UI/UX Product Designer",
+//     employment_type: "full-time",
+//     status: "active",
+//     salary: 60000,
+//     joining_date: "2023-03-10",
+//     bank_name: "ICICI Bank",
+//     bank_account_number: "102030405060",
+//     ifsc_code: "ICIC0000102",
+//     pan_number: "REDDY5678K",
+//     aadhar_number: "9876 5432 1098",
+//     project_id: "proj-1",
+//     notes: "Product designer for Web & Mobile",
+//     created_at: "2023-03-10T00:00:00.000Z",
+//     updated_at: "2026-09-22T00:00:00.000Z",
+//   },
+//   {
+//     id: "TSS003",
+//     employee_id: "TSS003",
+//     user_id: null,
+//     first_name: "Vikram",
+//     last_name: "Singh",
+//     email: "vikram.singh@teenssoftware.com",
+//     phone: "+91 9876543212",
+//     date_of_birth: "1994-11-03",
+//     gender: "male",
+//     blood_group: "A+",
+//     marital_status: "married",
+//     address: "Flat 102, Cyber Towers Colony, Madhapur",
+//     city: "Hyderabad",
+//     state: "Telangana",
+//     pincode: "500081",
+//     designation: "QA Automation Engineer",
+//     employment_type: "contract",
+//     status: "active",
+//     salary: 45000,
+//     joining_date: "2023-06-01",
+//     project_id: "proj-2",
+//     notes: "Automation engineer for US client claims engine",
+//     created_at: "2023-06-01T00:00:00.000Z",
+//     updated_at: "2026-09-22T00:00:00.000Z",
+//   },
+// ];
 
 // Global in-memory singleton state cache
 declare global {
@@ -215,124 +213,19 @@ declare global {
 
 function getCache() {
   if (!global.__hrmsCache || !Array.isArray(global.__hrmsCache.employees)) {
-    const employees = DEFAULT_EMPLOYEES.map((e) => ({
-      ...e,
-      project: DEFAULT_PROJECTS.find((p) => p.id === e.project_id) || DEFAULT_PROJECTS[0],
-    }));
+    const employees: Employee[] = [];
 
     const leaveBalances: EmployeeLeaveBalance[] = [];
-    for (const emp of employees) {
-      for (const lt of DEFAULT_LEAVE_TYPES) {
-        if (lt.code === "LOP" || !lt.is_active) continue;
-        leaveBalances.push({
-          id: `bal-${emp.id}-${lt.code}-2026`,
-          employee_id: emp.id,
-          leave_type_id: lt.id,
-          year: 2026,
-          allocated_days: lt.annual_quota,
-          used_days: emp.id === "TSS001" && lt.code === "CL" ? 2 : 0,
-          balance_days: emp.id === "TSS001" && lt.code === "CL" ? lt.annual_quota - 2 : lt.annual_quota,
-          leave_type: lt,
-        });
-      }
-    }
 
-    const leaveRequests: LeaveRequest[] = [
-      {
-        id: "lr-init-1",
-        employee_id: "TSS001",
-        leave_type_id: "lt-cl",
-        start_date: "2026-09-10",
-        end_date: "2026-09-11",
-        total_days: 2,
-        is_half_day: false,
-        reason: "Family function",
-        status: "approved",
-        reviewed_by: "hr@teenssoftware.com",
-        reviewed_at: "2026-09-08T10:00:00.000Z",
-        created_at: "2026-09-07T09:30:00.000Z",
-        leave_type: DEFAULT_LEAVE_TYPES.find((lt) => lt.code === "CL"),
-        employee: employees[0],
-      },
-    ];
+    const leaveRequests: LeaveRequest[] = [];
 
-    const changeRequests: ProfileChangeRequest[] = [
-      {
-        id: "pcr-init-1",
-        employee_id: "TSS001",
-        requested_changes: {
-          address: "Villa 12, Palm Meadows, Gachibowli, Hyderabad",
-          bank_name: "State Bank of India",
-          bank_account_number: "309988776655",
-          ifsc_code: "SBIN0004567",
-        },
-        previous_values: {
-          address: employees[0].address,
-          bank_name: employees[0].bank_name,
-          bank_account_number: employees[0].bank_account_number,
-          ifsc_code: employees[0].ifsc_code,
-        },
-        status: "pending",
-        created_at: new Date(Date.now() - 3600000 * 4).toISOString(),
-        employee: employees[0],
-      },
-    ];
+    const changeRequests: ProfileChangeRequest[] = [];
 
     const todayStr = new Date().toISOString().split("T")[0];
-    const attendanceLogs: AttendanceLog[] = [
-      {
-        id: "att-init-1",
-        employee_id: "TSS001",
-        attendance_date: todayStr,
-        check_in_time: `${todayStr}T09:05:00.000Z`,
-        check_out_time: null,
-        total_hours: null,
-        status: "present",
-        is_late: false,
-        is_regularized: false,
-        created_at: `${todayStr}T09:05:00.000Z`,
-      },
-    ];
+    const attendanceLogs: AttendanceLog[] = [];
 
     // Precalculate payslips for TSS001, TSS002, TSS003
     const payslips: Payslip[] = [];
-    const months = [
-      { month: 8, year: 2026, name: "August", totalDays: 31 },
-      { month: 9, year: 2026, name: "September", totalDays: 30 },
-    ];
-
-    for (const m of months) {
-      for (const emp of employees) {
-        const breakdown = calculateSalaryBreakdown({
-          grossSalary: emp.salary || 50000,
-          totalDaysInMonth: m.totalDays,
-          lopDays: 0,
-          activeComponents: DEFAULT_SALARY_COMPONENTS,
-        });
-
-        payslips.push({
-          id: `ps-${emp.id}-${m.year}-${m.month}`,
-          employee_id: emp.id,
-          payroll_month: m.month,
-          payroll_year: m.year,
-          month_name: m.name,
-          working_days: 26,
-          present_days: 26,
-          paid_leaves: emp.id === "TSS001" && m.month === 9 ? 2 : 0,
-          lop_days: 0,
-          gross_salary: breakdown.grossSalary,
-          lop_deduction: breakdown.lopDeduction,
-          total_earnings: breakdown.totalEarnings,
-          total_deductions: breakdown.totalDeductions,
-          net_salary: breakdown.netSalary,
-          earnings_breakup: breakdown.earningsBreakdown,
-          deductions_breakup: breakdown.deductionsBreakdown,
-          payment_status: "processed",
-          created_at: new Date().toISOString(),
-          employee: emp,
-        });
-      }
-    }
 
     global.__hrmsCache = {
       employees,
@@ -409,41 +302,58 @@ export class DataStore {
   static async getEmployeeById(id: string): Promise<Employee | null> {
     const cache = getCache();
 
-    // Check in-memory cache first
-    const cached = cache.employees.find((e) => e.id === id || e.employee_id === id);
+    const UUID_REGEX =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+    try {
+      const supabase = await createAdminClient();
+
+      let query = supabase
+        .from("employees")
+        .select(`*, department:departments(id, name)`);
+
+      if (UUID_REGEX.test(id)) {
+        query = query.eq("id", id);
+      } else {
+        query = query.eq("employee_id", id);
+      }
+
+      const { data, error } = await query.maybeSingle();
+
+      if (error) {
+        throw error;
+      }
+
+      if (data) {
+        const result: Employee = {
+          ...data,
+          project:
+            cache.projects.find((p) => p.id === data.project_id) ||
+            cache.projects[0],
+        };
+
+        this.seedEmployeeToCache(result);
+
+        return result;
+      }
+    } catch (error) {
+      console.warn("getEmployeeById DB fallback:", error);
+    }
+
+    const cached = cache.employees.find(
+      (employee) =>
+        employee.id === id || employee.employee_id === id
+    );
+
     if (cached) {
       return {
         ...cached,
-        project: cached.project || cache.projects.find((p) => p.id === cached.project_id) || cache.projects[0],
-      };
-    }
-
-    // Try DB
-    try {
-      const supabase = await createAdminClient();
-      const { data, error } = await supabase
-        .from("employees")
-        .select(`*, department:departments(id, name)`)
-        .eq("id", id)
-        .single();
-
-      if (!error && data) {
-        const result = {
-          ...data,
-          project: cache.projects.find((p) => p.id === data.project_id) || cache.projects[0],
-        };
-        this.seedEmployeeToCache(result);
-        return result;
-      }
-    } catch (err) {
-      console.warn("getEmployeeById DB fallback:", err);
-    }
-
-    // Fallback to first employee
-    if (cache.employees.length > 0) {
-      return {
-        ...cache.employees[0],
-        project: cache.employees[0].project || cache.projects.find((p) => p.id === cache.employees[0].project_id) || cache.projects[0],
+        project:
+          cached.project ||
+          cache.projects.find(
+            (project) => project.id === cached.project_id
+          ) ||
+          cache.projects[0],
       };
     }
 
@@ -537,27 +447,16 @@ export class DataStore {
       console.warn("getEmployeeByUserId DB fallback:", err);
     }
 
-    // 3. Fallback: match default employee (Balaji Marpally - TSS001) and bind user_id
-    const defaultEmp = cache.employees.find((e) => e.email === "employee@teenssoftware.com" || e.employee_id === "TSS001") || cache.employees[0];
-    if (defaultEmp) {
-      if (userId && !defaultEmp.user_id) {
-        defaultEmp.user_id = userId;
-      }
-      return {
-        ...defaultEmp,
-        project: defaultEmp.project || cache.projects.find((p) => p.id === defaultEmp.project_id) || cache.projects[0],
-      };
-    }
-
     return null;
   }
 
   static async createEmployee(empData: Partial<Employee>): Promise<Employee> {
     const cache = getCache();
     const id = empData.id || crypto.randomUUID();
+    const employeeId = empData.employee_id || await this.getNextEmployeeId();
     const newEmp: Employee = {
       id,
-      employee_id: empData.employee_id || id,
+      employee_id: employeeId,
       user_id: empData.user_id || null,
       first_name: empData.first_name || "New",
       last_name: empData.last_name || "Employee",
@@ -641,22 +540,35 @@ export class DataStore {
   }
 
   static async getNextEmployeeId(): Promise<string> {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, "0");
-    let employeeCount = getCache().employees.length;
+    let maxNumber = 4999;
 
     try {
       const supabase = await createAdminClient();
-      const { count, error } = await supabase
+      const { data, error } = await supabase
         .from("employees")
-        .select("id", { count: "exact", head: true });
-      if (!error && count !== null) employeeCount = count;
-    } catch (e) {
-      console.warn("getNextEmployeeId database count warning:", e);
+        .select("employee_id")
+        .like("employee_id", "TN%");
+      if (!error && data ) {
+        for (const employee of data) {
+          const match = /^TN(\d+)$/.exec(employee.employee_id || "")
+          if (match) {
+             maxNumber = Math.max(maxNumber,Number(match[1]))
+          }
+        }
+      }
+    } catch (error) {
+      console.warn("getNextEmployeeId database warning:", error);
+    }
+    const cache = getCache();
+    for (const employee of cache.employees) {
+      const match = /^TN(\d+)$/.exec(employee.employee_id || "");
+      if (match) {
+        maxNumber = Math.max(maxNumber,Number(match[1]))
+      }
     }
 
-    return `${year}${month}${String(employeeCount + 1).padStart(4, "0")}`;
+
+    return `TN${maxNumber + 1}`;
   }
 
   static async updateEmployee(id: string, updates: Partial<Employee>): Promise<Employee | null> {
@@ -669,26 +581,116 @@ export class DataStore {
 
     try {
       const supabase = await createAdminClient();
-      await supabase.from("employees").update(updates).eq("id", id);
-    } catch (e) {
-      console.warn("updateEmployee DB warning:", e);
+      const UUID_REGEX =/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      let query = supabase
+      .from("employees")
+      .update({
+          ...updates,
+          updated_at: new Date().toISOString(),
+      });
+
+      if (UUID_REGEX.test(id)) {
+        query = query.eq("id", id);
+      } else {
+        query = query.eq("employee_id", id);
+      }
+      const { error } = await query;
+      if(error){
+        throw error;
+      }
+
+
+    } catch (error) {
+      console.warn("updateEmployee DB warning:", error);
     }
 
     return updated;
   }
 
-  static async deleteEmployee(id: string): Promise<boolean> {
+  static async terminateEmployee(
+    id: string,
+    exitType: "resigned" | "terminated" | "laid_off",
+    exitReason: string,
+    exitDocumentUrl?: string | null,
+    exitDocumentName?: string | null,
+    exitDate?: string
+  ): Promise<Employee | null> {
     const cache = getCache();
-    cache.employees = cache.employees.filter((e) => e.id !== id && e.employee_id !== id);
 
-    try {
-      const supabase = await createAdminClient();
-      await supabase.from("employees").delete().eq("id", id);
-    } catch (e) {
-      console.warn("deleteEmployee DB warning:", e);
+    const employee = await this.getEmployeeById(id);
+
+    if (!employee) {
+      throw new Error("Employee not found");
     }
 
-    return true;
+    if ( employee.status === "resigned" || employee.status === "terminated" || employee.status === "laid_off"){
+      throw new Error("Employee has already exited");
+    } 
+
+    if (!exitReason?.trim()) {
+      throw new Error("Exit reason is required");
+    }
+
+    if (!exitDocumentUrl?.trim()|| !exitDocumentName?.trim()) {
+      throw new Error("Supporting exit document is required");
+    }
+
+    if (!exitDate?.trim()) {
+      throw new Error("Exit date is required");
+    }
+
+    const UUID_REGEX =/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    const supabase = await createAdminClient();
+    const finalexitDate = exitDate;
+    const updatedAt = new Date().toISOString();
+    const updates = {
+      status: exitType,
+      exit_reason: exitReason.trim(),
+      exit_document_url: exitDocumentUrl || null,
+      exit_document_name: exitDocumentName || null,
+      exit_date: finalexitDate,
+      updated_at: updatedAt,
+    };
+
+    let query = supabase
+      .from("employees")
+      .update(updates);
+
+    if (UUID_REGEX.test(id)) {
+      query = query.eq("id", id);
+    } else {
+      query = query.eq("employee_id", id);
+    }
+
+    const { data, error } = await query
+      .select(`*, department:departments(id, name)`)
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+    if (!data) {
+      throw new Error("Employee exit update failed");
+    }
+
+    // Update cache
+    const index = cache.employees.findIndex(
+      (emp) =>emp.id === employee.id ||emp.employee_id === employee.employee_id);
+
+      if (index !== -1) {
+        cache.employees[index] = {
+          ...cache.employees[index],
+          status: exitType,
+          exit_reason: exitReason.trim(),
+          exit_document_url: exitDocumentUrl || null,
+          exit_document_name: exitDocumentName || null,
+          exit_date: finalexitDate,
+          updated_at: updatedAt,
+        };
+      }
+
+    return data as Employee;
   }
 
 
@@ -724,10 +726,15 @@ export class DataStore {
   }): Promise<ProfileChangeRequest> {
     const cache = getCache();
     const employee = await this.getEmployeeById(employeeId);
+    if (!employee) {
+      throw new Error("Employee not found");
+    }
+
+    const employeeUuid = employee.id;
 
     const newRequest: ProfileChangeRequest = {
       id: "pcr-" + Date.now(),
-      employee_id: employeeId,
+      employee_id: employeeUuid,
       requested_changes: requestedChanges,
       previous_values: previousValues,
       status: "pending",
@@ -740,7 +747,7 @@ export class DataStore {
       const { data, error } = await supabase
         .from("profile_change_requests")
         .insert({
-          employee_id: employeeId,
+          employee_id: employeeUuid,
           requested_changes: requestedChanges,
           status: "pending",
         })
@@ -946,38 +953,152 @@ export class DataStore {
   // ==========================================
   // ATTENDANCE & CHECK-IN / CHECK-OUT
   // ==========================================
-  static async getAttendanceLogs(employeeId?: string, month?: number, year?: number): Promise<AttendanceLog[]> {
-    const cache = getCache();
-    let logs = [...cache.attendanceLogs];
 
-    if (employeeId) {
-      logs = logs.filter((l) => l.employee_id === employeeId);
+  static async getAttendanceLogs(
+  employeeId?: string,
+  month?: number,
+  year?: number
+): Promise<AttendanceLog[]> {
+  const supabase = await createAdminClient();
+
+  let query = supabase
+    .from("attendance_logs")
+    .select("*");
+
+  if (employeeId) {
+    const isUuid =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        employeeId
+      );
+
+    let employeeUuid: string | null = null;
+
+    if (isUuid) {
+      employeeUuid = employeeId;
+    } else {
+      const { data: employee, error: employeeError } = await supabase
+        .from("employees")
+        .select("id")
+        .eq("employee_id", employeeId)
+        .maybeSingle();
+
+      if (employeeError) {
+        throw new Error(employeeError.message);
+      }
+
+      employeeUuid = employee?.id || null;
     }
 
-    if (month !== undefined && year !== undefined) {
-      const prefix = `${year}-${String(month).padStart(2, "0")}`;
-      logs = logs.filter((l) => l.attendance_date.startsWith(prefix));
+    // Employee not found
+    if (!employeeUuid) {
+      return [];
     }
 
-    return logs.sort((a, b) => b.attendance_date.localeCompare(a.attendance_date));
+    query = query.eq("employee_id", employeeUuid);
   }
+
+  if (month !== undefined && year !== undefined) {
+    const startDate = new Date(year, month - 1, 1)
+      .toISOString()
+      .split("T")[0];
+
+    const endDate = new Date(year, month, 0)
+      .toISOString()
+      .split("T")[0];
+
+    query = query
+      .gte("attendance_date", startDate)
+      .lte("attendance_date", endDate);
+  }
+
+  const { data, error } = await query.order("attendance_date", {
+    ascending: false,
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (data || []) as AttendanceLog[];
+}
 
   static async getTodayAttendance(employeeId: string): Promise<AttendanceLog | null> {
-    const cache = getCache();
-    const todayStr = new Date().toISOString().split("T")[0];
-    const log = cache.attendanceLogs.find(
-      (l) => l.employee_id === employeeId && l.attendance_date === todayStr
+  const supabase = await createAdminClient();
+
+  const todayStr = new Date().toISOString().split("T")[0];
+
+  // employeeId can be TSS001 or a UUID
+  const isUuid =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      employeeId
     );
-    return log || null;
+
+  let employee: { id: string } | null = null;
+
+  if (isUuid) {
+    const { data, error } = await supabase
+      .from("employees")
+      .select("id")
+      .eq("id", employeeId)
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    employee = data;
+  } else {
+    const { data, error } = await supabase
+      .from("employees")
+      .select("id")
+      .eq("employee_id", employeeId)
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    employee = data;
   }
 
+  if (!employee) {
+    return null;
+  }
+
+  // IMPORTANT:
+  // attendance_logs.employee_id expects the employee UUID,
+  // not TSS001/TSS002/etc.
+  const { data, error } = await supabase
+    .from("attendance_logs")
+    .select("*")
+    .eq("employee_id", employee.id)
+    .eq("attendance_date", todayStr)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data as AttendanceLog | null;
+}
+
   static async clockIn(employeeId: string): Promise<AttendanceLog> {
-    const cache = getCache();
+   const supabase = await createAdminClient();
     const now = new Date();
     const todayStr = now.toISOString().split("T")[0];
 
     const employee = await this.getEmployeeById(employeeId);
-    const project = employee?.project || cache.projects[0];
+
+    if (!employee) {
+      throw new Error("Employee not found");
+    }
+
+    const employeeUuid = employee.id;
+    const project = employee?.project;
+
+    if(!project){
+      throw new Error("Employee project not found");
+    }
 
     const evaluation = evaluateAttendancePunch(
       now,
@@ -986,18 +1107,43 @@ export class DataStore {
       project.half_day_cutoff_minutes
     );
 
-    let log = cache.attendanceLogs.find(
-      (l) => l.employee_id === employeeId && l.attendance_date === todayStr
-    );
 
-    if (log) {
-      log.check_in_time = now.toISOString();
-      log.status = evaluation.status;
-      log.is_late = evaluation.isLate;
-    } else {
-      log = {
-        id: "att-" + Date.now(),
-        employee_id: employeeId,
+    const { data: existingLog, error: findError } = await supabase
+    .from("attendance_logs")
+    .select("*")
+    .eq("employee_id", employeeUuid)
+    .eq("attendance_date", todayStr)
+    .maybeSingle();
+
+    if (findError) {
+      throw new Error(findError.message);
+    }
+    let log;
+
+    if(existingLog){
+      const { data, error } = await supabase
+      .from("attendance_logs")
+      .update({
+        check_in_time: now.toISOString(),
+        status: evaluation.status,
+        is_late: evaluation.isLate,
+      })
+      .eq("id", existingLog.id)
+      .select()
+      .single();
+    
+
+    if (error) {
+      throw new Error(error.message);
+    }
+     log = data;
+  }
+
+  else{
+     const { data, error } = await supabase
+      .from("attendance_logs")
+      .insert({
+        employee_id: employeeUuid,
         attendance_date: todayStr,
         check_in_time: now.toISOString(),
         check_out_time: null,
@@ -1005,41 +1151,93 @@ export class DataStore {
         status: evaluation.status,
         is_late: evaluation.isLate,
         is_regularized: false,
-        created_at: now.toISOString(),
-      };
-      cache.attendanceLogs.unshift(log);
-    }
-
-    return log;
+      })
+      .select()
+      .single();
+      if (error) {
+        throw new Error(error.message);
+      }
+      log = data;
+  }
+    return log as AttendanceLog;
   }
 
   static async clockOut(employeeId: string): Promise<AttendanceLog> {
-    const cache = getCache();
+    const supabase = await createAdminClient();
     const now = new Date();
     const todayStr = now.toISOString().split("T")[0];
 
-    let log = cache.attendanceLogs.find(
-      (l) => l.employee_id === employeeId && l.attendance_date === todayStr
-    );
+    const employee = await this.getEmployeeById(employeeId);
+
+    if (!employee) {
+      throw new Error("Employee not found");
+    }
+
+    const employeeUuid = employee.id;
+
+   const { data: log, error: findError } = await supabase
+    .from("attendance_logs")
+    .select("*")
+    .eq("employee_id", employeeUuid)
+    .eq("attendance_date", todayStr)
+    .maybeSingle();
+
+  if (findError) {
+    throw new Error(findError.message);
+  }
 
     if (!log) {
-      // Auto check-in if missed
-      log = await this.clockIn(employeeId);
+      
+      const newLog = await this.clockIn(employeeId);
+      const checkOut = now;
+      const checkIn = new Date(newLog.check_in_time!);
+      const hours = Number(((checkOut.getTime() - checkIn.getTime()) /(1000 * 60 * 60)).toFixed(2))
+
+      const status = hours < 4.5 && newLog.status === "present" ? "half_day" : newLog.status;
+      const { data: updatedLog, error: updateError } = await supabase
+      .from("attendance_logs")
+      .update({
+        check_out_time: checkOut.toISOString(),
+        total_hours: hours,
+        status,
+      })
+      .eq("id", newLog.id)
+      .select()
+      .single();
+
+    if (updateError) {
+      throw new Error(updateError.message);
     }
 
-    log.check_out_time = now.toISOString();
-    if (log.check_in_time) {
-      const diffMs = now.getTime() - new Date(log.check_in_time).getTime();
-      const hours = Number((diffMs / (1000 * 60 * 60)).toFixed(2));
-      log.total_hours = hours;
-
-      // If worked less than 4.5 hours, flag as half-day
-      if (hours < 4.5 && log.status === "present") {
-        log.status = "half_day";
-      }
+    return updatedLog as AttendanceLog;
+  }
+    if (!log.check_in_time) {
+      throw new Error("Check-in time is missing");
     }
 
-    return log;
+    const checkOut = now;
+    const checkIn = new Date(log.check_in_time);
+
+    const hours = Number(((checkOut.getTime() - checkIn.getTime()) /(1000 * 60 * 60)).toFixed(2))
+
+    const status = hours < 4.5 && log.status === "present" ? "half_day" :log.status
+
+    const { data: updatedLog, error: updateError } = await supabase
+    .from("attendance_logs")
+    .update({
+      check_out_time: checkOut.toISOString(),
+      total_hours: hours,
+      status,
+    })
+    .eq("id", log.id)
+    .select()
+    .single();
+
+    if (updateError) {
+      throw new Error(updateError.message);
+    }
+
+    return updatedLog as AttendanceLog;
   }
 
   // ==========================================
@@ -1079,9 +1277,15 @@ export class DataStore {
     const cache = getCache();
     const employee = await this.getEmployeeById(employeeId);
 
+    if (!employee) {
+      throw new Error("Employee not found");
+    }
+
+    const employeeUuid = employee.id;
+
     const reg: AttendanceRegularization = {
       id: "reg-" + Date.now(),
-      employee_id: employeeId,
+      employee_id: employeeUuid,
       attendance_date: attendanceDate,
       proposed_check_in: proposedCheckIn,
       proposed_check_out: proposedCheckOut,
@@ -1095,7 +1299,7 @@ export class DataStore {
     const { data, error } = await supabase
       .from("attendance_regularizations")
       .insert({
-        employee_id: employeeId,
+        employee_id: employeeUuid,
         attendance_date: attendanceDate,
         proposed_check_in: proposedCheckIn,
         proposed_check_out: proposedCheckOut,
@@ -1106,7 +1310,9 @@ export class DataStore {
       .single();
     if (error) throw error;
     if (!data) throw new Error("Regularization was not returned after insert");
-    return data as AttendanceRegularization;
+    const createdRegularization = data as AttendanceRegularization;
+    cache.regularizations.unshift(createdRegularization);
+    return createdRegularization;
   }
 
   static async reviewAttendanceRegularization({
@@ -1121,46 +1327,141 @@ export class DataStore {
     rejectionReason?: string;
   }): Promise<boolean> {
     const cache = getCache();
-    const reg = cache.regularizations.find((r) => r.id === id);
-    if (!reg) return false;
+    const supabase = await createAdminClient();
 
-    reg.status = status;
-    reg.reviewed_by = reviewerId;
-    reg.reviewed_at = new Date().toISOString();
-    if (rejectionReason) reg.rejection_reason = rejectionReason;
+    // Get regularization from DB
+    const { data: dbReg, error: regError } = await supabase
+      .from("attendance_regularizations")
+      .select("*")
+      .eq("id", id)
+      .single();
 
+    if (regError) {
+      throw new Error(regError.message);
+    }
+
+    if (!dbReg) {
+      return false;
+    }
+
+    if (dbReg.status !== "pending") {
+       throw new Error(`Attendance regularization has already been ${dbReg.status}`);
+    }
+
+    const reg = dbReg as AttendanceRegularization;
+    const reviewedAt = new Date().toISOString();
+
+    // Only create/update attendance when approved
     if (status === "approved") {
-      let log = cache.attendanceLogs.find(
-        (l) => l.employee_id === reg.employee_id && l.attendance_date === reg.attendance_date
+      const checkInDate = new Date(
+        `${reg.attendance_date}T${reg.proposed_check_in}`
       );
 
-      const checkInDate = new Date(`${reg.attendance_date}T${reg.proposed_check_in}`);
-      const checkOutDate = new Date(`${reg.attendance_date}T${reg.proposed_check_out}`);
-      const totalHours = Number(((checkOutDate.getTime() - checkInDate.getTime()) / (1000 * 60 * 60)).toFixed(2));
+      const checkOutDate = new Date(
+        `${reg.attendance_date}T${reg.proposed_check_out}`
+      );
 
-      if (log) {
-        log.check_in_time = checkInDate.toISOString();
-        log.check_out_time = checkOutDate.toISOString();
-        log.total_hours = totalHours;
-        log.status = "present";
-        log.is_late = false;
-        log.is_regularized = true;
+      const totalHours = Number(
+        (
+          (checkOutDate.getTime() - checkInDate.getTime()) /
+          (1000 * 60 * 60)
+        ).toFixed(2)
+      );
+
+      // Check existing attendance log in Supabase
+      const { data: existingLog, error: logError } = await supabase
+        .from("attendance_logs")
+        .select("*")
+        .eq("employee_id", reg.employee_id)
+        .eq("attendance_date", reg.attendance_date)
+        .maybeSingle();
+
+      if (logError) {
+        throw new Error(logError.message);
+      }
+
+      let attendanceLog: AttendanceLog;
+
+      if (existingLog) {
+        // Update existing attendance log
+        const { data: updatedLog, error: attendanceUpdateError } = await supabase
+          .from("attendance_logs")
+          .update({
+            check_in_time: checkInDate.toISOString(),
+            check_out_time: checkOutDate.toISOString(),
+            total_hours: totalHours,
+            status: "present",
+            is_late: false,
+            is_regularized: true,
+          })
+          .eq("id", existingLog.id)
+          .select()
+          .single();
+
+        if (attendanceUpdateError) {
+          throw new Error(attendanceUpdateError.message);
+        }
+
+        attendanceLog = updatedLog as AttendanceLog;
       } else {
-        log = {
-          id: "att-" + Date.now(),
-          employee_id: reg.employee_id,
-          attendance_date: reg.attendance_date,
-          check_in_time: checkInDate.toISOString(),
-          check_out_time: checkOutDate.toISOString(),
-          total_hours: totalHours,
-          status: "present",
-          is_late: false,
-          is_regularized: true,
-          created_at: new Date().toISOString(),
-        };
-        cache.attendanceLogs.unshift(log);
+        // Create new attendance log
+        const { data: newLog, error: attendanceInsertError } = await supabase
+          .from("attendance_logs")
+          .insert({
+            employee_id: reg.employee_id,
+            attendance_date: reg.attendance_date,
+            check_in_time: checkInDate.toISOString(),
+            check_out_time: checkOutDate.toISOString(),
+            total_hours: totalHours,
+            status: "present",
+            is_late: false,
+            is_regularized: true,
+          })
+          .select()
+          .single();
+
+        if (attendanceInsertError) {
+          throw new Error(attendanceInsertError.message);
+        }
+
+        attendanceLog = newLog as AttendanceLog;
+      }
+
+      // Keep attendance cache in sync
+      const cacheLogIndex = cache.attendanceLogs.findIndex(
+        (l) =>
+          l.employee_id === reg.employee_id &&
+          l.attendance_date === reg.attendance_date
+      );
+
+      if (cacheLogIndex >= 0) {
+        cache.attendanceLogs[cacheLogIndex] = attendanceLog;
+      } else {
+        cache.attendanceLogs.unshift(attendanceLog);
       }
     }
+    const { error: updateError } = await supabase
+    .from("attendance_regularizations")
+    .update({
+      status,
+      reviewed_by: reviewerId,
+      reviewed_at: reviewedAt,
+      rejection_reason: rejectionReason || null,
+    })
+    .eq("id", id);
+
+    if (updateError) {
+      throw new Error(updateError.message);
+    }
+
+    const cachedReg = cache.regularizations.find((r) => r.id === id);
+
+  if (cachedReg) {
+    cachedReg.status = status;
+    cachedReg.reviewed_by = reviewerId;
+    cachedReg.reviewed_at = reviewedAt;
+    cachedReg.rejection_reason = rejectionReason || null;
+  }
 
     return true;
   }
@@ -1170,15 +1471,81 @@ export class DataStore {
   // ==========================================
   static async getLeaveTypes(): Promise<LeaveType[]> {
     const cache = getCache();
+
     try {
       const supabase = await createAdminClient();
-      const { data, error } = await supabase.from("leave_types").select("*").order("name");
-      if (error) throw error;
-      if (data && data.length > 0) return data;
+
+      const { data, error } = await supabase
+        .from("leave_types")
+        .select("*")
+        .in("code", ["CL", "SL"])
+        .eq("is_active", true)
+        .order("name");
+
+      if (error) {
+        throw error;
+      }
+
+      // Existing DB leave types already have real UUIDs.
+      if (data && data.length > 0) {
+        cache.leaveTypes = data as LeaveType[];
+        return cache.leaveTypes;
+      }
+
+      // No CL/SL records exist, so create them.
+      const defaults = [
+        {
+          name: "Casual Leave",
+          code: "CL",
+          annual_quota: 12,
+          is_paid: true,
+          is_active: true,
+          description: "For personal emergencies and errands",
+        },
+        {
+          name: "Sick Leave",
+          code: "SL",
+          annual_quota: 10,
+          is_paid: true,
+          is_active: true,
+          description: "For medical recovery with prescription",
+        },
+      ];
+
+      const { data: created, error: insertError } = await supabase
+        .from("leave_types")
+        .insert(defaults)
+        .select("*");
+
+      if (insertError) {
+        throw insertError;
+      }
+
+      if (!created || created.length === 0) {
+        throw new Error("Leave types were not created");
+      }
+
+      // IMPORTANT:
+      // Use the UUIDs generated by Supabase.
+      cache.leaveTypes = created as LeaveType[];
+
+      return cache.leaveTypes;
     } catch (error) {
-      console.warn("getLeaveTypes database warning:", error);
+      console.error("getLeaveTypes failed:", error);
+
+      /*
+      * Do NOT return DEFAULT_LEAVE_TYPES here because their IDs
+      * are "lt-cl" and "lt-sl", which are not valid UUIDs.
+      *
+      * Returning them could cause:
+      * invalid input syntax for type uuid: "lt-cl"
+      */
+      throw new Error(
+        error instanceof Error
+          ? error.message
+          : "Failed to load leave types"
+      );
     }
-    return cache.leaveTypes;
   }
 
   static async updateLeaveType(id: string, updates: Partial<LeaveType>): Promise<LeaveType | null> {
@@ -1189,59 +1556,179 @@ export class DataStore {
     return cache.leaveTypes[idx];
   }
 
-  static async getLeaveBalances(employeeId: string, year: number = new Date().getFullYear()): Promise<EmployeeLeaveBalance[]> {
+  static async getLeaveBalances(
+    employeeId: string,
+    year: number = new Date().getFullYear()
+  ): Promise<EmployeeLeaveBalance[]> {
     const cache = getCache();
-    let balances = cache.leaveBalances.filter(
-      (b) => b.employee_id === employeeId && b.year === year
+
+    const employee = await this.getEmployeeById(employeeId);
+
+    if (!employee) {
+      return [];
+    }
+
+    const employeeUuid = employee.id;
+
+    const supabase = await createAdminClient();
+
+    // Get existing balances from Supabase
+    const { data: dbBalances, error } = await supabase
+      .from("employee_leave_balances")
+      .select("*,leave_type:leave_types(*)")
+      .eq("employee_id", employeeUuid)
+      .eq("year", year);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    let balances: EmployeeLeaveBalance[] = (dbBalances || [])
+      .filter(
+        (balance: any) =>
+          balance.leave_type?.is_active &&
+          (balance.leave_type?.code === "CL" ||
+            balance.leave_type?.code === "SL")
+      )
+      .map((balance: any) => ({
+        ...balance,
+        leave_type: balance.leave_type,
+      })) as EmployeeLeaveBalance[];
+
+    /*
+    * IMPORTANT:
+    * Load leave types from Supabase.
+    *
+    * This gives us UUIDs such as:
+    *
+    * 550e8400-e29b-41d4-a716-446655440000
+    *
+    * instead of:
+    *
+    * lt-cl
+    * lt-sl
+    */
+    const activeLeaveTypes = (await this.getLeaveTypes()).filter(
+      (lt) =>
+        lt.is_active &&
+        (lt.code === "CL" || lt.code === "SL")
     );
 
-    // If balances not initialized for this employee, create them from active leave types
-    if (balances.length === 0) {
-      balances = cache.leaveTypes
-        .filter((lt) => lt.is_active && lt.code !== "LOP")
-        .map((lt) => ({
-          id: `bal-${employeeId}-${lt.code}-${year}`,
-          employee_id: employeeId,
-          leave_type_id: lt.id,
-          year,
-          allocated_days: lt.annual_quota,
-          used_days: 0,
-          balance_days: lt.annual_quota,
-          leave_type: lt,
-        }));
-      cache.leaveBalances.push(...balances);
-    } else {
-      balances = balances.map((b) => ({
-        ...b,
-        leave_type: cache.leaveTypes.find((lt) => lt.id === b.leave_type_id),
-      }));
+    const existingBalanceTypeIds = new Set(
+      balances.map((balance) => balance.leave_type_id)
+    );
+
+    const missingLeaveTypes = activeLeaveTypes.filter(
+      (lt) => !existingBalanceTypeIds.has(lt.id)
+    );
+
+    const rows = missingLeaveTypes.map((lt) => ({
+      employee_id: employeeUuid,
+      leave_type_id: lt.id,
+      year,
+      allocated_days: lt.annual_quota,
+      used_days: 0,
+      balance_days: lt.annual_quota,
+    }));
+
+    if (rows.length > 0) {
+      const { data: createdBalances, error: insertError } = await supabase
+        .from("employee_leave_balances")
+        .upsert(rows, {
+          onConflict: "employee_id,leave_type_id,year",
+        })
+        .select();
+
+      if (insertError) {
+        throw new Error(insertError.message);
+      }
+
+      const createdWithLeaveTypes = (createdBalances || []).map(
+        (balance: any) => ({
+          ...balance,
+          leave_type: activeLeaveTypes.find(
+            (lt) => lt.id === balance.leave_type_id
+          ),
+        })
+      );
+
+      balances = [
+        ...balances,
+        ...createdWithLeaveTypes,
+      ] as EmployeeLeaveBalance[];
     }
+
+    // Add leave type information
+    balances = balances.map((balance: any) => ({
+      ...balance,
+      leave_type:
+        balance.leave_type ||
+        activeLeaveTypes.find(
+          (lt) => lt.id === balance.leave_type_id
+        ),
+    }));
+
+    // Keep cache synchronized
+    cache.leaveBalances = [
+      ...cache.leaveBalances.filter(
+        (b) =>
+          !(
+            b.employee_id === employeeUuid &&
+            b.year === year
+          )
+      ),
+      ...balances,
+    ];
 
     return balances;
   }
 
   static async getLeaveRequests(employeeId?: string): Promise<LeaveRequest[]> {
     const cache = getCache();
-    try {
-      const supabase = await createAdminClient();
-      let query = supabase
-        .from("leave_requests")
-        .select("*, employee:employees(*), leave_type:leave_types(*)")
-        .order("created_at", { ascending: false });
-      if (employeeId) query = query.eq("employee_id", employeeId);
-      const { data, error } = await query;
-      if (error) throw error;
-      if (data) return data as LeaveRequest[];
-    } catch (error) {
-      console.warn("getLeaveRequests database warning:", error);
+    let requests = [...cache.leaveRequests];
+
+    let employeeUuid: string | undefined;
+
+    if (employeeId) {
+      const employee = await this.getEmployeeById(employeeId);
+
+      if (!employee) {
+        return [];
+      }
+
+      employeeUuid = employee.id;
+
+      requests = requests.filter(
+        (request) => request.employee_id === employeeUuid
+      );
     }
 
-    let reqs = employeeId
-      ? cache.leaveRequests.filter((r) => r.employee_id === employeeId)
-      : [...cache.leaveRequests];
-    return reqs
-      .map((r) => ({ ...r, leave_type: cache.leaveTypes.find((lt) => lt.id === r.leave_type_id) }))
-      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    try {
+      const supabase = await createAdminClient();
+
+      let query = supabase
+        .from("leave_requests")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (employeeUuid) {
+        query = query.eq("employee_id", employeeUuid);
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        throw error;
+      }
+
+      if (data) {
+        return data as LeaveRequest[];
+      }
+    } catch (error) {
+      console.warn("getLeaveRequests DB fallback:", error);
+    }
+
+    return requests;
   }
 
   static async createLeaveRequest({
@@ -1262,12 +1749,32 @@ export class DataStore {
     reason: string;
   }): Promise<LeaveRequest> {
     const cache = getCache();
+    const supabase = await createAdminClient();
+
     const employee = await this.getEmployeeById(employeeId);
-    const leaveType = cache.leaveTypes.find((lt) => lt.id === leaveTypeId);
+
+    if (!employee) {
+      throw new Error("Employee not found");
+    }
+
+    const employeeUuid = employee.id;
+
+    const { data: leaveType, error: leaveTypeError } = await supabase
+    .from("leave_types")
+    .select("*")
+    .eq("id", leaveTypeId)
+    .maybeSingle();
+
+    if (leaveTypeError) {
+      throw new Error(leaveTypeError.message);
+    }
+    if (!leaveType ||  !leaveType.is_active ||  (leaveType.code !== "CL" && leaveType.code !== "SL")) {
+      throw new Error("Only CL and SL leave types are allowed");
+    }
 
     const newRequest: LeaveRequest = {
       id: "lr-" + Date.now(),
-      employee_id: employeeId,
+      employee_id: employeeUuid,
       leave_type_id: leaveTypeId,
       start_date: startDate,
       end_date: endDate,
@@ -1280,11 +1787,10 @@ export class DataStore {
       leave_type: leaveType,
     };
 
-    const supabase = await createAdminClient();
     const { data, error } = await supabase
       .from("leave_requests")
       .insert({
-        employee_id: employeeId,
+        employee_id: employeeUuid,
         leave_type_id: leaveTypeId,
         start_date: startDate,
         end_date: endDate,
@@ -1297,6 +1803,9 @@ export class DataStore {
       .single();
     if (error) throw error;
     if (!data) throw new Error("Leave request was not returned after insert");
+    const createdRequest = data as LeaveRequest;
+
+    cache.leaveRequests.unshift(createdRequest);
     return data as LeaveRequest;
   }
 
@@ -1312,24 +1821,116 @@ export class DataStore {
     rejectionReason?: string;
   }): Promise<boolean> {
     const cache = getCache();
-    const req = cache.leaveRequests.find((r) => r.id === requestId);
-    if (!req) return false;
+
+    const supabase = await createAdminClient();
+
+    const { data: dbReq, error: requestError } = await supabase
+      .from("leave_requests")
+      .select("*")
+      .eq("id", requestId)
+      .single();
+
+    if (requestError) {
+      throw new Error(requestError.message);
+    }
+
+    if (!dbReq) {
+      return false;
+    }
+
+    if (dbReq.status !== "pending") {
+      throw new Error(`Leave request has already been ${dbReq.status}`)
+    }
+
+    const reviewedAt = new Date().toISOString();
+
+    // Keep cache in sync
+    const req = dbReq as LeaveRequest;
 
     req.status = status;
     req.reviewed_by = reviewerId;
-    req.reviewed_at = new Date().toISOString();
-    if (rejectionReason) req.rejection_reason = rejectionReason;
+    req.reviewed_at = reviewedAt;
+    req.rejection_reason = rejectionReason || null;
+
+    const cachedRequest = cache.leaveRequests.find(
+      (r) => r.id === requestId
+    );
+
+    if (cachedRequest) {
+      cachedRequest.status = status;
+      cachedRequest.reviewed_by = reviewerId;
+      cachedRequest.reviewed_at = reviewedAt;
+      cachedRequest.rejection_reason = rejectionReason || null;
+    }
 
     // If approved and not LOP, deduct from balance
     if (status === "approved") {
       const year = new Date(req.start_date).getFullYear();
-      const balance = cache.leaveBalances.find(
-        (b) => b.employee_id === req.employee_id && b.leave_type_id === req.leave_type_id && b.year === year
-      );
-      if (balance) {
-        balance.used_days += req.total_days;
-        balance.balance_days = Math.max(0, balance.allocated_days - balance.used_days);
+
+      const { data: dbBalance, error: balanceError } = await supabase
+        .from("employee_leave_balances")
+        .select("*")
+        .eq("employee_id", req.employee_id)
+        .eq("leave_type_id", req.leave_type_id)
+        .eq("year", year)
+        .maybeSingle();
+
+      if (balanceError) {
+        throw new Error(balanceError.message);
       }
+
+        if (!dbBalance) {
+          throw new Error("Leave balance not found for this employee and leave type");
+        }
+
+        const availableDays = dbBalance.balance_days;
+        if (availableDays < req.total_days) {
+          throw new Error(`Insufficient leave balance. Available: ${availableDays}, Requested: ${req.total_days}`);
+        }
+
+
+        const usedDays = dbBalance.used_days + req.total_days;
+        const balanceDays = dbBalance.allocated_days - usedDays;
+        const { error: balanceUpdateError } = await supabase
+          .from("employee_leave_balances")
+          .update({
+            used_days: usedDays,
+            balance_days: balanceDays,
+          })
+          .eq("employee_id", req.employee_id)
+          .eq("leave_type_id", req.leave_type_id)
+          .eq("year", year);
+
+        if (balanceUpdateError) {
+          throw new Error(balanceUpdateError.message);
+        }
+
+        // Keep cache synchronized
+        const cacheBalance = cache.leaveBalances.find(
+          (b) =>
+            b.employee_id === req.employee_id &&
+            b.leave_type_id === req.leave_type_id &&
+            b.year === year
+        );
+
+        if (cacheBalance) {
+          cacheBalance.used_days = usedDays;
+          cacheBalance.balance_days = balanceDays;
+        }
+    }
+
+    const { error: updateError } = await supabase
+      .from("leave_requests")
+      .update({
+        status,
+        reviewed_by: reviewerId,
+        reviewed_at: reviewedAt,
+        rejection_reason: rejectionReason || null,
+      })
+      .eq("id", requestId);
+
+    if (updateError) {
+      throw new Error(updateError.message);
     }
 
     return true;
@@ -1365,7 +1966,14 @@ export class DataStore {
     const cache = getCache();
     let slips = [...cache.payslips];
     if (employeeId) {
-      slips = slips.filter((p) => p.employee_id === employeeId);
+      const employee = await this.getEmployeeById(employeeId);
+       if (!employee) {
+        return [];
+      }
+
+      const employeeUuid = employee.id;
+
+      slips = slips.filter((p) => p.employee_id === employeeUuid);
     }
     if (month) {
       slips = slips.filter((p) => p.payroll_month === month);
@@ -1378,10 +1986,59 @@ export class DataStore {
 
   static async getPayslipById(id: string): Promise<Payslip | null> {
     const cache = getCache();
+
+    // First try Supabase
+    try {
+      const supabase = await createAdminClient();
+
+      const { data, error } = await supabase
+        .from("payslips")
+        .select("*")
+        .eq("id", id)
+        .maybeSingle();
+
+      if (error) {
+        throw error;
+      }
+
+      if (data) {
+        const employee = await this.getEmployeeById(data.employee_id);
+
+        const payslip: Payslip = {
+          ...(data as Payslip),
+          employee: employee || undefined,
+        };
+
+        // Keep cache synchronized
+        const existingIndex = cache.payslips.findIndex(
+          (p) => p.id === id
+        );
+
+        if (existingIndex >= 0) {
+          cache.payslips[existingIndex] = payslip;
+        } else {
+          cache.payslips.unshift(payslip);
+        }
+
+        return payslip;
+      }
+    } catch (error) {
+      console.warn("getPayslipById database warning:", error);
+    }
+
+    // Fallback to cache
     const slip = cache.payslips.find((p) => p.id === id);
-    if (!slip) return null;
+
+    if (!slip) {
+      return null;
+    }
+
     const employee = await this.getEmployeeById(slip.employee_id);
-    return { ...slip, employee: employee || undefined };
+
+    return {
+      ...slip,
+      employee: employee || undefined,
+    };
   }
 
   /**
@@ -1396,6 +2053,8 @@ export class DataStore {
     year: number;
   }): Promise<{ generatedCount: number; payslips: Payslip[] }> {
     const cache = getCache();
+    const supabase = await createAdminClient();
+
     const employees = await this.getEmployees();
     const activeComponents = cache.salaryComponents;
 
@@ -1403,6 +2062,7 @@ export class DataStore {
       "January", "February", "March", "April", "May", "June",
       "July", "August", "September", "October", "November", "December"
     ];
+
     const monthName = monthNames[month - 1];
     const totalDaysInMonth = new Date(year, month, 0).getDate();
 
@@ -1410,18 +2070,30 @@ export class DataStore {
 
     for (const emp of employees) {
       if (emp.status !== "active") continue;
-      const baseSalary = emp.salary || 50000; // default ₹50,000 if not set
+
+      const baseSalary = emp.salary || 50000;
 
       // Calculate LOP days from approved leave requests
       const empLeaves = cache.leaveRequests.filter((lr) => {
-        if (lr.employee_id !== emp.id || lr.status !== "approved") return false;
+        if (lr.employee_id !== emp.id || lr.status !== "approved") {
+          return false;
+        }
+
         const start = new Date(lr.start_date);
-        return start.getFullYear() === year && start.getMonth() + 1 === month;
+
+        return (
+          start.getFullYear() === year &&
+          start.getMonth() + 1 === month
+        );
       });
 
       let lopDays = 0;
+
       for (const req of empLeaves) {
-        const type = cache.leaveTypes.find((lt) => lt.id === req.leave_type_id);
+        const type = cache.leaveTypes.find(
+          (lt) => lt.id === req.leave_type_id
+        );
+
         if (type && !type.is_paid) {
           lopDays += req.total_days;
         }
@@ -1429,13 +2101,20 @@ export class DataStore {
 
       // Also factor half-days from attendance
       const prefix = `${year}-${String(month).padStart(2, "0")}`;
+
       const attLogs = cache.attendanceLogs.filter(
-        (a) => a.employee_id === emp.id && a.attendance_date.startsWith(prefix)
+        (a) =>
+          a.employee_id === emp.id &&
+          a.attendance_date.startsWith(prefix)
       );
-      const halfDays = attLogs.filter((a) => a.status === "half_day").length;
+
+      const halfDays = attLogs.filter(
+        (a) => a.status === "half_day"
+      ).length;
+
       lopDays += halfDays * 0.5;
 
-      const workingDays = Math.min(totalDaysInMonth, 26); // standard 26 working days
+      const workingDays = Math.min(totalDaysInMonth, 26);
       const presentDays = Math.max(0, workingDays - lopDays);
 
       const breakdown = calculateSalaryBreakdown({
@@ -1445,20 +2124,24 @@ export class DataStore {
         activeComponents,
       });
 
-      // Check if payslip already exists for this month/year, replace if so
-      const existingIdx = cache.payslips.findIndex(
-        (p) => p.employee_id === emp.id && p.payroll_month === month && p.payroll_year === year
-      );
+      const paidLeaves = empLeaves
+        .filter((l) => l.leave_type?.is_paid)
+        .reduce((acc, c) => acc + c.total_days, 0);
 
-      const payslip: Payslip = {
-        id: `ps-${emp.id}-${year}-${month}`,
+      /*
+      * Persist payslip in Supabase.
+      *
+      * employee_id = employees.id (UUID)
+      * Do NOT use emp.employee_id (TN5000 etc.)
+      */
+      const payslipData = {
         employee_id: emp.id,
         payroll_month: month,
         payroll_year: year,
         month_name: monthName,
         working_days: workingDays,
         present_days: presentDays,
-        paid_leaves: empLeaves.filter((l) => l.leave_type?.is_paid).reduce((acc, c) => acc + c.total_days, 0),
+        paid_leaves: paidLeaves,
         lop_days: lopDays,
         gross_salary: breakdown.grossSalary,
         lop_deduction: breakdown.lopDeduction,
@@ -1468,9 +2151,41 @@ export class DataStore {
         earnings_breakup: breakdown.earningsBreakdown,
         deductions_breakup: breakdown.deductionsBreakdown,
         payment_status: "processed",
-        created_at: new Date().toISOString(),
+      };
+
+      /*
+      * Because the database has:
+      * UNIQUE(employee_id, payroll_month, payroll_year)
+      *
+      * upsert will replace the existing payroll for the same
+      * employee/month/year instead of creating duplicates.
+      */
+      const { data: savedPayslip, error: payslipError } = await supabase
+        .from("payslips")
+        .upsert(payslipData, {
+          onConflict: "employee_id,payroll_month,payroll_year",
+        })
+        .select()
+        .single();
+
+      if (payslipError) {
+        throw new Error(
+          `Failed to generate payslip for ${emp.employee_id}: ${payslipError.message}`
+        );
+      }
+
+      const payslip = {
+        ...(savedPayslip as Payslip),
         employee: emp,
       };
+
+      // Keep cache synchronized
+      const existingIdx = cache.payslips.findIndex(
+        (p) =>
+          p.employee_id === emp.id &&
+          p.payroll_month === month &&
+          p.payroll_year === year
+      );
 
       if (existingIdx >= 0) {
         cache.payslips[existingIdx] = payslip;
@@ -1481,6 +2196,9 @@ export class DataStore {
       generatedSlips.push(payslip);
     }
 
-    return { generatedCount: generatedSlips.length, payslips: generatedSlips };
+    return {
+      generatedCount: generatedSlips.length,
+      payslips: generatedSlips,
+    };
   }
 }

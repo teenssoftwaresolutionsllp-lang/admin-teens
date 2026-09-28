@@ -631,7 +631,7 @@ const handleSubmit = async (e: React.FormEvent) => {
 
             <div ref={companyRef} className="relative">
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                Company Name
+                Client Name
               </label>
 
               <input
