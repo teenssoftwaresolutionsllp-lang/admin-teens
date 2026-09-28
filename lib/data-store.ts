@@ -15,87 +15,87 @@ import {
 import { calculateSalaryBreakdown, evaluateAttendancePunch } from "./calculations";
 
 // Default seed data for immediate zero-config operation
-const DEFAULT_HOLIDAY_CALENDARS: HolidayCalendar[] = [
-  {
-    id: "cal-in-2026",
-    name: "India Standard Holidays 2026",
-    country_code: "IN",
-    country_name: "India",
-    timezone: "Asia/Kolkata",
-    holidays: [
-      { id: "h1", calendar_id: "cal-in-2026", holiday_date: "2026-01-26", title: "Republic Day" },
-      { id: "h2", calendar_id: "cal-in-2026", holiday_date: "2026-03-25", title: "Holi" },
-      { id: "h3", calendar_id: "cal-in-2026", holiday_date: "2026-08-15", title: "Independence Day" },
-      { id: "h4", calendar_id: "cal-in-2026", holiday_date: "2026-10-02", title: "Gandhi Jayanti" },
-      { id: "h5", calendar_id: "cal-in-2026", holiday_date: "2026-11-08", title: "Diwali" },
-    ],
-  },
-  {
-    id: "cal-us-2026",
-    name: "US Federal Holidays 2026",
-    country_code: "US",
-    country_name: "United States",
-    timezone: "America/New_York",
-    holidays: [
-      { id: "h6", calendar_id: "cal-us-2026", holiday_date: "2026-01-01", title: "New Year's Day" },
-      { id: "h7", calendar_id: "cal-us-2026", holiday_date: "2026-07-04", title: "Independence Day" },
-      { id: "h8", calendar_id: "cal-us-2026", holiday_date: "2026-09-07", title: "Labor Day" },
-      { id: "h9", calendar_id: "cal-us-2026", holiday_date: "2026-11-26", title: "Thanksgiving Day" },
-      { id: "h10", calendar_id: "cal-us-2026", holiday_date: "2026-12-25", title: "Christmas Day" },
-    ],
-  },
-];
+// const DEFAULT_HOLIDAY_CALENDARS: HolidayCalendar[] = [
+//   {
+//     id: "cal-in-2026",
+//     name: "India Standard Holidays 2026",
+//     country_code: "IN",
+//     country_name: "India",
+//     timezone: "Asia/Kolkata",
+//     holidays: [
+//       { id: "h1", calendar_id: "cal-in-2026", holiday_date: "2026-01-26", title: "Republic Day" },
+//       { id: "h2", calendar_id: "cal-in-2026", holiday_date: "2026-03-25", title: "Holi" },
+//       { id: "h3", calendar_id: "cal-in-2026", holiday_date: "2026-08-15", title: "Independence Day" },
+//       { id: "h4", calendar_id: "cal-in-2026", holiday_date: "2026-10-02", title: "Gandhi Jayanti" },
+//       { id: "h5", calendar_id: "cal-in-2026", holiday_date: "2026-11-08", title: "Diwali" },
+//     ],
+//   },
+//   {
+//     id: "cal-us-2026",
+//     name: "US Federal Holidays 2026",
+//     country_code: "US",
+//     country_name: "United States",
+//     timezone: "America/New_York",
+//     holidays: [
+//       { id: "h6", calendar_id: "cal-us-2026", holiday_date: "2026-01-01", title: "New Year's Day" },
+//       { id: "h7", calendar_id: "cal-us-2026", holiday_date: "2026-07-04", title: "Independence Day" },
+//       { id: "h8", calendar_id: "cal-us-2026", holiday_date: "2026-09-07", title: "Labor Day" },
+//       { id: "h9", calendar_id: "cal-us-2026", holiday_date: "2026-11-26", title: "Thanksgiving Day" },
+//       { id: "h10", calendar_id: "cal-us-2026", holiday_date: "2026-12-25", title: "Christmas Day" },
+//     ],
+//   },
+// ];
 
-const DEFAULT_PROJECTS: Project[] = [
-  {
-    id: "proj-1",
-    name: "FinTech Enterprise Platform",
-    client_country: "India",
-    timezone: "Asia/Kolkata",
-    calendar_id: "cal-in-2026",
-    shift_start_time: "09:00",
-    shift_end_time: "18:00",
-    grace_period_minutes: 30,
-    half_day_cutoff_minutes: 150,
-  },
-  {
-    id: "proj-2",
-    name: "US Healthcare Claims Engine",
-    client_country: "United States",
-    timezone: "America/New_York",
-    calendar_id: "cal-us-2026",
-    shift_start_time: "18:30",
-    shift_end_time: "03:30",
-    grace_period_minutes: 30,
-    half_day_cutoff_minutes: 150,
-  },
-  {
-    id: "proj-bench",
-    name: "Internal Engineering & Bench",
-    client_country: "India",
-    timezone: "Asia/Kolkata",
-    calendar_id: "cal-in-2026",
-    shift_start_time: "09:30",
-    shift_end_time: "18:30",
-    grace_period_minutes: 30,
-    half_day_cutoff_minutes: 150,
-  },
-];
+// const DEFAULT_PROJECTS: Project[] = [
+//   {
+//     id: "proj-1",
+//     name: "FinTech Enterprise Platform",
+//     client_country: "India",
+//     timezone: "Asia/Kolkata",
+//     calendar_id: "cal-in-2026",
+//     shift_start_time: "09:00",
+//     shift_end_time: "18:00",
+//     grace_period_minutes: 30,
+//     half_day_cutoff_minutes: 150,
+//   },
+//   {
+//     id: "proj-2",
+//     name: "US Healthcare Claims Engine",
+//     client_country: "United States",
+//     timezone: "America/New_York",
+//     calendar_id: "cal-us-2026",
+//     shift_start_time: "18:30",
+//     shift_end_time: "03:30",
+//     grace_period_minutes: 30,
+//     half_day_cutoff_minutes: 150,
+//   },
+//   {
+//     id: "proj-bench",
+//     name: "Internal Engineering & Bench",
+//     client_country: "India",
+//     timezone: "Asia/Kolkata",
+//     calendar_id: "cal-in-2026",
+//     shift_start_time: "09:30",
+//     shift_end_time: "18:30",
+//     grace_period_minutes: 30,
+//     half_day_cutoff_minutes: 150,
+//   },
+// ];
 
-const DEFAULT_LEAVE_TYPES: LeaveType[] = [
-  { id: "lt-cl", name: "Casual Leave", code: "CL", annual_quota: 12, is_paid: true, is_active: true, description: "For personal emergencies and errands" },
-  { id: "lt-sl", name: "Sick Leave", code: "SL", annual_quota: 10, is_paid: true, is_active: true, description: "For medical recovery with prescription" },
-];
+// const DEFAULT_LEAVE_TYPES: LeaveType[] = [
+//   { id: "lt-cl", name: "Casual Leave", code: "CL", annual_quota: 12, is_paid: true, is_active: true, description: "For personal emergencies and errands" },
+//   { id: "lt-sl", name: "Sick Leave", code: "SL", annual_quota: 10, is_paid: true, is_active: true, description: "For medical recovery with prescription" },
+// ];
 
-const DEFAULT_SALARY_COMPONENTS: SalaryComponent[] = [
-  { id: "sc-basic", name: "Basic Salary", code: "BASIC", type: "earning", calculation_type: "percentage_of_gross", value: 50, affects_lop: true, is_active: true, is_statutory: true, description: "50% of monthly CTC" },
-  { id: "sc-hra", name: "House Rent Allowance (HRA)", code: "HRA", type: "earning", calculation_type: "percentage_of_basic", value: 40, affects_lop: true, is_active: true, is_statutory: true, description: "40% of Basic Pay" },
-  { id: "sc-special", name: "Special Allowance", code: "SPECIAL_ALLOWANCE", type: "earning", calculation_type: "fixed", value: 0, affects_lop: true, is_active: true, is_statutory: false, description: "Balancing component of Gross Salary" },
-  { id: "sc-pf", name: "Provident Fund (PF)", code: "PF", type: "deduction", calculation_type: "percentage_of_basic", value: 12, affects_lop: false, is_active: true, is_statutory: true, description: "12% of Basic Pay" },
-  { id: "sc-esi", name: "Employee State Insurance (ESI)", code: "ESI", type: "deduction", calculation_type: "percentage_of_gross", value: 0.75, affects_lop: false, is_active: true, is_statutory: true, description: "0.75% of Gross if Gross <= ₹21,000" },
-  { id: "sc-pt", name: "Professional Tax (PT)", code: "PT", type: "deduction", calculation_type: "fixed", value: 200, affects_lop: false, is_active: true, is_statutory: true, description: "Standard monthly statutory state tax (₹200)" },
-  { id: "sc-tds", name: "Tax Deducted at Source (TDS)", code: "TDS", type: "deduction", calculation_type: "percentage_of_gross", value: 5, affects_lop: false, is_active: false, is_statutory: true, description: "Income Tax deduction" },
-];
+// const DEFAULT_SALARY_COMPONENTS: SalaryComponent[] = [
+//   { id: "sc-basic", name: "Basic Salary", code: "BASIC", type: "earning", calculation_type: "percentage_of_gross", value: 50, affects_lop: true, is_active: true, is_statutory: true, description: "50% of monthly CTC" },
+//   { id: "sc-hra", name: "House Rent Allowance (HRA)", code: "HRA", type: "earning", calculation_type: "percentage_of_basic", value: 40, affects_lop: true, is_active: true, is_statutory: true, description: "40% of Basic Pay" },
+//   { id: "sc-special", name: "Special Allowance", code: "SPECIAL_ALLOWANCE", type: "earning", calculation_type: "fixed", value: 0, affects_lop: true, is_active: true, is_statutory: false, description: "Balancing component of Gross Salary" },
+//   { id: "sc-pf", name: "Provident Fund (PF)", code: "PF", type: "deduction", calculation_type: "percentage_of_basic", value: 12, affects_lop: false, is_active: true, is_statutory: true, description: "12% of Basic Pay" },
+//   { id: "sc-esi", name: "Employee State Insurance (ESI)", code: "ESI", type: "deduction", calculation_type: "percentage_of_gross", value: 0.75, affects_lop: false, is_active: true, is_statutory: true, description: "0.75% of Gross if Gross <= ₹21,000" },
+//   { id: "sc-pt", name: "Professional Tax (PT)", code: "PT", type: "deduction", calculation_type: "fixed", value: 200, affects_lop: false, is_active: true, is_statutory: true, description: "Standard monthly statutory state tax (₹200)" },
+//   { id: "sc-tds", name: "Tax Deducted at Source (TDS)", code: "TDS", type: "deduction", calculation_type: "percentage_of_gross", value: 5, affects_lop: false, is_active: false, is_statutory: true, description: "Income Tax deduction" },
+// ];
 
 // const DEFAULT_EMPLOYEES: Employee[] = [
 //   {
@@ -230,14 +230,14 @@ function getCache() {
     global.__hrmsCache = {
       employees,
       changeRequests,
-      projects: [...DEFAULT_PROJECTS],
-      holidayCalendars: [...DEFAULT_HOLIDAY_CALENDARS],
+      projects: [],
+      holidayCalendars: [],
       attendanceLogs,
       regularizations: [],
-      leaveTypes: [...DEFAULT_LEAVE_TYPES],
+      leaveTypes: [],
       leaveBalances,
       leaveRequests,
-      salaryComponents: [...DEFAULT_SALARY_COMPONENTS],
+      salaryComponents: [],
       payslips,
     };
   }
@@ -484,7 +484,7 @@ export class DataStore {
       client_type: empData.client_type || null,
       company_name: empData.company_name || null,
       status: empData.status || "active",
-      salary: empData.salary || 50000,
+      salary: empData.salary ?? 0,
       bank_name: empData.bank_name || null,
       bank_account_number: empData.bank_account_number || null,
       ifsc_code: empData.ifsc_code || null,
@@ -1591,12 +1591,101 @@ export class DataStore {
     }
   }
 
-  static async updateLeaveType(id: string, updates: Partial<LeaveType>): Promise<LeaveType | null> {
+  static async updateLeaveType(
+    id: string,
+    updates: Partial<LeaveType>
+  ): Promise<LeaveType | null> {
     const cache = getCache();
+    const supabase = await createAdminClient();
+
+    // Update leave type in Supabase
+    const { data: updatedLeaveType, error } = await supabase
+      .from("leave_types")
+      .update(updates)
+      .eq("id", id)
+      .select("*")
+      .single();
+
+    if (error) {
+      console.error("updateLeaveType error:", error);
+      throw new Error(error.message);
+    }
+
+    if (!updatedLeaveType) {
+      return null;
+    }
+
+    // Update local cache
     const idx = cache.leaveTypes.findIndex((lt) => lt.id === id);
-    if (idx < 0) return null;
-    cache.leaveTypes[idx] = { ...cache.leaveTypes[idx], ...updates };
-    return cache.leaveTypes[idx];
+
+    if (idx >= 0) {
+      cache.leaveTypes[idx] = updatedLeaveType as LeaveType;
+    } else {
+      cache.leaveTypes.push(updatedLeaveType as LeaveType);
+    }
+
+    // When annual quota changes, update employee balances
+    if (updates.annual_quota !== undefined) {
+      const year = new Date().getFullYear();
+      const newQuota = Number(updates.annual_quota);
+
+      const { data: balances, error: balanceFetchError } = await supabase
+        .from("employee_leave_balances")
+        .select("id, employee_id, leave_type_id, year, allocated_days, used_days")
+        .eq("leave_type_id", id)
+        .eq("year", year);
+
+      if (balanceFetchError) {
+        console.error(
+          "Failed to fetch employee leave balances:",
+          balanceFetchError
+        );
+        throw new Error(balanceFetchError.message);
+      }
+
+      for (const balance of balances || []) {
+        const usedDays = Number(balance.used_days || 0);
+
+        // New remaining balance
+        const newBalanceDays = Math.max(newQuota - usedDays, 0);
+
+        const { error: balanceUpdateError } = await supabase
+          .from("employee_leave_balances")
+          .update({
+            allocated_days: newQuota,
+            balance_days: newBalanceDays,
+          })
+          .eq("id", balance.id);
+
+        if (balanceUpdateError) {
+          console.error(
+            "Failed to update employee leave balance:",
+            balanceUpdateError
+          );
+          throw new Error(balanceUpdateError.message);
+        }
+      }
+
+      // Update cache balances too
+      cache.leaveBalances = cache.leaveBalances.map((balance) => {
+        if (
+          balance.leave_type_id === id &&
+          balance.year === year
+        ) {
+          const usedDays = Number(balance.used_days || 0);
+
+          return {
+            ...balance,
+            allocated_days: newQuota,
+            balance_days: Math.max(newQuota - usedDays, 0),
+          };
+        }
+
+        return balance;
+      });
+    }
+
+    return updatedLeaveType as LeaveType;
   }
 
   static async getLeaveBalances(
@@ -2101,20 +2190,22 @@ export class DataStore {
     for (const emp of employees) {
       if (emp.status !== "active") continue;
 
-      const baseSalary = emp.salary || 50000;
+        const annualCtc = emp.salary ?? 0;
 
-      // Calculate LOP days from approved leave requests
-      const empLeaves = cache.leaveRequests.filter((lr) => {
-        if (lr.employee_id !== emp.id || lr.status !== "approved") {
-          return false;
-        }
+        const baseSalary = (annualCtc * 100000) / 12;
 
-        const start = new Date(lr.start_date);
+        // Calculate LOP days from approved leave requests
+        const empLeaves = cache.leaveRequests.filter((lr) => {
+          if (lr.employee_id !== emp.id || lr.status !== "approved") {
+            return false;
+          }
 
-        return (
-          start.getFullYear() === year &&
-          start.getMonth() + 1 === month
-        );
+          const start = new Date(lr.start_date);
+
+          return (
+            start.getFullYear() === year &&
+            start.getMonth() + 1 === month
+          );
       });
 
       let lopDays = 0;

@@ -12,12 +12,15 @@ export default async function AdminLeavesPage() {
   const leaveTypes = await DataStore.getLeaveTypes();
   const leaveRequests = await DataStore.getLeaveRequests();
   const employees = await DataStore.getEmployees();
-
+  const leaveBalances = ( await Promise.all(
+    employees.map((employee) => DataStore.getLeaveBalances(employee.id)))
+  ).flat();
   return (
     <LeaveManager
       leaveTypes={leaveTypes}
       leaveRequests={leaveRequests}
       employees={employees}
+      leaveBalances={leaveBalances}
     />
   );
 }

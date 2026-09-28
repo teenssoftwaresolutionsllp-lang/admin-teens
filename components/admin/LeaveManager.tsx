@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { LeaveType, LeaveRequest, Employee } from "@/lib/types";
+import { LeaveType, LeaveRequest, Employee, EmployeeLeaveBalance } from "@/lib/types";
 import { Calendar, CheckCircle2, Sliders, User } from "lucide-react";
 import Link from "next/link";
 
@@ -9,12 +9,14 @@ interface LeaveManagerProps {
   leaveTypes: LeaveType[];
   leaveRequests: LeaveRequest[];
   employees: Employee[];
+  leaveBalances: EmployeeLeaveBalance[];
 }
 
 export default function LeaveManager({
   leaveTypes: initialLeaveTypes,
   leaveRequests,
   employees,
+  leaveBalances,
 }: LeaveManagerProps) {
   const [types, setTypes] = useState<LeaveType[]>(initialLeaveTypes);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -25,13 +27,71 @@ export default function LeaveManager({
     );
     setSuccessMsg("Leave policy updated.");
   };
+  const handleUpdateQuota = async (id: string, quota: number) => {
+  if (quota < 0) return;
+    try {
+      const response = await fetch(`/api/leave-types/${id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          annual_quota: quota,
+        }),
+      });
 
-  const handleUpdateQuota = (id: string, quota: number) => {
-    setTypes((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, annual_quota: quota } : t))
-    );
-    setSuccessMsg("Annual quota updated.");
+      if (!response.ok) {
+        throw new Error("Failed to update leave quota");
+      }
+
+      const updatedLeaveType: LeaveType = await response.json();
+
+      setTypes((prev) =>
+        prev.map((t) =>
+          t.id === id
+            ? { ...t, annual_quota: updatedLeaveType.annual_quota }
+            : t
+        )
+      );
+
+      setSuccessMsg("Annual quota updated.");
+    } catch (error) {
+      console.error("Quota update error:", error);
+      setSuccessMsg(null);
+    }
   };
+
+    const getBalance = (employeeId: string, leaveCode: string) => {
+    const leaveType = types.find((type) => type.code === leaveCode);
+
+    if (!leaveType) {
+        return {
+          allocated: 0,
+          used: 0,
+          remaining: 0,
+        };
+      }
+
+      const balance = (leaveBalances ?? []).find(
+        (item) =>
+          item.employee_id === employeeId &&
+          item.leave_type_id === leaveType.id
+      );
+
+      if (!balance) {
+        return {
+          allocated: leaveType.annual_quota,
+          used: 0,
+          remaining: leaveType.annual_quota,
+        };
+      }
+
+      return {
+        allocated: balance.allocated_days,
+        used: balance.used_days,
+        remaining: balance.balance_days,
+      };
+    };
 
   const pendingLeaves = leaveRequests.filter((r) => r.status === "pending");
 
@@ -163,7 +223,6 @@ export default function LeaveManager({
                 <th className="py-3.5 px-5">Employee</th>
                 <th className="py-3.5 px-4">Casual Leave (CL)</th>
                 <th className="py-3.5 px-4">Sick Leave (SL)</th>
-                <th className="py-3.5 px-4">Earned Leave (EL)</th>
                 <th className="py-3.5 px-5">LOP Days Taken</th>
               </tr>
             </thead>
@@ -176,10 +235,25 @@ export default function LeaveManager({
                       {emp.employee_id}
                     </span>
                   </td>
-                  <td className="py-4 px-4 font-semibold text-slate-800 font-mono">10 / 12 remaining</td>
-                  <td className="py-4 px-4 font-semibold text-slate-800 font-mono">9 / 10 remaining</td>
-                  <td className="py-4 px-4 font-semibold text-slate-800 font-mono">15 / 15 remaining</td>
-                  <td className="py-4 px-5 font-bold text-amber-700 font-mono">0 days</td>
+                  {(() => {
+                    const cl = getBalance(emp.id, "CL");
+                    const sl = getBalance(emp.id, "SL");
+                    const lop = getBalance(emp.id, "LOP");
+
+                    return (
+                      <>
+                        <td className="py-4 px-4 font-semibold text-slate-800 font-mono">
+                          {cl.remaining} / {cl.allocated} remaining
+                        </td>
+                        <td className="py-4 px-4 font-semibold text-slate-800 font-mono">
+                          {sl.remaining} / {sl.allocated} remaining
+                        </td>
+                        <td className="py-4 px-5 font-bold text-amber-700 font-mono">
+                          {lop.used} days
+                        </td>
+                      </>
+                    );
+                  })()}
                 </tr>
               ))}
             </tbody>
