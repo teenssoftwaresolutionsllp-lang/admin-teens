@@ -41,6 +41,17 @@ export default async function EditEmployeePage(props: any) {
     notFound();
   }
 
+  const frozenStatuses = [
+    "resigned",
+    "laid_off",
+    "terminated",
+    "inactive",
+  ];
+
+  if (frozenStatuses.includes(employee.status?.toLowerCase())) {
+    redirect(`/dashboard/employees/${id}`);
+  }
+
   const projects = await DataStore.getProjects();
 
   let departments: Department[] = [];

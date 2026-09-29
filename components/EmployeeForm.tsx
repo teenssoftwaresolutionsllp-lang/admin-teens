@@ -198,6 +198,9 @@ const handleSubmit = async (e: React.FormEvent) => {
   e.preventDefault();
   setError([]);
 
+  // ---------------------------------------------------------
+  // VALIDATION FOR ADD MODE
+  // ---------------------------------------------------------
   if (mode === "add") {
     const missingFields: string[] = [];
 
@@ -222,7 +225,6 @@ const handleSubmit = async (e: React.FormEvent) => {
       missingFields.push("Employee ID");
     }
 
-
     // Employment
     if (!formData.department_id) {
       missingFields.push("Department");
@@ -244,10 +246,6 @@ const handleSubmit = async (e: React.FormEvent) => {
       missingFields.push("Probation End Date");
     }
 
-    // if (!formData.work_location?.trim()) {
-    //   missingFields.push("Work Location");
-    // }
-
     if (
       formData.salary === undefined ||
       formData.salary === null
@@ -255,6 +253,7 @@ const handleSubmit = async (e: React.FormEvent) => {
       missingFields.push("CTC");
     }
 
+    // Statutory
     if (esiEligible && !esiNumber.trim()) {
       missingFields.push("ESI Number");
     }
@@ -263,8 +262,12 @@ const handleSubmit = async (e: React.FormEvent) => {
       missingFields.push("P.T Number");
     }
 
+    // ---------------------------------------------------------
+    // SHOW VALIDATION ERRORS
+    // ---------------------------------------------------------
     if (missingFields.length > 0) {
       setError(missingFields);
+
       const employmentFields = [
         "Employee ID",
         "Department",
@@ -284,19 +287,29 @@ const handleSubmit = async (e: React.FormEvent) => {
         "P.T Number",
       ];
 
-      if (missingFields.some((field) => statutoryFields.includes(field))) {
+      if (
+        missingFields.some((field) =>
+          statutoryFields.includes(field)
+        )
+      ) {
         setActiveTab(2);
-      }
-      else if (missingFields.some((field) => employmentFields.includes(field))) {
+      } else if (
+        missingFields.some((field) =>
+          employmentFields.includes(field)
+        )
+      ) {
         setActiveTab(1);
-      }
-      else{
+      } else {
         setActiveTab(0);
       }
+
       return;
     }
   }
 
+  // ---------------------------------------------------------
+  // SAVE
+  // ---------------------------------------------------------
   setIsLoading(true);
 
   try {
@@ -307,47 +320,83 @@ const handleSubmit = async (e: React.FormEvent) => {
 
     const method = mode === "add" ? "POST" : "PUT";
 
+      const {
+        initial_password,
+        ...employeeData
+      } = formData;
+
+
+    let payload: any = {
+      ...employeeData,
+
+      // Client
+      client_type: formData.client_type || null,
+      company_name: formData.company_name || null,
+
+      // Statutory
+      esi_healthcare_eligible: esiEligible,
+      esi_number: esiEligible ? esiNumber : null,
+
+      pf_eligible: pfEligible,
+
+      pt_eligible: ptEligible,
+      pt_number: ptEligible ? ptNumber : null,
+
+      tds_eligible: tdsEligible,
+     
+    };
+
+    if (mode === "add") {
+      payload.initial_password = formData.initial_password || "Employee@123";
+    }
+
+    console.log("Saving employee:", payload);
+
     const res = await fetch(url, {
       method,
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        ...formData,
+      body: JSON.stringify(payload),
+    });
 
-        client_type: formData.client_type,
-        company_name: formData.company_name,
+    const data = await res.json();
 
-        esi_healthcare_eligible: esiEligible,
-        esi_number: esiEligible ? esiNumber : null,
-
-        pf_eligible: pfEligible,
-
-        pt_eligible: ptEligible,
-        pt_number: ptEligible ? ptNumber : null,
-
-        tds_eligible: tdsEligible,
-
-        initial_password: formData.initial_password,
-      }),
+    console.log("Employee API response:", {
+      status: res.status,
+      ok: res.ok,
+      data,
     });
 
     if (!res.ok) {
-      const data = await res.json();
-      throw new Error(data.error || "Failed to save employee");
+      throw new Error(
+        data.error || "Failed to save employee"
+      );
     }
 
-    const savedEmployee = await res.json();
+    toast.success(
+      mode === "add"
+        ? "Employee created successfully"
+        : "Employee profile updated successfully"
+    );
+
+    const employeeId = mode === "add" ? data.id : employee?.id;
+    
+    if (!employeeId) {
+      throw new Error("Employee ID not found after saving");
+    }
 
     router.push(
-      `/dashboard/employees/${
-        mode === "add" ? savedEmployee.id : employee?.id
-      }`
+      `/dashboard/employees/${employeeId}`
     );
 
     router.refresh();
   } catch (err: any) {
-    const message = err?.message || "Failed to save employee";
+    console.error("Employee save error:", err);
+
+    const message =
+      err?.message || "Failed to save employee";
+
     setError([message]);
     toast.error(message);
   } finally {

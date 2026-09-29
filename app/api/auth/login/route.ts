@@ -31,6 +31,66 @@ export async function POST(request: Request) {
       .select('*')
       .eq('id', authData.user.id)
       .single();
+      
+      const temporaryLoginStatuses = [
+        'pending',
+        'probation',
+        'resigned',
+        'laid_off',
+      ];
+
+      // Get employee record
+      const { data: employee, error: employeeError } = await supabase
+        .from('employees')
+        .select('id, status, user_id, temporary_login_expires_at')
+        .eq('user_id', authData.user.id)
+        .maybeSingle();
+
+      if (employeeError) {
+        console.error('Employee lookup error:', employeeError);
+      }
+
+      if (employee) {
+        const employeeStatus = employee.status?.toLowerCase();
+
+        // Active employees can always log in
+        if (employeeStatus === 'active') {
+          // No expiry check required
+        }
+
+        // Pending, probation, resigned and laid_off
+        // can log in only until temporary_login_expires_at
+        else if (temporaryLoginStatuses.includes(employeeStatus)) {
+          if (
+            !employee.temporary_login_expires_at ||
+            new Date() > new Date(employee.temporary_login_expires_at)
+          ) {
+            await supabase.auth.signOut();
+
+            return NextResponse.json(
+              {
+                error:
+                  'Your temporary login credentials have expired. Please contact HR.',
+              },
+              { status: 403 }
+            );
+          }
+        }
+
+        // Terminated, inactive, or any other status
+        // cannot log in
+        else {
+          await supabase.auth.signOut();
+
+          return NextResponse.json(
+            {
+              error:
+                'Your account is not currently eligible for login. Please contact HR.',
+            },
+            { status: 403 }
+          );
+        }
+      }
 
     // Determine role and appropriate landing destination
     const role = profile?.role || (authData.user.user_metadata?.role) || 'employee';

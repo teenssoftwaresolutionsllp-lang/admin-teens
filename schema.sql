@@ -1,5 +1,6 @@
 -- ==========================================================
--- TEENS SOFTWARE SOLUTIONS - HRMS & EMPLOYEE SELF-SERVICE SCHEMA
+-- TEENS SOFTWARE SOLUTIONS - HRMS & EMPLOYEE SELF-SERVICE
+-- COMPLETE UPDATED SUPABASE SCHEMA
 -- ==========================================================
 
 -- ==========================================================
@@ -31,7 +32,9 @@ BEGIN
 
     ALTER TABLE public.profiles
     ADD CONSTRAINT profiles_role_check
-    CHECK (role IN ('ceo', 'hr', 'employee'));
+    CHECK (
+        role IN ('ceo', 'hr', 'employee')
+    );
 EXCEPTION
     WHEN others THEN NULL;
 END $$;
@@ -64,13 +67,16 @@ CREATE TABLE IF NOT EXISTS public.holiday_calendars (
 
 CREATE TABLE IF NOT EXISTS public.holidays (
     id uuid DEFAULT uuid_generate_v4() PRIMARY KEY,
+
     calendar_id uuid
         REFERENCES public.holiday_calendars(id)
         ON DELETE CASCADE,
+
     holiday_date date NOT NULL,
     title text NOT NULL,
     is_optional boolean DEFAULT false,
     created_at timestamptz DEFAULT now(),
+
     UNIQUE(calendar_id, holiday_date)
 );
 
@@ -81,14 +87,24 @@ CREATE TABLE IF NOT EXISTS public.holidays (
 
 CREATE TABLE IF NOT EXISTS public.projects (
     id uuid DEFAULT uuid_generate_v4() PRIMARY KEY,
+
     name text NOT NULL,
+
     client_country text NOT NULL DEFAULT 'India',
+
     timezone text NOT NULL DEFAULT 'Asia/Kolkata',
-    calendar_id uuid REFERENCES public.holiday_calendars(id),
+
+    calendar_id uuid
+        REFERENCES public.holiday_calendars(id),
+
     shift_start_time time NOT NULL DEFAULT '09:00:00',
+
     shift_end_time time NOT NULL DEFAULT '18:00:00',
+
     grace_period_minutes int DEFAULT 30,
+
     half_day_cutoff_minutes int DEFAULT 150,
+
     created_at timestamptz DEFAULT now()
 );
 
@@ -98,26 +114,40 @@ CREATE TABLE IF NOT EXISTS public.projects (
 -- ==========================================================
 
 CREATE TABLE IF NOT EXISTS public.employees (
+
+    -- Primary key
     id uuid DEFAULT uuid_generate_v4() PRIMARY KEY,
 
+    -- Supabase Auth user
     user_id uuid
         REFERENCES auth.users(id)
         ON DELETE SET NULL
         UNIQUE,
 
-    -- Business/display ID: TN5000, TN5001, etc.
+    -- Business/display ID
+    -- Example: TN5000, TN5001
     employee_id text UNIQUE NOT NULL,
+
+
+    -- ======================================================
+    -- PERSONAL INFORMATION
+    -- ======================================================
 
     first_name text NOT NULL,
     last_name text NOT NULL,
 
     email text UNIQUE NOT NULL,
+
     phone text,
 
     date_of_birth date,
 
     gender text CHECK (
-        gender IN ('male', 'female', 'other')
+        gender IN (
+            'male',
+            'female',
+            'other'
+        )
     ),
 
     blood_group text,
@@ -140,6 +170,11 @@ CREATE TABLE IF NOT EXISTS public.employees (
     emergency_contact_phone text,
     emergency_contact_relation text,
 
+
+    -- ======================================================
+    -- EMPLOYMENT INFORMATION
+    -- ======================================================
+
     department_id uuid
         REFERENCES public.departments(id),
 
@@ -158,57 +193,125 @@ CREATE TABLE IF NOT EXISTS public.employees (
     ),
 
     joining_date date,
+
+    -- Probation duration in months
+    probation_duration integer DEFAULT 6,
+
     probation_end_date date,
+
     confirmation_date date,
 
     reporting_manager text,
+
     work_location text,
+
+
+    -- ======================================================
+    -- SALARY
+    -- ======================================================
 
     salary numeric(12,2) DEFAULT 50000.00,
 
-    client_type text CHECK (client_type IN ('in-house', 'outsource')),
+
+    -- ======================================================
+    -- CLIENT / PROJECT
+    -- ======================================================
+
+    client_type text,
 
     company_name text,
 
+
+    -- ======================================================
+    -- BANK & IDENTITY
+    -- ======================================================
+
     bank_name text,
+
     bank_account_number text,
+
     ifsc_code text,
 
     pan_number text,
+
     aadhar_number text,
+
     uan_number text,
+
+
+    -- ======================================================
+    -- PROFILE
+    -- ======================================================
+
     profile_photo_url text,
+
+
+    -- ======================================================
+    -- EMPLOYEE STATUS
+    -- ======================================================
 
     status text DEFAULT 'active',
 
+
+    -- ======================================================
+    -- STATUTORY
+    -- ======================================================
+
     esi_healthcare_eligible boolean DEFAULT false,
+
     esi_number text,
 
     pf_eligible boolean DEFAULT false,
 
     pt_eligible boolean DEFAULT false,
+
     pt_number text,
 
     tds_eligible boolean DEFAULT false,
 
-    profile_photo_url text,
 
-    status text DEFAULT 'active',
+    -- ======================================================
+    -- EMPLOYEE EXIT INFORMATION
+    -- ======================================================
 
-    -- Employee exit information
     exit_reason text,
+
     exit_document_url text,
+
     exit_document_name text,
+
     exit_date date,
 
+
+    -- ======================================================
+    -- TEMPORARY LOGIN
+    --
+    -- Used for:
+    -- pending
+    -- probation
+    -- resigned
+    -- laid_off
+    --
+    -- Login is allowed only until this timestamp.
+    -- ======================================================
+
+    temporary_login_expires_at timestamptz,
+
+
+    -- ======================================================
+    -- TIMESTAMPS
+    -- ======================================================
+
     created_at timestamptz DEFAULT now(),
+
     updated_at timestamptz DEFAULT now()
 );
 
 
 -- ==========================================================
--- EMPLOYEE TABLE SAFETY UPDATES
--- Required when employees table already exists
+-- 5A. EMPLOYEE TABLE SAFETY UPDATES
+-- ==========================================================
+-- These make the migration safe when employees already exists.
 -- ==========================================================
 
 ALTER TABLE public.employees
@@ -216,6 +319,27 @@ ADD COLUMN IF NOT EXISTS user_id uuid;
 
 ALTER TABLE public.employees
 ADD COLUMN IF NOT EXISTS project_id uuid;
+
+ALTER TABLE public.employees
+ADD COLUMN IF NOT EXISTS probation_duration integer DEFAULT 6;
+
+ALTER TABLE public.employees
+ADD COLUMN IF NOT EXISTS probation_end_date date;
+
+ALTER TABLE public.employees
+ADD COLUMN IF NOT EXISTS confirmation_date date;
+
+ALTER TABLE public.employees
+ADD COLUMN IF NOT EXISTS reporting_manager text;
+
+ALTER TABLE public.employees
+ADD COLUMN IF NOT EXISTS work_location text;
+
+ALTER TABLE public.employees
+ADD COLUMN IF NOT EXISTS client_type text;
+
+ALTER TABLE public.employees
+ADD COLUMN IF NOT EXISTS company_name text;
 
 ALTER TABLE public.employees
 ADD COLUMN IF NOT EXISTS exit_reason text;
@@ -229,8 +353,14 @@ ADD COLUMN IF NOT EXISTS exit_document_name text;
 ALTER TABLE public.employees
 ADD COLUMN IF NOT EXISTS exit_date date;
 
+ALTER TABLE public.employees
+ADD COLUMN IF NOT EXISTS temporary_login_expires_at timestamptz;
 
--- Add FK for user_id if it does not already exist
+
+-- ==========================================================
+-- 5B. EMPLOYEE FOREIGN KEY - USER
+-- ==========================================================
+
 DO $$
 BEGIN
     IF NOT EXISTS (
@@ -238,18 +368,24 @@ BEGIN
         FROM pg_constraint
         WHERE conname = 'employees_user_id_fkey'
     ) THEN
+
         ALTER TABLE public.employees
         ADD CONSTRAINT employees_user_id_fkey
         FOREIGN KEY (user_id)
         REFERENCES auth.users(id)
         ON DELETE SET NULL;
+
     END IF;
+
 EXCEPTION
     WHEN others THEN NULL;
 END $$;
 
 
--- Add FK for project_id if it does not already exist
+-- ==========================================================
+-- 5C. EMPLOYEE FOREIGN KEY - PROJECT
+-- ==========================================================
+
 DO $$
 BEGIN
     IF NOT EXISTS (
@@ -257,19 +393,51 @@ BEGIN
         FROM pg_constraint
         WHERE conname = 'employees_project_id_fkey'
     ) THEN
+
         ALTER TABLE public.employees
         ADD CONSTRAINT employees_project_id_fkey
         FOREIGN KEY (project_id)
         REFERENCES public.projects(id);
+
     END IF;
+
 EXCEPTION
     WHEN others THEN NULL;
 END $$;
 
 
--- Update employee status constraint
+-- ==========================================================
+-- 5D. CLIENT TYPE CONSTRAINT
+-- ==========================================================
+
 DO $$
 BEGIN
+
+    ALTER TABLE public.employees
+    DROP CONSTRAINT IF EXISTS employees_client_type_check;
+
+    ALTER TABLE public.employees
+    ADD CONSTRAINT employees_client_type_check
+    CHECK (
+        client_type IS NULL
+        OR client_type IN (
+            'in-house',
+            'outsource'
+        )
+    );
+
+EXCEPTION
+    WHEN others THEN NULL;
+END $$;
+
+
+-- ==========================================================
+-- 5E. EMPLOYEE STATUS CONSTRAINT
+-- ==========================================================
+
+DO $$
+BEGIN
+
     ALTER TABLE public.employees
     DROP CONSTRAINT IF EXISTS employees_status_check;
 
@@ -278,6 +446,8 @@ BEGIN
     CHECK (
         status IN (
             'active',
+            'pending',
+            'probation',
             'inactive',
             'on_notice',
             'terminated',
@@ -285,9 +455,33 @@ BEGIN
             'laid_off'
         )
     );
+
 EXCEPTION
     WHEN others THEN NULL;
 END $$;
+
+
+-- ==========================================================
+-- 5F. EMPLOYEE DEFAULTS
+-- ==========================================================
+
+ALTER TABLE public.employees
+ALTER COLUMN probation_duration SET DEFAULT 6;
+
+ALTER TABLE public.employees
+ALTER COLUMN status SET DEFAULT 'active';
+
+ALTER TABLE public.employees
+ALTER COLUMN esi_healthcare_eligible SET DEFAULT false;
+
+ALTER TABLE public.employees
+ALTER COLUMN pf_eligible SET DEFAULT false;
+
+ALTER TABLE public.employees
+ALTER COLUMN pt_eligible SET DEFAULT false;
+
+ALTER TABLE public.employees
+ALTER COLUMN tds_eligible SET DEFAULT false;
 
 
 -- ==========================================================
@@ -295,6 +489,7 @@ END $$;
 -- ==========================================================
 
 CREATE TABLE IF NOT EXISTS public.employee_documents (
+
     id uuid DEFAULT uuid_generate_v4() PRIMARY KEY,
 
     employee_id uuid
@@ -302,7 +497,9 @@ CREATE TABLE IF NOT EXISTS public.employee_documents (
         ON DELETE CASCADE,
 
     document_type text NOT NULL,
+
     document_name text NOT NULL,
+
     document_url text NOT NULL,
 
     cloudinary_public_id text,
@@ -317,6 +514,7 @@ CREATE TABLE IF NOT EXISTS public.employee_documents (
 -- ==========================================================
 
 CREATE TABLE IF NOT EXISTS public.profile_change_requests (
+
     id uuid DEFAULT uuid_generate_v4() PRIMARY KEY,
 
     employee_id uuid
@@ -324,6 +522,7 @@ CREATE TABLE IF NOT EXISTS public.profile_change_requests (
         ON DELETE CASCADE,
 
     requested_changes jsonb NOT NULL,
+
     previous_values jsonb,
 
     status text CHECK (
@@ -350,6 +549,7 @@ CREATE TABLE IF NOT EXISTS public.profile_change_requests (
 -- ==========================================================
 
 CREATE TABLE IF NOT EXISTS public.attendance_logs (
+
     id uuid DEFAULT uuid_generate_v4() PRIMARY KEY,
 
     employee_id uuid
@@ -359,6 +559,7 @@ CREATE TABLE IF NOT EXISTS public.attendance_logs (
     attendance_date date NOT NULL,
 
     check_in_time timestamptz,
+
     check_out_time timestamptz,
 
     total_hours numeric(4,2),
@@ -375,6 +576,7 @@ CREATE TABLE IF NOT EXISTS public.attendance_logs (
     ) DEFAULT 'present',
 
     is_late boolean DEFAULT false,
+
     is_regularized boolean DEFAULT false,
 
     created_at timestamptz DEFAULT now(),
@@ -388,6 +590,7 @@ CREATE TABLE IF NOT EXISTS public.attendance_logs (
 -- ==========================================================
 
 CREATE TABLE IF NOT EXISTS public.attendance_regularizations (
+
     id uuid DEFAULT uuid_generate_v4() PRIMARY KEY,
 
     employee_id uuid
@@ -397,6 +600,7 @@ CREATE TABLE IF NOT EXISTS public.attendance_regularizations (
     attendance_date date NOT NULL,
 
     proposed_check_in time NOT NULL,
+
     proposed_check_out time NOT NULL,
 
     reason text NOT NULL,
@@ -425,6 +629,7 @@ CREATE TABLE IF NOT EXISTS public.attendance_regularizations (
 -- ==========================================================
 
 CREATE TABLE IF NOT EXISTS public.leave_types (
+
     id uuid DEFAULT uuid_generate_v4() PRIMARY KEY,
 
     name text NOT NULL,
@@ -434,6 +639,7 @@ CREATE TABLE IF NOT EXISTS public.leave_types (
     annual_quota int DEFAULT 12,
 
     is_paid boolean DEFAULT true,
+
     is_active boolean DEFAULT true,
 
     description text,
@@ -443,6 +649,7 @@ CREATE TABLE IF NOT EXISTS public.leave_types (
 
 
 CREATE TABLE IF NOT EXISTS public.employee_leave_balances (
+
     id uuid DEFAULT uuid_generate_v4() PRIMARY KEY,
 
     employee_id uuid
@@ -468,6 +675,7 @@ CREATE TABLE IF NOT EXISTS public.employee_leave_balances (
 
 
 CREATE TABLE IF NOT EXISTS public.leave_requests (
+
     id uuid DEFAULT uuid_generate_v4() PRIMARY KEY,
 
     employee_id uuid
@@ -479,6 +687,7 @@ CREATE TABLE IF NOT EXISTS public.leave_requests (
         ON DELETE CASCADE,
 
     start_date date NOT NULL,
+
     end_date date NOT NULL,
 
     total_days numeric(4,1) NOT NULL,
@@ -512,6 +721,7 @@ CREATE TABLE IF NOT EXISTS public.leave_requests (
 -- ==========================================================
 
 CREATE TABLE IF NOT EXISTS public.salary_components (
+
     id uuid DEFAULT uuid_generate_v4() PRIMARY KEY,
 
     name text NOT NULL,
@@ -536,7 +746,9 @@ CREATE TABLE IF NOT EXISTS public.salary_components (
     value numeric(10,2) NOT NULL,
 
     affects_lop boolean DEFAULT true,
+
     is_active boolean DEFAULT true,
+
     is_statutory boolean DEFAULT false,
 
     description text,
@@ -546,6 +758,7 @@ CREATE TABLE IF NOT EXISTS public.salary_components (
 
 
 CREATE TABLE IF NOT EXISTS public.payslips (
+
     id uuid DEFAULT uuid_generate_v4() PRIMARY KEY,
 
     employee_id uuid
@@ -553,6 +766,7 @@ CREATE TABLE IF NOT EXISTS public.payslips (
         ON DELETE CASCADE,
 
     payroll_month int NOT NULL,
+
     payroll_year int NOT NULL,
 
     month_name text NOT NULL,
@@ -576,6 +790,7 @@ CREATE TABLE IF NOT EXISTS public.payslips (
     net_salary numeric(12,2) NOT NULL,
 
     earnings_breakup jsonb NOT NULL,
+
     deductions_breakup jsonb NOT NULL,
 
     payment_status text CHECK (
@@ -588,7 +803,11 @@ CREATE TABLE IF NOT EXISTS public.payslips (
 
     created_at timestamptz DEFAULT now(),
 
-    UNIQUE(employee_id, payroll_month, payroll_year)
+    UNIQUE(
+        employee_id,
+        payroll_month,
+        payroll_year
+    )
 );
 
 
@@ -597,19 +816,33 @@ CREATE TABLE IF NOT EXISTS public.payslips (
 -- ==========================================================
 
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE public.departments ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE public.employees ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE public.employee_documents ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE public.profile_change_requests ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE public.attendance_logs ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE public.attendance_regularizations ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE public.leave_types ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE public.employee_leave_balances ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE public.leave_requests ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE public.salary_components ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE public.payslips ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE public.holiday_calendars ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE public.holidays ENABLE ROW LEVEL SECURITY;
 
 
@@ -718,6 +951,14 @@ ON public.employees
 FOR UPDATE
 TO authenticated
 USING (
+    EXISTS (
+        SELECT 1
+        FROM public.profiles
+        WHERE profiles.id = auth.uid()
+        AND profiles.role IN ('ceo', 'hr')
+    )
+)
+WITH CHECK (
     EXISTS (
         SELECT 1
         FROM public.profiles
@@ -1026,13 +1267,16 @@ GRANT USAGE
 ON SCHEMA public
 TO anon, authenticated, service_role;
 
+
 GRANT SELECT, INSERT, UPDATE, DELETE
 ON ALL TABLES IN SCHEMA public
 TO anon, authenticated, service_role;
 
+
 GRANT USAGE, SELECT, UPDATE
 ON ALL SEQUENCES IN SCHEMA public
 TO anon, authenticated, service_role;
+
 
 GRANT EXECUTE
 ON ALL FUNCTIONS IN SCHEMA public
@@ -1044,10 +1288,12 @@ GRANT SELECT, INSERT, UPDATE, DELETE
 ON TABLES
 TO anon, authenticated, service_role;
 
+
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
 GRANT USAGE, SELECT, UPDATE
 ON SEQUENCES
 TO anon, authenticated, service_role;
+
 
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
 GRANT EXECUTE
@@ -1060,23 +1306,44 @@ TO anon, authenticated, service_role;
 -- ==========================================================
 
 INSERT INTO public.departments
-(name, description)
+(
+    name,
+    description
+)
 VALUES
-    ('Engineering', 'Software development and engineering'),
-    ('Design', 'UI/UX and product design'),
-    ('Marketing', 'Marketing and communications'),
-    ('Sales', 'Sales and business development'),
-    ('HR', 'Human Resources and Operations'),
-    ('Finance', 'Finance and Accounting'),
-    ('Operations', 'Business operations')
+    (
+        'Engineering',
+        'Software development and engineering'
+    ),
+    (
+        'Design',
+        'UI/UX and product design'
+    ),
+    (
+        'Marketing',
+        'Marketing and communications'
+    ),
+    (
+        'Sales',
+        'Sales and business development'
+    ),
+    (
+        'HR',
+        'Human Resources and Operations'
+    ),
+    (
+        'Finance',
+        'Finance and Accounting'
+    ),
+    (
+        'Operations',
+        'Business operations'
+    )
 ON CONFLICT (name) DO NOTHING;
 
 
 -- ==========================================================
 -- 14. SEED LEAVE TYPES
--- IMPORTANT:
--- IDs are generated as UUIDs by PostgreSQL.
--- DO NOT use lt-cl / lt-sl as IDs.
 -- ==========================================================
 
 INSERT INTO public.leave_types
@@ -1228,8 +1495,11 @@ ON CONFLICT (code) DO NOTHING;
 CREATE OR REPLACE FUNCTION public.update_updated_at_column()
 RETURNS TRIGGER AS $$
 BEGIN
+
     NEW.updated_at = now();
+
     RETURN NEW;
+
 END;
 $$ LANGUAGE plpgsql;
 
@@ -1283,7 +1553,11 @@ BEGIN
 
     ON CONFLICT (id)
     DO UPDATE SET
+
+        email = EXCLUDED.email,
+
         full_name = EXCLUDED.full_name,
+
         role = EXCLUDED.role;
 
     RETURN NEW;
@@ -1300,3 +1574,38 @@ CREATE TRIGGER on_auth_user_created
 AFTER INSERT ON auth.users
 FOR EACH ROW
 EXECUTE FUNCTION public.handle_new_user();
+
+
+-- ==========================================================
+-- 18. OPTIONAL: INITIAL 45-DAY LOGIN PERIOD
+-- ==========================================================
+-- Use this ONLY for existing employees already in
+-- pending/probation/resigned/laid_off status.
+--
+-- New employees should have this value assigned by
+-- the application when appropriate.
+-- ==========================================================
+
+-- UPDATE public.employees
+-- SET temporary_login_expires_at = NOW() + INTERVAL '45 days'
+-- WHERE LOWER(status) IN (
+--     'pending',
+--     'probation',
+--     'resigned',
+--     'laid_off'
+-- )
+-- AND temporary_login_expires_at IS NULL;
+
+
+-- ==========================================================
+-- 19. FINAL EMPLOYEE SCHEMA CHECK
+-- ==========================================================
+
+SELECT
+    column_name,
+    data_type,
+    column_default
+FROM information_schema.columns
+WHERE table_schema = 'public'
+AND table_name = 'employees'
+ORDER BY ordinal_position;

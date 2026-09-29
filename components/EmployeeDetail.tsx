@@ -129,13 +129,20 @@ export default function EmployeeDetail({ employee, documents, role }: EmployeeDe
     }
   };
 
+const isExitStatus = [
+  "resigned",
+  "laid_off",
+  "terminated",
+  "inactive",
+].includes(employee.status?.toLowerCase());
+
   const tabs = [
     { name: "Personal", icon: User },
     { name: "Employment", icon: Briefcase },
     { name: "Bank & Identity", icon: CreditCard },
     { name: "Documents", icon: FileText },
     { name: "Address & Emergency", icon: MapPin },
-    { name: "Terminated", icon: DeleteIcon }
+    ...(!isExitStatus ? [{ name: "Employee Exit", icon: DeleteIcon }] : []),
   ];
 
   const DetailTile = ({ label, value }: { label: string; value: React.ReactNode }) => (
@@ -175,7 +182,7 @@ export default function EmployeeDetail({ employee, documents, role }: EmployeeDe
           </div>
         </div>
         
-        {role === "ceo" && (
+        {role === "ceo" || role === "hr" &&  !["resigned", "laid_off", "terminated", "inactive"].includes(employee.status?.toLowerCase()) &&(
           <Link
             href={`/dashboard/employees/${employee.id}/edit`}
             className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-sm hover:shadow transition-all"
@@ -301,7 +308,7 @@ export default function EmployeeDetail({ employee, documents, role }: EmployeeDe
           )}
 
           {/* Delete */}
-          {activeTab === 5 && (
+          {!isExitStatus && activeTab === 5 && (
             <div className="space-y-6">
               <div>
                 <h3 className="text-sm font-bold text-slate-900 mb-3 uppercase tracking-wider text-center text-slate-400"> Employee Exit </h3>

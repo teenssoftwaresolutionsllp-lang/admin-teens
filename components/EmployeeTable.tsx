@@ -49,8 +49,8 @@ export default function EmployeeTable({ employees, departments, role }: Employee
   }
 
   const getDepartmentName = (employee: Employee) => {
-    return employee.department?.name || departments.find((department) => department.id === employee.department_id)?.name || 'General'
-  }
+    return employee.department?.name || departments.find((department) => department.id === employee.department_id)?.name || 'General'
+  }
 
   const handleDownloadEmployee = async (emp: Employee) => {
   try {
@@ -357,15 +357,6 @@ export default function EmployeeTable({ employees, departments, role }: Employee
                         >
                           <Eye className="h-4 w-4" />
                         </Link>
-                        {role === 'ceo' && (
-                          <Link
-                            href={`/dashboard/employees/${emp.id}/edit`}
-                            className="rounded-xl p-2 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
-                            title="Edit Employee"
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Link>
-                        )}
                       </div>
                     </td>
                     <td className="whitespace-nowrap px-6 py-4">

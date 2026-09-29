@@ -154,6 +154,7 @@ export interface Employee {
   exit_document_url?: string | null;
   exit_document_name?: string | null;
   exit_date?: string | null;
+  temporary_login_expires_at?: string | null;
 
   // ==============================
   // Timestamps

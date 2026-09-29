@@ -14,185 +14,6 @@ import {
 } from "./types";
 import { calculateSalaryBreakdown, evaluateAttendancePunch } from "./calculations";
 
-// Default seed data for immediate zero-config operation
-// const DEFAULT_HOLIDAY_CALENDARS: HolidayCalendar[] = [
-//   {
-//     id: "cal-in-2026",
-//     name: "India Standard Holidays 2026",
-//     country_code: "IN",
-//     country_name: "India",
-//     timezone: "Asia/Kolkata",
-//     holidays: [
-//       { id: "h1", calendar_id: "cal-in-2026", holiday_date: "2026-01-26", title: "Republic Day" },
-//       { id: "h2", calendar_id: "cal-in-2026", holiday_date: "2026-03-25", title: "Holi" },
-//       { id: "h3", calendar_id: "cal-in-2026", holiday_date: "2026-08-15", title: "Independence Day" },
-//       { id: "h4", calendar_id: "cal-in-2026", holiday_date: "2026-10-02", title: "Gandhi Jayanti" },
-//       { id: "h5", calendar_id: "cal-in-2026", holiday_date: "2026-11-08", title: "Diwali" },
-//     ],
-//   },
-//   {
-//     id: "cal-us-2026",
-//     name: "US Federal Holidays 2026",
-//     country_code: "US",
-//     country_name: "United States",
-//     timezone: "America/New_York",
-//     holidays: [
-//       { id: "h6", calendar_id: "cal-us-2026", holiday_date: "2026-01-01", title: "New Year's Day" },
-//       { id: "h7", calendar_id: "cal-us-2026", holiday_date: "2026-07-04", title: "Independence Day" },
-//       { id: "h8", calendar_id: "cal-us-2026", holiday_date: "2026-09-07", title: "Labor Day" },
-//       { id: "h9", calendar_id: "cal-us-2026", holiday_date: "2026-11-26", title: "Thanksgiving Day" },
-//       { id: "h10", calendar_id: "cal-us-2026", holiday_date: "2026-12-25", title: "Christmas Day" },
-//     ],
-//   },
-// ];
-
-// const DEFAULT_PROJECTS: Project[] = [
-//   {
-//     id: "proj-1",
-//     name: "FinTech Enterprise Platform",
-//     client_country: "India",
-//     timezone: "Asia/Kolkata",
-//     calendar_id: "cal-in-2026",
-//     shift_start_time: "09:00",
-//     shift_end_time: "18:00",
-//     grace_period_minutes: 30,
-//     half_day_cutoff_minutes: 150,
-//   },
-//   {
-//     id: "proj-2",
-//     name: "US Healthcare Claims Engine",
-//     client_country: "United States",
-//     timezone: "America/New_York",
-//     calendar_id: "cal-us-2026",
-//     shift_start_time: "18:30",
-//     shift_end_time: "03:30",
-//     grace_period_minutes: 30,
-//     half_day_cutoff_minutes: 150,
-//   },
-//   {
-//     id: "proj-bench",
-//     name: "Internal Engineering & Bench",
-//     client_country: "India",
-//     timezone: "Asia/Kolkata",
-//     calendar_id: "cal-in-2026",
-//     shift_start_time: "09:30",
-//     shift_end_time: "18:30",
-//     grace_period_minutes: 30,
-//     half_day_cutoff_minutes: 150,
-//   },
-// ];
-
-// const DEFAULT_LEAVE_TYPES: LeaveType[] = [
-//   { id: "lt-cl", name: "Casual Leave", code: "CL", annual_quota: 12, is_paid: true, is_active: true, description: "For personal emergencies and errands" },
-//   { id: "lt-sl", name: "Sick Leave", code: "SL", annual_quota: 10, is_paid: true, is_active: true, description: "For medical recovery with prescription" },
-// ];
-
-// const DEFAULT_SALARY_COMPONENTS: SalaryComponent[] = [
-//   { id: "sc-basic", name: "Basic Salary", code: "BASIC", type: "earning", calculation_type: "percentage_of_gross", value: 50, affects_lop: true, is_active: true, is_statutory: true, description: "50% of monthly CTC" },
-//   { id: "sc-hra", name: "House Rent Allowance (HRA)", code: "HRA", type: "earning", calculation_type: "percentage_of_basic", value: 40, affects_lop: true, is_active: true, is_statutory: true, description: "40% of Basic Pay" },
-//   { id: "sc-special", name: "Special Allowance", code: "SPECIAL_ALLOWANCE", type: "earning", calculation_type: "fixed", value: 0, affects_lop: true, is_active: true, is_statutory: false, description: "Balancing component of Gross Salary" },
-//   { id: "sc-pf", name: "Provident Fund (PF)", code: "PF", type: "deduction", calculation_type: "percentage_of_basic", value: 12, affects_lop: false, is_active: true, is_statutory: true, description: "12% of Basic Pay" },
-//   { id: "sc-esi", name: "Employee State Insurance (ESI)", code: "ESI", type: "deduction", calculation_type: "percentage_of_gross", value: 0.75, affects_lop: false, is_active: true, is_statutory: true, description: "0.75% of Gross if Gross <= ₹21,000" },
-//   { id: "sc-pt", name: "Professional Tax (PT)", code: "PT", type: "deduction", calculation_type: "fixed", value: 200, affects_lop: false, is_active: true, is_statutory: true, description: "Standard monthly statutory state tax (₹200)" },
-//   { id: "sc-tds", name: "Tax Deducted at Source (TDS)", code: "TDS", type: "deduction", calculation_type: "percentage_of_gross", value: 5, affects_lop: false, is_active: false, is_statutory: true, description: "Income Tax deduction" },
-// ];
-
-// const DEFAULT_EMPLOYEES: Employee[] = [
-//   {
-//     id: "TSS001",
-//     employee_id: "TSS001",
-//     user_id: null,
-//     first_name: "Balaji",
-//     last_name: "Marpally",
-//     email: "employee@teenssoftware.com",
-//     phone: "+91 9876543210",
-//     date_of_birth: "1995-05-14",
-//     gender: "male",
-//     blood_group: "O+",
-//     marital_status: "single",
-//     address: "Flat 402, Greenfield Heights, Hitec City",
-//     city: "Hyderabad",
-//     state: "Telangana",
-//     pincode: "500081",
-//     emergency_contact_name: "Ramesh Marpally",
-//     emergency_contact_phone: "+91 9876543219",
-//     emergency_contact_relation: "Father",
-//     designation: "Senior Full Stack Developer",
-//     employment_type: "full-time",
-//     status: "active",
-//     salary: 75000,
-//     joining_date: "2023-01-15",
-//     bank_name: "HDFC Bank",
-//     bank_account_number: "50100234567890",
-//     ifsc_code: "HDFC0001234",
-//     pan_number: "ABCDE1234F",
-//     aadhar_number: "1234 5678 9012",
-//     uan_number: "100904561234",
-//     esi_number: "31000123456780001",
-//     project_id: "proj-1",
-//     notes: "Lead developer on FinTech project",
-//     created_at: "2023-01-15T00:00:00.000Z",
-//     updated_at: "2026-09-22T00:00:00.000Z",
-//   },
-//   {
-//     id: "TSS002",
-//     employee_id: "TSS002",
-//     user_id: null,
-//     first_name: "Sneha",
-//     last_name: "Reddy",
-//     email: "sneha.reddy@teenssoftware.com",
-//     phone: "+91 9876543211",
-//     date_of_birth: "1997-08-22",
-//     gender: "female",
-//     blood_group: "B+",
-//     marital_status: "single",
-//     address: "Plot 45, Jubilee Hills",
-//     city: "Hyderabad",
-//     state: "Telangana",
-//     pincode: "500033",
-//     designation: "UI/UX Product Designer",
-//     employment_type: "full-time",
-//     status: "active",
-//     salary: 60000,
-//     joining_date: "2023-03-10",
-//     bank_name: "ICICI Bank",
-//     bank_account_number: "102030405060",
-//     ifsc_code: "ICIC0000102",
-//     pan_number: "REDDY5678K",
-//     aadhar_number: "9876 5432 1098",
-//     project_id: "proj-1",
-//     notes: "Product designer for Web & Mobile",
-//     created_at: "2023-03-10T00:00:00.000Z",
-//     updated_at: "2026-09-22T00:00:00.000Z",
-//   },
-//   {
-//     id: "TSS003",
-//     employee_id: "TSS003",
-//     user_id: null,
-//     first_name: "Vikram",
-//     last_name: "Singh",
-//     email: "vikram.singh@teenssoftware.com",
-//     phone: "+91 9876543212",
-//     date_of_birth: "1994-11-03",
-//     gender: "male",
-//     blood_group: "A+",
-//     marital_status: "married",
-//     address: "Flat 102, Cyber Towers Colony, Madhapur",
-//     city: "Hyderabad",
-//     state: "Telangana",
-//     pincode: "500081",
-//     designation: "QA Automation Engineer",
-//     employment_type: "contract",
-//     status: "active",
-//     salary: 45000,
-//     joining_date: "2023-06-01",
-//     project_id: "proj-2",
-//     notes: "Automation engineer for US client claims engine",
-//     created_at: "2023-06-01T00:00:00.000Z",
-//     updated_at: "2026-09-22T00:00:00.000Z",
-//   },
-// ];
-
 // Global in-memory singleton state cache
 declare global {
   // eslint-disable-next-line no-var
@@ -575,83 +396,63 @@ export class DataStore {
     return `TN${maxNumber + 1}`;
   }
 
-  static async updateEmployee(id: string, updates: Partial<Employee>): Promise<Employee | null> {
-    const cache = getCache();
-    const existing = await this.getEmployeeById(id);
-    if (!existing) return null;
-
-    const updated = { ...existing, ...updates, updated_at: new Date().toISOString() };
-    this.seedEmployeeToCache(updated);
-
+  static async updateEmployee(
+    id: string,
+    updates: Partial<Employee>
+  ): Promise<Employee | null> {
     try {
       const supabase = await createAdminClient();
-      const UUID_REGEX =/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-      let query = supabase
-      .from("employees")
-      .update({
-          ...updates,
-          updated_at: new Date().toISOString(),
-      });
+
+      const UUID_REGEX =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+      const updateData = {
+        ...updates,
+        updated_at: new Date().toISOString(),
+      };
+
+      let result;
 
       if (UUID_REGEX.test(id)) {
-        query = query.eq("id", id);
+        result = await supabase
+          .from("employees")
+          .update(updateData)
+          .eq("id", id)
+          .select(`*, department:departments(id, name)`)
+          .single();
       } else {
-        query = query.eq("employee_id", id);
+        result = await supabase
+          .from("employees")
+          .update(updateData)
+          .eq("employee_id", id)
+          .select(`*, department:departments(id, name)`)
+          .single();
       }
-      const { error } = await query;
-      if(error){
+
+      const { data, error } = result;
+
+      if (error) {
+        console.error("updateEmployee DB error:", error);
         throw error;
       }
 
+      if (!data) {
+        console.error("Employee update returned no data");
+        return null;
+      }
 
-    } catch (error) {
-      console.warn("updateEmployee DB warning:", error);
-    }
+      this.seedEmployeeToCache(data as Employee);
 
-    return updated;
-  }
+      return data as Employee;
+    } catch (error: any) {
+      console.error("updateEmployee failed:", error);
+      console.error("Message:", error?.message);
+      console.error("Details:", error?.details);
+      console.error("Hint:", error?.hint);
+      console.error("Code:", error?.code);
 
-  static async deleteEmployee(id: string): Promise<boolean> {
-  const cache = getCache();
-
-  const UUID_REGEX =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-  try {
-    const supabase = await createAdminClient();
-
-    let query = supabase
-      .from("employees")
-      .delete();
-
-    if (UUID_REGEX.test(id)) {
-      query = query.eq("id", id);
-    } else {
-      query = query.eq("employee_id", id);
-    }
-
-    const { error } = await query;
-
-    if (error) {
       throw error;
     }
-
-    // Remove from in-memory cache
-    const index = cache.employees.findIndex(
-      (employee) =>
-        employee.id === id ||
-        employee.employee_id === id
-    );
-
-    if (index !== -1) {
-      cache.employees.splice(index, 1);
-    }
-
-    return true;
-  } catch (error) {
-    console.error("deleteEmployee DB error:", error);
-    throw error;
-  }
   }
 
   static async terminateEmployee(
@@ -690,12 +491,17 @@ export class DataStore {
     const supabase = await createAdminClient();
     const finalexitDate = exitDate;
     const updatedAt = new Date().toISOString();
+
+    const temporaryLoginExpiresAt = exitType === "resigned" || exitType === "laid_off" ? new Date(
+        Date.now() + 45 * 24 * 60 * 60 * 1000
+      ).toISOString() : null;
     const updates = {
       status: exitType,
       exit_reason: exitReason.trim(),
       exit_document_url: exitDocumentUrl || null,
       exit_document_name: exitDocumentName || null,
       exit_date: finalexitDate,
+      temporary_login_expires_at: temporaryLoginExpiresAt,
       updated_at: updatedAt,
     };
 
@@ -733,6 +539,7 @@ export class DataStore {
           exit_document_url: exitDocumentUrl || null,
           exit_document_name: exitDocumentName || null,
           exit_date: finalexitDate,
+          temporary_login_expires_at: temporaryLoginExpiresAt,
           updated_at: updatedAt,
         };
       }
