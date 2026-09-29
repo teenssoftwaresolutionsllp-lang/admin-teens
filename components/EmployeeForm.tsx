@@ -3,9 +3,10 @@
 import { useState , useEffect, useRef} from "react";
 import { toast } from "react-hot-toast"
 import { useRouter } from "next/navigation";
-import { Department, Employee, UserRole, EmployeeDocument, Project } from "@/lib/types";
-import { User, Briefcase, Loader2, KeyRound, File } from "lucide-react";
+import { Department, Employee, UserRole, EmployeeDocument, Project, } from "@/lib/types";
+import { User, Briefcase, Loader2, KeyRound, File, CreditCard, FileText, MapPin, Copy } from "lucide-react";
 import companiesData from "@/data/companies.json";
+import DocumentUpload from "./DocumentUpload";
 
 const companies = companiesData.companies;
 
@@ -88,8 +89,25 @@ export default function EmployeeForm({ employee, departments, projects, generate
     pan_number: employee?.pan_number || "",
     aadhar_number: employee?.aadhar_number || "",
 
+    // Address Information
+    permanent_address: employee?.permanent_address || "",
+    permanent_city: employee?.permanent_city || "",
+    permanent_state: employee?.permanent_state || "",
+    permanent_pincode: employee?.permanent_pincode || "",
+
+    temporary_address: employee?.temporary_address || "",
+    temporary_city: employee?.temporary_city || "",
+    temporary_state: employee?.temporary_state || "",
+    temporary_pincode: employee?.temporary_pincode || "",
+
+    // Emergency Contact
+    emergency_contact_name: employee?.emergency_contact_name || "",
+    emergency_contact_relation: employee?.emergency_contact_relation || "",
+    emergency_contact_phone: employee?.emergency_contact_phone || "",
+
     // Statutory Information
     esi_number: employee?.esi_number || "",
+    uan_number: employee?.uan_number || "",
 
     // Profile / Status
     status: employee?.status || "active",
@@ -407,6 +425,9 @@ const handleSubmit = async (e: React.FormEvent) => {
   const tabs = [
     { name: "Personal Info", icon: User },
     { name: "Employment", icon: Briefcase },
+    { name: "Bank & Identity", icon: CreditCard },
+    { name: "Address & Emergency", icon: MapPin },
+    { name: "Documents", icon: FileText },
     { name: "Statutory", icon: File},
   ]
   return (
@@ -641,7 +662,6 @@ const handleSubmit = async (e: React.FormEvent) => {
             </div>
           </div>
         </div>
-
 
         {/* Tab 1: Employment */}
         <div className={activeTab === 1 ? "block" : "hidden"}>
@@ -1000,8 +1020,390 @@ const handleSubmit = async (e: React.FormEvent) => {
           </div>
         </div>
 
-        {/* {tab 2: options to selct eligabilty of pt ,tds} */}
+        {/* Tab 2:  Bank & Identity*/}
         <div className={activeTab === 2 ? "block" : "hidden"}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+
+            {/* Bank Name */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                Bank Name
+              </label>
+
+              <input
+                type="text"
+                name="bank_name"
+                value={formData.bank_name || ""}
+                onChange={handleChange}
+                placeholder="Enter bank name"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
+              />
+            </div>
+
+            {/* Bank Account Number */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                Bank Account Number
+              </label>
+
+              <input
+                type="text"
+                name="bank_account_number"
+                value={formData.bank_account_number || ""}
+                onChange={handleChange}
+                placeholder="Enter account number"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
+              />
+            </div>
+
+            {/* IFSC Code */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                IFSC Code
+              </label>
+
+              <input
+                type="text"
+                name="ifsc_code"
+                value={formData.ifsc_code || ""}
+                onChange={handleChange}
+                placeholder="e.g. SBIN0001234"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 uppercase focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
+              />
+            </div>
+
+            {/* PAN */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                PAN Number
+              </label>
+
+              <input
+                type="text"
+                name="pan_number"
+                value={formData.pan_number || ""}
+                onChange={handleChange}
+                placeholder="Enter PAN number"
+                maxLength={10}
+                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 uppercase focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
+              />
+            </div>
+
+            {/* Aadhaar */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                Aadhaar Number
+              </label>
+
+              <input
+                type="text"
+                name="aadhar_number"
+                value={formData.aadhar_number || ""}
+                onChange={handleChange}
+                placeholder="Enter Aadhaar number"
+                maxLength={12}
+                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
+              />
+            </div>
+
+          </div>
+        </div>
+        {/* Tab 3 : ADDRESS & EMERGENCY */}
+        <div className={activeTab === 3 ? "block" : "hidden"}>
+
+          {/* Main Address Container */}
+          <div className="space-y-8">
+
+            {/* ================= PERMANENT ADDRESS ================= */}
+            <section>
+              <div className="flex items-center gap-2 mb-4">
+                <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center">
+                  <MapPin className="w-4 h-4 text-indigo-600" />
+                </div>
+
+                <div>
+                  <h3 className="text-sm font-bold text-gray-900">
+                    Permanent Address
+                  </h3>
+                  <p className="text-xs text-gray-500">
+                    Employee&apos;s permanent residential address
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+
+                {/* Permanent Address */}
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-bold text-gray-700 mb-2">
+                    Address
+                  </label>
+
+                  <textarea
+                    name="permanent_address"
+                    value={formData.permanent_address || ""}
+                    onChange={handleChange}
+                    rows={3}
+                    placeholder="Enter permanent address"
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
+                  />
+                </div>
+
+                {/* Permanent City */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-2">
+                    City
+                  </label>
+
+                  <input
+                    type="text"
+                    name="permanent_city"
+                    value={formData.permanent_city || ""}
+                    onChange={handleChange}
+                    placeholder="Enter city"
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  />
+                </div>
+
+                {/* Permanent State */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-2">
+                    State
+                  </label>
+
+                  <input
+                    type="text"
+                    name="permanent_state"
+                    value={formData.permanent_state || ""}
+                    onChange={handleChange}
+                    placeholder="Enter state"
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  />
+                </div>
+
+                {/* Permanent Pincode */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-2">
+                    Pincode
+                  </label>
+
+                  <input
+                    type="text"
+                    name="permanent_pincode"
+                    value={formData.permanent_pincode || ""}
+                    onChange={handleChange}
+                    placeholder="Enter pincode"
+                    maxLength={6}
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  />
+                </div>
+
+              </div>
+            </section>
+
+
+            {/* ================= SAME AS PERMANENT ================= */}
+            <div className="flex justify-center">
+              <button
+                type="button"
+                onClick={() => {
+                  setFormData((prev) => ({
+                    ...prev,
+                    temporary_address: prev.permanent_address || "",
+                    temporary_city: prev.permanent_city || "",
+                    temporary_state: prev.permanent_state || "",
+                    temporary_pincode: prev.permanent_pincode || "",
+                  }));
+                }}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-600 text-xs font-bold hover:bg-indigo-100 hover:border-indigo-300 transition-all"
+              >
+                <Copy className="w-4 h-4" />
+                Same as Permanent Address
+              </button>
+            </div>
+
+
+            {/* ================= TEMPORARY ADDRESS ================= */}
+            <section>
+              <div className="flex items-center gap-2 mb-4">
+                <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
+                  <MapPin className="w-4 h-4 text-blue-600" />
+                </div>
+
+                <div>
+                  <h3 className="text-sm font-bold text-gray-900">
+                    Temporary Address
+                  </h3>
+                  <p className="text-xs text-gray-500">
+                    Employee&apos;s current or temporary residential address
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+
+                {/* Temporary Address */}
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-bold text-gray-700 mb-2">
+                    Address
+                  </label>
+
+                  <textarea
+                    name="temporary_address"
+                    value={formData.temporary_address || ""}
+                    onChange={handleChange}
+                    rows={3}
+                    placeholder="Enter temporary address"
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
+                  />
+                </div>
+
+                {/* Temporary City */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-2">
+                    City
+                  </label>
+
+                  <input
+                    type="text"
+                    name="temporary_city"
+                    value={formData.temporary_city || ""}
+                    onChange={handleChange}
+                    placeholder="Enter city"
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  />
+                </div>
+
+                {/* Temporary State */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-2">
+                    State
+                  </label>
+
+                  <input
+                    type="text"
+                    name="temporary_state"
+                    value={formData.temporary_state || ""}
+                    onChange={handleChange}
+                    placeholder="Enter state"
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  />
+                </div>
+
+                {/* Temporary Pincode */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-2">
+                    Pincode
+                  </label>
+
+                  <input
+                    type="text"
+                    name="temporary_pincode"
+                    value={formData.temporary_pincode || ""}
+                    onChange={handleChange}
+                    placeholder="Enter pincode"
+                    maxLength={6}
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  />
+                </div>
+
+              </div>
+            </section>
+
+
+            {/* ================= EMERGENCY CONTACT ================= */}
+            <section>
+              <div className="flex items-center gap-2 mb-4">
+                <div className="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center">
+                  <User className="w-4 h-4 text-red-600" />
+                </div>
+
+                <div>
+                  <h3 className="text-sm font-bold text-gray-900">
+                    Emergency Contact
+                  </h3>
+                  <p className="text-xs text-gray-500">
+                    Person to contact in case of an emergency
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+
+                {/* Emergency Contact Name */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-2">
+                    Contact Name
+                  </label>
+
+                  <input
+                    type="text"
+                    name="emergency_contact_name"
+                    value={formData.emergency_contact_name || ""}
+                    onChange={handleChange}
+                    placeholder="Enter contact name"
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  />
+                </div>
+
+                {/* Relationship */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-2">
+                    Relationship
+                  </label>
+
+                  <select
+                    name="emergency_contact_relation"
+                    value={formData.emergency_contact_relation || ""}
+                    onChange={handleChange}
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  >
+                    <option value="">Select relationship</option>
+                    <option value="Father">Father</option>
+                    <option value="Mother">Mother</option>
+                    <option value="Spouse">Spouse</option>
+                    <option value="Brother">Brother</option>
+                    <option value="Sister">Sister</option>
+                    <option value="Son">Son</option>
+                    <option value="Daughter">Daughter</option>
+                    <option value="Guardian">Guardian</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+
+                {/* Emergency Contact Phone */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-2">
+                    Contact Phone
+                  </label>
+
+                  <input
+                    type="tel"
+                    name="emergency_contact_phone"
+                    value={formData.emergency_contact_phone || ""}
+                    onChange={handleChange}
+                    placeholder="Enter emergency contact number"
+                    maxLength={10}
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  />
+                </div>
+
+              </div>
+            </section>
+
+          </div>
+        </div>
+        {/* Tab 4: Documents */}
+        {activeTab === 4 && (
+          <div>
+            <DocumentUpload
+            documents={documents || []}
+            />
+          </div>
+        )}
+
+        {/* {tab 5: options to selct eligabilty of pt ,tds} */}
+        <div className={activeTab === 5 ? "block" : "hidden"}>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
 
             {/* ESI */}
@@ -1049,12 +1451,38 @@ const handleSubmit = async (e: React.FormEvent) => {
                   type="checkbox"
                   checked={pfEligible}
                   onChange={(e) => {
-                    setPfEligible(e.target.checked);
+                   const checked = e.target.checked;
+                   setPfEligible(checked);
+
+                   setFormData((prev) => ({
+                    ...prev,
+                    pf_eligible: checked,
+                   }))
                   }}
                 />
-
                 <span>Is he Eligible for P.F</span>
               </label>
+                {pfEligible && (
+                  <div className="mt-4">
+                    <label className="block text-xs font-bold text-gray-700 mb-2">
+                      UAN Number
+                    </label>
+
+                    <input
+                      type="text"
+                      name="uan_number"
+                      value={formData.uan_number || ""}
+                      onChange={handleChange}
+                      placeholder="Enter UAN number"
+                      maxLength={12}
+                      className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    />
+
+                    <p className="text-xs text-gray-400 mt-1">
+                      Enter the employee&apos;s 12-digit Universal Account Number.
+                    </p>
+                  </div>
+                )}
             </div>
 
             {/* PT */}
@@ -1162,12 +1590,12 @@ const handleSubmit = async (e: React.FormEvent) => {
           </button>
         )}
 
-        {/* ADD MODE - TAB 2 */}
-        {mode === "add" && activeTab === 1 && (
+        {/* ADD MODE - TAB 2-4 */}
+        {mode === "add" && activeTab >= 1 && activeTab < 5 && (
           <>
             <button
               type="button"
-              onClick={() => setActiveTab(0)}
+              onClick={() => setActiveTab(activeTab - 1)}
               className="px-5 py-2.5 text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-all"
             >
               ← Back
@@ -1178,51 +1606,89 @@ const handleSubmit = async (e: React.FormEvent) => {
               onClick={() => {
                 const missingFields: string[] = [];
 
-                if (!formData.employee_id?.trim()) {
-                  missingFields.push("Employee ID");
+                if (activeTab === 1) {
+                  if (!formData.employee_id?.trim()) {
+                    missingFields.push("Employee ID");
+                  }
+
+                  if (!formData.department_id) {
+                    missingFields.push("Department");
+                  }
+
+                  if (!formData.designation?.trim()) {
+                    missingFields.push("Designation");
+                  }
+
+                  if (!formData.employment_type) {
+                    missingFields.push("Employment Type");
+                  }
+
+                  if (!formData.joining_date) {
+                    missingFields.push("Joining Date");
+                  }
+
+                  if (!formData.probation_end_date) {
+                    missingFields.push("Probation End Date");
+                  }
+
+                  if (!formData.work_location) {
+                    missingFields.push("Work Location");
+                  }
+
+                  if (formData.salary === undefined || formData.salary === null) {
+                    missingFields.push("CTC");
+                  }
+
+                  if (!formData.client_type) {
+                    missingFields.push("Client Type");
+                  }
+
+                  if (!formData.company_name?.trim()) {
+                    missingFields.push("Client Name");
+                  }
+
+                  if (
+                    formData.client_type === "in-house" &&
+                    !formData.project_id
+                  ) {
+                    missingFields.push("Project");
+                  }
                 }
 
-                if (!formData.department_id) {
-                  missingFields.push("Department");
+                if (activeTab === 5) {
+                  if (esiEligible && !esiNumber?.trim()) {
+                    missingFields.push("ESI Number");
+                  }
+
+                  if (ptEligible && !ptNumber?.trim()) {
+                    missingFields.push("PT Number");
+                  }
                 }
 
-                if (!formData.designation?.trim()) {
-                  missingFields.push("Designation");
+                if (activeTab === 3) {
+                  if (!formData.bank_name?.trim()) {
+                    missingFields.push("Bank Name");
+                  }
+
+                  if (!formData.bank_account_number?.trim()) {
+                    missingFields.push("Bank Account Number");
+                  }
+
+                  if (!formData.ifsc_code?.trim()) {
+                    missingFields.push("IFSC Code");
+                  }
+
+                  if (!formData.pan_number?.trim()) {
+                    missingFields.push("PAN Number");
+                  }
+
+                  if (!formData.aadhar_number?.trim()) {
+                    missingFields.push("Aadhaar Number");
+                  }
                 }
 
-                if (!formData.employment_type) {
-                  missingFields.push("Employment Type");
-                }
-
-                if (!formData.joining_date) {
-                  missingFields.push("Joining Date");
-                }
-
-                if (!formData.probation_end_date) {
-                  missingFields.push("Probation End Date");
-                }
-
-                if (!formData.work_location) {
-                  missingFields.push("Work Location");
-                }
-
-                if (formData.salary === undefined || formData.salary === null) {
-                  missingFields.push("CTC");
-                }
-
-                if (!formData.client_type) {
-                  missingFields.push("Client Type");
-                }
-
-                if (!formData.company_name?.trim()) {
-                  missingFields.push("Client Name");
-                }
-
-                if (
-                  formData.client_type === "in-house" &&
-                  !formData.project_id
-                ) {
-                  missingFields.push("Project");
+                if (activeTab === 4) {
+                  // Add your required Address / Emergency validation here
                 }
 
                 if (missingFields.length > 0) {
@@ -1231,7 +1697,7 @@ const handleSubmit = async (e: React.FormEvent) => {
                 }
 
                 setError([]);
-                setActiveTab(2);
+                setActiveTab(activeTab + 1);
               }}
               className="flex items-center gap-2 px-6 py-2.5 text-xs font-bold text-white bg-indigo-600 rounded-xl shadow-sm hover:bg-indigo-700 transition-all"
             >
@@ -1241,12 +1707,12 @@ const handleSubmit = async (e: React.FormEvent) => {
           </>
         )}
 
-        {/* ADD MODE - TAB 3 */}
-        {mode === "add" && activeTab === 2 && (
+        {/* ADD MODE - TAB 5 */}
+        {mode === "add" && activeTab === 5 && (
           <>
             <button
               type="button"
-              onClick={() => setActiveTab(1)}
+              onClick={() => setActiveTab(4)}
               className="px-5 py-2.5 text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-all"
             >
               ← Back

@@ -66,13 +66,16 @@ export interface Employee {
   blood_group?: string | null;
   marital_status?: "single" | "married" | "divorced" | "widowed" | null;
 
-  // ==============================
   // Address Information
-  // ==============================
-  address?: string | null;
-  city?: string | null;
-  state?: string | null;
-  pincode?: string | null;
+  permanent_address?: string | null;
+  permanent_city?: string | null;
+  permanent_state?: string | null;
+  permanent_pincode?: string | null;
+
+  temporary_address?: string | null;
+  temporary_city?: string | null;
+  temporary_state?: string | null;
+  temporary_pincode?: string | null;
 
   // ==============================
   // Emergency Contact
@@ -125,11 +128,14 @@ export interface Employee {
   pan_number?: string | null;
   aadhar_number?: string | null;
 
+
+
   // Statutory Information
   esi_healthcare_eligible?: boolean;
   esi_number?: string | null;
 
   pf_eligible?: boolean;
+  uan_number?: string | null;
 
   pt_eligible?: boolean;
   pt_number?: string | null;

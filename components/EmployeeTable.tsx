@@ -149,10 +149,15 @@ export default function EmployeeTable({ employees, departments, role }: Employee
               },
             }),
 
-            new Paragraph(`Address: ${emp.address || "N/A"}`),
-            new Paragraph(`City: ${emp.city || "N/A"}`),
-            new Paragraph(`State: ${emp.state || "N/A"}`),
-            new Paragraph(`Pincode: ${emp.pincode || "N/A"}`),
+            new Paragraph(`Permanent Address: ${emp.permanent_address || "N/A"}`),
+            new Paragraph(`Permanent City: ${emp.permanent_city || "N/A"}`),
+            new Paragraph(`Permanent State: ${emp.permanent_state || "N/A"}`),
+            new Paragraph(`Permanent Pincode: ${emp.permanent_pincode || "N/A"}`),
+
+            new Paragraph(`Temporary Address: ${emp.temporary_address || "N/A"}`),
+            new Paragraph(`Temporary City: ${emp.temporary_city || "N/A"}`),
+            new Paragraph(`Temporary State: ${emp.temporary_state || "N/A"}`),
+            new Paragraph(`Temporary Pincode: ${emp.temporary_pincode || "N/A"}`),
 
             new Paragraph({
               children: [
@@ -386,10 +391,15 @@ export default function EmployeeTable({ employees, departments, role }: Employee
             },
           }),
 
-          new Paragraph(`Address: ${emp.address || "N/A"}`),
-          new Paragraph(`City: ${emp.city || "N/A"}`),
-          new Paragraph(`State: ${emp.state || "N/A"}`),
-          new Paragraph(`Pincode: ${emp.pincode || "N/A"}`),
+          new Paragraph(`Permanent Address: ${emp.permanent_address || "N/A"}`),
+          new Paragraph(`Permanent City: ${emp.permanent_city || "N/A"}`),
+          new Paragraph(`Permanent State: ${emp.permanent_state || "N/A"}`),
+          new Paragraph(`Permanent Pincode: ${emp.permanent_pincode || "N/A"}`),
+
+          new Paragraph(`Temporary Address: ${emp.temporary_address || "N/A"}`),
+          new Paragraph(`Temporary City: ${emp.temporary_city || "N/A"}`),
+          new Paragraph(`Temporary State: ${emp.temporary_state || "N/A"}`),
+          new Paragraph(`Temporary Pincode: ${emp.temporary_pincode || "N/A"}`),
 
           new Paragraph({
             children: [

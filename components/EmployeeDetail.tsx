@@ -140,9 +140,9 @@ const isExitStatus = [
     { name: "Personal", icon: User },
     { name: "Employment", icon: Briefcase },
     { name: "Bank & Identity", icon: CreditCard },
-    { name: "Documents", icon: FileText },
     { name: "Address & Emergency", icon: MapPin },
-    ...(!isExitStatus ? [{ name: "Employee Exit", icon: DeleteIcon }] : []),
+    { name: "Documents", icon: FileText },
+    ...(!isExitStatus ? [{ name: "Terminated", icon: DeleteIcon }] : []),
   ];
 
   const DetailTile = ({ label, value }: { label: string; value: React.ReactNode }) => (
@@ -271,7 +271,7 @@ const isExitStatus = [
           )}
 
           {/* Documents */}
-          {activeTab === 3 && (
+          {activeTab === 4 && (
             <div>
               <DocumentUpload
                 employeeId={employee.id}
@@ -282,31 +282,132 @@ const isExitStatus = [
           )}
 
           {/* Address & Emergency */}
-          {activeTab === 4 && (
-            <div className="space-y-6">
+          {activeTab === 3 && (
+            <div className="space-y-8">
+
+              {/* ================= PERMANENT ADDRESS ================= */}
               <div>
-                <h3 className="text-sm font-bold text-slate-900 mb-3 uppercase tracking-wider text-slate-400">Residential Address</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <div className="md:col-span-2">
-                    <DetailTile label="Address Line" value={employee.address} />
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center">
+                    <MapPin className="w-4 h-4 text-indigo-600" />
                   </div>
-                  <DetailTile label="City" value={employee.city} />
-                  <DetailTile label="State" value={employee.state} />
-                  <DetailTile label="Pincode" value={employee.pincode} />
+
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900">
+                      Permanent Address
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                      Employee&apos;s permanent residential address
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div className="md:col-span-2 lg:col-span-3">
+                    <DetailTile
+                      label="Address"
+                      value={employee.permanent_address}
+                    />
+                  </div>
+
+                  <DetailTile
+                    label="City"
+                    value={employee.permanent_city}
+                  />
+
+                  <DetailTile
+                    label="State"
+                    value={employee.permanent_state}
+                  />
+
+                  <DetailTile
+                    label="Pincode"
+                    value={employee.permanent_pincode}
+                  />
                 </div>
               </div>
 
-              <div className="pt-2 border-t border-slate-100">
-                <h3 className="text-sm font-bold text-slate-900 mb-3 uppercase tracking-wider text-slate-400">Emergency Contact</h3>
+
+              {/* ================= TEMPORARY ADDRESS ================= */}
+              <div className="pt-6 border-t border-slate-100">
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
+                    <MapPin className="w-4 h-4 text-blue-600" />
+                  </div>
+
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900">
+                      Temporary Address
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                      Employee&apos;s current or temporary residential address
+                    </p>
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <DetailTile label="Contact Name" value={employee.emergency_contact_name} />
-                  <DetailTile label="Phone Number" value={employee.emergency_contact_phone} />
-                  <DetailTile label="Relationship" value={employee.emergency_contact_relation} />
+                  <div className="md:col-span-2 lg:col-span-3">
+                    <DetailTile
+                      label="Address"
+                      value={employee.temporary_address}
+                    />
+                  </div>
+
+                  <DetailTile
+                    label="City"
+                    value={employee.temporary_city}
+                  />
+
+                  <DetailTile
+                    label="State"
+                    value={employee.temporary_state}
+                  />
+
+                  <DetailTile
+                    label="Pincode"
+                    value={employee.temporary_pincode}
+                  />
                 </div>
               </div>
+
+
+              {/* ================= EMERGENCY CONTACT ================= */}
+              <div className="pt-6 border-t border-slate-100">
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="w-8 h-8 rounded-lg bg-rose-50 flex items-center justify-center">
+                    <Phone className="w-4 h-4 text-rose-600" />
+                  </div>
+
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900">
+                      Emergency Contact
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                      Person to contact in case of an emergency
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <DetailTile
+                    label="Contact Name"
+                    value={employee.emergency_contact_name}
+                  />
+
+                  <DetailTile
+                    label="Relationship"
+                    value={employee.emergency_contact_relation}
+                  />
+
+                  <DetailTile
+                    label="Contact Phone"
+                    value={employee.emergency_contact_phone}
+                  />
+                </div>
+              </div>
+
             </div>
           )}
-
           {/* Delete */}
           {!isExitStatus && activeTab === 5 && (
             <div className="space-y-6">
