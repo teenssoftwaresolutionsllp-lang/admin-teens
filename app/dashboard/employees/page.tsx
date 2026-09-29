@@ -40,7 +40,7 @@ export default async function EmployeesPage() {
           </span>
         </div>
         
-        {role === 'hr' && (
+        {/* {role === 'hr' && (
           <Link
             href="/dashboard/employees/add"
             className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 transition-colors"
@@ -48,7 +48,7 @@ export default async function EmployeesPage() {
             <PlusCircle className="h-4 w-4" />
             Add Employee
           </Link>
-        )}
+        )} */}
       </div>
 
       <EmployeeTable employees={employees} departments={departments} role={role} />

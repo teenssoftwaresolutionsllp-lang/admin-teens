@@ -112,13 +112,13 @@ export default async function DashboardPage() {
                 <CheckSquare className="h-4 w-4" />
                 <span>Approvals ({totalPendingActions})</span>
               </Link>
-              <Link
+              {/* <Link
                 href="/dashboard/employees/add"
                 className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-indigo-700 transition-colors"
               >
                 <PlusCircle className="h-4 w-4" />
                 <span>Add Employee</span>
-              </Link>
+              </Link> */}
             </>
           )}
 
