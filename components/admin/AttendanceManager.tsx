@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { AttendanceLog, Employee, Project } from "@/lib/types";
-import { Clock, CheckCircle2, AlertTriangle, XCircle, Search, Filter } from "lucide-react";
+import { Clock, Search, Filter } from "lucide-react";
 
 interface AttendanceManagerProps {
   logs: AttendanceLog[];
@@ -20,19 +20,31 @@ export default function AttendanceManager({
   );
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [clientFilter, setClientFilter] = useState<string>("all");
+
+  const getLogForEmployee = (empId: string) => {
+    return initialLogs.find((l) => l.employee_id === empId && l.attendance_date === selectedDate );
+  };
 
   const filteredEmployees = employees.filter((emp) => {
     const matchesSearch =
       `${emp.first_name} ${emp.last_name}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
       emp.employee_id.toLowerCase().includes(searchTerm.toLowerCase());
-    return matchesSearch;
+    
+      const log = getLogForEmployee(emp.id);
+      let matchesStatus = true;
+      if (statusFilter === "present") {
+        matchesStatus = !!log && (log.status === "present" || log.is_regularized);
+      } else if (statusFilter === "late") {
+        matchesStatus = !!log && log.is_late && !log.is_regularized;
+      } else if (statusFilter === "half_day") {
+        matchesStatus = !!log && log.status === "half_day" && !log.is_regularized;
+      } else if (statusFilter === "absent") {
+        matchesStatus = !log || (!log.is_regularized && log.status !== "present" && log.status !== "half_day");
+      }
+      const matchesClient = clientFilter === "all" ||  emp.company_name?.trim().toLowerCase() === clientFilter.trim().toLowerCase();
+      return matchesSearch && matchesStatus && matchesClient;
   });
-
-  const getLogForEmployee = (empId: string) => {
-    return initialLogs.find(
-      (l) => l.employee_id === empId && l.attendance_date === selectedDate
-    );
-  };
 
   const presentCount = employees.filter((e) => {
     const l = getLogForEmployee(e.id);
@@ -72,7 +84,10 @@ export default function AttendanceManager({
             type="date"
             value={selectedDate}
             onChange={(e) => setSelectedDate(e.target.value)}
-            className="px-3.5 py-2 text-xs font-semibold border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-hidden bg-slate-50 text-slate-800 shadow-xs"
+            onClick={(e)=>{
+              e.currentTarget.showPicker?.();
+            }}
+            className="px-3.5 py-2 text-xs font-semibold border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-hidden bg-slate-50 text-slate-800 shadow-xs cursor-pointer"
           />
         </div>
       </div>
@@ -121,6 +136,26 @@ export default function AttendanceManager({
           <div className="flex items-center gap-2">
             <Filter className="w-4 h-4 text-slate-400" />
             <select
+              value={clientFilter}
+              onChange={(e) => setClientFilter(e.target.value)}
+              className="px-3 py-2 text-xs border border-slate-200 rounded-xl font-medium text-slate-700 bg-white shadow-xs focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value="all">All Clients / Vendors</option>
+
+              {Array.from(
+                new Set(
+                  employees
+                    .map((emp) => emp.company_name)
+                    .filter((company): company is string => Boolean(company))
+                )
+              ).map((company) => (
+                <option key={company} value={company}>
+                  {company}
+                </option>
+              ))}
+            </select>
+
+            <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
               className="px-3 py-2 text-xs border border-slate-200 rounded-xl font-medium text-slate-700 bg-white shadow-xs focus:ring-2 focus:ring-indigo-500"
@@ -140,7 +175,7 @@ export default function AttendanceManager({
               <tr>
                 <th className="py-3.5 px-4">Employee</th>
                 <th className="py-3.5 px-4">Department</th>
-                <th className="py-3.5 px-4">Clients - Vendors</th>
+                <th className="py-3.5 px-4">Clients / Vendors</th>
                 <th className="py-3.5 px-4">Assigned Shift</th>
                 <th className="py-3.5 px-4">Check-In</th>
                 <th className="py-3.5 px-4">Check-Out</th>
@@ -164,9 +199,22 @@ export default function AttendanceManager({
                     <td className="py-3.5 px-4 font-medium text-slate-700">
                       {emp.department?.name || "Engineering"}
                     </td>
-                    <td className="py-3.5 px-4 text-slate-600 font-mono text-[11px]">
-                      {project.shift_start_time} - {project.shift_end_time} ({project.client_country})
+                    <td className="py-3.5 px-4">
+                      <span className="font-semibold text-slate-800 block">
+                        {emp.company_name || "Not Assigned"}
+                      </span>
+                      <span className="text-[10px] text-slate-400">
+                        {project?.client_country || "—"}
+                      </span>
                     </td>
+                    {/* Assigned Shift */}
+                    <td className="py-3.5 px-4 font-mono font-medium">
+                      {project?.shift_start_time && project?.shift_end_time
+                        ? `${project.shift_start_time} - ${project.shift_end_time}`
+                        : "—"}
+                    </td>
+
+                    {/* Check-In */}
                     <td className="py-3.5 px-4 font-mono font-medium">
                       {log?.check_in_time
                         ? new Date(log.check_in_time).toLocaleTimeString([], {

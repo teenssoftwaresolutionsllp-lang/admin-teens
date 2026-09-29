@@ -278,9 +278,10 @@ export class DataStore {
         .order("created_at", { ascending: false });
 
       if (!error && data && data.length > 0) {
+        const projects = await this.getProjects();
         const result = data.map((emp) => ({
           ...emp,
-          project: cache.projects.find((p) => p.id === emp.project_id) || cache.projects[0],
+          project: projects.find((p) => p.id === emp.project_id) || projects[0],
         }));
         // Sync DB data into cache
         for (const emp of result) {
@@ -325,6 +326,8 @@ export class DataStore {
       }
 
       if (data) {
+        const projects = await this.getProjects();
+
         const result: Employee = {
           ...data,
           project:
@@ -366,9 +369,10 @@ export class DataStore {
     // Check in-memory cache first
     const cached = cache.employees.find((e) => e.email?.toLowerCase() === email?.toLowerCase());
     if (cached) {
+      const projects = await this.getProjects();
       return {
         ...cached,
-        project: cached.project || cache.projects.find((p) => p.id === cached.project_id) || cache.projects[0],
+        project: cached.project || cache.projects.find((project) => project.id === cached.project_id) || projects[0],
       };
     }
 
@@ -902,7 +906,10 @@ export class DataStore {
         .order("name");
 
       if (error) throw error;
-      if (data && data.length > 0) return data as Project[];
+      if (data && data.length > 0) {
+        cache.projects = data as Project[];
+        return cache.projects;
+      };
 
       const calendarDefinitions = [
         { name: "India Standard Holidays 2026", country_code: "IN", country_name: "India", timezone: "Asia/Kolkata" },
@@ -929,7 +936,8 @@ export class DataStore {
         .insert(projectRows)
         .select("*, calendar:holiday_calendars(*)");
       if (projectError) throw projectError;
-      return (createdProjects || []) as Project[];
+      cache.projects = (createdProjects || []) as Project[];
+      return cache.projects;
     } catch (error) {
       console.warn("getProjects database warning:", error);
       return cache.projects.map((p) => ({
