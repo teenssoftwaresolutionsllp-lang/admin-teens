@@ -63,7 +63,7 @@ export default function Sidebar({ role }: SidebarProps) {
     { name: "Attendance & Shifts", href: "/dashboard/attendance", icon: Clock, roles: ["ceo", "hr"] },
     { name: "Leave Management", href: "/dashboard/leaves", icon: CalendarDays, roles: ["ceo", "hr"] },
     { name: "Payroll & Payslips", href: "/dashboard/payroll", icon: Banknote, roles: ["ceo", "hr"] },
-    { name: "Projects & Calendars", href: "/dashboard/projects", icon: Globe, roles: ["ceo", "hr"] },
+    { name: "Client & Vendors", href: "/dashboard/projects", icon: Globe, roles: ["ceo", "hr"] },
   ];
 
   const employeeNavItems = [

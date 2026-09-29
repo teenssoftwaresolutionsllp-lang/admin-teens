@@ -24,7 +24,7 @@ export default function Header({ profile }: HeaderProps) {
     if (pathname === "/dashboard/attendance") return "Company Attendance & Shifts";
     if (pathname === "/dashboard/leaves") return "Leave Policy & Balances";
     if (pathname === "/dashboard/payroll") return "Payroll & Salary Processing";
-    if (pathname === "/dashboard/projects") return "Projects & Multi-Country Calendars";
+    if (pathname === "/dashboard/projects") return "Client & Vendors";
     
     // Employee ESS titles
     if (pathname === "/portal") return "Employee Self-Service Dashboard";

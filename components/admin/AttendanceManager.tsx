@@ -140,6 +140,7 @@ export default function AttendanceManager({
               <tr>
                 <th className="py-3.5 px-4">Employee</th>
                 <th className="py-3.5 px-4">Department</th>
+                <th className="py-3.5 px-4">Clients - Vendors</th>
                 <th className="py-3.5 px-4">Assigned Shift</th>
                 <th className="py-3.5 px-4">Check-In</th>
                 <th className="py-3.5 px-4">Check-Out</th>

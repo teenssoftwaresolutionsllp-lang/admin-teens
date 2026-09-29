@@ -292,41 +292,189 @@ export default function ApprovalsHub({
                           </div>
                         )}
                       </div>
+                    {/* Categorized Profile Changes */}
+                    {(() => {
+                      const fieldSections: Record<string, string> = {
+                        // Personal Information
+                        first_name: "Personal Information",
+                        last_name: "Personal Information",
+                        date_of_birth: "Personal Information",
+                        gender: "Personal Information",
+                        blood_group: "Personal Information",
+                        marital_status: "Personal Information",
 
-                      {/* Diff Comparison Table */}
-                      <div className="overflow-x-auto rounded-xl border border-slate-200/80 bg-white">
-                        <table className="w-full text-xs text-left">
-                          <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-100 uppercase tracking-wider text-[11px]">
-                            <tr>
-                              <th className="py-2.5 px-4 w-1/3">Field Name</th>
-                              <th className="py-2.5 px-4 w-1/3 text-slate-500">Current Value</th>
-                              <th className="py-2.5 px-4 w-1/3 text-indigo-700 font-bold">
-                                Requested New Value
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-100 bg-white">
-                            {Object.entries(req.requested_changes)
-                              .filter(([_, v]) => v !== null && v !== "")
-                              .map(([k, v]) => {
-                                const prev = (req.previous_values || {})[k] || (emp as any)?.[k] || "—";
-                                return (
-                                  <tr key={k} className="hover:bg-slate-50/50">
-                                    <td className="py-2.5 px-4 font-semibold text-slate-800 capitalize">
-                                      {k.replace(/_/g, " ")}
-                                    </td>
-                                    <td className="py-2.5 px-4 text-slate-500 font-mono">
-                                      {String(prev)}
-                                    </td>
-                                    <td className="py-2.5 px-4 font-mono font-bold text-emerald-700 bg-emerald-50/30">
-                                      {String(v)}
-                                    </td>
+                        // Contact Information
+                        phone: "Contact Information",
+                        email: "Contact Information",
+                        address: "Contact Information",
+                        city: "Contact Information",
+                        state: "Contact Information",
+                        country: "Contact Information",
+                        pincode: "Contact Information",
+
+                        // Employment Information
+                        employee_id: "Employment Information",
+                        department_id: "Employment Information",
+                        project_id: "Employment Information",
+                        designation: "Employment Information",
+                        employment_type: "Employment Information",
+                        joining_date: "Employment Information",
+                        probation_duration: "Employment Information",
+                        probation_end_date: "Employment Information",
+                        confirmation_date: "Employment Information",
+                        reporting_manager: "Employment Information",
+                        work_location: "Employment Information",
+                        client_type: "Employment Information",
+                        company_name: "Employment Information",
+                        salary: "Employment Information",
+                        status: "Employment Information",
+
+                        // Bank & Identity Information
+                        bank_name: "Bank & Identity Information",
+                        bank_account_number: "Bank & Identity Information",
+                        ifsc_code: "Bank & Identity Information",
+                        pan_number: "Bank & Identity Information",
+                        aadhaar_number: "Bank & Identity Information",
+
+                        // Statutory Information
+                        pf_eligible: "Statutory Information",
+                        pf_number: "Statutory Information",
+                        esi_eligible: "Statutory Information",
+                        esi_number: "Statutory Information",
+                        pt_eligible: "Statutory Information",
+                        pt_number: "Statutory Information",
+                        tds_eligible: "Statutory Information",
+
+                        // Emergency Contact Information
+                        emergency_contact_name: "Emergency Contact Information",
+                        emergency_contact_phone: "Emergency Contact Information",
+                        emergency_contact_relationship: "Emergency Contact Information",
+                        emergency_contact_address: "Emergency Contact Information",
+
+                        // Documents
+                        profile_photo: "Documents",
+                        aadhaar_document: "Documents",
+                        pan_document: "Documents",
+                        bank_document: "Documents",
+                        address_proof: "Documents",
+                        educational_documents: "Documents",
+                        experience_documents: "Documents",
+                      };
+
+                      const sectionOrder = [
+                        "Personal Information",
+                        "Contact Information",
+                        "Employment Information",
+                        "Bank & Identity Information",
+                        "Statutory Information",
+                        "Emergency Contact Information",
+                        "Documents",
+                      ];
+
+                      const changes = Object.entries(req.requested_changes).filter(
+                        ([_, v]) => v !== null && v !== ""
+                      );
+
+                      return (
+                        <div className="space-y-5">
+                          {sectionOrder.map((sectionName) => {
+                            const sectionFields = changes.filter(
+                              ([key]) => fieldSections[key] === sectionName
+                            );
+
+                            if (sectionFields.length === 0) return null;
+
+                            return (
+                              <div
+                                key={sectionName}
+                                className="overflow-hidden rounded-xl border border-slate-200/80 bg-white"
+                              >
+                                {/* Section Heading */}
+                                <div className="px-4 py-3 bg-slate-50 border-b border-slate-200">
+                                  <h5 className="text-[11px] font-bold uppercase tracking-wider text-slate-700">
+                                    {sectionName}
+                                  </h5>
+                                </div>
+
+                                {/* Fields */}
+                                <table className="w-full text-xs text-left">
+                                  <thead className="bg-white text-slate-500 font-bold border-b border-slate-100">
+                                    <tr>
+                                      <th className="py-2.5 px-4 w-1/2">
+                                        Information Type
+                                      </th>
+                                      <th className="py-2.5 px-4 w-1/2 text-indigo-700">
+                                        Employee Detail
+                                      </th>
+                                    </tr>
+                                  </thead>
+
+                                  <tbody className="divide-y divide-slate-100">
+                                    {sectionFields.map(([key, value]) => (
+                                      <tr
+                                        key={key}
+                                        className="hover:bg-slate-50/50 transition-colors"
+                                      >
+                                        <td className="py-2.5 px-4 font-semibold text-slate-800 capitalize">
+                                          {key.replace(/_/g, " ")}
+                                        </td>
+
+                                        <td className="py-2.5 px-4 font-mono font-bold text-emerald-700 bg-emerald-50/30">
+                                          {String(value)}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            );
+                          })}
+
+                          {/* Any fields not included in the categories above */}
+                          {changes.some(([key]) => !fieldSections[key]) && (
+                            <div className="overflow-hidden rounded-xl border border-slate-200/80 bg-white">
+                              <div className="px-4 py-3 bg-slate-50 border-b border-slate-200">
+                                <h5 className="text-[11px] font-bold uppercase tracking-wider text-slate-700">
+                                  Other Information
+                                </h5>
+                              </div>
+
+                              <table className="w-full text-xs text-left">
+                                <thead className="bg-white text-slate-500 font-bold border-b border-slate-100">
+                                  <tr>
+                                    <th className="py-2.5 px-4 w-1/2">
+                                      Information Type
+                                    </th>
+                                    <th className="py-2.5 px-4 w-1/2 text-indigo-700">
+                                      Employee Detail
+                                    </th>
                                   </tr>
-                                );
-                              })}
-                          </tbody>
-                        </table>
-                      </div>
+                                </thead>
+
+                                <tbody className="divide-y divide-slate-100">
+                                  {changes
+                                    .filter(([key]) => !fieldSections[key])
+                                    .map(([key, value]) => (
+                                      <tr
+                                        key={key}
+                                        className="hover:bg-slate-50/50 transition-colors"
+                                      >
+                                        <td className="py-2.5 px-4 font-semibold text-slate-800 capitalize">
+                                          {key.replace(/_/g, " ")}
+                                        </td>
+
+                                        <td className="py-2.5 px-4 font-mono font-bold text-emerald-700 bg-emerald-50/30">
+                                          {String(value)}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                     </div>
                   );
                 })}

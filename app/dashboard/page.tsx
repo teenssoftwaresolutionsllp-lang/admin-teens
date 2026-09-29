@@ -41,12 +41,23 @@ export default async function DashboardPage() {
   const activeEmployees = allEmployees.filter(e => e.status === 'active').length;
   const onNotice = allEmployees.filter(e => e.status === 'on_notice').length;
   const recentEmployees = allEmployees.slice(0, 5);
+  const now = new Date();
+  const currentMonth = now.getMonth();
+  const currentYear = now.getFullYear();
+  const newHires = allEmployees.filter((employee) => {
+    if (!employee.joining_date) return false;
+    const joiningDate = new Date(employee.joining_date);
+    return (
+      joiningDate.getMonth() === currentMonth &&
+      joiningDate.getFullYear() === currentYear
+    );
+  }).length;
 
   const stats = {
     totalEmployees: totalEmployees || 3,
     activeEmployees: activeEmployees || 3,
     departments: 7,
-    newHires: 1,
+    newHires,
     onNotice: onNotice || 0,
     recentEmployees: recentEmployees || [],
   };
@@ -63,10 +74,8 @@ export default async function DashboardPage() {
   const pendingRegCount = regularizations.filter(r => r.status === 'pending').length;
   const totalPendingActions = pendingProfileCount + pendingLeaveCount + pendingRegCount;
 
-  const currentMonth = new Date().getMonth() + 1;
-  const currentYear = new Date().getFullYear();
   const monthlyPayrollTotal = payslips
-    .filter(p => p.payroll_month === currentMonth && p.payroll_year === currentYear)
+    .filter(p => p.payroll_month === currentMonth + 1 && p.payroll_year === currentYear)
     .reduce((acc, c) => acc + c.net_salary, 0);
 
   return (
@@ -246,7 +255,7 @@ export default async function DashboardPage() {
                 <Globe className="w-5 h-5" />
               </div>
               <div>
-                <h4 className="font-bold text-slate-900 text-xs">Projects & Calendars</h4>
+                <h4 className="font-bold text-slate-900 text-xs">Client & Vendors</h4>
                 <p className="text-[11px] text-slate-500">Multi-country holidays & shifts</p>
               </div>
             </div>
