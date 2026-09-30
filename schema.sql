@@ -288,6 +288,14 @@ CREATE TABLE IF NOT EXISTS public.employees (
     -- resigned
     -- laid_off
     --
+    -- HR can decide how many days the employee can
+    -- continue logging in after exit.
+    --
+    -- Maximum allowed: 45 days.
+    -- ======================================================
+
+    temporary_login_days integer,
+
     -- Login is allowed only until this timestamp.
     -- ======================================================
 
@@ -348,6 +356,9 @@ ADD COLUMN IF NOT EXISTS exit_document_name text;
 
 ALTER TABLE public.employees
 ADD COLUMN IF NOT EXISTS exit_date date;
+
+ALTER TABLE public.employees
+ADD COLUMN IF NOT EXISTS temporary_login_days integer;
 
 ALTER TABLE public.employees
 ADD COLUMN IF NOT EXISTS temporary_login_expires_at timestamptz;
@@ -478,6 +489,28 @@ ALTER COLUMN pt_eligible SET DEFAULT false;
 
 ALTER TABLE public.employees
 ALTER COLUMN tds_eligible SET DEFAULT false;
+
+
+-- ==========================================================
+-- 5G. TEMPORARY LOGIN DAYS CONSTRAINT
+-- ==========================================================
+
+DO $$
+BEGIN
+
+    ALTER TABLE public.employees
+    DROP CONSTRAINT IF EXISTS temporary_login_days_limit;
+
+    ALTER TABLE public.employees
+    ADD CONSTRAINT temporary_login_days_limit
+    CHECK (
+        temporary_login_days IS NULL
+        OR temporary_login_days BETWEEN 0 AND 45
+    );
+
+EXCEPTION
+    WHEN others THEN NULL;
+END $$;
 
 
 -- ==========================================================
@@ -1583,7 +1616,9 @@ EXECUTE FUNCTION public.handle_new_user();
 -- ==========================================================
 
 -- UPDATE public.employees
--- SET temporary_login_expires_at = NOW() + INTERVAL '45 days'
+-- SET
+--     temporary_login_days = 45,
+--     temporary_login_expires_at = NOW() + INTERVAL '45 days'
 -- WHERE LOWER(status) IN (
 --     'pending',
 --     'probation',
@@ -1605,3 +1640,89 @@ FROM information_schema.columns
 WHERE table_schema = 'public'
 AND table_name = 'employees'
 ORDER BY ordinal_position;
+
+-- ==========================================================
+-- 20. EMPLOYEE EXIT DOCUMENT STORAGE
+-- ==========================================================
+-- Exit documents are stored in a private Supabase Storage bucket.
+-- The application stores the Storage object path in
+-- employees.exit_document_url.
+-- ==========================================================
+
+INSERT INTO storage.buckets (
+    id,
+    name,
+    public
+)
+VALUES (
+    'employee-exit-documents',
+    'employee-exit-documents',
+    false
+)
+ON CONFLICT (id) DO NOTHING;
+
+
+-- ==========================================================
+-- 20A. EXIT DOCUMENT STORAGE - VIEW POLICY
+-- ==========================================================
+
+DROP POLICY IF EXISTS "HR can view exit documents"
+ON storage.objects;
+
+CREATE POLICY "HR can view exit documents"
+ON storage.objects
+FOR SELECT
+TO authenticated
+USING (
+    bucket_id = 'employee-exit-documents'
+    AND EXISTS (
+        SELECT 1
+        FROM public.profiles
+        WHERE profiles.id = auth.uid()
+        AND profiles.role IN ('ceo', 'hr')
+    )
+);
+
+
+-- ==========================================================
+-- 20B. EXIT DOCUMENT STORAGE - UPLOAD POLICY
+-- ==========================================================
+
+DROP POLICY IF EXISTS "HR can upload exit documents"
+ON storage.objects;
+
+CREATE POLICY "HR can upload exit documents"
+ON storage.objects
+FOR INSERT
+TO authenticated
+WITH CHECK (
+    bucket_id = 'employee-exit-documents'
+    AND EXISTS (
+        SELECT 1
+        FROM public.profiles
+        WHERE profiles.id = auth.uid()
+        AND profiles.role IN ('ceo', 'hr')
+    )
+);
+
+
+-- ==========================================================
+-- 20C. EXIT DOCUMENT STORAGE - DELETE POLICY
+-- ==========================================================
+
+DROP POLICY IF EXISTS "HR can delete exit documents"
+ON storage.objects;
+
+CREATE POLICY "HR can delete exit documents"
+ON storage.objects
+FOR DELETE
+TO authenticated
+USING (
+    bucket_id = 'employee-exit-documents'
+    AND EXISTS (
+        SELECT 1
+        FROM public.profiles
+        WHERE profiles.id = auth.uid()
+        AND profiles.role IN ('ceo', 'hr')
+    )
+);
