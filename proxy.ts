@@ -44,7 +44,7 @@ export async function proxy(request: NextRequest) {
 
   if (user && isLoginPath) {
     const role = user.user_metadata?.role || 'hr'
-    const destination = role === 'employee' ? '/portal' : '/dashboard'
+    const destination = role === 'employee' ? '/portal/profile' : '/dashboard'
     const url = request.nextUrl.clone()
     url.pathname = destination
     return NextResponse.redirect(url)

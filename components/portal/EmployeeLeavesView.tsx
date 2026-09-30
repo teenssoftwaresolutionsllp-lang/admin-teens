@@ -43,47 +43,71 @@ export default function EmployeeLeavesView({
     return Math.max(1, diff);
   };
 
-  const handleApplySubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSubmitting(true);
+const handleApplySubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+
+  setSubmitting(true);
+  setSuccessMsg(null);
+
+  const totalDays = calculateDays();
+
+  try {
+    const res = await fetch("/api/leaves", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        employeeId: employee.id,
+        leaveTypeId: formData.leaveTypeId,
+        startDate: formData.startDate,
+        endDate: formData.endDate,
+        totalDays,
+        isHalfDay: formData.isHalfDay,
+        reason: formData.reason,
+      }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(
+        data?.error || `Leave submission failed. Status: ${res.status}`
+      );
+    }
+
+    setRequests((prev) => [
+      data.leaveRequest,
+      ...prev,
+    ]);
+
+    setIsModalOpen(false);
+
+    setSuccessMsg(
+      "Leave application successfully submitted to HR for approval."
+    );
+
+    setFormData({
+      leaveTypeId: leaveTypes[0]?.id || "",
+      startDate: new Date().toISOString().split("T")[0],
+      endDate: new Date().toISOString().split("T")[0],
+      isHalfDay: false,
+      reason: "",
+    });
+  } catch (err) {
+    console.error("Leave submission API error:", err);
+
     setSuccessMsg(null);
 
-    const totalDays = calculateDays();
-
-    try {
-      const res = await fetch("/api/leaves", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          employeeId: employee.id,
-          leaveTypeId: formData.leaveTypeId,
-          startDate: formData.startDate,
-          endDate: formData.endDate,
-          totalDays,
-          isHalfDay: formData.isHalfDay,
-          reason: formData.reason,
-        }),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        setRequests([data.leaveRequest, ...requests]);
-        setIsModalOpen(false);
-        setSuccessMsg("Leave application successfully submitted to HR for approval.");
-        setFormData({
-          leaveTypeId: leaveTypes[0]?.id || "",
-          startDate: new Date().toISOString().split("T")[0],
-          endDate: new Date().toISOString().split("T")[0],
-          isHalfDay: false,
-          reason: "",
-        });
-      }
-    } catch (err) {
-      console.error("Apply leave error:", err);
-    } finally {
-      setSubmitting(false);
-    }
-  };
+    alert(
+      err instanceof Error
+        ? err.message
+        : "Failed to submit leave application."
+    );
+  } finally {
+    setSubmitting(false);
+  }
+};
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">

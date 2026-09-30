@@ -27,7 +27,7 @@ export default function Header({ profile }: HeaderProps) {
     if (pathname === "/dashboard/projects") return "Client & Vendors";
     
     // Employee ESS titles
-    if (pathname === "/portal") return "Employee Self-Service Dashboard";
+    // if (pathname === "/portal/") return "Employee Self-Service Dashboard";
     if (pathname === "/portal/profile") return "My Employee Profile";
     if (pathname === "/portal/attendance") return "My Attendance & Check-In";
     if (pathname === "/portal/leaves") return "My Leaves & Holidays";

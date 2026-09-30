@@ -2,19 +2,79 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { CheckCircle2, AlertCircle, ArrowRight, ShieldCheck } from "lucide-react";
+
+import {
+  CheckCircle2,
+  AlertCircle,
+  ArrowRight,
+  ShieldCheck,
+} from "lucide-react";
+
 import { calculateProfileCompletion } from "@/lib/calculations";
 import { Employee } from "@/lib/types";
 
+/*
+ * IMPORTANT:
+ *
+ * profileData is intentionally NOT typed as Partial<Employee>.
+ *
+ * editFormData contains editable form values and some fields
+ * may have different temporary types before they are submitted.
+ *
+ * This prevents the TypeScript error at:
+ *
+ * profileData={editFormData}
+ */
 interface ProfileProgressBarProps {
   employee: Partial<Employee> | null;
+
+  profileData?: Record<string, unknown> | null;
+
+  showProgress?: boolean;
+
   onCompleteProfile?: () => void;
 }
 
-export default function ProfileProgressBar({ employee, onCompleteProfile }: ProfileProgressBarProps) {
-  const [showAllMissing, setShowAllMissing] = useState(false);
-  const { percentage, missingFields, isComplete, completedFieldsCount, totalFieldsCount } =
-    calculateProfileCompletion(employee);
+export default function ProfileProgressBar({
+  employee,
+  profileData,
+  showProgress = false,
+  onCompleteProfile,
+}: ProfileProgressBarProps) {
+  const [showAllMissing, setShowAllMissing] =
+    useState(false);
+
+  /*
+   * If the employee has not started editing,
+   * completely hide the progress card.
+   */
+  if (!showProgress) {
+    return null;
+  }
+
+  /*
+   * Merge:
+   *
+   * 1. Existing employee master data
+   * 2. Current values from edit form
+   *
+   * The edit form values override the existing
+   * employee values.
+   */
+  const progressEmployee = {
+    ...(employee || {}),
+    ...(profileData || {}),
+  } as Partial<Employee>;
+
+  const {
+    percentage,
+    missingFields,
+    isComplete,
+    completedFieldsCount,
+    totalFieldsCount,
+  } = calculateProfileCompletion(
+    progressEmployee
+  );
 
   return (
     <div
@@ -24,27 +84,53 @@ export default function ProfileProgressBar({ employee, onCompleteProfile }: Prof
           : "bg-white border-slate-200/90"
       }`}
     >
+
+      {/* =====================================================
+          HEADER
+      ===================================================== */}
+
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-5">
+
         <div className="space-y-1.5 max-w-2xl">
+
           <div className="flex flex-wrap items-center gap-2.5">
+
+            {/* STATUS ICON */}
+
             <div
               className={`p-1.5 rounded-lg ${
-                isComplete ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
+                isComplete
+                  ? "bg-emerald-100 text-emerald-700"
+                  : "bg-amber-100 text-amber-700"
               }`}
             >
+
               {isComplete ? (
                 <ShieldCheck className="w-5 h-5 shrink-0" />
               ) : (
                 <AlertCircle className="w-5 h-5 shrink-0" />
               )}
+
             </div>
+
+            {/* TITLE */}
+
             <h3
               className={`text-base sm:text-lg font-bold tracking-tight ${
-                isComplete ? "text-emerald-950" : "text-slate-900"
+                isComplete
+                  ? "text-emerald-950"
+                  : "text-slate-900"
               }`}
             >
-              {isComplete ? "Profile 100% Complete & Verified" : "Employee Profile Completion"}
+
+              {isComplete
+                ? "Profile 100% Complete & Verified"
+                : "Employee Profile Completion"}
+
             </h3>
+
+            {/* PERCENTAGE */}
+
             <span
               className={`text-xs font-bold px-3 py-1 rounded-full shadow-xs ${
                 isComplete
@@ -52,32 +138,60 @@ export default function ProfileProgressBar({ employee, onCompleteProfile }: Prof
                   : "bg-amber-100 text-amber-800 border border-amber-300/60"
               }`}
             >
+
               {percentage}% Completed
+
             </span>
+
           </div>
 
+          {/* DESCRIPTION */}
+
           <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+
             {isComplete
               ? "All mandatory personal, contact, address, banking, and statutory identity details are fully submitted."
               : `${completedFieldsCount} of ${totalFieldsCount} key profile attributes submitted. Fill remaining fields for seamless payroll and compliance.`}
+
           </p>
+
         </div>
+
+        {/* COMPLETE PROFILE BUTTON */}
 
         {!isComplete && (
           <Link
             href="/portal/profile"
-            onClick={onCompleteProfile ? (event) => { event.preventDefault(); onCompleteProfile(); } : undefined}
+            onClick={
+              onCompleteProfile
+                ? (event) => {
+                    event.preventDefault();
+                    onCompleteProfile();
+                  }
+                : undefined
+            }
             className="inline-flex items-center justify-center gap-2 px-5 py-2.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 rounded-xl shadow-sm hover:shadow transition-all shrink-0"
           >
-            <span>Complete Profile</span>
+
+            <span>
+              Complete Profile
+            </span>
+
             <ArrowRight className="w-3.5 h-3.5" />
+
           </Link>
         )}
+
       </div>
 
-      {/* Progress Bar Container */}
+      {/* =====================================================
+          PROGRESS BAR
+      ===================================================== */}
+
       <div className="mt-5">
+
         <div className="w-full bg-slate-100 rounded-full h-3.5 overflow-hidden border border-slate-200/80 p-0.5 shadow-inner">
+
           <div
             className={`h-full rounded-full transition-all duration-700 ${
               isComplete
@@ -86,41 +200,78 @@ export default function ProfileProgressBar({ employee, onCompleteProfile }: Prof
                 ? "bg-gradient-to-r from-indigo-500 to-indigo-600"
                 : "bg-gradient-to-r from-amber-500 to-amber-600"
             }`}
-            style={{ width: `${percentage}%` }}
+            style={{
+              width: `${percentage}%`,
+            }}
           />
+
         </div>
+
       </div>
 
-      {/* Missing Fields chips when incomplete */}
-      {!isComplete && missingFields.length > 0 && (
-        <div className="mt-4 flex flex-wrap items-center gap-2">
-          <span className="text-xs font-semibold text-slate-500">Pending details:</span>
-          {(showAllMissing ? missingFields : missingFields.slice(0, 5)).map((field) => (
-            <span
-              key={field}
-              className="text-[11px] font-medium bg-amber-50 text-amber-800 border border-amber-200/80 px-2.5 py-0.5 rounded-lg"
-            >
-              {field}
+      {/* =====================================================
+          MISSING FIELDS
+      ===================================================== */}
+
+      {!isComplete &&
+        missingFields.length > 0 && (
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+
+            <span className="text-xs font-semibold text-slate-500">
+              Pending details:
             </span>
-          ))}
-          {missingFields.length > 5 && (
-            <button
-              type="button"
-              onClick={() => setShowAllMissing((visible) => !visible)}
-              className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800"
-            >
-              {showAllMissing ? "Show less" : `Show all ${missingFields.length}`}
-            </button>
-          )}
-        </div>
-      )}
+
+            {(
+              showAllMissing
+                ? missingFields
+                : missingFields.slice(0, 5)
+            ).map((field) => (
+              <span
+                key={field}
+                className="text-[11px] font-medium bg-amber-50 text-amber-800 border border-amber-200/80 px-2.5 py-0.5 rounded-lg"
+              >
+                {field}
+              </span>
+            ))}
+
+            {missingFields.length > 5 && (
+              <button
+                type="button"
+                onClick={() =>
+                  setShowAllMissing(
+                    (visible) => !visible
+                  )
+                }
+                className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800"
+              >
+
+                {showAllMissing
+                  ? "Show less"
+                  : `Show all ${missingFields.length}`}
+
+              </button>
+            )}
+
+          </div>
+        )}
+
+      {/* =====================================================
+          COMPLETE MESSAGE
+      ===================================================== */}
 
       {isComplete && (
         <div className="mt-4 flex items-center gap-2 text-xs font-medium text-emerald-800 bg-emerald-100/60 border border-emerald-200/70 p-2.5 rounded-xl">
+
           <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-          <span>Profile verified for direct bank transfer, PF/ESI filing, and official payslip generation.</span>
+
+          <span>
+            Profile verified for direct bank transfer,
+            PF/ESI filing, and official payslip generation.
+          </span>
+
         </div>
       )}
+
     </div>
   );
 }
