@@ -94,7 +94,7 @@ export async function POST(request: Request) {
 
     // Determine role and appropriate landing destination
     const role = profile?.role || (authData.user.user_metadata?.role) || 'employee';
-    const redirectTo = role === 'employee' ? '/portal' : '/dashboard';
+    const redirectTo = role === 'employee' ? '/portal/profile' : '/dashboard';
 
     return NextResponse.json({
       user: authData.user,
