@@ -282,6 +282,10 @@ export class DataStore {
     const newEmp: Employee = {
       id,
       employee_id: employeeId,
+
+      // =========================
+      // PERSONAL INFORMATION
+      // =========================
       user_id: empData.user_id || null,
       first_name: empData.first_name || "New",
       last_name: empData.last_name || "Employee",
@@ -291,13 +295,30 @@ export class DataStore {
       gender: empData.gender || null,
       blood_group: empData.blood_group || null,
       marital_status: empData.marital_status || null,
-      address: empData.address || null,
-      city: empData.city || null,
-      state: empData.state || null,
-      pincode: empData.pincode || null,
+
+      // =========================
+      // ADDRESS INFORMATION
+      // =========================
+      permanent_address: empData.permanent_address || null,
+      permanent_city: empData.permanent_city || null,
+      permanent_state: empData.permanent_state || null,
+      permanent_pincode: empData.permanent_pincode || null,
+
+      temporary_address: empData.temporary_address || null,
+      temporary_city: empData.temporary_city || null,
+      temporary_state: empData.temporary_state || null,
+      temporary_pincode: empData.temporary_pincode || null,
+
+      // =========================
+      // EMERGENCY CONTACT
+      // =========================
       emergency_contact_name: empData.emergency_contact_name || null,
       emergency_contact_phone: empData.emergency_contact_phone || null,
       emergency_contact_relation: empData.emergency_contact_relation || null,
+
+      // =========================
+      // EMPLOYMENT INFORMATION
+      // =========================
       department_id: empData.department_id || null,
       designation: empData.designation || null,
       employment_type: empData.employment_type || "full-time",
@@ -306,19 +327,47 @@ export class DataStore {
       confirmation_date: empData.confirmation_date || null,
       reporting_manager: empData.reporting_manager || null,
       work_location: empData.work_location || null,
+
       client_type: empData.client_type || null,
       company_name: empData.company_name || null,
+
       status: empData.status || "active",
       salary: empData.salary ?? 0,
+
+      // =========================
+      // STATUTORY INFORMATION
+      // =========================
+      esi_healthcare_eligible: empData.esi_healthcare_eligible?? false,
+      esi_number: empData.esi_number || null,
+
+      pf_eligible: empData.pf_eligible ?? false,
+      uan_number: empData.uan_number || null,
+
+      pt_eligible: empData.pt_eligible ?? false,
+      pt_number: empData.pt_number || null,
+
+      tds_eligible: empData.tds_eligible ?? false,
+
+      // =========================
+      // BANK & IDENTITY
+      // =========================
       bank_name: empData.bank_name || null,
       bank_account_number: empData.bank_account_number || null,
       ifsc_code: empData.ifsc_code || null,
       pan_number: empData.pan_number || null,
       aadhar_number: empData.aadhar_number || null,
-      esi_number: empData.esi_number || null,
+
+      // =========================
+      // PROJECT
+      // =========================
       project_id: empData.project_id || null,
+
+      // =========================
+      // TIMESTAMPS
+      // =========================
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
+
       project: cache.projects[0],
     };
 

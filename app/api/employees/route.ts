@@ -125,16 +125,9 @@ export async function POST(request: Request) {
 
   employeeData.employee_id = `TN${nextNumber}`;
 }
-
-
-    
-
-    // Create Supabase Auth account for the employee so they can log in
-    let authUserId = null;
-    
-    
-
-    if (employeeData.email) {
+  // Create Supabase Auth account for the employee so they can log in
+  let authUserId = null;    
+  if (employeeData.email) {
       const passwordToSet = initial_password || 'Employee@123';
       const fullName = `${employeeData.first_name || ''} ${employeeData.last_name || ''}`.trim() || 'Employee';
 
@@ -176,22 +169,22 @@ export async function POST(request: Request) {
       } catch (authErr) {
         console.warn('Auth user creation warning:', authErr);
       }
-    }
+  }
 
-    console.log("EMPLOYEE DATA BEFORE CREATE:", {
+  console.log("EMPLOYEE DATA BEFORE CREATE:", {
       client_type: employeeData.client_type,
       company_name: employeeData.company_name,
-    });
+  });
 
-    // Save employee using DataStore and adminClient (bypassing RLS issues)
-    const saved = await DataStore.createEmployee(employeeData as any);
+  // Save employee using DataStore and adminClient (bypassing RLS issues)
+  const saved = await DataStore.createEmployee(employeeData as any);
 
-    // Initialize leave balances for the newly added employee
-    if (saved?.id) {
+  // Initialize leave balances for the newly added employee
+  if (saved?.id) {
       await DataStore.getLeaveBalances(saved.id);
-    }
+  }
 
-    return NextResponse.json({
+  return NextResponse.json({
       ...saved,
       credentials_provisioned: !!authUserId,
       login_email: employeeData.email,

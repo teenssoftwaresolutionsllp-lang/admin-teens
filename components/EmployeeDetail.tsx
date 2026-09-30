@@ -26,6 +26,7 @@ export default function EmployeeDetail({ employee, documents, role }: EmployeeDe
   }
   const [exitReason, setExitReason] = useState("");
   const [exitDate, setExitDate] = useState("");
+  const [exitLoginDays, setExitLoginDays] = useState("45");
   const [exitDocument, setExitDocument] = useState<File | null>(null);
 
   const maskString = (str?: string | null, visibleCount = 4) => {
@@ -103,6 +104,7 @@ export default function EmployeeDetail({ employee, documents, role }: EmployeeDe
           exit_document_url: filePath,
           exit_document_name: exitDocument.name,
           exit_date: exitDate,
+          temporary_login_days: Number(exitLoginDays),
         }),
       });
 
@@ -527,9 +529,44 @@ const isExitStatus = [
                       className="w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-red-500"
                     />
                   </div>
+                  {/* Login Access Period */}
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Login Access After Exit <span className="text-red-500">*</span>
+                    </label>
+
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="number"
+                        min="0"
+                        max="45"
+                        value={exitLoginDays}
+                        onChange={(e) => {
+                          const value = Number(e.target.value);
+                          if (value > 45) {
+                            setExitLoginDays("45");
+                            return;
+                          }
+                          else if(value < 0){
+                            setExitLoginDays("0");
+                            return;
+                          }
+                          setExitLoginDays(e.target.value);
+                        }}
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-red-500"
+                        placeholder="Enter number of days"
+                      />
+
+                      <span className="text-sm text-slate-500 whitespace-nowrap">
+                        days
+                      </span>
+                    </div>
+                      <p className="mt-1 text-xs text-slate-500">
+                        Maximum login access allowed is 45 days after exit.
+                      </p>
+                  </div>
                   {/* Confirm */}
                  <div className="flex justify-end gap-4 mt-4">
-
                   <button
                       type="button"
                       onClick={() => {

@@ -61,7 +61,7 @@ export async function PUT(
     const { data: currentEmployee, error: currentEmployeeError } =
       await adminClient
         .from('employees')
-        .select('id, status, temporary_login_expires_at')
+        .select('id, status, temporary_login_days,temporary_login_expires_at')
         .eq('id', id)
         .single();
 
@@ -80,25 +80,45 @@ export async function PUT(
         : oldStatus;
 
     // ---------------------------------------------------------
-    // RESIGNED / LAID OFF
+    // RESIGNED / LAID OFF / TERMINATED
     // Give employee 45 days of temporary login access
-    // starting from the date HR changes the status.
+    // HR can give temporary login access from 0 to 45 days.
     // ---------------------------------------------------------
     if (
-      (newStatus === 'resigned' || newStatus === 'laid_off') &&
+      (newStatus === 'resigned' || newStatus === 'laid_off' || newStatus === 'terminated') &&
       oldStatus !== newStatus
     ) {
-      const expiryDate = new Date();
+      const loginDays = Number(updateData.temporary_login_days);
+      if (!Number.isFinite(loginDays) || loginDays < 0 || loginDays > 45) {
+        return NextResponse.json(
+          {
+            error: 'Temporary login access must be between 0 and 45 days.',
+          },
+          { status: 400 }
+        );
+      }
 
-      expiryDate.setDate(expiryDate.getDate() + 45);
+      // Use Exit Date if provided.
+      // Otherwise use today's date.
+      const expiryDate = updateData.exit_date ? new Date(`${updateData.exit_date}T23:59:59`) : new Date();
 
-      updateData.temporary_login_expires_at =
-        expiryDate.toISOString();
+      if (Number.isNaN(expiryDate.getTime())) {
+        return NextResponse.json(
+          {
+            error: 'Invalid exit date',
+          },
+          { status: 400 }
+        );
+      }
 
-      console.log(
-        `Temporary login expiry for employee ${id}:`,
-        expiryDate.toISOString()
-      );
+      // Calculate expiry date
+      expiryDate.setDate(expiryDate.getDate() + loginDays);
+
+      // Store both values in employees table
+      updateData.temporary_login_days = loginDays;
+      updateData.temporary_login_expires_at = expiryDate.toISOString();
+      console.log(`Employee ${id} will have login access for ${loginDays} days.`,`Login expires: ${expiryDate.toISOString()}`)
+
     }
 
     // ---------------------------------------------------------
@@ -109,16 +129,6 @@ export async function PUT(
       updateData.temporary_login_expires_at = null;
     }
 
-    // ---------------------------------------------------------
-    // TERMINATED / INACTIVE
-    // Login should be blocked immediately.
-    // ---------------------------------------------------------
-    if (
-      newStatus === 'terminated' ||
-      newStatus === 'inactive'
-    ) {
-      updateData.temporary_login_expires_at = null;
-    }
 
     // ---------------------------------------------------------
     // UPDATE EMPLOYEE
@@ -139,11 +149,7 @@ export async function PUT(
 
     return NextResponse.json(updated);
   } catch (error: any) {
-    console.error(
-      'API Error in PUT /api/employees/[id]:',
-      error
-    );
-
+    console.error('API Error in PUT /api/employees/[id]:',error);
     console.error('Error message:', error?.message);
     console.error('Error details:', error?.details);
     console.error('Error hint:', error?.hint);

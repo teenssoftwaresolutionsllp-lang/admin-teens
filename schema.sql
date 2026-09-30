@@ -161,10 +161,14 @@ CREATE TABLE IF NOT EXISTS public.employees (
         )
     ),
 
-    address text,
-    city text,
-    state text,
-    pincode text,
+    permanent_address text,
+    permanent_city text,
+    permanent_state text,
+    permanent_pincode text,
+    temporary_address text,
+    temporary_city text,
+    temporary_state text,
+    temporary_pincode text,
 
     emergency_contact_name text,
     emergency_contact_phone text,
@@ -236,9 +240,6 @@ CREATE TABLE IF NOT EXISTS public.employees (
 
     aadhar_number text,
 
-    uan_number text,
-
-
     -- ======================================================
     -- PROFILE
     -- ======================================================
@@ -258,17 +259,12 @@ CREATE TABLE IF NOT EXISTS public.employees (
     -- ======================================================
 
     esi_healthcare_eligible boolean DEFAULT false,
-
     esi_number text,
-
     pf_eligible boolean DEFAULT false,
-
+    uan_number text,
     pt_eligible boolean DEFAULT false,
-
     pt_number text,
-
     tds_eligible boolean DEFAULT false,
-
 
     -- ======================================================
     -- EMPLOYEE EXIT INFORMATION
