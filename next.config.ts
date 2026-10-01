@@ -1,6 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  serverExternalPackages: [
+    "pdf-parse",
+    "@napi-rs/canvas",
+  ],
   images: {
     remotePatterns: [
       {
@@ -12,6 +16,7 @@ const nextConfig: NextConfig = {
         hostname: 'sqrxsdcqesfqzsoshwfb.supabase.co',
       }
     ],
+    
   },
 };
 

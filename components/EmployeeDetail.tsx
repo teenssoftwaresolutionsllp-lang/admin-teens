@@ -4,7 +4,7 @@ import { Employee, EmployeeDocument, UserRole } from "@/lib/types";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase-browser";
 import { toast } from "react-hot-toast";
-import { User, MapPin, Briefcase, CreditCard, FileText, Download, Edit, DeleteIcon, Calendar, Phone, Mail } from "lucide-react";
+import { User, MapPin, Briefcase, CreditCard, FileText, Download, Edit, DeleteIcon, LaptopMinimal, Phone, File } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import DocumentUpload from "./DocumentUpload";
@@ -144,6 +144,9 @@ const isExitStatus = [
     { name: "Bank & Identity", icon: CreditCard },
     { name: "Address & Emergency", icon: MapPin },
     { name: "Documents", icon: FileText },
+    { name:"Accessory anagement", icon: LaptopMinimal},
+    { name: "Statutory", icon: File},
+
     ...(!isExitStatus ? [{ name: "Terminated", icon: DeleteIcon }] : []),
   ];
 
@@ -272,16 +275,6 @@ const isExitStatus = [
             </div>
           )}
 
-          {/* Documents */}
-          {activeTab === 4 && (
-            <div>
-              <DocumentUpload
-                employeeId={employee.id}
-                documents={documents || []}
-                canUpload={role === "ceo" || role === "hr"}
-              />
-            </div>
-          )}
 
           {/* Address & Emergency */}
           {activeTab === 3 && (
@@ -410,8 +403,24 @@ const isExitStatus = [
 
             </div>
           )}
+
+          {/* Documents */}
+          {activeTab === 4 && (
+            <div>
+              <DocumentUpload
+                employeeId={employee.id}
+                documents={documents || []}
+                canUpload={role === "ceo" || role === "hr"}
+              />
+            </div>
+          )}
+
+          {/* Tab 5: Accessory anagement*/}
+
+          {/* {tab 6: options to selct eligabilty of pt ,tds} */}
+        
           {/* Delete */}
-          {!isExitStatus && activeTab === 5 && (
+          {!isExitStatus && activeTab === 7 && (
             <div className="space-y-6">
               <div>
                 <h3 className="text-sm font-bold text-slate-900 mb-3 uppercase tracking-wider text-center text-slate-400"> Employee Exit </h3>

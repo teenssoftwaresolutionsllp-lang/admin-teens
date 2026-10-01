@@ -83,6 +83,15 @@ export interface Employee {
   emergency_contact_name?: string | null;
   emergency_contact_phone?: string | null;
   emergency_contact_relation?: string | null;
+  // Emergency Contact 2
+  emergency_contact_name_2?: string | null;
+  emergency_contact_phone_2?: string | null;
+  emergency_contact_relation_2?: string | null;
+
+  // Emergency Contact 3
+  emergency_contact_name_3?: string | null;
+  emergency_contact_phone_3?: string | null;
+  emergency_contact_relation_3?: string | null;
 
   // ==============================
   // Employment Information
@@ -101,6 +110,7 @@ export interface Employee {
   joining_date?: string | null;
   probation_duration?: number;
   probation_end_date?: string | null;
+  appointment_date?: string | null;
   confirmation_date?: string | null;
 
   reporting_manager?: string | null;
@@ -127,10 +137,20 @@ export interface Employee {
 
   pan_number?: string | null;
   aadhar_number?: string | null;
+  passport_number?:string |null;
 
+  // ==============================
+  // Accessories Information
+  // ==============================
 
-
+  accessory_type ?:string | null;
+  accessory_serial?: string | null;
+  peripherals?:{type: string;
+    serial: string;
+  }[];
+  // ==============================
   // Statutory Information
+  // ==============================
   esi_healthcare_eligible?: boolean;
   esi_number?: string | null;
 
@@ -183,7 +203,18 @@ export interface EmployeeDocument {
   document_name: string;
   document_url: string;
   cloudinary_public_id: string | null;
-  uploaded_at: string;
+  cloudinary_resource_type?: string | null;
+
+  aadhaar_number?: string | null;
+  pan_number?: string | null;
+  passport_number?: string | null;
+
+
+  created_at?: string;
+  updated_at?: string;
+  uploaded_at?: string;
+  
+  [key: string]: any;
 }
 
 export interface ProfileChangeRequest {
