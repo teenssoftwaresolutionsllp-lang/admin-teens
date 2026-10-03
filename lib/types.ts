@@ -66,6 +66,9 @@ export interface Employee {
   blood_group?: string | null;
   marital_status?: "single" | "married" | "divorced" | "widowed" | null;
 
+  //doc
+  documents?: EmployeeDocument[];
+
   // Address Information
   permanent_address?: string | null;
   permanent_city?: string | null;

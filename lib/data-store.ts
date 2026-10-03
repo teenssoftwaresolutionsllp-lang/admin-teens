@@ -312,9 +312,20 @@ export class DataStore {
       // =========================
       // EMERGENCY CONTACT
       // =========================
+      // Emergency Contact 1
       emergency_contact_name: empData.emergency_contact_name || null,
       emergency_contact_phone: empData.emergency_contact_phone || null,
       emergency_contact_relation: empData.emergency_contact_relation || null,
+
+      // Emergency Contact 2
+      emergency_contact_name_2: empData.emergency_contact_name_2 || null,
+      emergency_contact_phone_2: empData.emergency_contact_phone_2 || null,
+      emergency_contact_relation_2: empData.emergency_contact_relation_2 || null,
+
+      // Emergency Contact 3
+      emergency_contact_name_3: empData.emergency_contact_name_3 || null,
+      emergency_contact_phone_3: empData.emergency_contact_phone_3 || null,
+      emergency_contact_relation_3: empData.emergency_contact_relation_3 || null,
 
       // =========================
       // EMPLOYMENT INFORMATION
@@ -324,6 +335,7 @@ export class DataStore {
       employment_type: empData.employment_type || "full-time",
       joining_date: empData.joining_date || new Date().toISOString().split("T")[0],
       probation_end_date: empData.probation_end_date || null,
+      appointment_date: empData.appointment_date || null,
       confirmation_date: empData.confirmation_date || null,
       reporting_manager: empData.reporting_manager || null,
       work_location: empData.work_location || null,
@@ -356,6 +368,14 @@ export class DataStore {
       ifsc_code: empData.ifsc_code || null,
       pan_number: empData.pan_number || null,
       aadhar_number: empData.aadhar_number || null,
+      passport_number: empData.passport_number || null,
+
+      // =========================
+      // ACCESSORIES
+      // =========================
+      accessory_type: empData.accessory_type || null,
+      accessory_serial: empData.accessory_serial || null,
+      peripherals: empData.peripherals || [],
 
       // =========================
       // PROJECT

@@ -244,13 +244,15 @@ export default function DocumentUpload({ employeeId, documents: initialDocs, onU
                   >
                     <Download className="w-4 h-4" />
                   </a>
-                  <button
-                    onClick={() => handleDelete(doc.id)}
-                    className="p-1.5 rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-colors"
-                    title="Delete"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  {canUpload && (
+                    <button
+                      onClick={() => handleDelete(doc.id)}
+                      className="p-1.5 rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-colors"
+                      title="Delete"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
               </div>
             ))}

@@ -143,7 +143,7 @@ const isExitStatus = [
     { name: "Employment", icon: Briefcase },
     { name: "Bank & Identity", icon: CreditCard },
     { name: "Address & Emergency", icon: MapPin },
-    { name: "Documents", icon: FileText },
+    { name: "Documentation", icon: FileText },
     { name:"Accessory anagement", icon: LaptopMinimal},
     { name: "Statutory", icon: File},
 
@@ -265,16 +265,15 @@ const isExitStatus = [
               </div>
 
               <div className="pt-2 border-t border-slate-100">
-                <h3 className="text-sm font-bold text-slate-900 mb-3 uppercase tracking-wider text-slate-400">Statutory & Identity</h3>
+                <h3 className="text-sm font-bold text-slate-900 mb-3 uppercase tracking-wider text-slate-400">Official Identification</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   <DetailTile label="PAN Number" value={maskString(employee.pan_number, 4)} />
                   <DetailTile label="Aadhaar Number" value={maskString(employee.aadhar_number, 4)} />
-                  <DetailTile label="ESI Number" value={employee.esi_number} />
+                  <DetailTile label="Passport Number" value={maskString(employee.passport_number, 4)} />
                 </div>
               </div>
             </div>
           )}
-
 
           {/* Address & Emergency */}
           {activeTab === 3 && (
@@ -323,7 +322,7 @@ const isExitStatus = [
               </div>
 
 
-              {/* ================= TEMPORARY ADDRESS ================= */}
+              {/* ================= COMMUNICATION ADDRESS ================= */}
               <div className="pt-6 border-t border-slate-100">
                 <div className="flex items-center gap-2 mb-4">
                   <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
@@ -332,7 +331,7 @@ const isExitStatus = [
 
                   <div>
                     <h3 className="text-sm font-bold text-slate-900">
-                      Temporary Address
+                      Communication Address
                     </h3>
                     <p className="text-xs text-slate-500">
                       Employee&apos;s current or temporary residential address
@@ -366,7 +365,7 @@ const isExitStatus = [
               </div>
 
 
-              {/* ================= EMERGENCY CONTACT ================= */}
+              {/* ================= EMERGENCY CONTACTS ================= */}
               <div className="pt-6 border-t border-slate-100">
                 <div className="flex items-center gap-2 mb-4">
                   <div className="w-8 h-8 rounded-lg bg-rose-50 flex items-center justify-center">
@@ -375,29 +374,90 @@ const isExitStatus = [
 
                   <div>
                     <h3 className="text-sm font-bold text-slate-900">
-                      Emergency Contact
+                      Emergency Contacts
                     </h3>
                     <p className="text-xs text-slate-500">
-                      Person to contact in case of an emergency
+                      People to contact in case of an emergency
                     </p>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <DetailTile
-                    label="Contact Name"
-                    value={employee.emergency_contact_name}
-                  />
+                <div className="space-y-6">
 
-                  <DetailTile
-                    label="Relationship"
-                    value={employee.emergency_contact_relation}
-                  />
+                  {/* ================= CONTACT 1 ================= */}
+                  <div className="rounded-xl border border-slate-200 p-5">
+                    <h4 className="text-sm font-bold text-slate-900 mb-4">
+                      Emergency Contact 1
+                    </h4>
 
-                  <DetailTile
-                    label="Contact Phone"
-                    value={employee.emergency_contact_phone}
-                  />
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      <DetailTile
+                        label="Contact Name"
+                        value={employee.emergency_contact_name}
+                      />
+
+                      <DetailTile
+                        label="Relationship"
+                        value={employee.emergency_contact_relation}
+                      />
+
+                      <DetailTile
+                        label="Contact Phone"
+                        value={employee.emergency_contact_phone}
+                      />
+                    </div>
+                  </div>
+
+
+                  {/* ================= CONTACT 2 ================= */}
+                  <div className="rounded-xl border border-slate-200 p-5">
+                    <h4 className="text-sm font-bold text-slate-900 mb-4">
+                      Emergency Contact 2
+                    </h4>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      <DetailTile
+                        label="Contact Name"
+                        value={employee.emergency_contact_name_2}
+                      />
+
+                      <DetailTile
+                        label="Relationship"
+                        value={employee.emergency_contact_relation_2}
+                      />
+
+                      <DetailTile
+                        label="Contact Phone"
+                        value={employee.emergency_contact_phone_2}
+                      />
+                    </div>
+                  </div>
+
+
+                  {/* ================= CONTACT 3 ================= */}
+                  <div className="rounded-xl border border-slate-200 p-5">
+                    <h4 className="text-sm font-bold text-slate-900 mb-4">
+                      Emergency Contact 3
+                    </h4>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      <DetailTile
+                        label="Contact Name"
+                        value={employee.emergency_contact_name_3}
+                      />
+
+                      <DetailTile
+                        label="Relationship"
+                        value={employee.emergency_contact_relation_3}
+                      />
+
+                      <DetailTile
+                        label="Contact Phone"
+                        value={employee.emergency_contact_phone_3}
+                      />
+                    </div>
+                  </div>
+
                 </div>
               </div>
 
@@ -409,16 +469,159 @@ const isExitStatus = [
             <div>
               <DocumentUpload
                 employeeId={employee.id}
-                documents={documents || []}
-                canUpload={role === "ceo" || role === "hr"}
+                documents={documents}
+                canUpload={false}
               />
             </div>
           )}
 
+
           {/* Tab 5: Accessory anagement*/}
+          {activeTab === 5 && (
+            <div className="space-y-6">
+
+              {/* Main Accessory */}
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 mb-3 uppercase tracking-wider text-slate-400">
+                  Assigned Equipment
+                </h3>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+
+                  <DetailTile
+                    label="Accessory Type"
+                    value={employee.accessory_type}
+                  />
+
+                  <DetailTile
+                    label="Serial Number"
+                    value={employee.accessory_serial}
+                  />
+
+                </div>
+              </div>
+
+              {/* Peripherals */}
+              <div className="pt-5 border-t border-slate-100">
+                <h3 className="text-sm font-bold text-slate-900 mb-3 uppercase tracking-wider text-slate-400">
+                  Peripherals
+                </h3>
+
+                {employee.peripherals && employee.peripherals.length > 0 ? (
+                  <div className="space-y-3">
+
+                    {employee.peripherals.map((item, index) => (
+                      <div
+                        key={index}
+                        className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"
+                      >
+                        <div>
+                          <p className="text-sm font-bold text-slate-900">
+                            {item.type}
+                          </p>
+
+                          <p className="text-xs text-slate-500">
+                            S.No: {item.serial}
+                          </p>
+                        </div>
+
+                        <span className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-600">
+                          Assigned
+                        </span>
+                      </div>
+                    ))}
+
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center">
+                    <p className="text-sm text-slate-500">
+                      No peripherals assigned
+                    </p>
+                  </div>
+                )}
+              </div>
+
+            </div>
+          )}
 
           {/* {tab 6: options to selct eligabilty of pt ,tds} */}
-        
+          {activeTab === 6 && (
+            <div className="space-y-6">
+
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 mb-3 uppercase tracking-wider text-slate-400">
+                  Statutory Eligibility
+                </h3>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+
+                  {/* ESI */}
+                  <DetailTile
+                    label="ESI / Health Care Eligible"
+                    value={
+                      employee.esi_healthcare_eligible
+                        ? "Yes"
+                        : "No"
+                    }
+                  />
+
+                  {employee.esi_healthcare_eligible && (
+                    <DetailTile
+                      label="ESI Number"
+                      value={employee.esi_number}
+                    />
+                  )}
+
+                  {/* PF */}
+                  <DetailTile
+                    label="P.F Eligible"
+                    value={
+                      employee.pf_eligible
+                        ? "Yes"
+                        : "No"
+                    }
+                  />
+
+                  {employee.pf_eligible && (
+                    <DetailTile
+                      label="UAN Number"
+                      value={employee.uan_number}
+                    />
+                  )}
+
+                  {/* PT */}
+                  <DetailTile
+                    label="P.T Eligible"
+                    value={
+                      employee.pt_eligible
+                        ? "Yes"
+                        : "No"
+                    }
+                  />
+
+                  {employee.pt_eligible && (
+                    <DetailTile
+                      label="P.T Number"
+                      value={employee.pt_number}
+                    />
+                  )}
+
+                  {/* TDS */}
+                  <DetailTile
+                    label="T.D.S Eligible"
+                    value={
+                      employee.tds_eligible
+                        ? "Yes"
+                        : "No"
+                    }
+                  />
+
+                </div>
+              </div>
+
+            </div>
+          )}
+
           {/* Delete */}
           {!isExitStatus && activeTab === 7 && (
             <div className="space-y-6">

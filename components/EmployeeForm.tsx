@@ -31,12 +31,13 @@ export default function EmployeeForm({ employee, departments, projects, generate
   const [pfEligible, setPfEligible] = useState(false);
   const [ptEligible, setPtEligible] = useState(false);
   const [ptNumber, setPtNumber] = useState("");
-  const [accessoryType, setAccessoryType] = useState("");
-  const [accessorySerial,setAccessorySerial] = useState("");
+  const [accessoryType, setAccessoryType] = useState( employee?.accessory_type || "");
+  const [accessorySerial,setAccessorySerial] = useState(employee?.accessory_serial || "");
   const [peripheralType,setPeripheralType] = useState("");
   const [peripheralSerial,setPeripheralSerial] = useState("");
   const [peripherals,setPeripherals] = useState<{ type: string; serial: string }[]>(employee?.peripherals || []);
   const [tdsEligible, setTdsEligible] = useState(false);
+  const [documents, setDocuments] = useState<EmployeeDocument[]>([]);
   const [error, setError] = useState<string []>([]);
 
   const [companySearch, setCompanySearch] = useState(
@@ -75,7 +76,7 @@ export default function EmployeeForm({ employee, departments, projects, generate
     employment_type: employee?.employment_type || null,
     joining_date: employee?.joining_date?.split("T")[0] || "",
     probation_duration: employee?.probation_duration || 6,
-    appointment_date :employee?.appointment_date,
+    appointment_date :employee?.appointment_date?.split("T")[0] || "",
     probation_end_date: employee?.probation_end_date?.split("T")[0] || "",
     confirmation_date: employee?.confirmation_date?.split("T")[0] || "",
     reporting_manager: employee?.reporting_manager || "",
@@ -107,10 +108,20 @@ export default function EmployeeForm({ employee, departments, projects, generate
     temporary_state: employee?.temporary_state || "",
     temporary_pincode: employee?.temporary_pincode || "",
 
-    // Emergency Contact
+    // Emergency Contact 1
     emergency_contact_name: employee?.emergency_contact_name || "",
     emergency_contact_relation: employee?.emergency_contact_relation || "",
     emergency_contact_phone: employee?.emergency_contact_phone || "",
+
+    // Emergency Contact 2
+    emergency_contact_name_2: employee?.emergency_contact_name_2 || "",
+    emergency_contact_relation_2: employee?.emergency_contact_relation_2 || "",
+    emergency_contact_phone_2: employee?.emergency_contact_phone_2 || "",
+
+    // Emergency Contact 3
+    emergency_contact_name_3: employee?.emergency_contact_name_3 || "",
+    emergency_contact_relation_3: employee?.emergency_contact_relation_3 || "",
+    emergency_contact_phone_3: employee?.emergency_contact_phone_3 || "",
 
 
     // Accessories 
@@ -151,6 +162,9 @@ export default function EmployeeForm({ employee, departments, projects, generate
   useEffect(() => {
     if (!employee) return;
 
+    // =========================
+    // STATUTORY
+    // =========================
     setEsiEligible(employee.esi_healthcare_eligible ?? false);
     setEsiNumber(employee.esi_number ?? "");
 
@@ -160,10 +174,133 @@ export default function EmployeeForm({ employee, departments, projects, generate
     setPtNumber(employee.pt_number ?? "");
 
     setTdsEligible(employee.tds_eligible ?? false);
+
+    // =========================
+    // ACCESSORIES
+    // =========================
+    setAccessoryType(employee.accessory_type ?? "");
+    setAccessorySerial(employee.accessory_serial ?? "");
+    setPeripherals(employee.peripherals ?? []);
+
+    // Documents
+    setDocuments(employee.documents ?? []);
+
+    // =========================
+    // CLIENT
+    // =========================
+    setCompanySearch(employee.company_name ?? "");
+
+    // =========================
+    // FORM DATA
+    // =========================
+    setFormData({
+      first_name: employee.first_name ?? "",
+      last_name: employee.last_name ?? "",
+      email: employee.email ?? "",
+      phone: employee.phone ?? "",
+
+      date_of_birth: employee.date_of_birth
+        ? employee.date_of_birth.split("T")[0]
+        : "",
+
+      gender: employee.gender ?? null,
+      blood_group: employee.blood_group ?? "",
+      marital_status: employee.marital_status ?? null,
+
+      employee_id: employee.employee_id ?? "",
+      department_id: employee.department_id ?? "",
+      project_id: employee.project_id ?? "",
+      designation: employee.designation ?? "",
+      employment_type: employee.employment_type ?? null,
+
+      joining_date: employee.joining_date
+        ? employee.joining_date.split("T")[0]
+        : "",
+
+      probation_duration: employee.probation_duration ?? 6,
+
+      appointment_date: employee.appointment_date
+        ? employee.appointment_date.split("T")[0]
+        : "",
+
+      probation_end_date: employee.probation_end_date
+        ? employee.probation_end_date.split("T")[0]
+        : "",
+
+      confirmation_date: employee.confirmation_date
+        ? employee.confirmation_date.split("T")[0]
+        : "",
+
+      reporting_manager: employee.reporting_manager ?? "",
+      work_location: employee.work_location ?? "",
+
+      // Client
+      client_type: employee.client_type ?? "",
+      company_name: employee.company_name ?? "",
+
+      // Salary
+      salary: employee.salary ?? undefined,
+
+      // Bank & Identity
+      bank_name: employee.bank_name ?? "",
+      bank_account_number: employee.bank_account_number ?? "",
+      ifsc_code: employee.ifsc_code ?? "",
+      pan_number: employee.pan_number ?? "",
+      aadhar_number: employee.aadhar_number ?? "",
+      passport_number: employee.passport_number ?? "",
+
+      // Permanent Address
+      permanent_address: employee.permanent_address ?? "",
+      permanent_city: employee.permanent_city ?? "",
+      permanent_state: employee.permanent_state ?? "",
+      permanent_pincode: employee.permanent_pincode ?? "",
+
+      // Temporary Address
+      temporary_address: employee.temporary_address ?? "",
+      temporary_city: employee.temporary_city ?? "",
+      temporary_state: employee.temporary_state ?? "",
+      temporary_pincode: employee.temporary_pincode ?? "",
+
+      // Emergency Contact 1
+      emergency_contact_name: employee.emergency_contact_name ?? "",
+      emergency_contact_relation:
+        employee.emergency_contact_relation ?? "",
+      emergency_contact_phone:
+        employee.emergency_contact_phone ?? "",
+
+      // Emergency Contact 2
+      emergency_contact_name_2:
+        employee.emergency_contact_name_2 ?? "",
+      emergency_contact_relation_2:
+        employee.emergency_contact_relation_2 ?? "",
+      emergency_contact_phone_2:
+        employee.emergency_contact_phone_2 ?? "",
+
+      // Emergency Contact 3
+      emergency_contact_name_3:
+        employee.emergency_contact_name_3 ?? "",
+      emergency_contact_relation_3:
+        employee.emergency_contact_relation_3 ?? "",
+      emergency_contact_phone_3:
+        employee.emergency_contact_phone_3 ?? "",
+
+      // Accessories
+      accessory_type: employee.accessory_type ?? "",
+      accessory_serial: employee.accessory_serial ?? "",
+      peripherals: employee.peripherals ?? [],
+
+      // Statutory
+      esi_number: employee.esi_number ?? "",
+      uan_number: employee.uan_number ?? "",
+      // Status
+      status: employee.status ?? "active",
+
+      // Don't change this in edit
+      initial_password: "Employee@123",
+    } as any);
   }, [employee]);
 
-  const [documents, setDocuments] = useState<EmployeeDocument[]>([]);
-
+  
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value === "" ? null : value }));
@@ -369,12 +506,18 @@ const handleSubmit = async (e: React.FormEvent) => {
       esi_number: esiEligible ? esiNumber : null,
 
       pf_eligible: pfEligible,
+      uan_number: pfEligible ? formData.uan_number : null,
 
       pt_eligible: ptEligible,
       pt_number: ptEligible ? ptNumber : null,
 
       tds_eligible: tdsEligible,
-     
+
+      //accessory
+      accessory_type: accessoryType || null,
+      accessory_serial: accessorySerial || null,
+      peripherals: peripherals || [],
+          
     };
 
     if (mode === "add") {
@@ -1146,7 +1289,7 @@ const handleSubmit = async (e: React.FormEvent) => {
 
               <input
                 type="text"
-                name="aadhar_number"
+                name="passport_number"
                 value={formData.passport_number || ""}
                 onChange={handleChange}
                 placeholder="Enter Passport number"
@@ -1597,6 +1740,7 @@ const handleSubmit = async (e: React.FormEvent) => {
           <div>
             <DocumentUpload
             documents={documents || []}
+            employeeId={employee?.id}
             />
           </div>
         )}

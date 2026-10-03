@@ -41,6 +41,33 @@ export default async function EditEmployeePage(props: any) {
     notFound();
   }
 
+  // Load employee documents
+  let documents: any[] = [];
+
+  try {
+    const adminClient = await createAdminClient();
+
+    const { data, error } = await adminClient
+      .from("employee_documents")
+      .select("*")
+      .eq("employee_id", id)
+      .order("uploaded_at", { ascending: false });
+
+    if (error) {
+      console.error("Error loading employee documents:", error);
+    }
+
+    documents = data || [];
+  } catch (error) {
+    console.error("Failed to load employee documents:", error);
+  }
+
+  // Attach documents to employee for edit form
+  const employeeWithDocuments = {
+    ...employee,
+    documents,
+  };
+
   const frozenStatuses = [
     "resigned",
     "laid_off",
@@ -108,7 +135,7 @@ export default async function EditEmployeePage(props: any) {
 
       <EmployeeForm 
         mode="edit" 
-        employee={employee as Employee} 
+        employee={employeeWithDocuments as Employee} 
         departments={departments} 
         projects={projects}
         role={role} 
