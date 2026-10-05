@@ -19,6 +19,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   UploadCloud,
+  ShieldCheck,
 } from "lucide-react";
 import Image from "next/image";
 import { UserRole } from "@/lib/types";
@@ -144,6 +145,12 @@ export default function Sidebar({ role }: SidebarProps) {
       name: "Projects & Calendars",
       href: "/dashboard/projects",
       icon: Globe,
+      roles: ["ceo", "hr"],
+    },
+    {
+      name: "Policies",
+      href: "/dashboard/policies",
+      icon: ShieldCheck,
       roles: ["ceo", "hr"],
     },
   ];

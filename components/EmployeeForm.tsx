@@ -584,7 +584,7 @@ const handleSubmit = async (e: React.FormEvent) => {
     { name: "Bank & Identity", icon: CreditCard },
     { name: "Address & Emergency", icon: MapPin },
     { name: "Documentation", icon: FileText },
-    { name:"Accessory anagement", icon: LaptopMinimal},
+    { name:"Accessory Management", icon: LaptopMinimal},
     { name: "Statutory", icon: File},
   ]
   return (
@@ -1745,9 +1745,11 @@ const handleSubmit = async (e: React.FormEvent) => {
           </div>
         )}
 
-        {/* Tab 5: Accessory anagement*/}
+        {/* Tab 5: Accessory management*/}
         {activeTab === 5 && (
           <div className="space-y-6">
+
+            {/* ================= ASSIGNED EQUIPMENT ================= */}
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                 Accessory Type
@@ -1757,19 +1759,20 @@ const handleSubmit = async (e: React.FormEvent) => {
                 value={accessoryType}
                 onChange={(e) => {
                   setAccessoryType(e.target.value);
-                  setAccessorySerial("");
-                  setPeripheralType("");
+
+                  if (e.target.value === "") {
+                    setAccessorySerial("");
+                  }
                 }}
                 className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
               >
-                <option value="">Select the Accessory</option>
+                <option value="">No Main Accessory</option>
                 <option value="Desktop">Desktop</option>
                 <option value="Laptop">Laptop</option>
-                <option value="Peripheral">Peripheral</option>
               </select>
             </div>
 
-            {/* Desktop / Laptop */}
+            {/* Desktop / Laptop Serial Number */}
             {(accessoryType === "Desktop" || accessoryType === "Laptop") && (
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
@@ -1786,105 +1789,120 @@ const handleSubmit = async (e: React.FormEvent) => {
               </div>
             )}
 
-            {/* Peripheral */}
-            {accessoryType === "Peripheral" && (
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                      Peripheral
-                    </label>
+            {/* ================= PERIPHERALS ================= */}
+            <div className="border-t border-slate-200 pt-6 space-y-4">
 
-                    <select
-                      value={peripheralType}
-                      onChange={(e) => setPeripheralType(e.target.value)}
-                      className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
-                    >
-                      <option value="">Select Peripheral</option>
-                      <option value="Mouse">Mouse</option>
-                      <option value="Keyboard">Keyboard</option>
-                      <option value="Monitor">Monitor</option>
-                      <option value="Headset">Headset</option>
-                      <option value="Webcam">Webcam</option>
-                      <option value="Printer">Printer</option>
-                      <option value="Other">Other</option>
-                    </select>
-                  </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">
+                  Peripherals
+                </h3>
 
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                      S.No
-                    </label>
+                <p className="text-xs text-slate-500 mt-1">
+                  Add peripherals assigned to this employee.
+                </p>
+              </div>
 
-                    <input
-                      type="text"
-                      value={peripheralSerial}
-                      onChange={(e) => setPeripheralSerial(e.target.value)}
-                      placeholder="Enter S.No"
-                      className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
-                    />
-                  </div>
+              {/* Add Peripheral */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Peripheral
+                  </label>
+
+                  <select
+                    value={peripheralType}
+                    onChange={(e) => setPeripheralType(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
+                  >
+                    <option value="">Select Peripheral</option>
+                    <option value="Mouse">Mouse</option>
+                    <option value="Keyboard">Keyboard</option>
+                    <option value="Monitor">Monitor</option>
+                    <option value="Headset">Headset</option>
+                    <option value="Webcam">Webcam</option>
+                    <option value="Printer">Printer</option>
+                    <option value="Other">Other</option>
+                  </select>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (!peripheralType || !peripheralSerial) return;
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    S.No
+                  </label>
 
-                    setPeripherals((prev) => [
-                      ...prev,
-                      {
-                        type: peripheralType,
-                        serial: peripheralSerial,
-                      },
-                    ]);
+                  <input
+                    type="text"
+                    value={peripheralSerial}
+                    onChange={(e) => setPeripheralSerial(e.target.value)}
+                    placeholder="Enter S.No"
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
+                  />
+                </div>
 
-                    setPeripheralType("");
-                    setPeripheralSerial("");
-                  }}
-                  className="px-4 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-bold hover:bg-indigo-700 transition-all"
-                >
-                  + Add Peripheral
-                </button>
-
-                {/* Added peripherals */}
-                {peripherals.length > 0 && (
-                  <div className="space-y-2">
-                    <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                      Added Peripherals
-                    </h4>
-
-                    {peripherals.map((item, index) => (
-                      <div
-                        key={index}
-                        className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"
-                      >
-                        <div>
-                          <p className="text-sm font-bold text-slate-900">
-                            {item.type}
-                          </p>
-                          <p className="text-xs text-slate-500">
-                            S.No: {item.serial}
-                          </p>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setPeripherals((prev) =>
-                              prev.filter((_, i) => i !== index)
-                            );
-                          }}
-                          className="text-xs font-bold text-red-600 hover:text-red-700"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
               </div>
-            )}
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (!peripheralType || !peripheralSerial.trim()) return;
+
+                  setPeripherals((prev) => [
+                    ...prev,
+                    {
+                      type: peripheralType,
+                      serial: peripheralSerial.trim(),
+                    },
+                  ]);
+
+                  setPeripheralType("");
+                  setPeripheralSerial("");
+                }}
+                className="px-4 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-bold hover:bg-indigo-700 transition-all"
+              >
+                + Add Peripheral
+              </button>
+
+              {/* ================= EXISTING PERIPHERALS ================= */}
+              {peripherals.length > 0 && (
+                <div className="space-y-2">
+
+                  <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    Assigned Peripherals
+                  </h4>
+
+                  {peripherals.map((item, index) => (
+                    <div
+                      key={`${item.type}-${item.serial}-${index}`}
+                      className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"
+                    >
+                      <div>
+                        <p className="text-sm font-bold text-slate-900">
+                          {item.type}
+                        </p>
+
+                        <p className="text-xs text-slate-500">
+                          S.No: {item.serial}
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPeripherals((prev) =>
+                            prev.filter((_, i) => i !== index)
+                          );
+                        }}
+                        className="text-xs font-bold text-red-600 hover:text-red-700"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+            </div>
           </div>
         )}
 

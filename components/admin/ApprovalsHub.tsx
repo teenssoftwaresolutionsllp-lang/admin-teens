@@ -506,13 +506,15 @@ export default function ApprovalsHub({
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {leaveRequests.map((r) => {
+                      console.log("Leave request:", r);
+                      console.log("Employee:", r.employee);
                       const emp = r.employee;
                       const isPending = r.status === "pending";
 
                       return (
                         <tr key={r.id} className="hover:bg-slate-50/80 transition-colors">
                           <td className="py-3.5 px-4 font-bold text-slate-900">
-                            {emp ? `${emp.first_name} ${emp.last_name}` : "Balaji Marpally"}
+                            {emp ? `${emp.first_name} ${emp.last_name}` : "Unknown Employee"}
                           </td>
                           <td className="py-3.5 px-4">
                             <span className="font-semibold text-indigo-700 bg-indigo-50 px-2.5 py-0.5 rounded-md">
@@ -605,7 +607,7 @@ export default function ApprovalsHub({
                       return (
                         <tr key={reg.id} className="hover:bg-slate-50/80 transition-colors">
                           <td className="py-3.5 px-4 font-bold text-slate-900">
-                            {emp ? `${emp.first_name} ${emp.last_name}` : "Balaji Marpally"}
+                            {emp ? `${emp.first_name} ${emp.last_name}` : "Unknown Employee"}
                           </td>
                           <td className="py-3.5 px-4 font-semibold text-slate-800 font-mono">
                             {reg.attendance_date}

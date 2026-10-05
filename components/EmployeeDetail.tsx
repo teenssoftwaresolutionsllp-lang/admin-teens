@@ -144,7 +144,7 @@ const isExitStatus = [
     { name: "Bank & Identity", icon: CreditCard },
     { name: "Address & Emergency", icon: MapPin },
     { name: "Documentation", icon: FileText },
-    { name:"Accessory anagement", icon: LaptopMinimal},
+    { name:"Accessory Management", icon: LaptopMinimal},
     { name: "Statutory", icon: File},
 
     ...(!isExitStatus ? [{ name: "Terminated", icon: DeleteIcon }] : []),
@@ -476,7 +476,7 @@ const isExitStatus = [
           )}
 
 
-          {/* Tab 5: Accessory anagement*/}
+          {/* Tab 5: Accessory Management*/}
           {activeTab === 5 && (
             <div className="space-y-6">
 

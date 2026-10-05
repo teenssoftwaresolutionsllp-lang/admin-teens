@@ -1711,7 +1711,13 @@ export class DataStore {
 
       let query = supabase
         .from("leave_requests")
-        .select("*")
+        .select(`*, 
+          employee:employees (
+            id,
+            employee_id,
+            first_name,
+            last_name
+        )`)
         .order("created_at", { ascending: false });
 
       if (employeeUuid) {
@@ -2051,14 +2057,27 @@ export class DataStore {
   static async generateMonthlyPayroll({
     month,
     year,
+    employeeId,
   }: {
     month: number;
     year: number;
+    employeeId : string;
   }): Promise<{ generatedCount: number; payslips: Payslip[] }> {
     const cache = getCache();
     const supabase = await createAdminClient();
 
-    const employees = await this.getEmployees();
+    const selectedEmployee = await this.getEmployeeById(employeeId);
+
+    if (!selectedEmployee) {
+      throw new Error("Employee not found");
+    }
+
+    if (selectedEmployee.status !== "active") {
+      throw new Error("Selected employee is not active");
+    }
+
+    const employees: Employee[] = [selectedEmployee];
+
     const activeComponents = cache.salaryComponents;
 
     const monthNames = [
@@ -2074,9 +2093,10 @@ export class DataStore {
     for (const emp of employees) {
       if (emp.status !== "active") continue;
 
-        const annualCtc = emp.salary ?? 0;
+        const annualCtcLakh = Number(emp.salary ?? 0);
+        const annualCtc = annualCtcLakh * 100000;
 
-        const baseSalary = (annualCtc * 100000) / 12;
+        const baseSalary = Number((annualCtc / 12).toFixed(2));
 
         // Calculate LOP days from approved leave requests
         const empLeaves = cache.leaveRequests.filter((lr) => {

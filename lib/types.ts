@@ -74,6 +74,7 @@ export interface Employee {
   permanent_city?: string | null;
   permanent_state?: string | null;
   permanent_pincode?: string | null;
+  grade?:string | null;
 
   temporary_address?: string | null;
   temporary_city?: string | null;
