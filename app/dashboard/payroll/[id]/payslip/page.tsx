@@ -385,28 +385,7 @@ export default function PayslipPage() {
           PAYSLIP MODAL OVERLAY
           Everything behind this becomes blurred.
       ================================================== */}
-
-      <main
-        className="
-          fixed
-          inset-0
-          z-[9999]
-          flex
-          items-center
-          justify-center
-          bg-black/20
-          backdrop-blur-md
-          p-4
-          sm:p-6
-          lg:p-8
-
-          print:static
-          print:block
-          print:bg-white
-          print:backdrop-blur-none
-          print:p-0
-        "
-      >
+        <main className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/20 backdrop-blur-md p-4 sm:p-6 lg:p-8 print:static print:block print:bg-white print:backdrop-blur-none print:p-0">
         {/* ==================================================
             CLOSE BUTTON
         ================================================== */}
@@ -414,29 +393,7 @@ export default function PayslipPage() {
         <button
           onClick={() => router.back()}
           aria-label="Close payslip"
-          className="
-            print:hidden
-            absolute
-            top-5
-            right-6
-            z-[10001]
-
-            flex
-            h-10
-            w-10
-            items-center
-            justify-center
-
-            rounded-full
-            bg-white
-            text-gray-700
-
-            shadow-lg
-
-            transition
-            hover:bg-gray-100
-            hover:text-black
-          "
+          className="print:hidden absolute top-5 right-6 z-[10001] flex h-10 w-10 items-center justify-center rounded-full bg-white text-gray-700 shadow-lg transition hover:bg-gray-100 hover:text-black"
         >
           ✕
         </button>
@@ -448,31 +405,7 @@ export default function PayslipPage() {
 
         <div
           id="payslip"
-          className="
-            payslip-page
-
-            relative
-            z-[10000]
-
-            w-full
-            max-w-[900px]
-
-            max-h-[calc(100vh-32px)]
-            overflow-y-auto
-
-            bg-white
-            text-black
-
-            rounded-xl
-            shadow-2xl
-
-            print:w-full
-            print:max-w-none
-            print:max-h-none
-            print:overflow-visible
-            print:rounded-none
-            print:shadow-none
-          "
+          className="payslip-page relative z-[10000] w-full max-w-[900px] max-h-[calc(100vh-32px)] overflow-y-auto bg-white text-black rounded-xl shadow-2xl print:w-full print:max-w-none print:max-h-none print:overflow-visible print:rounded-none print:shadow-none"
         >
           {/* ==================================================
               COMPANY HEADER
@@ -687,13 +620,7 @@ export default function PayslipPage() {
                   earnings.map((item) => (
                     <div
                       key={item.key}
-                      className="
-                        grid
-                        grid-cols-[1fr_100px_100px]
-                        border-b
-                        border-gray-300
-                        text-xs
-                      "
+                      className=" grid grid-cols-[1fr_100px_100px] border-b border-gray-300 text-xs"
                     >
                       <div className="px-3 py-2 border-r border-gray-300">
                         {item.name}
@@ -760,13 +687,7 @@ export default function PayslipPage() {
                   deductions.map((item) => (
                     <div
                       key={item.key}
-                      className="
-                        grid
-                        grid-cols-[1fr_100px_100px]
-                        border-b
-                        border-gray-300
-                        text-xs
-                      "
+                      className=" grid grid-cols-[1fr_100px_100px] border-b border-gray-300 text-xs"
                     >
                       <div className="px-3 py-2 border-r border-gray-300">
                         {item.name}

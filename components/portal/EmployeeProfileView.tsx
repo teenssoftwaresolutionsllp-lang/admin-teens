@@ -49,6 +49,14 @@ interface PreviousEmployment {
   work_location: string;
 }
 
+type AddressType = "permanentAddress" | "temporaryAddress";
+
+type AddressField =
+  | "address"
+  | "city"
+  | "state"
+  | "pincode";
+
 export default function EmployeeProfileView({
   employee,
   pendingRequest: initialPendingRequest,
@@ -68,16 +76,15 @@ export default function EmployeeProfileView({
 
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
-  const [hasStartedProfileEditing, setHasStartedProfileEditing] =
-    useState(false);
+  const [hasStartedProfileEditing, setHasStartedProfileEditing] = useState(false);
 
-  const [pendingRequest, setPendingRequest] =
-    useState<ProfileChangeRequest | null>(initialPendingRequest);
+  const [pendingRequest, setPendingRequest] =useState<ProfileChangeRequest | null>(
+      initialPendingRequest
+    );
 
   const [loading, setLoading] = useState(false);
 
-  const [successMessage, setSuccessMessage] =
-    useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   /* =========================================================
      PROFILE PHOTO STATE
@@ -88,8 +95,7 @@ export default function EmployeeProfileView({
       employee.profile_photo_url || null
     );
 
-  const [profilePhotoError, setProfilePhotoError] =
-    useState<string | null>(null);
+  const [profilePhotoError, setProfilePhotoError] = useState<string | null>(null);
 
   /* =========================================================
      PROFILE PHOTO CHANGE
@@ -110,9 +116,7 @@ export default function EmployeeProfileView({
       setProfilePhotoError(
         "Please select a valid image file."
       );
-
       e.target.value = "";
-
       return;
     }
 
@@ -122,9 +126,7 @@ export default function EmployeeProfileView({
       setProfilePhotoError(
         "Profile photo must be less than 5MB."
       );
-
       e.target.value = "";
-
       return;
     }
 
@@ -145,17 +147,13 @@ export default function EmployeeProfileView({
      DOCUMENT STATE
   ========================================================= */
 
-  const [selectedDocumentType, setSelectedDocumentType] =
-    useState("");
+  const [selectedDocumentType, setSelectedDocumentType] = useState("");
 
-  const [selectedDocumentFile, setSelectedDocumentFile] =
-    useState<File | null>(null);
+  const [selectedDocumentFile, setSelectedDocumentFile] = useState<File | null>(null);
 
-  const [documentError, setDocumentError] =
-    useState<string | null>(null);
+  const [documentError, setDocumentError] = useState<string | null>(null);
 
-  const [documentSuccess, setDocumentSuccess] =
-    useState<string | null>(null);
+  const [documentSuccess, setDocumentSuccess] = useState<string | null>(null);
 
   /* =========================================================
      DOCUMENT TYPES
@@ -181,74 +179,125 @@ export default function EmployeeProfileView({
   ========================================================= */
 
   const [editFormData, setEditFormData] = useState({
-    /* Personal */
+    /* =====================================================
+       PERSONAL
+    ===================================================== */
 
     phone: employee.phone || "",
-
     date_of_birth: employee.date_of_birth || "",
-
     gender: employee.gender || "",
-
     blood_group: employee.blood_group || "",
-
     marital_status: employee.marital_status || "single",
 
-    /* Address */
+    /* =====================================================
+       PERMANENT ADDRESS
+    ===================================================== */
 
-    address: employee.address || "",
+    permanentAddress: {
+      address: employee.permanent_address || "",
+      city: employee.permanent_city || "",
+      state: employee.permanent_state || "",
+      pincode: employee.permanent_pincode || "",
+    },
 
-    city: employee.city || "",
+    /* =====================================================
+       TEMPORARY ADDRESS
+    ===================================================== */
 
-    state: employee.state || "",
+    temporaryAddress: {
+      address: employee.temporary_address || "",
+      city: employee.temporary_city || "",
+      state: employee.temporary_state || "",
+      pincode: employee.temporary_pincode || "",
+    },
 
-    pincode: employee.pincode || "",
+    /* =====================================================
+       EMERGENCY CONTACT 1
+    ===================================================== */
 
-    /* Emergency */
+    emergency_contact_name: employee.emergency_contact_name || "",
 
-    emergency_contact_name:
-      employee.emergency_contact_name || "",
+    emergency_contact_phone: employee.emergency_contact_phone || "",
 
-    emergency_contact_phone:
-      employee.emergency_contact_phone || "",
+    emergency_contact_relation: employee.emergency_contact_relation || "",
 
-    emergency_contact_relation:
-      employee.emergency_contact_relation || "",
+    /* =====================================================
+       EMERGENCY CONTACT 2
+    ===================================================== */
 
-    /* Employment */
+    emergency_contact_name_2: employee.emergency_contact_name_2 || "",
+
+    emergency_contact_phone_2: employee.emergency_contact_phone_2 || "",
+
+    emergency_contact_relation_2: employee.emergency_contact_relation_2 || "",
+
+    /* =====================================================
+       EMERGENCY CONTACT 3
+    ===================================================== */
+
+    emergency_contact_name_3: employee.emergency_contact_name_3 || "",
+
+    emergency_contact_phone_3: employee.emergency_contact_phone_3 || "",
+
+    emergency_contact_relation_3: employee.emergency_contact_relation_3 || "",
+
+    /* =====================================================
+       EMPLOYMENT
+    ===================================================== */
 
     department_id: employee.department_id || "",
 
     designation: employee.designation || "",
 
-    probation_end_date:
-      employee.probation_end_date || "",
+    probation_end_date: employee.probation_end_date || "",
 
-    confirmation_date:
-      employee.confirmation_date || "",
+    confirmation_date: employee.confirmation_date || "",
 
-    reporting_manager:
-      employee.reporting_manager || "",
+    reporting_manager: employee.reporting_manager || "",
 
-    work_location:
-      employee.work_location || "",
+    work_location: employee.work_location || "",
 
-    /* Bank & KYC */
+    /* =====================================================
+       BANK & KYC
+    ===================================================== */
 
     bank_name: employee.bank_name || "",
 
-    bank_account_number:
-      employee.bank_account_number || "",
+    bank_account_number: employee.bank_account_number || "",
 
     ifsc_code: employee.ifsc_code || "",
 
     pan_number: employee.pan_number || "",
 
-    aadhar_number:
-      employee.aadhar_number || "",
+    aadhar_number: employee.aadhar_number || "",
 
-    uan_number:
-      employee.uan_number || "",
+    passport_number: employee.passport_number || "",
   });
+
+  /* =========================================================
+     EMERGENCY CONTACT FIELD CONFIGURATION
+  ========================================================= */
+
+  const emergencyContactFields = [
+    {
+      title: "Emergency Contact 1",
+      name: "emergency_contact_name" as const,
+      phone: "emergency_contact_phone" as const,
+      relation: "emergency_contact_relation" as const,
+    },
+    {
+      title: "Emergency Contact 2",
+      name: "emergency_contact_name_2" as const,
+      phone: "emergency_contact_phone_2" as const,
+      relation: "emergency_contact_relation_2" as const,
+    },
+    {
+      title: "Emergency Contact 3",
+      name: "emergency_contact_name_3" as const,
+      phone: "emergency_contact_phone_3" as const,
+      relation: "emergency_contact_relation_3" as const,
+    },
+  ];
 
   /* =========================================================
      PREVIOUS EMPLOYMENT STATE
@@ -285,6 +334,26 @@ export default function EmployeeProfileView({
     setEditFormData((prev) => ({
       ...prev,
       [name]: value,
+    }));
+  };
+
+  /* =========================================================
+     ADDRESS INPUT CHANGE
+  ========================================================= */
+
+  const handleAddressChange = (
+    addressType: AddressType,
+    field: AddressField,
+    value: string
+  ) => {
+    setHasStartedProfileEditing(true);
+
+    setEditFormData((prev) => ({
+      ...prev,
+      [addressType]: {
+        ...prev[addressType],
+        [field]: value,
+      },
     }));
   };
 
@@ -359,58 +428,158 @@ export default function EmployeeProfileView({
     setSuccessMessage(null);
 
     try {
-      const changedFields = Object.fromEntries(
-        Object.entries(editFormData).filter(
+      /* =====================================================
+         FLAT FORM VALUES
+      ===================================================== */
+
+      const formValues: Record<string, unknown> = {
+        /* Personal */
+
+        phone: editFormData.phone,
+        date_of_birth: editFormData.date_of_birth,
+        gender: editFormData.gender,
+        blood_group: editFormData.blood_group,
+        marital_status: editFormData.marital_status,
+
+        /* Permanent Address */
+
+        permanent_address: editFormData.permanentAddress.address,
+
+        permanent_city: editFormData.permanentAddress.city,
+
+        permanent_state: editFormData.permanentAddress.state,
+
+        permanent_pincode: editFormData.permanentAddress.pincode,
+
+        /* Temporary Address */
+
+        temporary_address: editFormData.temporaryAddress.address,
+
+        temporary_city: editFormData.temporaryAddress.city,
+
+        temporary_state: editFormData.temporaryAddress.state,
+
+        temporary_pincode: editFormData.temporaryAddress.pincode,
+
+        /* Emergency Contact 1 */
+
+        emergency_contact_name: editFormData.emergency_contact_name,
+
+        emergency_contact_phone: editFormData.emergency_contact_phone,
+
+        emergency_contact_relation: editFormData.emergency_contact_relation,
+
+        /* Emergency Contact 2 */
+
+        emergency_contact_name_2: editFormData.emergency_contact_name_2,
+
+        emergency_contact_phone_2: editFormData.emergency_contact_phone_2,
+
+        emergency_contact_relation_2: editFormData.emergency_contact_relation_2,
+
+        /* Emergency Contact 3 */
+
+        emergency_contact_name_3: editFormData.emergency_contact_name_3,
+
+        emergency_contact_phone_3: editFormData.emergency_contact_phone_3,
+
+        emergency_contact_relation_3: editFormData.emergency_contact_relation_3,
+
+        /* Employment */
+
+        department_id: editFormData.department_id,
+
+        designation: editFormData.designation,
+
+        probation_end_date: editFormData.probation_end_date,
+
+        confirmation_date: editFormData.confirmation_date,
+
+        reporting_manager: editFormData.reporting_manager,
+
+        work_location: editFormData.work_location,
+
+        /* Bank & KYC */
+
+        bank_name: editFormData.bank_name,
+
+        bank_account_number: editFormData.bank_account_number,
+
+        ifsc_code: editFormData.ifsc_code,
+
+        pan_number: editFormData.pan_number,
+
+        aadhar_number: editFormData.aadhar_number,
+
+        passport_number: editFormData.passport_number,
+      };
+
+      /* =====================================================
+         FIND CHANGED FIELDS
+      ===================================================== */
+
+      const changedFields: Record<
+        string,
+        unknown
+      > = Object.fromEntries(
+        Object.entries(formValues).filter(
           ([key, value]) => {
             const currentValue =
               employee[key as keyof Employee] ?? "";
 
             return (
               String(value ?? "") !==
-              String(currentValue)
+              String(currentValue ?? "")
             );
           }
         )
       );
 
       /* =====================================================
-         PREVIOUS EMPLOYMENT DATA
+         PREVIOUS EMPLOYMENT
       ===================================================== */
 
       const filledPreviousEmployments =
         previousEmployments.filter(
           (employment) =>
-            employment.company_name ||
-            employment.designation ||
+            employment.company_name.trim() ||
+            employment.designation.trim() ||
             employment.start_date ||
             employment.end_date ||
-            employment.reporting_manager ||
-            employment.work_location
+            employment.reporting_manager.trim() ||
+            employment.work_location.trim()
         );
 
-      if (
-        filledPreviousEmployments.length > 0
-      ) {
-        (
-          changedFields as Record<
-            string,
-            unknown
-          >
-        ).previous_employments =
+      if (filledPreviousEmployments.length > 0) {
+        changedFields.previous_employments =
           filledPreviousEmployments;
       }
 
-      const previousValues =
-        Object.fromEntries(
-          Object.keys(changedFields).map(
-            (key) => [
-              key,
-              employee[
-                key as keyof Employee
-              ] ?? "",
-            ]
-          )
-        );
+      /* =====================================================
+         PREVIOUS VALUES
+      ===================================================== */
+
+      const previousValues: Record<
+        string,
+        unknown
+      > = Object.fromEntries(
+        Object.keys(changedFields).map(
+          (key) => [
+            key,
+            employee[key as keyof Employee] ?? "",
+          ]
+        )
+      );
+
+      if (
+        "previous_employments" in changedFields
+      ) {
+        previousValues.previous_employments = "";
+      }
+
+      /* =====================================================
+         NO CHANGES
+      ===================================================== */
 
       if (
         Object.keys(changedFields).length === 0
@@ -424,6 +593,10 @@ export default function EmployeeProfileView({
         return;
       }
 
+      /* =====================================================
+         SUBMIT REQUEST
+      ===================================================== */
+
       const res = await fetch(
         "/api/profile-change-requests",
         {
@@ -436,10 +609,7 @@ export default function EmployeeProfileView({
 
           body: JSON.stringify({
             employeeId: employee.id,
-
-            requestedChanges:
-              changedFields,
-
+            requestedChanges: changedFields,
             previousValues,
           }),
         }
@@ -453,9 +623,7 @@ export default function EmployeeProfileView({
 
       const data = await res.json();
 
-      setPendingRequest(
-        data.request
-      );
+      setPendingRequest(data.request);
 
       setIsEditModalOpen(false);
 
@@ -513,9 +681,7 @@ export default function EmployeeProfileView({
       "image/jpeg",
     ];
 
-    if (
-      !allowedTypes.includes(file.type)
-    ) {
+    if (!allowedTypes.includes(file.type)) {
       setSelectedDocumentFile(null);
 
       setDocumentError(
@@ -605,11 +771,9 @@ export default function EmployeeProfileView({
 
       {successMessage && (
         <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-sm flex items-center gap-2">
-
           <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
 
           <span>{successMessage}</span>
-
         </div>
       )}
 
@@ -618,58 +782,55 @@ export default function EmployeeProfileView({
       ===================================================== */}
 
       {pendingRequest &&
-        pendingRequest.status ===
-          "pending" && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 shadow-sm">
+        pendingRequest.status === "pending" && (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 shadow-sm">
 
-          <div className="flex items-start gap-3">
+            <div className="flex items-start gap-3">
 
-            <Clock className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+              <Clock className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
 
-            <div className="flex-1">
+              <div className="flex-1">
 
-              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center justify-between gap-4">
 
-                <h4 className="text-sm font-bold text-amber-900">
-                  Profile Edit Request Pending HR Approval
-                </h4>
+                  <h4 className="text-sm font-bold text-amber-900">
+                    Profile Edit Request Pending HR Approval
+                  </h4>
 
-                <span className="text-[10px] font-bold bg-amber-200 text-amber-900 px-2 py-0.5 rounded-full uppercase whitespace-nowrap">
-                  Pending Review
-                </span>
+                  <span className="text-[10px] font-bold bg-amber-200 text-amber-900 px-2 py-0.5 rounded-full uppercase whitespace-nowrap">
+                    Pending Review
+                  </span>
 
-              </div>
+                </div>
 
-              <p className="text-xs text-amber-700 mt-1">
-                You recently submitted changes
-                to your profile. Once HR verifies
-                and approves them, your employee
-                master record and completion bar
-                will automatically update.
-              </p>
+                <p className="text-xs text-amber-700 mt-1">
+                  You recently submitted changes
+                  to your profile. Once HR verifies
+                  and approves them, your employee
+                  master record and completion bar
+                  will automatically update.
+                </p>
 
-              <div className="mt-3 bg-white/80 p-3 rounded-lg border border-amber-200 text-xs text-slate-700 space-y-1">
+                <div className="mt-3 bg-white/80 p-3 rounded-lg border border-amber-200 text-xs text-slate-700 space-y-1">
 
-                <span className="font-semibold text-slate-900 block mb-1">
-                  Requested modifications:
-                </span>
+                  <span className="font-semibold text-slate-900 block mb-1">
+                    Requested modifications:
+                  </span>
 
-                {Object.entries(
-                  pendingRequest.requested_changes
-                )
-                  .filter(
-                    ([_, val]) =>
-                      val !== null &&
-                      val !== ""
+                  {Object.entries(
+                    pendingRequest.requested_changes
                   )
-                  .slice(0, 6)
-                  .map(
-                    ([key, val]) => (
+                    .filter(
+                      ([_, val]) =>
+                        val !== null &&
+                        val !== ""
+                    )
+                    .slice(0, 6)
+                    .map(([key, val]) => (
                       <div
                         key={key}
                         className="flex justify-between gap-4 border-b border-slate-100 py-1 last:border-0"
                       >
-
                         <span className="text-slate-500 capitalize">
                           {key.replace(
                             /_/g,
@@ -681,19 +842,17 @@ export default function EmployeeProfileView({
                         <span className="font-medium text-slate-800 text-right">
                           {String(val)}
                         </span>
-
                       </div>
-                    )
-                  )}
+                    ))}
+
+                </div>
 
               </div>
 
             </div>
 
           </div>
-
-        </div>
-      )}
+        )}
 
       {/* =====================================================
           MAIN PROFILE CARD
@@ -929,110 +1088,56 @@ export default function EmployeeProfileView({
               PERSONAL DETAILS
           ================================================= */}
 
-          {activeTab ===
-            "personal" && (
+          {activeTab === "personal" && (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 text-sm">
 
-              <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
+              {[
+                [
+                  "First Name",
+                  employee.first_name,
+                ],
+                [
+                  "Last Name",
+                  employee.last_name,
+                ],
+                [
+                  "Official Email",
+                  employee.email,
+                ],
+                [
+                  "Phone Number",
+                  employee.phone || "Not specified",
+                ],
+                [
+                  "Date of Birth",
+                  employee.date_of_birth || "Not specified",
+                ],
+                [
+                  "Gender",
+                  employee.gender || "Not specified",
+                ],
+                [
+                  "Blood Group",
+                  employee.blood_group || "Not specified",
+                ],
+                [
+                  "Marital Status",
+                  employee.marital_status || "Single",
+                ],
+              ].map(([label, value]) => (
+                <div
+                  key={label}
+                  className="p-4 bg-slate-50/70 rounded-xl border border-slate-100"
+                >
+                  <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
+                    {label}
+                  </span>
 
-                <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
-                  First Name
-                </span>
-
-                <span className="font-bold text-slate-900 text-base">
-                  {employee.first_name}
-                </span>
-
-              </div>
-
-              <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
-
-                <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
-                  Last Name
-                </span>
-
-                <span className="font-bold text-slate-900 text-base">
-                  {employee.last_name}
-                </span>
-
-              </div>
-
-              <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
-
-                <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
-                  Official Email
-                </span>
-
-                <span className="font-medium text-slate-900 font-mono text-xs">
-                  {employee.email}
-                </span>
-
-              </div>
-
-              <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
-
-                <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
-                  Phone Number
-                </span>
-
-                <span className="font-semibold text-slate-900">
-                  {employee.phone ||
-                    "Not specified"}
-                </span>
-
-              </div>
-
-              <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
-
-                <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
-                  Date of Birth
-                </span>
-
-                <span className="font-semibold text-slate-900 font-mono">
-                  {employee.date_of_birth ||
-                    "Not specified"}
-                </span>
-
-              </div>
-
-              <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
-
-                <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
-                  Gender
-                </span>
-
-                <span className="font-semibold text-slate-900 capitalize">
-                  {employee.gender ||
-                    "Not specified"}
-                </span>
-
-              </div>
-
-              <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
-
-                <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
-                  Blood Group
-                </span>
-
-                <span className="font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md inline-block">
-                  {employee.blood_group ||
-                    "Not specified"}
-                </span>
-
-              </div>
-
-              <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
-
-                <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
-                  Marital Status
-                </span>
-
-                <span className="font-semibold text-slate-900 capitalize">
-                  {employee.marital_status ||
-                    "Single"}
-                </span>
-
-              </div>
+                  <span className="font-semibold text-slate-900">
+                    {value}
+                  </span>
+                </div>
+              ))}
 
             </div>
           )}
@@ -1041,19 +1146,18 @@ export default function EmployeeProfileView({
               ADDRESS & EMERGENCY
           ================================================= */}
 
-          {activeTab ===
-            "address" && (
-            <div className="space-y-6">
+          {activeTab === "address" && (
+            <div className="space-y-8">
 
-              <div>
+              {/* PERMANENT ADDRESS */}
+
+              <section>
 
                 <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-4 flex items-center gap-2">
 
                   <MapPin className="w-4 h-4 text-indigo-600" />
 
-                  <span>
-                    Residential Address
-                  </span>
+                  Permanent / Residential Address
 
                 </h4>
 
@@ -1066,7 +1170,7 @@ export default function EmployeeProfileView({
                     </span>
 
                     <span className="font-semibold text-slate-800">
-                      {employee.address ||
+                      {employee.permanent_address ||
                         "Not specified"}
                     </span>
 
@@ -1079,7 +1183,7 @@ export default function EmployeeProfileView({
                     </span>
 
                     <span className="font-semibold text-slate-800">
-                      {employee.city ||
+                      {employee.permanent_city ||
                         "Not specified"}
                     </span>
 
@@ -1092,7 +1196,7 @@ export default function EmployeeProfileView({
                     </span>
 
                     <span className="font-semibold text-slate-800">
-                      {employee.state ||
+                      {employee.permanent_state ||
                         "Not specified"}
                     </span>
 
@@ -1105,7 +1209,7 @@ export default function EmployeeProfileView({
                     </span>
 
                     <span className="font-semibold text-slate-800 font-mono">
-                      {employee.pincode ||
+                      {employee.permanent_pincode ||
                         "Not specified"}
                     </span>
 
@@ -1113,64 +1217,173 @@ export default function EmployeeProfileView({
 
                 </div>
 
-              </div>
+              </section>
 
-              <div className="border-t border-slate-200/80 pt-6">
+              {/* TEMPORARY ADDRESS */}
+
+              <section className="border-t border-slate-200/80 pt-7">
+
+                <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-4 flex items-center gap-2">
+
+                  <MapPinned className="w-4 h-4 text-indigo-600" />
+
+                  Temporary Address
+
+                </h4>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5 text-sm">
+
+                  <div className="sm:col-span-2 md:col-span-3 p-4 bg-slate-50/70 rounded-xl border border-slate-100">
+
+                    <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
+                      Street Address
+                    </span>
+
+                    <span className="font-semibold text-slate-800">
+                      {employee.temporary_address ||
+                        "Not specified"}
+                    </span>
+
+                  </div>
+
+                  <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
+
+                    <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
+                      City
+                    </span>
+
+                    <span className="font-semibold text-slate-800">
+                      {employee.temporary_city ||
+                        "Not specified"}
+                    </span>
+
+                  </div>
+
+                  <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
+
+                    <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
+                      State
+                    </span>
+
+                    <span className="font-semibold text-slate-800">
+                      {employee.temporary_state ||
+                        "Not specified"}
+                    </span>
+
+                  </div>
+
+                  <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
+
+                    <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
+                      Postal Pincode
+                    </span>
+
+                    <span className="font-semibold text-slate-800 font-mono">
+                      {employee.temporary_pincode ||
+                        "Not specified"}
+                    </span>
+
+                  </div>
+
+                </div>
+
+              </section>
+
+              {/* EMERGENCY CONTACTS */}
+
+              <section className="border-t border-slate-200/80 pt-7">
 
                 <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-4 flex items-center gap-2">
 
                   <Phone className="w-4 h-4 text-indigo-600" />
 
-                  <span>
-                    Emergency Contact Details
-                  </span>
+                  Emergency Contact Details
 
                 </h4>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 text-sm">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
 
-                  <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
+                  {[
+                    {
+                      title: "Emergency Contact 1",
+                      name:
+                        employee.emergency_contact_name,
+                      phone:
+                        employee.emergency_contact_phone,
+                      relation:
+                        employee.emergency_contact_relation,
+                    },
+                    {
+                      title: "Emergency Contact 2",
+                      name:
+                        employee.emergency_contact_name_2,
+                      phone:
+                        employee.emergency_contact_phone_2,
+                      relation:
+                        employee.emergency_contact_relation_2,
+                    },
+                    {
+                      title: "Emergency Contact 3",
+                      name:
+                        employee.emergency_contact_name_3,
+                      phone:
+                        employee.emergency_contact_phone_3,
+                      relation:
+                        employee.emergency_contact_relation_3,
+                    },
+                  ].map((contact) => (
+                    <div
+                      key={contact.title}
+                      className="p-5 bg-slate-50/70 rounded-xl border border-slate-100"
+                    >
 
-                    <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
-                      Contact Name
-                    </span>
+                      <h5 className="text-xs font-bold text-indigo-700 uppercase tracking-wider mb-4">
+                        {contact.title}
+                      </h5>
 
-                    <span className="font-bold text-slate-900">
-                      {employee.emergency_contact_name ||
-                        "Not specified"}
-                    </span>
+                      <div className="space-y-3">
 
-                  </div>
+                        <div>
+                          <span className="text-[10px] text-slate-400 font-bold block uppercase">
+                            Name
+                          </span>
 
-                  <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
+                          <span className="font-bold text-slate-900">
+                            {contact.name ||
+                              "Not specified"}
+                          </span>
+                        </div>
 
-                    <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
-                      Contact Phone
-                    </span>
+                        <div>
+                          <span className="text-[10px] text-slate-400 font-bold block uppercase">
+                            Phone
+                          </span>
 
-                    <span className="font-semibold text-slate-900">
-                      {employee.emergency_contact_phone ||
-                        "Not specified"}
-                    </span>
+                          <span className="font-semibold text-slate-900">
+                            {contact.phone ||
+                              "Not specified"}
+                          </span>
+                        </div>
 
-                  </div>
+                        <div>
+                          <span className="text-[10px] text-slate-400 font-bold block uppercase">
+                            Relationship
+                          </span>
 
-                  <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
+                          <span className="font-semibold text-indigo-700">
+                            {contact.relation ||
+                              "Not specified"}
+                          </span>
+                        </div>
 
-                    <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
-                      Relationship
-                    </span>
+                      </div>
 
-                    <span className="font-semibold text-indigo-700">
-                      {employee.emergency_contact_relation ||
-                        "Not specified"}
-                    </span>
-
-                  </div>
+                    </div>
+                  ))}
 
                 </div>
 
-              </div>
+              </section>
 
             </div>
           )}
@@ -1179,12 +1392,10 @@ export default function EmployeeProfileView({
               BANK & STATUTORY KYC
           ================================================= */}
 
-          {activeTab ===
-            "bank" && (
+          {activeTab === "bank" && (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5 text-sm">
 
               <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
-
                 <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
                   Bank Name
                 </span>
@@ -1193,11 +1404,9 @@ export default function EmployeeProfileView({
                   {employee.bank_name ||
                     "Not specified"}
                 </span>
-
               </div>
 
               <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
-
                 <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
                   Account Number
                 </span>
@@ -1209,11 +1418,9 @@ export default function EmployeeProfileView({
                       )}`
                     : "Not specified"}
                 </span>
-
               </div>
 
               <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
-
                 <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
                   IFSC Code
                 </span>
@@ -1222,11 +1429,9 @@ export default function EmployeeProfileView({
                   {employee.ifsc_code ||
                     "Not specified"}
                 </span>
-
               </div>
 
               <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
-
                 <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
                   PAN Number
                 </span>
@@ -1235,11 +1440,9 @@ export default function EmployeeProfileView({
                   {employee.pan_number ||
                     "Not specified"}
                 </span>
-
               </div>
 
               <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
-
                 <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
                   Aadhaar Number
                 </span>
@@ -1251,11 +1454,9 @@ export default function EmployeeProfileView({
                       )}`
                     : "Not specified"}
                 </span>
-
               </div>
 
               <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
-
                 <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
                   UAN (PF Number)
                 </span>
@@ -1264,7 +1465,6 @@ export default function EmployeeProfileView({
                   {employee.uan_number ||
                     "Auto-assigned by HR"}
                 </span>
-
               </div>
 
             </div>
@@ -1274,8 +1474,7 @@ export default function EmployeeProfileView({
               EMPLOYMENT & SHIFT
           ================================================= */}
 
-          {activeTab ===
-            "employment" && (
+          {activeTab === "employment" && (
             <div className="space-y-8">
 
               {/* CURRENT EMPLOYMENT */}
@@ -1302,223 +1501,88 @@ export default function EmployeeProfileView({
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5">
 
-                  {/* EMPLOYEE ID */}
-
-                  <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
-
-                    <div className="flex items-center gap-2 mb-2">
-
-                      <UserRound className="w-4 h-4 text-indigo-500" />
-
-                      <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">
-                        Employee ID
-                      </span>
-
-                    </div>
-
-                    <span className="font-mono font-bold text-slate-900">
-                      {employee.employee_id ||
-                        "Not specified"}
-                    </span>
-
-                  </div>
-
-                  {/* DEPARTMENT */}
-
-                  <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
-
-                    <div className="flex items-center gap-2 mb-2">
-
-                      <Building className="w-4 h-4 text-indigo-500" />
-
-                      <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">
-                        Department
-                      </span>
-
-                    </div>
-
-                    <span className="font-bold text-slate-900">
-                      {employee.department?.name ||
+                  {[
+                    {
+                      label: "Employee ID",
+                      value:
+                        employee.employee_id ||
+                        "Not specified",
+                    },
+                    {
+                      label: "Department",
+                      value:
+                        employee.department?.name ||
                         departments.find(
                           (department) =>
                             department.id ===
                             employee.department_id
                         )?.name ||
-                        "Not assigned"}
-                    </span>
-
-                  </div>
-
-                  {/* DESIGNATION */}
-
-                  <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
-
-                    <div className="flex items-center gap-2 mb-2">
-
-                      <UserRound className="w-4 h-4 text-indigo-500" />
-
-                      <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">
-                        Designation
-                      </span>
-
-                    </div>
-
-                    <span className="font-bold text-slate-900">
-                      {employee.designation ||
-                        "Not assigned"}
-                    </span>
-
-                  </div>
-
-                  {/* EMPLOYMENT TYPE */}
-
-                  <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
-
-                    <div className="flex items-center gap-2 mb-2">
-
-                      <Briefcase className="w-4 h-4 text-indigo-500" />
-
-                      <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">
-                        Employment Type
-                      </span>
-
-                    </div>
-
-                    <span className="font-bold text-emerald-700 capitalize bg-emerald-50 px-2 py-1 rounded-md inline-block">
-                      {employee.employment_type ||
-                        "Not specified"}
-                    </span>
-
-                  </div>
-
-                  {/* JOINING DATE */}
-
-                  <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
-
-                    <div className="flex items-center gap-2 mb-2">
-
-                      <CalendarDays className="w-4 h-4 text-indigo-500" />
-
-                      <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">
-                        Joining Date
-                      </span>
-
-                    </div>
-
-                    <span className="font-semibold text-slate-900">
-                      {formatDate(
+                        "Not assigned",
+                    },
+                    {
+                      label: "Designation",
+                      value:
+                        employee.designation ||
+                        "Not assigned",
+                    },
+                    {
+                      label: "Employment Type",
+                      value:
+                        employee.employment_type ||
+                        "Not specified",
+                    },
+                    {
+                      label: "Joining Date",
+                      value: formatDate(
                         employee.joining_date
-                      )}
-                    </span>
-
-                  </div>
-
-                  {/* PROBATION END */}
-
-                  <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
-
-                    <div className="flex items-center gap-2 mb-2">
-
-                      <CalendarDays className="w-4 h-4 text-indigo-500" />
-
-                      <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">
-                        Probation End Date
-                      </span>
-
-                    </div>
-
-                    <span className="font-semibold text-slate-900">
-                      {formatDate(
+                      ),
+                    },
+                    {
+                      label: "Probation End Date",
+                      value: formatDate(
                         employee.probation_end_date
-                      )}
-                    </span>
-
-                  </div>
-
-                  {/* CONFIRMATION DATE */}
-
-                  <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
-
-                    <div className="flex items-center gap-2 mb-2">
-
-                      <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-
-                      <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">
-                        Confirmation Date
-                      </span>
-
-                    </div>
-
-                    <span className="font-semibold text-slate-900">
-                      {formatDate(
+                      ),
+                    },
+                    {
+                      label: "Confirmation Date",
+                      value: formatDate(
                         employee.confirmation_date
-                      )}
-                    </span>
+                      ),
+                    },
+                    {
+                      label: "Reporting Manager",
+                      value:
+                        employee.reporting_manager ||
+                        "Not assigned",
+                    },
+                    {
+                      label: "Work Location",
+                      value:
+                        employee.work_location ||
+                        "Not assigned",
+                    },
+                    {
+                      label: "Employment Status",
+                      value:
+                        employee.status ||
+                        "Active",
+                    },
+                  ].map((item) => (
+                    <div
+                      key={item.label}
+                      className="p-4 bg-slate-50/70 rounded-xl border border-slate-100"
+                    >
 
-                  </div>
+                      <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-2">
+                        {item.label}
+                      </span>
 
-                  {/* REPORTING MANAGER */}
-
-                  <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
-
-                    <div className="flex items-center gap-2 mb-2">
-
-                      <UserRound className="w-4 h-4 text-indigo-500" />
-
-                      <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">
-                        Reporting Manager
+                      <span className="font-bold text-slate-900">
+                        {item.value}
                       </span>
 
                     </div>
-
-                    <span className="font-semibold text-slate-900">
-                      {employee.reporting_manager ||
-                        "Not assigned"}
-                    </span>
-
-                  </div>
-
-                  {/* WORK LOCATION */}
-
-                  <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
-
-                    <div className="flex items-center gap-2 mb-2">
-
-                      <MapPinned className="w-4 h-4 text-indigo-500" />
-
-                      <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">
-                        Work Location
-                      </span>
-
-                    </div>
-
-                    <span className="font-semibold text-slate-900">
-                      {employee.work_location ||
-                        "Not assigned"}
-                    </span>
-
-                  </div>
-
-                  {/* STATUS */}
-
-                  <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
-
-                    <div className="flex items-center gap-2 mb-2">
-
-                      <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-
-                      <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">
-                        Employment Status
-                      </span>
-
-                    </div>
-
-                    <span className="font-bold text-emerald-700 capitalize">
-                      {employee.status ||
-                        "Active"}
-                    </span>
-
-                  </div>
+                  ))}
 
                 </div>
 
@@ -1550,8 +1614,6 @@ export default function EmployeeProfileView({
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5">
 
-                  {/* PROJECT */}
-
                   <div className="md:col-span-2 p-5 bg-indigo-50/50 rounded-xl border border-indigo-100">
 
                     <span className="text-[11px] text-indigo-500 font-bold block uppercase tracking-wider mb-2">
@@ -1564,8 +1626,6 @@ export default function EmployeeProfileView({
                     </span>
 
                   </div>
-
-                  {/* PROJECT ID */}
 
                   <div className="p-5 bg-slate-50/70 rounded-xl border border-slate-100">
 
@@ -1580,18 +1640,14 @@ export default function EmployeeProfileView({
 
                   </div>
 
-                  {/* SHIFT START */}
-
                   <div className="p-5 bg-slate-50/70 rounded-xl border border-slate-100">
 
                     <div className="flex items-center gap-2 mb-2">
-
                       <Timer className="w-4 h-4 text-indigo-500" />
 
                       <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">
                         Shift Start
                       </span>
-
                     </div>
 
                     <span className="font-mono font-bold text-slate-900 text-lg">
@@ -1601,18 +1657,14 @@ export default function EmployeeProfileView({
 
                   </div>
 
-                  {/* SHIFT END */}
-
                   <div className="p-5 bg-slate-50/70 rounded-xl border border-slate-100">
 
                     <div className="flex items-center gap-2 mb-2">
-
                       <Timer className="w-4 h-4 text-indigo-500" />
 
                       <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">
                         Shift End
                       </span>
-
                     </div>
 
                     <span className="font-mono font-bold text-slate-900 text-lg">
@@ -1621,8 +1673,6 @@ export default function EmployeeProfileView({
                     </span>
 
                   </div>
-
-                  {/* SHIFT TIME */}
 
                   <div className="p-5 bg-emerald-50/60 rounded-xl border border-emerald-100">
 
@@ -1646,8 +1696,6 @@ export default function EmployeeProfileView({
 
                   </div>
 
-                  {/* TIMEZONE */}
-
                   <div className="p-5 bg-slate-50/70 rounded-xl border border-slate-100">
 
                     <div className="flex items-center gap-2 mb-2">
@@ -1668,8 +1716,6 @@ export default function EmployeeProfileView({
                   </div>
 
                 </div>
-
-                {/* SHIFT INFORMATION */}
 
                 <div className="mt-5 p-4 bg-amber-50 border border-amber-100 rounded-xl">
 
@@ -1705,8 +1751,7 @@ export default function EmployeeProfileView({
               DOCUMENT
           ================================================= */}
 
-          {activeTab ===
-            "document" && (
+          {activeTab === "document" && (
             <div className="max-w-2xl">
 
               <div className="mb-6">
@@ -1902,7 +1947,9 @@ export default function EmployeeProfileView({
               className="px-6 py-5 space-y-8 max-h-[75vh] overflow-y-auto"
             >
 
-              {/* PERSONAL INFORMATION */}
+              {/* =================================================
+                  PERSONAL INFORMATION
+              ================================================= */}
 
               <section>
 
@@ -1917,7 +1964,6 @@ export default function EmployeeProfileView({
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
                   <div>
-
                     <label className="block text-xs text-slate-600 font-semibold mb-1.5">
                       Phone Number
                     </label>
@@ -1930,11 +1976,9 @@ export default function EmployeeProfileView({
                       }
                       className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
                     />
-
                   </div>
 
                   <div>
-
                     <label className="block text-xs text-slate-600 font-semibold mb-1.5">
                       Date of Birth
                     </label>
@@ -1950,11 +1994,9 @@ export default function EmployeeProfileView({
                       }
                       className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
                     />
-
                   </div>
 
                   <div>
-
                     <label className="block text-xs text-slate-600 font-semibold mb-1.5">
                       Gender
                     </label>
@@ -1987,11 +2029,9 @@ export default function EmployeeProfileView({
                       </option>
 
                     </select>
-
                   </div>
 
                   <div>
-
                     <label className="block text-xs text-slate-600 font-semibold mb-1.5">
                       Blood Group
                     </label>
@@ -2044,11 +2084,9 @@ export default function EmployeeProfileView({
                       </option>
 
                     </select>
-
                   </div>
 
                   <div>
-
                     <label className="block text-xs text-slate-600 font-semibold mb-1.5">
                       Marital Status
                     </label>
@@ -2081,14 +2119,15 @@ export default function EmployeeProfileView({
                       </option>
 
                     </select>
-
                   </div>
 
                 </div>
 
               </section>
 
-              {/* ADDRESS & EMERGENCY */}
+              {/* =================================================
+                  ADDRESS & EMERGENCY
+              ================================================= */}
 
               <section>
 
@@ -2100,155 +2139,330 @@ export default function EmployeeProfileView({
 
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-6">
 
-                  <div className="md:col-span-2">
+                  {/* PERMANENT ADDRESS */}
 
-                    <label className="block text-xs text-slate-600 font-semibold mb-1.5">
+                  <div className="border border-slate-200 rounded-xl p-5 bg-slate-50/40">
+
+                    <h5 className="text-sm font-bold text-slate-800 mb-4">
                       Permanent Address
-                    </label>
+                    </h5>
 
-                    <textarea
-                      name="address"
-                      value={
-                        editFormData.address
-                      }
-                      onChange={
-                        handleInputChange
-                      }
-                      rows={2}
-                      className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 resize-none"
-                    />
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+
+                      <div className="md:col-span-3">
+
+                        <label className="block text-xs text-slate-600 font-semibold mb-1.5">
+                          Address
+                        </label>
+
+                        <textarea
+                          value={
+                            editFormData
+                              .permanentAddress
+                              .address
+                          }
+                          onChange={(e) =>
+                            handleAddressChange(
+                              "permanentAddress",
+                              "address",
+                              e.target.value
+                            )
+                          }
+                          rows={2}
+                          className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 resize-none bg-white"
+                        />
+
+                      </div>
+
+                      <div>
+
+                        <label className="block text-xs text-slate-600 font-semibold mb-1.5">
+                          City
+                        </label>
+
+                        <input
+                          value={
+                            editFormData
+                              .permanentAddress
+                              .city
+                          }
+                          onChange={(e) =>
+                            handleAddressChange(
+                              "permanentAddress",
+                              "city",
+                              e.target.value
+                            )
+                          }
+                          className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
+                        />
+
+                      </div>
+
+                      <div>
+
+                        <label className="block text-xs text-slate-600 font-semibold mb-1.5">
+                          State
+                        </label>
+
+                        <input
+                          value={
+                            editFormData
+                              .permanentAddress
+                              .state
+                          }
+                          onChange={(e) =>
+                            handleAddressChange(
+                              "permanentAddress",
+                              "state",
+                              e.target.value
+                            )
+                          }
+                          className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
+                        />
+
+                      </div>
+
+                      <div>
+
+                        <label className="block text-xs text-slate-600 font-semibold mb-1.5">
+                          Pincode
+                        </label>
+
+                        <input
+                          value={
+                            editFormData
+                              .permanentAddress
+                              .pincode
+                          }
+                          onChange={(e) =>
+                            handleAddressChange(
+                              "permanentAddress",
+                              "pincode",
+                              e.target.value
+                            )
+                          }
+                          className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
+                        />
+
+                      </div>
+
+                    </div>
 
                   </div>
 
-                  <div className="md:col-span-2">
+                  {/* TEMPORARY ADDRESS */}
 
-                    <label className="block text-xs text-slate-600 font-semibold mb-1.5">
+                  <div className="border border-slate-200 rounded-xl p-5 bg-slate-50/40">
+
+                    <h5 className="text-sm font-bold text-slate-800 mb-4">
                       Temporary Address
-                    </label>
+                    </h5>
 
-                    <textarea
-                      name="address"
-                      value={
-                        editFormData.address
-                      }
-                      onChange={
-                        handleInputChange
-                      }
-                      rows={2}
-                      className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 resize-none"
-                    />
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
 
-                  </div>
+                      <div className="md:col-span-3">
 
-                  <div>
+                        <label className="block text-xs text-slate-600 font-semibold mb-1.5">
+                          Address
+                        </label>
 
-                    <label className="block text-xs text-slate-600 font-semibold mb-1.5">
-                      City
-                    </label>
+                        <textarea
+                          value={
+                            editFormData
+                              .temporaryAddress
+                              .address
+                          }
+                          onChange={(e) =>
+                            handleAddressChange(
+                              "temporaryAddress",
+                              "address",
+                              e.target.value
+                            )
+                          }
+                          rows={2}
+                          className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 resize-none bg-white"
+                        />
 
-                    <input
-                      name="city"
-                      value={editFormData.city}
-                      onChange={
-                        handleInputChange
-                      }
-                      className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
-                    />
+                      </div>
 
-                  </div>
+                      <div>
 
-                  <div>
+                        <label className="block text-xs text-slate-600 font-semibold mb-1.5">
+                          City
+                        </label>
 
-                    <label className="block text-xs text-slate-600 font-semibold mb-1.5">
-                      State
-                    </label>
+                        <input
+                          value={
+                            editFormData
+                              .temporaryAddress
+                              .city
+                          }
+                          onChange={(e) =>
+                            handleAddressChange(
+                              "temporaryAddress",
+                              "city",
+                              e.target.value
+                            )
+                          }
+                          className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
+                        />
 
-                    <input
-                      name="state"
-                      value={editFormData.state}
-                      onChange={
-                        handleInputChange
-                      }
-                      className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
-                    />
+                      </div>
 
-                  </div>
+                      <div>
 
-                  <div>
+                        <label className="block text-xs text-slate-600 font-semibold mb-1.5">
+                          State
+                        </label>
 
-                    <label className="block text-xs text-slate-600 font-semibold mb-1.5">
-                      Pincode
-                    </label>
+                        <input
+                          value={
+                            editFormData
+                              .temporaryAddress
+                              .state
+                          }
+                          onChange={(e) =>
+                            handleAddressChange(
+                              "temporaryAddress",
+                              "state",
+                              e.target.value
+                            )
+                          }
+                          className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
+                        />
 
-                    <input
-                      name="pincode"
-                      value={
-                        editFormData.pincode
-                      }
-                      onChange={
-                        handleInputChange
-                      }
-                      className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
-                    />
+                      </div>
 
-                  </div>
+                      <div>
 
-                  <div>
+                        <label className="block text-xs text-slate-600 font-semibold mb-1.5">
+                          Pincode
+                        </label>
 
-                    <label className="block text-xs text-slate-600 font-semibold mb-1.5">
-                      Emergency Contact Name
-                    </label>
+                        <input
+                          value={
+                            editFormData
+                              .temporaryAddress
+                              .pincode
+                          }
+                          onChange={(e) =>
+                            handleAddressChange(
+                              "temporaryAddress",
+                              "pincode",
+                              e.target.value
+                            )
+                          }
+                          className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
+                        />
 
-                    <input
-                      name="emergency_contact_name"
-                      value={
-                        editFormData.emergency_contact_name
-                      }
-                      onChange={
-                        handleInputChange
-                      }
-                      className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
-                    />
+                      </div>
 
-                  </div>
-
-                  <div>
-
-                    <label className="block text-xs text-slate-600 font-semibold mb-1.5">
-                      Emergency Contact Phone
-                    </label>
-
-                    <input
-                      name="emergency_contact_phone"
-                      value={
-                        editFormData.emergency_contact_phone
-                      }
-                      onChange={
-                        handleInputChange
-                      }
-                      className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
-                    />
+                    </div>
 
                   </div>
 
+                  {/* EMERGENCY CONTACTS */}
+
                   <div>
 
-                    <label className="block text-xs text-slate-600 font-semibold mb-1.5">
-                      Emergency Contact Relation
-                    </label>
+                    <h5 className="text-sm font-bold text-slate-800 mb-4">
+                      Emergency Contacts
+                    </h5>
 
-                    <input
-                      name="emergency_contact_relation"
-                      value={
-                        editFormData.emergency_contact_relation
-                      }
-                      onChange={
-                        handleInputChange
-                      }
-                      className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
-                    />
+                    <div className="space-y-4">
+
+                      {emergencyContactFields.map(
+                        (contact) => (
+                          <div
+                            key={contact.title}
+                            className="border border-slate-200 rounded-xl p-5 bg-slate-50/40"
+                          >
+
+                            <h6 className="text-xs font-bold text-indigo-700 uppercase tracking-wider mb-4">
+                              {contact.title}
+                            </h6>
+
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+
+                              <div>
+
+                                <label className="block text-xs text-slate-600 font-semibold mb-1.5">
+                                  Name
+                                </label>
+
+                                <input
+                                  name={
+                                    contact.name
+                                  }
+                                  value={
+                                    editFormData[
+                                      contact.name
+                                    ]
+                                  }
+                                  onChange={
+                                    handleInputChange
+                                  }
+                                  className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
+                                />
+
+                              </div>
+
+                              <div>
+
+                                <label className="block text-xs text-slate-600 font-semibold mb-1.5">
+                                  Phone
+                                </label>
+
+                                <input
+                                  type="tel"
+                                  name={
+                                    contact.phone
+                                  }
+                                  value={
+                                    editFormData[
+                                      contact.phone
+                                    ]
+                                  }
+                                  onChange={
+                                    handleInputChange
+                                  }
+                                  className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
+                                />
+
+                              </div>
+
+                              <div>
+
+                                <label className="block text-xs text-slate-600 font-semibold mb-1.5">
+                                  Relationship
+                                </label>
+
+                                <input
+                                  name={
+                                    contact.relation
+                                  }
+                                  value={
+                                    editFormData[
+                                      contact.relation
+                                    ]
+                                  }
+                                  onChange={
+                                    handleInputChange
+                                  }
+                                  className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
+                                />
+
+                              </div>
+
+                            </div>
+
+                          </div>
+                        )
+                      )}
+
+                    </div>
 
                   </div>
 
@@ -2256,7 +2470,9 @@ export default function EmployeeProfileView({
 
               </section>
 
-              {/* PREVIOUS EMPLOYMENT */}
+              {/* =================================================
+                  PREVIOUS EMPLOYMENT
+              ================================================= */}
 
               <section>
 
@@ -2488,7 +2704,9 @@ export default function EmployeeProfileView({
 
               </section>
 
-              {/* BANK DETAILS */}
+              {/* =================================================
+                  BANK DETAILS
+              ================================================= */}
 
               <section>
 
@@ -2502,125 +2720,61 @@ export default function EmployeeProfileView({
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
-                  <div>
+                  {[
+                    {
+                      name: "bank_name",
+                      label: "Bank Name",
+                    },
+                    {
+                      name: "bank_account_number",
+                      label: "Bank Account Number",
+                    },
+                    {
+                      name: "ifsc_code",
+                      label: "IFSC Code",
+                    },
+                    {
+                      name: "pan_number",
+                      label: "PAN Number",
+                    },
+                    {
+                      name: "aadhar_number",
+                      label: "Aadhaar Number",
+                    },
+                    {
+                      name: "uan_number",
+                      label: "UAN Number",
+                    },
+                  ].map((field) => (
+                    <div key={field.name}>
 
-                    <label className="block text-xs text-slate-600 font-semibold mb-1.5">
-                      Bank Name
-                    </label>
+                      <label className="block text-xs text-slate-600 font-semibold mb-1.5">
+                        {field.label}
+                      </label>
 
-                    <input
-                      name="bank_name"
-                      value={
-                        editFormData.bank_name
-                      }
-                      onChange={
-                        handleInputChange
-                      }
-                      className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
-                    />
+                      <input
+                        name={field.name}
+                        value={
+                          editFormData[
+                            field.name as keyof typeof editFormData
+                          ] as string
+                        }
+                        onChange={
+                          handleInputChange
+                        }
+                        className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
+                      />
 
-                  </div>
-
-                  <div>
-
-                    <label className="block text-xs text-slate-600 font-semibold mb-1.5">
-                      Bank Account Number
-                    </label>
-
-                    <input
-                      name="bank_account_number"
-                      value={
-                        editFormData.bank_account_number
-                      }
-                      onChange={
-                        handleInputChange
-                      }
-                      className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
-                    />
-
-                  </div>
-
-                  <div>
-
-                    <label className="block text-xs text-slate-600 font-semibold mb-1.5">
-                      IFSC Code
-                    </label>
-
-                    <input
-                      name="ifsc_code"
-                      value={
-                        editFormData.ifsc_code
-                      }
-                      onChange={
-                        handleInputChange
-                      }
-                      className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
-                    />
-
-                  </div>
-
-                  <div>
-
-                    <label className="block text-xs text-slate-600 font-semibold mb-1.5">
-                      PAN Number
-                    </label>
-
-                    <input
-                      name="pan_number"
-                      value={
-                        editFormData.pan_number
-                      }
-                      onChange={
-                        handleInputChange
-                      }
-                      className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
-                    />
-
-                  </div>
-
-                  <div>
-
-                    <label className="block text-xs text-slate-600 font-semibold mb-1.5">
-                      Aadhaar Number
-                    </label>
-
-                    <input
-                      name="aadhar_number"
-                      value={
-                        editFormData.aadhar_number
-                      }
-                      onChange={
-                        handleInputChange
-                      }
-                      className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
-                    />
-
-                  </div>
-
-                  <div>
-
-                    <label className="block text-xs text-slate-600 font-semibold mb-1.5">
-                      UAN Number
-                    </label>
-
-                    <input
-                      name="uan_number"
-                      value={
-                        editFormData.uan_number
-                      }
-                      onChange={
-                        handleInputChange
-                      }
-                      className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
-                    />
-
-                  </div>
+                    </div>
+                  ))}
 
                 </div>
 
               </section>
 
-              {/* FORM BUTTONS */}
+              {/* =================================================
+                  FORM BUTTONS
+              ================================================= */}
 
               <div className="flex items-center justify-end gap-3 pt-5 border-t border-slate-200 sticky bottom-0 bg-white">
 
