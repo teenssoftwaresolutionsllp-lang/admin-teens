@@ -179,9 +179,68 @@ export async function POST(request: Request) {
   // Save employee using DataStore and adminClient (bypassing RLS issues)
   const saved = await DataStore.createEmployee(employeeData as any);
 
-  // Initialize leave balances for the newly added employee
+  // =========================================================
+  // INITIALIZE EMPLOYEE SALARY COMPONENTS
+  // =========================================================
+
   if (saved?.id) {
-      await DataStore.getLeaveBalances(saved.id);
+    // Get all active salary components from master table
+    const {
+      data: masterSalaryComponents,
+      error: salaryComponentsError,
+    } = await adminClient
+      .from("salary_components")
+      .select(`
+        id,
+        code,
+        calculation_type,
+        value,
+        is_active
+      `)
+      .eq("is_active", true);
+
+    if (salaryComponentsError) {
+      throw new Error(
+        `Failed to load salary components: ${salaryComponentsError.message}`
+      );
+    }
+
+    if (masterSalaryComponents?.length) {
+      const employeeSalaryComponents =
+        masterSalaryComponents.map((component) => ({
+          employee_id: saved.id,
+          salary_component_id: component.id,
+          calculation_type: component.calculation_type,
+          value: Number(component.value || 0),
+          is_active: true,
+
+          gratuity_5_year_taken: false,
+          gratuity_5_year_taken_date: null,
+          gratuity_5_year_amount: 0,
+
+          gratuity_10_year_taken: false,
+          gratuity_10_year_taken_date: null,
+          gratuity_10_year_amount: 0,
+        }));
+
+      const {
+        error: employeeSalaryComponentsError,
+      } = await adminClient
+        .from("employee_salary_components")
+        .insert(employeeSalaryComponents);
+
+      if (employeeSalaryComponentsError) {
+        throw new Error(
+          `Failed to initialize employee salary components: ${employeeSalaryComponentsError.message}`
+        );
+      }
+    }
+
+    // =========================================================
+    // INITIALIZE LEAVE BALANCES
+    // =========================================================
+
+    await DataStore.getLeaveBalances(saved.id);
   }
 
   return NextResponse.json({

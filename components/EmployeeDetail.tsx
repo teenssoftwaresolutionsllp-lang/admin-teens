@@ -4,9 +4,9 @@ import { Employee, EmployeeDocument, UserRole } from "@/lib/types";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase-browser";
 import { toast } from "react-hot-toast";
-import { User, MapPin, Briefcase, CreditCard, FileText, Download, Edit, DeleteIcon, LaptopMinimal, Phone, File } from "lucide-react";
+import { User, MapPin, Briefcase, CreditCard, FileText, Gift, Edit, DeleteIcon, LaptopMinimal, Phone, File } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect,useState } from "react";
 import DocumentUpload from "./DocumentUpload";
 
 interface EmployeeDetailProps {
@@ -19,6 +19,14 @@ export default function EmployeeDetail({ employee, documents, role }: EmployeeDe
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
+  const [gratuity, setGratuity] = useState<any>(null);
+  const [gratuityLoading, setGratuityLoading] = useState(false);
+  const [gratuityProcessing, setGratuityProcessing] = useState(false);
+  const [gratuityConfirm, setGratuityConfirm] = useState(false);
+  const [gratuityMessage, setGratuityMessage] = useState<{
+    type: "success" | "error";
+    message: string;
+  } | null>(null);
   const [showExitMenu, setShowExitMenu] = useState(false);
   const [exitAction, setExitAction] = useState< "resigned" | "laid_off" | "terminated" | null > (null);
   const handleExitAction = (action: "resigned" | "laid_off" | "terminated" | "deleted")=>{
@@ -39,6 +47,39 @@ export default function EmployeeDetail({ employee, documents, role }: EmployeeDe
     if (!dateStr) return "N/A";
     return new Date(dateStr).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
   };
+
+  const loadGratuity = async () => {
+    try {
+      setGratuityLoading(true);
+
+      const response = await fetch(
+        `/api/employees/${employee.id}/gratuity`
+      );
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          result.error || "Failed to load gratuity"
+        );
+      }
+
+      setGratuity(result);
+    } catch (error: any) {
+      console.error("Gratuity load error:", error);
+      toast.error(
+        error.message || "Failed to load gratuity"
+      );
+    } finally {
+      setGratuityLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 7) {
+      loadGratuity();
+    }
+  }, [activeTab]);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -146,6 +187,7 @@ const isExitStatus = [
     { name: "Documentation", icon: FileText },
     { name:"Accessory Management", icon: LaptopMinimal},
     { name: "Statutory", icon: File},
+    { name: "Gratuity", icon: Gift },
 
     ...(!isExitStatus ? [{ name: "Terminated", icon: DeleteIcon }] : []),
   ];
@@ -156,6 +198,64 @@ const isExitStatus = [
       <dd className="text-sm font-semibold text-slate-900 break-words">{value || "N/A"}</dd>
     </div>
   );
+
+  const handleTakeGratuity = () => {
+    setGratuityConfirm(true);
+  };
+
+  const processGratuity = async () => {
+    if (!gratuityConfirm) return;
+
+    setGratuityConfirm(false);
+
+    try {
+      setGratuityProcessing(true);
+
+      const response = await fetch(
+        `/api/employees/${employee.id}/gratuity`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({}),
+        }
+      );
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          result.error || "Failed to process gratuity"
+        );
+      }
+
+      await loadGratuity();
+
+      setGratuityMessage({
+        type: "success",
+        message: `Gratuity of ₹${Number(
+          result.amount
+        ).toLocaleString("en-IN", {
+          minimumFractionDigits: 2,
+        })} processed successfully.`,
+      });
+    } catch (error: any) {
+      console.error(
+        "Gratuity processing error:",
+        error
+      );
+
+      setGratuityMessage({
+        type: "error",
+        message:
+          error.message ||
+          "Failed to process gratuity",
+      });
+    } finally {
+      setGratuityProcessing(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -257,7 +357,7 @@ const isExitStatus = [
               <div>
                 <h3 className="text-sm font-bold text-slate-900 mb-3 uppercase tracking-wider text-slate-400">Financial Details</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <DetailTile label="Monthly Fixed Salary" value={employee.salary ? `₹${employee.salary.toLocaleString('en-IN')}` : "N/A"} />
+                  <DetailTile label="Annual CTC" value={employee.salary ? `₹${employee.salary.toLocaleString('en-IN')}` : "N/A"} />
                   <DetailTile label="Bank Name" value={employee.bank_name} />
                   <DetailTile label="Bank Account Number" value={maskString(employee.bank_account_number, 4)} />
                   <DetailTile label="IFSC Code" value={employee.ifsc_code} />
@@ -622,8 +722,216 @@ const isExitStatus = [
             </div>
           )}
 
+          {/* ================= GRATUITY ================= */}
+          {activeTab === 7 && (
+            <div className="space-y-6">
+
+              {/* HEADER */}
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
+                  Gratuity
+                </h3>
+
+                <p className="text-xs text-slate-500 mt-1">
+                  Gratuity is automatically calculated based on
+                  completed service and the latest basic salary.
+                </p>
+              </div>
+
+              {gratuityLoading ? (
+                <div className="py-10 text-center text-sm text-slate-500">
+                  Loading gratuity details...
+                </div>
+              ) : gratuity ? (
+                <>
+                  {/* =====================================================
+                      SERVICE INFORMATION
+                  ===================================================== */}
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+
+                    <DetailTile
+                      label="Joining Date"
+                      value={formatDate(employee.joining_date)}
+                    />
+
+                    <DetailTile
+                      label="Service Period"
+                      value={gratuity.serviceYearsText}
+                    />
+
+                    <DetailTile
+                      label="Gratuity Service Years"
+                      value={`${gratuity.gratuityServiceYears} ${
+                        gratuity.gratuityServiceYears === 1
+                          ? "Year"
+                          : "Years"
+                      }`}
+                    />
+
+                    <DetailTile
+                      label="Monthly Basic"
+                      value={`₹${Number(
+                        gratuity.monthlyBasic
+                      ).toLocaleString("en-IN", {
+                        minimumFractionDigits: 2,
+                      })}`}
+                    />
+
+                  </div>
+
+                  {/* =====================================================
+                      CURRENT GRATUITY
+                  ===================================================== */}
+                  <div className="rounded-xl border border-slate-200 p-5">
+
+                    <div className="flex items-center justify-between gap-4 mb-5">
+
+                      <div>
+                        <h4 className="text-sm font-bold text-slate-900">
+                          {gratuity.serviceYearsText} Gratuity
+                        </h4>
+
+                        <p className="text-xs text-slate-500 mt-1">
+                          Current gratuity based on actual service period.
+                        </p>
+                      </div>
+
+                      <span
+                        className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase border ${
+                          gratuity.gratuity5YearTaken
+                            ? "bg-blue-50 text-blue-700 border-blue-200"
+                            : gratuity.gratuityServiceYears >= 5
+                            ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                            : "bg-slate-50 text-slate-500 border-slate-200"
+                        }`}
+                      >
+                        {gratuity.gratuity5YearTaken
+                          ? "Taken"
+                          : gratuity.gratuityServiceYears >= 5
+                          ? "Available"
+                          : "Not Eligible"}
+                      </span>
+
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+
+                      {/* CURRENT AMOUNT */}
+                      <DetailTile
+                        label="Current Gratuity Amount"
+                        value={
+                          gratuity.gratuityServiceYears >= 5
+                            ? `₹${Number(
+                                gratuity.gratuityAmount
+                              ).toLocaleString("en-IN", {
+                                minimumFractionDigits: 2,
+                              })}`
+                            : "₹0.00"
+                        }
+                      />
+
+                      {/* SERVICE YEARS */}
+                      <DetailTile
+                        label="Calculation Service"
+                        value={
+                          gratuity.gratuityServiceYears >= 5
+                            ? `${gratuity.gratuityServiceYears} ${
+                                gratuity.gratuityServiceYears === 1
+                                  ? "Year"
+                                  : "Years"
+                              }`
+                            : "Not Eligible"
+                        }
+                      />
+
+                      {/* STATUS */}
+                      <DetailTile
+                        label="Status"
+                        value={
+                          gratuity.gratuity5YearTaken
+                            ? "Taken"
+                            : gratuity.gratuityServiceYears >= 5
+                            ? "Available"
+                            : "Not Eligible"
+                        }
+                      />
+
+                    </div>
+
+                    {/* ===================================================
+                        TAKEN INFORMATION
+                    =================================================== */}
+                    {gratuity.gratuity5YearTaken && (
+                      <div className="mt-4 p-3 rounded-lg bg-blue-50 border border-blue-100 text-xs text-blue-700">
+                        Gratuity already taken on{" "}
+                        {gratuity.gratuity5YearTakenDate
+                          ? formatDate(
+                              gratuity.gratuity5YearTakenDate
+                            )
+                          : "N/A"}
+                        .
+                        {gratuity.gratuity5YearTakenAmount
+                          ? ` Amount: ₹${Number(
+                              gratuity.gratuity5YearTakenAmount
+                            ).toLocaleString("en-IN", {
+                              minimumFractionDigits: 2,
+                            })}.`
+                          : ""}
+                      </div>
+                    )}
+
+                    {/* ===================================================
+                        TAKE GRATUITY
+                    =================================================== */}
+                    {!gratuity.gratuity5YearTaken &&
+                      gratuity.gratuityServiceYears >= 5 &&
+                      (role === "hr" || role === "ceo") && (
+                        <button
+                          type="button"
+                          disabled={gratuityProcessing}
+                          onClick={handleTakeGratuity}
+                          className="mt-5 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg"
+                        >
+                          {gratuityProcessing
+                            ? "Processing..."
+                            : "Take Gratuity"}
+                        </button>
+                      )}
+
+                  </div>
+
+                  {/* =====================================================
+                      FORMULA
+                  ===================================================== */}
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+
+                    <p className="text-xs font-semibold text-slate-700">
+                      Gratuity Calculation
+                    </p>
+
+                    <p className="mt-2 text-xs text-slate-500">
+                      Monthly Basic × 15 × Gratuity Service Years ÷ 26
+                    </p>
+
+                    <p className="mt-2 text-xs text-slate-500">
+                      Service of 6 months or more after a completed year
+                      is rounded up to the next year for gratuity
+                      calculation.
+                    </p>
+
+                  </div>
+                </>
+              ) : (
+                <div className="py-10 text-center text-sm text-slate-500">
+                  Gratuity information is unavailable.
+                </div>
+              )}
+
+            </div>
+          )}
+
           {/* Delete */}
-          {!isExitStatus && activeTab === 7 && (
+          {!isExitStatus && activeTab === 8 && (
             <div className="space-y-6">
               <div>
                 <h3 className="text-sm font-bold text-slate-900 mb-3 uppercase tracking-wider text-center text-slate-400"> Employee Exit </h3>
@@ -816,6 +1124,164 @@ const isExitStatus = [
           )}
         </div>
       </div>
+      {/* =========================================================
+          GRATUITY CONFIRMATION MODAL
+      ========================================================= */}
+      {gratuityConfirm && (
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center">
+
+          {/* FULL SCREEN BACKDROP */}
+          <div
+            className="absolute inset-0 bg-black/50"
+            style={{
+              backdropFilter: "blur(16px)",
+              WebkitBackdropFilter: "blur(16px)",
+            }}
+          />
+
+          {/* CONFIRMATION BOX */}
+          <div className="relative z-10 w-[90%] max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="text-center">
+
+              {/* ICON */}
+              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-amber-100">
+                <span className="text-xl font-bold text-amber-600">
+                  !
+                </span>
+              </div>
+
+              <h3 className="text-lg font-semibold text-gray-900">
+                Confirm Gratuity
+              </h3>
+
+              <p className="mt-2 text-sm text-gray-600">
+                Are you sure you want to process the
+                <span className="font-semibold text-gray-900">
+                  {" "}current gratuity amount
+                </span>
+                ?
+              </p>
+
+              {gratuity && (
+                <div className="mt-4 rounded-lg bg-slate-50 border border-slate-200 p-4">
+                  <p className="text-xs text-slate-500">
+                    Service Period
+                  </p>
+
+                  <p className="mt-1 text-sm font-semibold text-slate-900">
+                    {gratuity.serviceYearsText}
+                  </p>
+
+                  <p className="mt-3 text-xs text-slate-500">
+                    Gratuity Amount
+                  </p>
+
+                  <p className="mt-1 text-lg font-bold text-indigo-600">
+                    ₹{Number(
+                      gratuity.gratuityAmount
+                    ).toLocaleString("en-IN", {
+                      minimumFractionDigits: 2,
+                    })}
+                  </p>
+                </div>
+              )}
+
+              <div className="mt-6 flex justify-center gap-3">
+
+                {/* CANCEL */}
+                <button
+                  type="button"
+                  onClick={() => setGratuityConfirm(false)}
+                  disabled={gratuityProcessing}
+                  className="rounded-lg border border-gray-300 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+
+                {/* CONFIRM */}
+                <button
+                  type="button"
+                  onClick={processGratuity}
+                  disabled={gratuityProcessing}
+                  className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {gratuityProcessing
+                    ? "Processing..."
+                    : "Confirm"}
+                </button>
+
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* =========================================================
+          GRATUITY RESULT MODAL
+      ========================================================= */}
+      {gratuityMessage && (
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center">
+
+          {/* FULL SCREEN BACKDROP */}
+          <div
+            className="absolute inset-0 bg-black/50"
+            style={{
+              backdropFilter: "blur(16px)",
+              WebkitBackdropFilter: "blur(16px)",
+            }}
+          />
+
+          {/* RESULT BOX */}
+          <div className="relative z-10 w-[90%] max-w-md rounded-2xl bg-white p-6 text-center shadow-2xl">
+
+            {/* ICON */}
+            <div
+              className={`mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full ${
+                gratuityMessage.type === "success"
+                  ? "bg-green-100"
+                  : "bg-red-100"
+              }`}
+            >
+              <span
+                className={`text-2xl font-bold ${
+                  gratuityMessage.type === "success"
+                    ? "text-green-600"
+                    : "text-red-600"
+                }`}
+              >
+                {gratuityMessage.type === "success"
+                  ? "✓"
+                  : "!"}
+              </span>
+            </div>
+
+            {/* TITLE */}
+            <h3 className="text-lg font-semibold text-gray-900">
+              {gratuityMessage.type === "success"
+                ? "Gratuity Taken"
+                : "Failed"}
+            </h3>
+
+            {/* MESSAGE */}
+            <p className="mt-2 text-sm text-gray-600">
+              {gratuityMessage.message}
+            </p>
+
+            {/* OK */}
+            <button
+              type="button"
+              onClick={() => setGratuityMessage(null)}
+              className={`mt-5 rounded-lg px-6 py-2.5 text-sm font-medium text-white ${
+                gratuityMessage.type === "success"
+                  ? "bg-indigo-600 hover:bg-indigo-700"
+                  : "bg-red-600 hover:bg-red-700"
+              }`}
+            >
+              OK
+            </button>
+
+          </div>
+        </div>
+      )}
     </div>
   );
 }

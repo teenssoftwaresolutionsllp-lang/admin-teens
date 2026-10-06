@@ -142,6 +142,7 @@ export interface Employee {
   pan_number?: string | null;
   aadhar_number?: string | null;
   passport_number?:string |null;
+  payment_mode?:string | null;
 
   // ==============================
   // Accessories Information
@@ -313,11 +314,28 @@ export interface SalaryComponent {
   code: string;
   type: SalaryComponentType;
   calculation_type: CalculationType;
-  value: number; // e.g. 50 (for 50% of gross), or 40 (for 40% of basic), or fixed amount
+  value: number; 
   affects_lop: boolean;
   is_active: boolean;
   is_statutory: boolean;
   description: string;
+}
+
+export interface EmployeeSalaryComponent {
+  id: string;
+  employee_id: string;
+  salary_component_id: string;
+  calculation_type: string;
+  value: number;
+  is_active: boolean;
+  gratuity_5_year_taken: boolean;
+  gratuity_5_year_taken_date?: string | null;
+  gratuity_5_year_amount: number;
+  gratuity_10_year_taken: boolean;
+  gratuity_10_year_taken_date?: string | null;
+  gratuity_10_year_amount: number;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface PayslipBreakupItem {

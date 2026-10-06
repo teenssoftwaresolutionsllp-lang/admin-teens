@@ -451,97 +451,92 @@ export default function PayslipPage() {
                   Employee Details
                 </h3>
               </div>
+              <div className="grid grid-cols-3">
+                {/* COLUMN 1 */}
+                <div>
+                    <InfoRow
+                    label="Employee Code"
+                    value={
+                        employee?.employee_id ||
+                        payroll.employee_id ||
+                        "-"
+                    }
+                    />
 
-              <div className="grid grid-cols-2">
-                <InfoRow
-                  label="Employee Code"
-                  value={
-                    employee?.employee_id ||
-                    payroll.employee_id ||
-                    "-"
-                  }
-                />
+                    <InfoRow
+                    label="Employee Name"
+                    value={employeeName}
+                    />
 
-                <InfoRow
-                  label="Employee Name"
-                  value={employeeName}
-                />
+                    <InfoRow
+                    label="Date of Hire"
+                    value={formatDate(
+                        employee?.joining_date ||
+                        employee?.date_of_joining
+                    )}
+                    />
 
-                <InfoRow
-                  label="Department"
-                  value={departmentName}
-                />
+                    <InfoRow
+                    label="Designation"
+                    value={employee?.designation || "-"}
+                    />
+                </div>
 
-                <InfoRow
-                  label="Designation"
-                  value={employee?.designation || "-"}
-                />
+                {/* COLUMN 2 */}
+                <div>
+                    <InfoRow
+                    label="Department"
+                    value={departmentName}
+                    />
 
-                <InfoRow
-                  label="Date of Hire"
-                  value={formatDate(
-                    employee?.joining_date ||
-                      employee?.date_of_joining
-                  )}
-                />
+                    <InfoRow
+                    label="Months"
+                    value={`${payroll.month_name} ${payroll.payroll_year}`}
+                    />
 
-                <InfoRow
-                  label="Location"
-                  value={
-                    employee?.work_location ||
-                    employee?.location ||
-                    "-"
-                  }
-                />
+                    <InfoRow
+                    label="PF Number"
+                    value={employee?.pf_number || "-"}
+                    />
 
-                <InfoRow
-                  label="Grade"
-                  value={employee?.grade || "-"}
-                />
+                    <InfoRow
+                    label="UAN"
+                    value={employee?.uan_number || "-"}
+                    />
 
-                <InfoRow
-                  label="Employment Type"
-                  value={
-                    employee?.employment_type || "-"
-                  }
-                />
+                    <InfoRow
+                    label="ESI Number"
+                    value={employee?.esi_number || "-"}
+                    />
+                </div>
 
-                <InfoRow
-                  label="PF Number"
-                  value={employee?.pf_number || "-"}
-                />
+                {/* COLUMN 3 */}
+                <div>
+                    <InfoRow
+                    label="Standard Days"
+                    value={String(payroll.working_days ?? 0)}
+                    />
 
-                <InfoRow
-                  label="UAN"
-                  value={employee?.uan_number || "-"}
-                />
+                    <InfoRow
+                    label="Days Worked"
+                    value={String(payroll.present_days ?? 0)}
+                    />
 
-                <InfoRow
-                  label="ESI Number"
-                  value={employee?.esi_number || "-"}
-                />
+                    <InfoRow
+                    label="Paid Leave"
+                    value={String(payroll.paid_leaves ?? 0)}
+                    />
 
-                <InfoRow
-                  label="Payment Mode"
-                  value={
-                    employee?.payment_mode ||
-                    "Bank Transfer"
-                  }
-                />
+                    <InfoRow
+                    label="LWOP Days"
+                    value={String(payroll.lop_days ?? 0)}
+                    />
 
-                <InfoRow
-                  label="Bank Account"
-                  value={
-                    employee?.bank_account_number ||
-                    employee?.account_number ||
-                    "-"
-                  }
-                />
-
-                <InfoRow
-                  label="Bank Name"
-                  value={employee?.bank_name || "-"}
-                />
+                    <InfoRow
+                    label="Payment Mode"
+                    value={employee?.payment_mode || "Online"}
+                    />
+                </div>
               </div>
             </div>
           </section>

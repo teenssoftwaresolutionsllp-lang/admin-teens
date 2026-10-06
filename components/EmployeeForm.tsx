@@ -300,6 +300,8 @@ export default function EmployeeForm({ employee, departments, projects, generate
     } as any);
   }, [employee]);
 
+
+
   
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -559,6 +561,8 @@ const handleSubmit = async (e: React.FormEvent) => {
     if (!employeeId) {
       throw new Error("Employee ID not found after saving");
     }
+
+
 
     router.push(
       `/dashboard/employees/${employeeId}`
@@ -1054,6 +1058,7 @@ const handleSubmit = async (e: React.FormEvent) => {
               />
               <p className="text-[11px] text-slate-500 mt-1.5">Enter annual CTC in lakhs. Example: 5.5 = ₹5.5 Lakhs per year. </p>
             </div>
+
             
             {/* Client Type */}
             <div>
