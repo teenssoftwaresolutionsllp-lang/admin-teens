@@ -1,25 +1,38 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import {
+  FormEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 
 import {
   AttendanceLog,
   AttendanceRegularization,
   Employee,
+  EmployeeLeaveBalance,
+  LeaveRequest,
+  LeaveType,
   Project,
 } from "@/lib/types";
 
 import {
   Clock,
   CheckCircle2,
-  AlertTriangle,
   XCircle,
   FileCheck,
   Loader2,
   Calendar,
+  CalendarOff,
+  Plus,
+  X,
+  AlertCircle,
 } from "lucide-react";
 
 import ClockInWidget from "./ClockInWidget";
+
 import AttendanceCalendar, {
   SelectedAttendance,
 } from "./AttendanceCalendar";
@@ -30,778 +43,1916 @@ interface EmployeeAttendanceViewProps {
   todayLog: AttendanceLog | null;
   historyLogs: AttendanceLog[];
   regularizations: AttendanceRegularization[];
+  leaveBalances?: EmployeeLeaveBalance[];
+  leaveRequests?: LeaveRequest[];
+  leaveTypes?: LeaveType[];
 }
+
+/* ============================================================
+   HELPERS
+============================================================ */
+
+function getTodayString() {
+  const now = new Date();
+
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+function calculateDaysBetween(
+  startDate: string,
+  endDate: string
+) {
+  if (!startDate || !endDate) return 0;
+
+  const start = new Date(`${startDate}T00:00:00`);
+  const end = new Date(`${endDate}T00:00:00`);
+
+  if (
+    Number.isNaN(start.getTime()) ||
+    Number.isNaN(end.getTime())
+  ) {
+    return 0;
+  }
+
+  const difference = end.getTime() - start.getTime();
+
+  return (
+    Math.floor(
+      difference / (1000 * 60 * 60 * 24)
+    ) + 1
+  );
+}
+
+function getClockIn(
+  log: AttendanceLog | null | undefined
+) {
+  if (!log) return null;
+
+  return (
+    (log as any).clock_in ??
+    (log as any).clockIn ??
+    (log as any).check_in_time ??
+    (log as any).check_in ??
+    (log as any).checkIn ??
+    null
+  );
+}
+
+function getClockOut(
+  log: AttendanceLog | null | undefined
+) {
+  if (!log) return null;
+
+  return (
+    (log as any).clock_out ??
+    (log as any).clockOut ??
+    (log as any).check_out_time ??
+    (log as any).check_out ??
+    (log as any).checkOut ??
+    null
+  );
+}
+
+function getLogDate(
+  log: AttendanceLog | null | undefined
+) {
+  if (!log) return "";
+
+  const value =
+    (log as any).attendance_date ??
+    (log as any).attendanceDate ??
+    (log as any).date ??
+    "";
+
+  if (!value) return "";
+
+  if (
+    typeof value === "string" &&
+    /^\d{4}-\d{2}-\d{2}$/.test(value)
+  ) {
+    return value;
+  }
+
+  const parsed = new Date(value);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return "";
+  }
+
+  const year = parsed.getFullYear();
+  const month = String(
+    parsed.getMonth() + 1
+  ).padStart(2, "0");
+  const day = String(
+    parsed.getDate()
+  ).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+function formatAttendanceTime(
+  value?: string | null
+) {
+  if (!value) return "--";
+
+  if (
+    /^\d{1,2}:\d{2}\s?(AM|PM)$/i.test(value)
+  ) {
+    return value;
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "--";
+  }
+
+  return date.toLocaleTimeString("en-IN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
+function getTimeInputValue(
+  value?: string | null
+) {
+  if (!value) return "";
+
+  if (/^\d{2}:\d{2}$/.test(value)) {
+    return value;
+  }
+
+  if (/^\d{2}:\d{2}:\d{2}$/.test(value)) {
+    return value.slice(0, 5);
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  return `${String(
+    date.getHours()
+  ).padStart(2, "0")}:${String(
+    date.getMinutes()
+  ).padStart(2, "0")}`;
+}
+
+function formatDateForDisplay(
+  value: string
+) {
+  if (!value) return "--";
+
+  const date = new Date(
+    `${value}T00:00:00`
+  );
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function calculateWorkingHours(
+  clockIn?: string | null,
+  clockOut?: string | null
+) {
+  if (!clockIn || !clockOut) {
+    return "--";
+  }
+
+  const start = new Date(clockIn);
+  const end = new Date(clockOut);
+
+  if (
+    Number.isNaN(start.getTime()) ||
+    Number.isNaN(end.getTime())
+  ) {
+    return "--";
+  }
+
+  const difference =
+    end.getTime() - start.getTime();
+
+  if (difference <= 0) {
+    return "--";
+  }
+
+  const totalMinutes = Math.floor(
+    difference / (1000 * 60)
+  );
+
+  const hours = Math.floor(
+    totalMinutes / 60
+  );
+
+  const minutes = totalMinutes % 60;
+
+  if (hours === 0) {
+    return `${minutes}m`;
+  }
+
+  return `${hours}h ${minutes}m`;
+}
+
+/* ============================================================
+   LEAVE BALANCE HELPERS
+============================================================ */
+
+function getLeaveTypeCode(
+  value: any
+) {
+  return String(
+    value?.leaveType?.code ??
+      value?.leave_type?.code ??
+      value?.leaveTypeCode ??
+      value?.leave_type_code ??
+      value?.code ??
+      value?.leaveType?.leave_code ??
+      value?.leave_type?.leave_code ??
+      value?.leaveType?.name ??
+      value?.leave_type?.name ??
+      value?.name ??
+      ""
+  )
+    .trim()
+    .toUpperCase();
+}
+
+function getBalanceValue(
+  balance: any
+) {
+  const value =
+    balance?.balance_days ??
+    balance?.balanceDays ??
+    balance?.available ??
+    balance?.available_days ??
+    balance?.availableDays ??
+    balance?.remaining ??
+    balance?.remaining_days ??
+    balance?.remainingDays ??
+    0;
+
+  const number = Number(value);
+
+  return Number.isFinite(number)
+    ? number
+    : 0;
+}
+
+/* ============================================================
+   ATTENDANCE STATUS HELPER
+============================================================ */
+
+function normalizeAttendanceStatus(
+  value: unknown
+) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+}
+
+/* ============================================================
+   LEAVE REQUEST HELPERS
+============================================================ */
+
+function getLeaveRequestStatus(
+  request: any
+) {
+  return String(
+    request?.status ?? ""
+  )
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+}
+
+function getLeaveRequestDays(
+  request: any
+) {
+  const isHalfDay =
+    request?.is_half_day ??
+    request?.isHalfDay ??
+    false;
+
+  if (Boolean(isHalfDay)) {
+    return 0.5;
+  }
+
+  const totalDays =
+    request?.total_days ??
+    request?.totalDays ??
+    request?.days ??
+    0;
+
+  const days = Number(totalDays);
+
+  if (
+    Number.isFinite(days) &&
+    days > 0
+  ) {
+    return days;
+  }
+
+  const startDate =
+    request?.start_date ??
+    request?.startDate ??
+    "";
+
+  const endDate =
+    request?.end_date ??
+    request?.endDate ??
+    "";
+
+  if (startDate && endDate) {
+    return calculateDaysBetween(
+      String(startDate).slice(0, 10),
+      String(endDate).slice(0, 10)
+    );
+  }
+
+  return 0;
+}
+
+/* ============================================================
+   LEAVE TYPE DISPLAY HELPER
+============================================================ */
+
+function getLeaveTypeId(
+  request: any
+) {
+  return String(
+    request?.leave_type_id ??
+      request?.leaveTypeId ??
+      request?.leave_type?.id ??
+      request?.leaveType?.id ??
+      ""
+  ).trim();
+}
+
+function getLeaveTypeName(
+  value: any
+) {
+  return String(
+    value?.leaveType?.name ??
+      value?.leave_type?.name ??
+      value?.name ??
+      ""
+  ).trim();
+}
+
+/* ============================================================
+   COMPONENT
+============================================================ */
 
 export default function EmployeeAttendanceView({
   employee,
   project,
   todayLog,
   historyLogs,
-  regularizations: initialRegs,
+  regularizations,
+  leaveBalances: initialLeaveBalances = [],
+  leaveRequests: initialLeaveRequests = [],
+  leaveTypes: initialLeaveTypes = [],
 }: EmployeeAttendanceViewProps) {
-  // =========================================================
-  // ATTENDANCE LOGS
-  // =========================================================
+  /* ============================================================
+     ATTENDANCE STATE
+  ============================================================ */
 
   const [logs, setLogs] =
-    useState<AttendanceLog[]>(historyLogs);
+    useState<AttendanceLog[]>(
+      historyLogs ?? []
+    );
 
-  // =========================================================
-  // REGULARIZATIONS
-  // =========================================================
+  const [currentTodayLog, setCurrentTodayLog] =
+    useState<AttendanceLog | null>(
+      todayLog
+    );
 
   const [regs, setRegs] =
-    useState<AttendanceRegularization[]>(initialRegs);
+    useState<AttendanceRegularization[]>(
+      regularizations ?? []
+    );
 
-  const [isModalOpen, setIsModalOpen] =
+  const [
+    selectedAttendance,
+    setSelectedAttendance,
+  ] = useState<SelectedAttendance | null>(
+    null
+  );
+
+  const [
+    selectedDate,
+    setSelectedDate,
+  ] = useState<string>(
+    getTodayString()
+  );
+
+  /* ============================================================
+     LEAVE STATE
+  ============================================================ */
+
+  const [leaveRequests, setLeaveRequests] =
+    useState<LeaveRequest[]>(
+      initialLeaveRequests ?? []
+    );
+
+  const [leaveBalances, setLeaveBalances] =
+    useState<EmployeeLeaveBalance[]>(
+      initialLeaveBalances ?? []
+    );
+
+  const [leaveTypes, setLeaveTypes] =
+    useState<LeaveType[]>(
+      initialLeaveTypes ?? []
+    );
+
+  const [loadingLeaves, setLoadingLeaves] =
     useState(false);
 
-  const [submitting, setSubmitting] =
+  const [showLeaveModal, setShowLeaveModal] =
     useState(false);
 
-  const [successMsg, setSuccessMsg] =
+  const [submittingLeave, setSubmittingLeave] =
+    useState(false);
+
+  const [leaveError, setLeaveError] =
     useState<string | null>(null);
 
-  // =========================================================
-  // CALENDAR VISIBILITY
-  // =========================================================
+  const [leaveSuccess, setLeaveSuccess] =
+    useState<string | null>(null);
 
-  const [showAttendanceCalendar, setShowAttendanceCalendar] =
-    useState(false);
-
-  // =========================================================
-  // SELECTED CALENDAR ATTENDANCE
-  // =========================================================
-
-  const [selectedAttendance, setSelectedAttendance] =
-    useState<SelectedAttendance | null>(null);
-
-  // =========================================================
-  // REGULARIZATION FORM
-  // =========================================================
-
-  const [formData, setFormData] = useState({
-    attendanceDate:
-      new Date().toISOString().split("T")[0],
-
-    proposedCheckIn: "09:00",
-
-    proposedCheckOut: "18:00",
-
+  const [leaveForm, setLeaveForm] = useState({
+    leaveTypeId: "",
+    startDate: "",
+    endDate: "",
+    totalDays: 1,
+    isHalfDay: false,
     reason: "",
   });
 
-  // =========================================================
-  // TODAY DATE
-  // =========================================================
+  /* ============================================================
+     REGULARIZATION STATE
+  ============================================================ */
 
-  const todayDate = useMemo(() => {
-    const now = new Date();
+  const [
+    showRegularizationRequests,
+    setShowRegularizationRequests,
+  ] = useState(false);
 
-    return `${now.getFullYear()}-${String(
-      now.getMonth() + 1
-    ).padStart(2, "0")}-${String(
-      now.getDate()
-    ).padStart(2, "0")}`;
-  }, []);
+  const [
+    isRegularizationModalOpen,
+    setIsRegularizationModalOpen,
+  ] = useState(false);
 
-  // =========================================================
-  // REGULARIZATION SUBMIT
-  // =========================================================
+  const [
+    submittingRegularization,
+    setSubmittingRegularization,
+  ] = useState(false);
 
-  const handleRegularizeSubmit = async (
-    e: React.FormEvent
+  const [
+    regularizationSuccess,
+    setRegularizationSuccess,
+  ] = useState<string | null>(null);
+
+  const [
+    regularizationError,
+    setRegularizationError,
+  ] = useState<string | null>(null);
+
+  const [
+    regularizationForm,
+    setRegularizationForm,
+  ] = useState({
+    attendanceDate: "",
+    proposedCheckIn: "",
+    proposedCheckOut: "",
+    reason: "",
+  });
+
+  /* ============================================================
+     TODAY
+  ============================================================ */
+
+  const todayString = getTodayString();
+
+  /* ============================================================
+     LOAD LEAVE DATA
+  ============================================================ */
+
+  const refreshLeaveData = useCallback(
+    async () => {
+      try {
+        setLoadingLeaves(true);
+
+        const response = await fetch(
+          `/api/leaves?employeeId=${encodeURIComponent(
+            String(employee.id)
+          )}`,
+          {
+            method: "GET",
+            cache: "no-store",
+          }
+        );
+
+        const data =
+          await response.json().catch(
+            () => null
+          );
+
+        if (!response.ok) {
+          console.error(
+            "Leave API Error:",
+            {
+              status: response.status,
+              statusText:
+                response.statusText,
+              data,
+            }
+          );
+
+          throw new Error(
+            data?.error ||
+              data?.message ||
+              "Failed to load leave information."
+          );
+        }
+
+        const requests =
+          Array.isArray(
+            data?.leaveRequests
+          )
+            ? data.leaveRequests
+            : Array.isArray(
+                data?.requests
+              )
+            ? data.requests
+            : [];
+
+        const balances =
+          Array.isArray(
+            data?.leaveBalances
+          )
+            ? data.leaveBalances
+            : Array.isArray(
+                data?.balances
+              )
+            ? data.balances
+            : [];
+
+        const types =
+          Array.isArray(
+            data?.leaveTypes
+          )
+            ? data.leaveTypes
+            : Array.isArray(
+                data?.types
+              )
+            ? data.types
+            : [];
+
+        setLeaveRequests(requests);
+        setLeaveBalances(balances);
+        setLeaveTypes(types);
+      } catch (error) {
+        console.error(
+          "Failed to load leaves:",
+          error
+        );
+      } finally {
+        setLoadingLeaves(false);
+      }
+    },
+    [employee.id]
+  );
+
+  useEffect(() => {
+    refreshLeaveData();
+
+    const interval = setInterval(() => {
+      refreshLeaveData();
+    }, 30000);
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, [refreshLeaveData]);
+
+  /* ============================================================
+     CURRENT ATTENDANCE
+  ============================================================ */
+
+  const currentAttendanceLog = useMemo(() => {
+    if (selectedAttendance?.date) {
+      const selected = logs.find(
+        (log) =>
+          getLogDate(log) ===
+          selectedAttendance.date
+      );
+
+      if (selected) {
+        return selected;
+      }
+
+      if (
+        currentTodayLog &&
+        getLogDate(currentTodayLog) ===
+          selectedAttendance.date
+      ) {
+        return currentTodayLog;
+      }
+    }
+
+    return currentTodayLog;
+  }, [
+    selectedAttendance,
+    logs,
+    currentTodayLog,
+  ]);
+
+  /* ============================================================
+     ATTENDANCE SUMMARY
+  ============================================================ */
+
+  const presentCount = useMemo(() => {
+    return logs.filter((log) => {
+      const status = normalizeAttendanceStatus(
+        (log as any).status
+      );
+
+      return (
+        status === "present" ||
+        status === "half_day" ||
+        Boolean((log as any).is_late)
+      );
+    }).length;
+  }, [logs]);
+
+  const absentCount = useMemo(() => {
+    return logs.filter((log) => {
+      const status =
+        normalizeAttendanceStatus(
+          (log as any).status
+        );
+
+      return (
+        status === "absent" ||
+        status === "not_present"
+      );
+    }).length;
+  }, [logs]);
+
+  const leaveCount = useMemo(() => {
+    return leaveRequests.reduce(
+      (total, request: any) => {
+        const status =
+          getLeaveRequestStatus(
+            request
+          );
+
+        if (
+          status !== "approved"
+        ) {
+          return total;
+        }
+
+        const days =
+          getLeaveRequestDays(
+            request
+          );
+
+        return total + days;
+      },
+      0
+    );
+  }, [leaveRequests]);
+
+  /* ============================================================
+     YEARLY SL / CL BALANCE
+  ============================================================ */
+
+  const sickLeaveRemaining = useMemo(() => {
+    const balance = leaveBalances.find(
+      (item: any) =>
+        getLeaveTypeCode(item) ===
+        "SL"
+    );
+
+    if (!balance) {
+      return 12;
+    }
+
+    return Math.max(
+      0,
+      getBalanceValue(balance)
+    );
+  }, [leaveBalances]);
+
+  const casualLeaveRemaining = useMemo(() => {
+    const balance = leaveBalances.find(
+      (item: any) =>
+        getLeaveTypeCode(item) ===
+        "CL"
+    );
+
+    if (!balance) {
+      return 12;
+    }
+
+    return Math.max(
+      0,
+      getBalanceValue(balance)
+    );
+  }, [leaveBalances]);
+
+  const leaveBalance = useMemo(() => {
+    return (
+      sickLeaveRemaining +
+      casualLeaveRemaining
+    );
+  }, [
+    sickLeaveRemaining,
+    casualLeaveRemaining,
+  ]);
+
+  /* ============================================================
+     LEAVE TYPES
+  ============================================================ */
+
+  const visibleLeaveTypes = useMemo(() => {
+    const allowed = [
+      "CL",
+      "SL",
+      "EL",
+      "LOP",
+    ];
+
+    return leaveTypes.filter(
+      (type: any) => {
+        const code =
+          getLeaveTypeCode(type);
+
+        return allowed.includes(code);
+      }
+    );
+  }, [leaveTypes]);
+
+  /* ============================================================
+     GET REQUEST LEAVE TYPE
+     
+     IMPORTANT:
+     Sometimes request contains only leave_type_id.
+     So match that ID with leaveTypes.
+  ============================================================ */
+
+  const getRequestLeaveType = useCallback(
+    (request: any) => {
+      const requestTypeId =
+        getLeaveTypeId(request);
+
+      const matchedType =
+        leaveTypes.find(
+          (type: any) => {
+            const typeId = String(
+              type?.id ?? ""
+            ).trim();
+
+            return (
+              typeId &&
+              requestTypeId &&
+              typeId === requestTypeId
+            );
+          }
+        );
+
+      if (matchedType) {
+        const code =
+          getLeaveTypeCode(
+            matchedType
+          );
+
+        const name =
+          getLeaveTypeName(
+            matchedType
+          );
+
+        return {
+          code: code || "--",
+          name: name || "",
+        };
+      }
+
+      /*
+       * If API already sends leave type
+       * inside request, use that as fallback.
+       */
+      const requestCode =
+        getLeaveTypeCode(
+          request
+        );
+
+      const requestName =
+        getLeaveTypeName(
+          request
+        );
+
+      return {
+        code:
+          requestCode || "--",
+        name:
+          requestName || "",
+      };
+    },
+    [leaveTypes]
+  );
+
+  /* ============================================================
+     LEAVE MODAL
+  ============================================================ */
+
+  const openLeaveModal = () => {
+    setLeaveError(null);
+    setLeaveSuccess(null);
+
+    setLeaveForm({
+      leaveTypeId:
+        visibleLeaveTypes[0]
+          ? String(
+              (visibleLeaveTypes[0] as any)
+                .id
+            )
+          : "",
+      startDate: "",
+      endDate: "",
+      totalDays: 1,
+      isHalfDay: false,
+      reason: "",
+    });
+
+    setShowLeaveModal(true);
+  };
+
+  const closeLeaveModal = () => {
+    if (submittingLeave) {
+      return;
+    }
+
+    setShowLeaveModal(false);
+    setLeaveError(null);
+  };
+
+  /* ============================================================
+     AUTO CALCULATE LEAVE DAYS
+  ============================================================ */
+
+  useEffect(() => {
+    if (
+      leaveForm.startDate &&
+      leaveForm.endDate
+    ) {
+      const days =
+        calculateDaysBetween(
+          leaveForm.startDate,
+          leaveForm.endDate
+        );
+
+      setLeaveForm((prev) => ({
+        ...prev,
+        totalDays: prev.isHalfDay
+          ? 0.5
+          : Math.max(days, 1),
+      }));
+    }
+  }, [
+    leaveForm.startDate,
+    leaveForm.endDate,
+    leaveForm.isHalfDay,
+  ]);
+
+  /* ============================================================
+     SUBMIT LEAVE
+  ============================================================ */
+
+  const handleLeaveSubmit = async (
+    e: FormEvent<HTMLFormElement>
   ) => {
     e.preventDefault();
 
-    setSubmitting(true);
-    setSuccessMsg(null);
+    setLeaveError(null);
+    setLeaveSuccess(null);
+
+    if (!leaveForm.leaveTypeId) {
+      setLeaveError(
+        "Please select a leave type."
+      );
+      return;
+    }
+
+    if (!leaveForm.startDate) {
+      setLeaveError(
+        "Please select start date."
+      );
+      return;
+    }
+
+    if (!leaveForm.endDate) {
+      setLeaveError(
+        "Please select end date."
+      );
+      return;
+    }
+
+    if (
+      leaveForm.endDate <
+      leaveForm.startDate
+    ) {
+      setLeaveError(
+        "End date cannot be before start date."
+      );
+      return;
+    }
+
+    if (
+      leaveForm.totalDays <= 0
+    ) {
+      setLeaveError(
+        "Total days must be greater than 0."
+      );
+      return;
+    }
+
+    if (!leaveForm.reason.trim()) {
+      setLeaveError(
+        "Please enter the reason."
+      );
+      return;
+    }
 
     try {
-      const res = await fetch(
-        "/api/attendance/regularization",
+      setSubmittingLeave(true);
+
+      const response = await fetch(
+        "/api/leaves",
         {
           method: "POST",
-
           headers: {
-            "Content-Type": "application/json",
+            "Content-Type":
+              "application/json",
           },
-
           body: JSON.stringify({
             employeeId: employee.id,
-            ...formData,
+            leaveTypeId:
+              leaveForm.leaveTypeId,
+            startDate:
+              leaveForm.startDate,
+            endDate:
+              leaveForm.endDate,
+            totalDays:
+              leaveForm.totalDays,
+            isHalfDay:
+              leaveForm.isHalfDay,
+            reason:
+              leaveForm.reason.trim(),
           }),
         }
       );
 
-      if (res.ok) {
-        const data = await res.json();
+      const data =
+        await response.json();
 
-        setRegs([
-          data.regularization,
-          ...regs,
-        ]);
-
-        setIsModalOpen(false);
-
-        setSuccessMsg(
-          "Regularization request submitted to HR for approval."
+      if (!response.ok) {
+        throw new Error(
+          data?.error ||
+            data?.message ||
+            "Failed to submit leave request."
         );
-
-        setFormData({
-          attendanceDate:
-            new Date().toISOString().split("T")[0],
-
-          proposedCheckIn: "09:00",
-
-          proposedCheckOut: "18:00",
-
-          reason: "",
-        });
       }
-    } catch (err) {
+
+      const newRequest =
+        data?.request ??
+        data?.leaveRequest;
+
+      if (newRequest) {
+        setLeaveRequests(
+          (prev) => [
+            newRequest,
+            ...prev,
+          ]
+        );
+      }
+
+      await refreshLeaveData();
+
+      setLeaveSuccess(
+        "Leave request submitted successfully."
+      );
+
+      setLeaveForm({
+        leaveTypeId: "",
+        startDate: "",
+        endDate: "",
+        totalDays: 1,
+        isHalfDay: false,
+        reason: "",
+      });
+
+      setTimeout(() => {
+        setShowLeaveModal(false);
+        setLeaveSuccess(null);
+      }, 900);
+    } catch (error) {
       console.error(
-        "Regularization error:",
-        err
+        "Leave submit error:",
+        error
+      );
+
+      setLeaveError(
+        error instanceof Error
+          ? error.message
+          : "Failed to submit leave request."
       );
     } finally {
-      setSubmitting(false);
+      setSubmittingLeave(false);
     }
   };
 
-  // =========================================================
-  // STATUS BADGE
-  // =========================================================
+  /* ============================================================
+     OPEN REGULARIZATION
+  ============================================================ */
 
-  const getStatusBadge = (
-    log: AttendanceLog
-  ) => {
-    if (log.is_regularized) {
-      return (
-        <span className="text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full inline-flex items-center gap-1">
-          <FileCheck className="w-3 h-3" />
+  const openRegularization = () => {
+    setRegularizationError(null);
+    setRegularizationSuccess(null);
 
-          Regularized
-        </span>
-      );
+    const date =
+      selectedAttendance?.date ||
+      selectedDate ||
+      getLogDate(
+        currentAttendanceLog
+      ) ||
+      todayString;
+
+    const selectedLog =
+      logs.find(
+        (log) =>
+          getLogDate(log) === date
+      ) ??
+      (getLogDate(
+        currentAttendanceLog
+      ) === date
+        ? currentAttendanceLog
+        : null);
+
+    const existingClockIn =
+      getClockIn(selectedLog);
+
+    const existingClockOut =
+      getClockOut(selectedLog);
+
+    setRegularizationForm({
+      attendanceDate: date,
+      proposedCheckIn:
+        getTimeInputValue(
+          existingClockIn
+        ),
+      proposedCheckOut:
+        getTimeInputValue(
+          existingClockOut
+        ),
+      reason: "",
+    });
+
+    setIsRegularizationModalOpen(
+      true
+    );
+  };
+
+  /* ============================================================
+     CLOSE REGULARIZATION
+  ============================================================ */
+
+  const closeRegularization = () => {
+    if (
+      submittingRegularization
+    ) {
+      return;
     }
 
-    if (log.status === "present") {
-      if (log.is_late) {
-        return (
-          <span className="text-[11px] font-semibold bg-orange-50 text-orange-700 border border-orange-200 px-2 py-0.5 rounded-full">
-            Present (Late)
-          </span>
+    setIsRegularizationModalOpen(
+      false
+    );
+
+    setRegularizationError(null);
+  };
+
+  /* ============================================================
+     SUBMIT REGULARIZATION
+  ============================================================ */
+
+  const handleRegularizationSubmit =
+    async (
+      e: FormEvent<HTMLFormElement>
+    ) => {
+      e.preventDefault();
+
+      setRegularizationError(null);
+      setRegularizationSuccess(null);
+
+      const attendanceDate =
+        regularizationForm.attendanceDate.trim();
+
+      const proposedCheckIn =
+        regularizationForm.proposedCheckIn.trim();
+
+      const proposedCheckOut =
+        regularizationForm.proposedCheckOut.trim();
+
+      const reason =
+        regularizationForm.reason.trim();
+
+      if (!attendanceDate) {
+        setRegularizationError(
+          "Please select attendance date."
         );
+        return;
       }
 
-      return (
-        <span className="text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full inline-flex items-center gap-1">
-          <CheckCircle2 className="w-3 h-3" />
+      if (!proposedCheckIn) {
+        setRegularizationError(
+          "Please enter punch in time."
+        );
+        return;
+      }
 
-          Present
-        </span>
-      );
-    }
+      if (!proposedCheckOut) {
+        setRegularizationError(
+          "Please enter punch out time."
+        );
+        return;
+      }
 
-    if (log.status === "half_day") {
-      return (
-        <span className="text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full inline-flex items-center gap-1">
-          <AlertTriangle className="w-3 h-3" />
+      if (!reason) {
+        setRegularizationError(
+          "Please enter the reason."
+        );
+        return;
+      }
 
-          Half Day
-        </span>
-      );
-    }
+      try {
+        setSubmittingRegularization(
+          true
+        );
 
-    if (log.status === "on_leave") {
-      return (
-        <span className="text-[11px] font-semibold bg-purple-50 text-purple-700 border border-purple-200 px-2 py-0.5 rounded-full">
-          On Leave
-        </span>
-      );
-    }
+        const response =
+          await fetch(
+            "/api/attendance/regularization",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type":
+                  "application/json",
+              },
+              body: JSON.stringify({
+                employeeId: String(
+                  employee.id
+                ),
+                attendanceDate,
+                proposedCheckIn,
+                proposedCheckOut,
+                reason,
+              }),
+            }
+          );
 
-    return (
-      <span className="text-[11px] font-semibold bg-red-50 text-red-700 border border-red-200 px-2 py-0.5 rounded-full">
-        Absent (LOP)
-      </span>
+        const data =
+          await response.json();
+
+        if (!response.ok) {
+          throw new Error(
+            data?.error ||
+              data?.message ||
+              "Failed to submit regularization request."
+          );
+        }
+
+        const newRegularization =
+          data?.regularization ??
+          data?.request ??
+          data?.data;
+
+        if (newRegularization) {
+          setRegs((prev) => [
+            newRegularization,
+            ...prev,
+          ]);
+        }
+
+        setIsRegularizationModalOpen(
+          false
+        );
+
+        setShowRegularizationRequests(
+          true
+        );
+
+        setRegularizationSuccess(
+          "Attendance regularization request submitted successfully."
+        );
+
+        setRegularizationForm({
+          attendanceDate: "",
+          proposedCheckIn: "",
+          proposedCheckOut: "",
+          reason: "",
+        });
+      } catch (error) {
+        console.error(
+          "Regularization submit error:",
+          error
+        );
+
+        setRegularizationError(
+          error instanceof Error
+            ? error.message
+            : "Failed to submit regularization request."
+        );
+      } finally {
+        setSubmittingRegularization(
+          false
+        );
+      }
+    };
+
+  /* ============================================================
+     ACTIVE DATE
+  ============================================================ */
+
+  const activeDate =
+    selectedDate || todayString;
+
+  const selectedLog = useMemo(() => {
+    const found = logs.find(
+      (log) =>
+        getLogDate(log) ===
+        activeDate
     );
-  };
 
-  // =========================================================
-  // CALENDAR TOGGLE
-  // =========================================================
-
-  const handleCalendarToggle = () => {
-    setShowAttendanceCalendar(
-      (previous) => !previous
-    );
-
-    /*
-     * When calendar is closed, clear selected date.
-     * This prevents old selected attendance from
-     * appearing when calendar is opened again.
-     */
-    if (showAttendanceCalendar) {
-      setSelectedAttendance(null);
+    if (found) {
+      return found;
     }
-  };
 
-  // =========================================================
-  // CALENDAR DATE SELECT
-  // =========================================================
+    if (
+      currentTodayLog &&
+      getLogDate(currentTodayLog) ===
+        activeDate
+    ) {
+      return currentTodayLog;
+    }
+
+    return null;
+  }, [
+    logs,
+    currentTodayLog,
+    activeDate,
+  ]);
+
+  const selectedClockIn =
+    selectedAttendance?.date ===
+      activeDate
+      ? selectedAttendance.clockIn ??
+        getClockIn(selectedLog)
+      : getClockIn(selectedLog);
+
+  const selectedClockOut =
+    selectedAttendance?.date ===
+      activeDate
+      ? selectedAttendance.clockOut ??
+        getClockOut(selectedLog)
+      : getClockOut(selectedLog);
+
+  /* ============================================================
+     CALENDAR DATE SELECT
+  ============================================================ */
 
   const handleCalendarDateSelect = (
     attendance: SelectedAttendance
   ) => {
-    setSelectedAttendance(attendance);
-  };
-
-  // =========================================================
-  // FORMAT TIME
-  // =========================================================
-
-  const formatTime = (
-    value?: string | null
-  ) => {
-    if (!value) {
-      return "--:--";
-    }
-
-    /*
-     * Already formatted time:
-     * 09:05 AM
-     */
-    if (
-      value.includes("AM") ||
-      value.includes("PM")
-    ) {
-      return value;
-    }
-
-    const date = new Date(value);
-
-    if (Number.isNaN(date.getTime())) {
-      return value;
-    }
-
-    return date.toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
-
-  // =========================================================
-  // FORMAT DATE
-  // =========================================================
-
-  const formatSelectedDate = (
-    date?: string
-  ) => {
-    if (!date) {
-      return "--";
-    }
-
-    const parsedDate = new Date(
-      `${date}T00:00:00`
+    setSelectedAttendance(
+      attendance
     );
 
-    if (Number.isNaN(parsedDate.getTime())) {
-      return date;
-    }
-
-    return parsedDate.toLocaleDateString(
-      "en-CA"
+    setSelectedDate(
+      attendance.date
     );
   };
 
-  // =========================================================
-  // FORMAT TOTAL HOURS
-  // =========================================================
+  /* ============================================================
+     REGULARIZATION DATE CHANGE
+  ============================================================ */
 
-  const formatWorkedHours = (
-    worked?: string
+  const handleRegularizationDateChange =
+    (value: string) => {
+      const matchingLog =
+        logs.find(
+          (log) =>
+            getLogDate(log) ===
+            value
+        ) ??
+        (getLogDate(
+          currentTodayLog
+        ) === value
+          ? currentTodayLog
+          : null);
+
+      setRegularizationForm(
+        (prev) => ({
+          ...prev,
+          attendanceDate: value,
+          proposedCheckIn:
+            getTimeInputValue(
+              getClockIn(
+                matchingLog
+              )
+            ),
+          proposedCheckOut:
+            getTimeInputValue(
+              getClockOut(
+                matchingLog
+              )
+            ),
+        })
+      );
+    };
+
+  /* ============================================================
+     REGULARIZATION STATUS
+  ============================================================ */
+
+  const getRegularizationStatus = (
+    request: any
   ) => {
-    if (!worked) {
-      return "--";
-    }
-
-    return worked;
+    return String(
+      request?.status ?? "pending"
+    ).toLowerCase();
   };
 
-  // =========================================================
-  // CHECK WHETHER SELECTED DATE IS TODAY
-  // =========================================================
+  const getStatusLabel = (
+    request: any
+  ) => {
+    const status =
+      getRegularizationStatus(
+        request
+      );
 
-  const isSelectedToday =
-    selectedAttendance?.date === todayDate;
+    switch (status) {
+      case "approved":
+        return "Approved";
 
-  // =========================================================
-  // UI
-  // =========================================================
+      case "rejected":
+        return "Rejected";
+
+      case "pending":
+        return "Pending";
+
+      default:
+        return status
+          .replaceAll("_", " ")
+          .replace(
+            /\b\w/g,
+            (char) =>
+              char.toUpperCase()
+          );
+    }
+  };
+
+  /* ============================================================
+     RENDER
+  ============================================================ */
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto">
+    <div className="space-y-6">
 
-      {/* =====================================================
-          TOP BANNER
-      ====================================================== */}
+      {/* HEADER */}
 
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 sm:p-7 rounded-2xl border border-slate-200/90 shadow-sm">
+      <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">
+            Attendance & Leaves
+          </h1>
 
-        <div className="space-y-1">
-
-          <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
-            Attendance & Shift Timing
-          </h2>
-
-          <p className="text-xs sm:text-sm text-slate-500">
-
-            Assigned Shift:{" "}
-
-            <span className="font-semibold text-slate-700">
-              {project.shift_start_time} -{" "}
-              {project.shift_end_time}
-            </span>
-
-            {" "}&bull; Grace Period:{" "}
-
-            <span className="font-semibold text-slate-700">
-              {project.grace_period_minutes} mins
-            </span>
-
-            {" "}&bull; Late check-in beyond 2.5 hrs is evaluated
-            as Half Day.
-
+          <p className="mt-1 text-sm text-slate-500">
+            Manage your attendance, leave requests
+            and attendance regularization.
           </p>
-
         </div>
 
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="px-5 py-2.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 rounded-xl shadow-sm hover:shadow transition-all shrink-0 cursor-pointer"
-        >
-          Request Regularization
-        </button>
+        <div className="flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={
+              openRegularization
+            }
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+          >
+            <FileCheck className="h-4 w-4" />
+            Request Regularization
+          </button>
 
+          <button
+            type="button"
+            onClick={openLeaveModal}
+            className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
+          >
+            <Plus className="h-4 w-4" />
+            Apply for Leave
+          </button>
+        </div>
       </div>
 
-      {/* =====================================================
-          SUCCESS MESSAGE
-      ====================================================== */}
+      {/* SUCCESS */}
 
-      {successMsg && (
-        <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl text-xs font-semibold flex items-center gap-2">
-
-          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+      {regularizationSuccess && (
+        <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
+          <CheckCircle2 className="h-5 w-5 shrink-0" />
 
           <span>
-            {successMsg}
+            {regularizationSuccess}
           </span>
-
         </div>
       )}
 
-      {/* =====================================================
-          CLOCK IN / CLOCK OUT WIDGET
-      ====================================================== */}
+      {/* SUMMARY CARDS */}
 
-      <ClockInWidget
-        employeeId={employee.id}
-        initialLog={todayLog}
-        project={project}
-      />
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
 
-      {/* =====================================================
-          ATTENDANCE HISTORY + REGULARIZATIONS
-      ====================================================== */}
+        {/* PRESENT */}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-slate-500">
+              Present
+            </p>
 
-        {/* ===================================================
-            ATTENDANCE HISTORY
-        ==================================================== */}
+            <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+          </div>
 
-        <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden">
+          <p className="mt-2 text-2xl font-bold text-slate-900">
+            {presentCount}
+          </p>
+        </div>
 
-          {/* =================================================
-              ATTENDANCE HISTORY HEADER
-          ================================================== */}
+        {/* ABSENT */}
 
-          <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-slate-500">
+              Absent
+            </p>
 
-            <div className="flex items-center gap-2">
+            <XCircle className="h-5 w-5 text-red-500" />
+          </div>
 
-              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+          <p className="mt-2 text-2xl font-bold text-slate-900">
+            {absentCount}
+          </p>
+        </div>
 
-                <span>
-                  Attendance History
-                </span>
+        {/* LEAVE */}
 
-              </h3>
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-slate-500">
+              Leave
+            </p>
 
-              {/* =================================================
-                  CALENDAR BUTTON
-              ================================================== */}
+            <CalendarOff className="h-5 w-5 text-yellow-500" />
+          </div>
 
-              <button
-                type="button"
-                onClick={handleCalendarToggle}
-                title={
-                  showAttendanceCalendar
-                    ? "Hide Calendar"
-                    : "Show Calendar"
-                }
-                aria-label={
-                  showAttendanceCalendar
-                    ? "Hide Calendar"
-                    : "Show Calendar"
-                }
-                className={`w-8 h-8 rounded-lg border flex items-center justify-center transition-all cursor-pointer ${
-                  showAttendanceCalendar
-                    ? "bg-indigo-600 border-indigo-600 text-white"
-                    : "bg-white border-slate-200 text-indigo-600 hover:bg-indigo-50 hover:border-indigo-200"
-                }`}
-              >
-                <Calendar className="w-4 h-4" />
-              </button>
+          <p className="mt-2 text-2xl font-bold text-slate-900">
+            {leaveCount}
+          </p>
+        </div>
 
+        {/* YEARLY LEAVES */}
+
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-slate-500">
+              Yearly Leaves
+            </p>
+
+            <Calendar className="h-5 w-5 text-slate-500" />
+          </div>
+
+          <div className="mt-3 grid grid-cols-2">
+
+            {/* SL */}
+
+            <div className="text-center">
+              <p className="text-2xl font-bold text-slate-900">
+                {sickLeaveRemaining}
+              </p>
+
+              <p className="mt-1 text-xs font-bold text-slate-600">
+                SL
+              </p>
+
+              <p className="text-[11px] text-slate-400">
+                Sick Leave
+              </p>
             </div>
 
-            <span className="text-xs font-semibold text-slate-400">
-              Past Punches
-            </span>
+            {/* CL */}
+
+            <div className="border-l border-slate-200 text-center">
+              <p className="text-2xl font-bold text-slate-900">
+                {casualLeaveRemaining}
+              </p>
+
+              <p className="mt-1 text-xs font-bold text-slate-600">
+                CL
+              </p>
+
+              <p className="text-[11px] text-slate-400">
+                Casual Leave
+              </p>
+            </div>
+
+          </div>
+        </div>
+
+        {/* TOTAL LEAVE BALANCE */}
+
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-slate-500">
+              Leave Balance
+            </p>
+
+            <Calendar className="h-5 w-5 text-blue-500" />
+          </div>
+
+          <p className="mt-2 text-2xl font-bold text-slate-900">
+            {leaveBalance}
+          </p>
+
+          <p className="mt-1 text-xs text-slate-400">
+            SL + CL remaining
+          </p>
+        </div>
+
+      </div>
+
+      {/* ======================================================
+          CALENDAR + CLOCK
+      ====================================================== */}
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+
+        {/* CALENDAR */}
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-4">
+            <h2 className="text-lg font-bold text-slate-900">
+              Attendance Calendar
+            </h2>
+
+            <p className="text-sm text-slate-500">
+              Select a date to view attendance details.
+            </p>
+          </div>
+
+          <AttendanceCalendar
+            logs={logs}
+            leaveRequests={
+              leaveRequests
+            }
+            onDateSelect={
+              handleCalendarDateSelect
+            }
+            onSelectedDateChange={(
+              date
+            ) => {
+              setSelectedDate(date);
+
+              if (!date) {
+                setSelectedAttendance(
+                  null
+                );
+              }
+            }}
+          />
+        </div>
+
+        {/* CLOCK */}
+
+        <div>
+          <ClockInWidget
+            employeeId={String(
+              employee.id
+            )}
+            initialLog={
+              currentTodayLog
+            }
+            project={project}
+            selectedDate={activeDate}
+            selectedAttendance={
+              selectedAttendance
+            }
+            onRequestRegularization={
+              openRegularization
+            }
+            onAttendanceUpdate={(
+              updatedLog
+            ) => {
+              setCurrentTodayLog(
+                updatedLog
+              );
+
+              setLogs((prev) => {
+                const updatedDate =
+                  getLogDate(
+                    updatedLog
+                  );
+
+                const exists =
+                  prev.some(
+                    (log) =>
+                      getLogDate(
+                        log
+                      ) ===
+                      updatedDate
+                  );
+
+                if (exists) {
+                  return prev.map(
+                    (log) =>
+                      getLogDate(
+                        log
+                      ) ===
+                      updatedDate
+                        ? updatedLog
+                        : log
+                  );
+                }
+
+                return [
+                  updatedLog,
+                  ...prev,
+                ];
+              });
+
+              const updatedDate =
+                getLogDate(
+                  updatedLog
+                );
+
+              const status = String(
+                (updatedLog as any)
+                  .status ??
+                  "present"
+              ).toLowerCase();
+
+              let selectedStatus:
+                | "present"
+                | "half_day"
+                | "leave"
+                | "empty" =
+                "present";
+
+              if (
+                status ===
+                "half_day"
+              ) {
+                selectedStatus =
+                  "half_day";
+              } else if (
+                status ===
+                  "on_leave" ||
+                status === "leave"
+              ) {
+                selectedStatus =
+                  "leave";
+              }
+
+              const updatedClockIn =
+                getClockIn(
+                  updatedLog
+                );
+
+              const updatedClockOut =
+                getClockOut(
+                  updatedLog
+                );
+
+              const totalHours =
+                (updatedLog as any)
+                  .total_hours ??
+                (updatedLog as any)
+                  .totalHours;
+
+              let worked = "--";
+
+              if (
+                totalHours !==
+                  undefined &&
+                totalHours !==
+                  null &&
+                totalHours !== ""
+              ) {
+                worked = `${totalHours} hrs`;
+              } else {
+                worked =
+                  calculateWorkingHours(
+                    updatedClockIn,
+                    updatedClockOut
+                  );
+              }
+
+              setSelectedAttendance({
+                date: updatedDate,
+                status:
+                  selectedStatus,
+                clockIn:
+                  updatedClockIn ??
+                  undefined,
+                clockOut:
+                  updatedClockOut ??
+                  undefined,
+                worked,
+              });
+
+              setSelectedDate(
+                updatedDate
+              );
+            }}
+          />
+        </div>
+      </div>
+
+      {/* ======================================================
+          ATTENDANCE DETAILS
+      ====================================================== */}
+
+      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+
+        <div className="flex items-center justify-between gap-4 border-b border-slate-200 p-5">
+
+          <div>
+            <h2 className="text-lg font-bold text-slate-900">
+              Attendance Details
+            </h2>
+
+            <p className="mt-1 text-sm text-slate-500">
+              View attendance timing and status for the selected date.
+            </p>
+          </div>
+
+          <div className="rounded-lg bg-slate-50 p-2">
+            <Clock className="h-5 w-5 text-slate-500" />
+          </div>
+
+        </div>
+
+        <div className="p-5">
+
+          <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Attendance Date
+            </p>
+
+            <p className="mt-1 text-sm font-semibold text-slate-800">
+              {formatDateForDisplay(
+                activeDate
+              )}
+            </p>
 
           </div>
 
-          {/* =================================================
-              EXISTING ATTENDANCE CALENDAR
-          ================================================== */}
+          <div className="overflow-x-auto rounded-xl border border-slate-200">
 
-          {showAttendanceCalendar && (
-            <div className="border-b border-slate-100 bg-slate-50/30 p-4 sm:p-5">
+            <table className="w-full min-w-[750px]">
 
-              <AttendanceCalendar
-                logs={logs}
-                leaveRequests={[]}
-                onDateSelect={
-                  handleCalendarDateSelect
-                }
-              />
+              <thead>
+                <tr className="border-b border-slate-200 bg-slate-50 text-left">
 
-              {/* =================================================
-                  SELECTED DATE ATTENDANCE
-                  THIS APPEARS BELOW THE CALENDAR
-              ================================================== */}
-
-              {selectedAttendance && (
-                <div className="mt-5 bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
-
-                  {/* =================================================
-                      SELECTED DATE HEADER
-                  ================================================== */}
-
-                  <div className="px-5 py-4 bg-slate-50/80 border-b border-slate-200">
-
-                    <div className="flex items-center justify-between">
-
-                      <div>
-
-                        <h4 className="text-sm font-bold text-slate-900">
-                          Attendance Details
-                        </h4>
-
-                        <p className="text-xs text-slate-500 mt-1">
-                          {formatSelectedDate(
-                            selectedAttendance.date
-                          )}
-                        </p>
-
-                      </div>
-
-                      <span
-                        className={`text-[11px] font-semibold px-2.5 py-1 rounded-full ${
-                          selectedAttendance.status ===
-                          "present"
-                            ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                            : selectedAttendance.status ===
-                              "half_day"
-                            ? "bg-amber-50 text-amber-700 border border-amber-200"
-                            : selectedAttendance.status ===
-                              "leave"
-                            ? "bg-rose-50 text-rose-700 border border-rose-200"
-                            : "bg-slate-100 text-slate-600 border border-slate-200"
-                        }`}
-                      >
-                        {selectedAttendance.status ===
-                        "present"
-                          ? "Present"
-                          : selectedAttendance.status ===
-                            "half_day"
-                          ? "Half Day"
-                          : selectedAttendance.status ===
-                            "leave"
-                          ? "Leave"
-                          : "No Attendance"}
-                      </span>
-
-                    </div>
-
-                  </div>
-
-                  {/* =================================================
-                      ATTENDANCE TABLE
-                  ================================================== */}
-
-                  <div className="overflow-x-auto">
-
-                    <table className="w-full text-left text-xs text-slate-600">
-
-                      <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px] tracking-wider border-b border-slate-200">
-
-                        <tr>
-
-                          <th className="py-3.5 px-5">
-                            Date
-                          </th>
-
-                          <th className="py-3.5 px-5">
-                            Check-In
-                          </th>
-
-                          <th className="py-3.5 px-5">
-                            Check-Out
-                          </th>
-
-                          <th className="py-3.5 px-5">
-                            Total Hours
-                          </th>
-
-                        </tr>
-
-                      </thead>
-
-                      <tbody>
-
-                        <tr className="hover:bg-slate-50/80 transition-colors">
-
-                          {/* DATE */}
-
-                          <td className="py-4 px-5 font-bold text-slate-900">
-                            {formatSelectedDate(
-                              selectedAttendance.date
-                            )}
-                          </td>
-
-                          {/* CHECK IN */}
-
-                          <td className="py-4 px-5 font-mono font-semibold text-emerald-700">
-
-                            {formatTime(
-                              selectedAttendance.clockIn
-                            )}
-
-                          </td>
-
-                          {/* CHECK OUT */}
-
-                          <td className="py-4 px-5 font-mono font-semibold text-rose-700">
-
-                            {formatTime(
-                              selectedAttendance.clockOut
-                            )}
-
-                          </td>
-
-                          {/* TOTAL HOURS */}
-
-                          <td className="py-4 px-5 font-mono font-bold text-slate-800">
-
-                            {formatWorkedHours(
-                              selectedAttendance.worked
-                            )}
-
-                          </td>
-
-                        </tr>
-
-                      </tbody>
-
-                    </table>
-
-                  </div>
-
-                  {/* =================================================
-                      TODAY INFORMATION
-                  ================================================== */}
-
-                  {isSelectedToday && (
-                    <div className="px-5 py-3 border-t border-slate-100 bg-sky-50/60">
-
-                      <p className="text-[11px] text-sky-700 font-medium">
-
-                        Clock In time appears after you
-                        click Clock In. Clock Out and Total
-                        Hours will appear after you click
-                        Clock Out.
-
-                      </p>
-
-                    </div>
-                  )}
-
-                  {/* =================================================
-                      PREVIOUS DATE INFORMATION
-                  ================================================== */}
-
-                  {!isSelectedToday && (
-                    <div className="px-5 py-3 border-t border-slate-100 bg-slate-50">
-
-                      <p className="text-[11px] text-slate-500 font-medium">
-
-                        Showing attendance timings for the
-                        selected previous date.
-
-                      </p>
-
-                    </div>
-                  )}
-
-                </div>
-              )}
-
-            </div>
-          )}
-
-          {/* =================================================
-              MAIN ATTENDANCE TABLE
-          ================================================== */}
-
-          <div className="overflow-x-auto">
-
-            <table className="w-full text-left text-xs text-slate-600">
-
-              <thead className="bg-slate-50/80 text-slate-500 font-bold border-b border-slate-200/80 uppercase text-[11px] tracking-wider">
-
-                <tr>
-
-                  <th className="py-3.5 px-5">
+                  <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
                     Date
                   </th>
 
-                  <th className="py-3.5 px-5">
-                    Check-In
+                  <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Clock In
                   </th>
 
-                  <th className="py-3.5 px-5">
-                    Check-Out
+                  <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Clock Out
                   </th>
 
-                  <th className="py-3.5 px-5">
-                    Total Hours
+                  <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Worked
                   </th>
 
-                  <th className="py-3.5 px-5">
-                    Status
+                  <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Attendance
+                  </th>
+
+                  <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Shift
                   </th>
 
                 </tr>
-
               </thead>
 
-              <tbody className="divide-y divide-slate-100">
+              <tbody>
 
-                {logs.length === 0 ? (
+                <tr className="border-b border-slate-100 last:border-0">
 
-                  <tr>
+                  <td className="px-5 py-4 text-sm font-medium text-slate-800">
+                    {formatDateForDisplay(
+                      activeDate
+                    )}
+                  </td>
 
-                    <td
-                      colSpan={5}
-                      className="text-center py-8 text-slate-400"
-                    >
-                      No attendance records found yet.
-                      Check in above!
-                    </td>
+                  <td className="px-5 py-4 text-sm text-slate-600">
+                    {selectedClockIn
+                      ? formatAttendanceTime(
+                          selectedClockIn
+                        )
+                      : "--"}
+                  </td>
 
-                  </tr>
+                  <td className="px-5 py-4 text-sm text-slate-600">
+                    {selectedClockOut
+                      ? formatAttendanceTime(
+                          selectedClockOut
+                        )
+                      : "--"}
+                  </td>
 
-                ) : (
+                  <td className="px-5 py-4 text-sm font-semibold text-slate-700">
+                    {selectedAttendance?.date ===
+                      activeDate &&
+                    selectedAttendance?.worked
+                      ? selectedAttendance.worked
+                      : calculateWorkingHours(
+                          selectedClockIn,
+                          selectedClockOut
+                        )}
+                  </td>
 
-                  logs.map((item) => (
+                  <td className="px-5 py-4">
 
-                    <tr
-                      key={item.id}
-                      className="hover:bg-slate-50/80 transition-colors"
-                    >
+                    <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold capitalize text-slate-700">
 
-                      {/* DATE */}
+                      {selectedAttendance?.date ===
+                        activeDate &&
+                      selectedAttendance?.status
+                        ? selectedAttendance.status.replaceAll(
+                            "_",
+                            " "
+                          )
+                        : selectedLog
+                        ? String(
+                            (selectedLog as any)
+                              .status ??
+                              "Not Available"
+                          ).replaceAll(
+                            "_",
+                            " "
+                          )
+                        : "Not Available"}
 
-                      <td className="py-3.5 px-5 font-bold text-slate-900">
+                    </span>
 
-                        {item.attendance_date}
+                  </td>
 
-                      </td>
+                  <td className="px-5 py-4 text-sm text-slate-600">
 
-                      {/* CHECK IN */}
+                    {(selectedLog as any)
+                      ?.shift_name ??
+                      (selectedLog as any)
+                        ?.shift ??
+                      (selectedLog as any)
+                        ?.shiftName ??
+                      project?.name ??
+                      "--"}
 
-                      <td className="py-3.5 px-5 font-mono text-slate-700">
+                  </td>
 
-                        {item.check_in_time
-                          ? new Date(
-                              item.check_in_time
-                            ).toLocaleTimeString(
-                              [],
-                              {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              }
-                            )
-                          : "--:--"}
-
-                      </td>
-
-                      {/* CHECK OUT */}
-
-                      <td className="py-3.5 px-5 font-mono text-slate-700">
-
-                        {item.check_out_time
-                          ? new Date(
-                              item.check_out_time
-                            ).toLocaleTimeString(
-                              [],
-                              {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              }
-                            )
-                          : "--:--"}
-
-                      </td>
-
-                      {/* TOTAL HOURS */}
-
-                      <td className="py-3.5 px-5 font-mono font-bold text-slate-800">
-
-                        {item.total_hours
-                          ? `${item.total_hours} hrs`
-                          : "--"}
-
-                      </td>
-
-                      {/* STATUS */}
-
-                      <td className="py-3.5 px-5">
-
-                        {getStatusBadge(item)}
-
-                      </td>
-
-                    </tr>
-
-                  ))
-
-                )}
+                </tr>
 
               </tbody>
 
@@ -811,272 +1962,639 @@ export default function EmployeeAttendanceView({
 
         </div>
 
-        {/* ===================================================
-            REGULARIZATION REQUESTS
-        ==================================================== */}
+      </div>
 
-        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-5 space-y-4">
+      {/* ======================================================
+          ATTENDANCE REGULARIZATION
+      ====================================================== */}
 
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
 
-            <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+        <div className="flex items-center justify-between gap-4 border-b border-slate-200 p-5">
 
-              <Clock className="w-4 h-4 text-indigo-600" />
+          <div>
+            <h2 className="text-lg font-bold text-slate-900">
+              Attendance Regularization
+            </h2>
 
-              <span>
-                Regularizations
-              </span>
-
-            </h3>
-
-            <span className="text-[11px] font-bold text-slate-400">
-
-              {regs.length} Submitted
-
-            </span>
-
+            <p className="mt-1 text-sm text-slate-500">
+              Submit and track attendance correction
+              requests.
+            </p>
           </div>
 
-          <div className="space-y-3">
+          <button
+            type="button"
+            onClick={() =>
+              setShowRegularizationRequests(
+                (prev) => !prev
+              )
+            }
+            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+          >
+            {showRegularizationRequests
+              ? "Hide Requests"
+              : "View Requests"}
+          </button>
+
+        </div>
+
+        {showRegularizationRequests && (
+          <div className="overflow-x-auto">
 
             {regs.length === 0 ? (
-
-              <p className="text-xs text-slate-400 text-center py-8">
-                No regularization requests submitted.
-              </p>
-
+              <div className="p-8 text-center text-sm text-slate-500">
+                No regularization requests found.
+              </div>
             ) : (
+              <table className="w-full min-w-[800px]">
 
-              regs.map((r) => (
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-50 text-left">
 
-                <div
-                  key={r.id}
-                  className="p-3.5 bg-slate-50/80 border border-slate-200/70 rounded-xl text-xs space-y-1.5"
-                >
+                    <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Date
+                    </th>
 
-                  <div className="flex items-center justify-between">
+                    <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Punch In
+                    </th>
 
-                    <span className="font-bold text-slate-900">
-                      {r.attendance_date}
-                    </span>
+                    <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Punch Out
+                    </th>
 
-                    <span
-                      className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase ${
-                        r.status === "approved"
-                          ? "bg-emerald-100 text-emerald-800"
-                          : r.status === "rejected"
-                          ? "bg-red-100 text-red-800"
-                          : "bg-amber-100 text-amber-800"
-                      }`}
-                    >
-                      {r.status}
-                    </span>
+                    <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Reason
+                    </th>
 
-                  </div>
+                    <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Status
+                    </th>
 
-                  <p className="text-slate-600 font-mono text-[11px]">
+                  </tr>
+                </thead>
 
-                    Punch:{" "}
+                <tbody>
 
-                    <span className="font-semibold text-indigo-700">
+                  {regs.map(
+                    (
+                      request: any,
+                      index
+                    ) => {
 
-                      {r.proposed_check_in} -{" "}
-                      {r.proposed_check_out}
+                      const date =
+                        request?.attendance_date ??
+                        request?.attendanceDate ??
+                        request?.date ??
+                        "";
 
-                    </span>
+                      const checkIn =
+                        request?.proposed_check_in ??
+                        request?.proposedCheckIn ??
+                        request?.punch_in ??
+                        request?.punchIn ??
+                        request?.punchInTime ??
+                        null;
 
-                  </p>
+                      const checkOut =
+                        request?.proposed_check_out ??
+                        request?.proposedCheckOut ??
+                        request?.punch_out ??
+                        request?.punchOut ??
+                        request?.punchOutTime ??
+                        null;
 
-                  <p className="text-slate-500 text-[11px] italic bg-white p-2 rounded-lg border border-slate-100">
+                      const status =
+                        getRegularizationStatus(
+                          request
+                        );
 
-                    &quot;
-                    {r.reason}
-                    &quot;
+                      return (
+                        <tr
+                          key={
+                            request?.id ??
+                            `${date}-${index}`
+                          }
+                          className="border-b border-slate-100 last:border-0"
+                        >
 
-                  </p>
+                          <td className="px-5 py-4 text-sm font-medium text-slate-800">
+                            {date
+                              ? formatDateForDisplay(
+                                  String(
+                                    date
+                                  ).slice(
+                                    0,
+                                    10
+                                  )
+                                )
+                              : "--"}
+                          </td>
 
-                </div>
+                          <td className="px-5 py-4 text-sm text-slate-600">
+                            {formatAttendanceTime(
+                              checkIn
+                            )}
+                          </td>
 
-              ))
+                          <td className="px-5 py-4 text-sm text-slate-600">
+                            {formatAttendanceTime(
+                              checkOut
+                            )}
+                          </td>
 
+                          <td className="max-w-xs px-5 py-4 text-sm text-slate-600">
+                            <div className="truncate">
+                              {request?.reason ||
+                                "--"}
+                            </div>
+                          </td>
+
+                          <td className="px-5 py-4">
+
+                            <span
+                              className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+                                status ===
+                                "approved"
+                                  ? "bg-emerald-100 text-emerald-700"
+                                  : status ===
+                                    "rejected"
+                                  ? "bg-red-100 text-red-700"
+                                  : "bg-yellow-100 text-yellow-700"
+                              }`}
+                            >
+                              {getStatusLabel(
+                                request
+                              )}
+                            </span>
+
+                          </td>
+
+                        </tr>
+                      );
+                    }
+                  )}
+
+                </tbody>
+
+              </table>
+            )}
+
+          </div>
+        )}
+
+      </div>
+
+      {/* ======================================================
+          LEAVE MANAGEMENT
+      ====================================================== */}
+
+      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+
+        <div className="border-b border-slate-200 p-5">
+
+          <div className="flex items-center justify-between gap-4">
+
+            <div>
+              <h2 className="text-lg font-bold text-slate-900">
+                Leave Management
+              </h2>
+
+              <p className="mt-1 text-sm text-slate-500">
+                View your leave requests.
+              </p>
+            </div>
+
+            {loadingLeaves && (
+              <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
             )}
 
           </div>
 
         </div>
 
+        <div className="p-5">
+
+          {leaveRequests.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center">
+
+              <CalendarOff className="mx-auto h-8 w-8 text-slate-300" />
+
+              <p className="mt-3 text-sm font-medium text-slate-600">
+                No leave requests found.
+              </p>
+
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+
+              <table className="w-full min-w-[850px]">
+
+                <thead>
+                  <tr className="border-b border-slate-200 text-left">
+
+                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Leave Type
+                    </th>
+
+                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Start
+                    </th>
+
+                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      End
+                    </th>
+
+                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Days
+                    </th>
+
+                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Reason
+                    </th>
+
+                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Status
+                    </th>
+
+                  </tr>
+                </thead>
+
+                <tbody>
+
+                  {leaveRequests.map(
+                    (
+                      request: any,
+                      index
+                    ) => {
+
+                      /*
+                       * IMPORTANT:
+                       * Get the leave type using leave_type_id
+                       * and match it with leaveTypes.
+                       */
+                      const requestLeaveType =
+                        getRequestLeaveType(
+                          request
+                        );
+
+                      const typeCode =
+                        requestLeaveType.code;
+
+                      const typeName =
+                        requestLeaveType.name;
+
+                      const status =
+                        String(
+                          request?.status ??
+                            "pending"
+                        ).toLowerCase();
+
+                      return (
+                        <tr
+                          key={
+                            request?.id ??
+                            index
+                          }
+                          className="border-b border-slate-100 last:border-0"
+                        >
+
+                          {/* ==================================================
+                              LEAVE TYPE
+                          ================================================== */}
+
+                          <td className="px-4 py-4">
+
+                            <div className="flex items-center gap-2">
+
+                              <span className="inline-flex min-w-[38px] items-center justify-center rounded-md bg-slate-100 px-2 py-1 text-xs font-bold text-slate-800">
+                                {String(
+                                  typeCode
+                                ).toUpperCase()}
+                              </span>
+
+                              {typeName && (
+                                <span className="text-sm text-slate-600">
+                                  {typeName}
+                                </span>
+                              )}
+
+                            </div>
+
+                          </td>
+
+                          {/* START */}
+
+                          <td className="px-4 py-4 text-sm text-slate-600">
+                            {request?.start_date ??
+                              request?.startDate ??
+                              "--"}
+                          </td>
+
+                          {/* END */}
+
+                          <td className="px-4 py-4 text-sm text-slate-600">
+                            {request?.end_date ??
+                              request?.endDate ??
+                              "--"}
+                          </td>
+
+                          {/* DAYS */}
+
+                          <td className="px-4 py-4 text-sm font-semibold text-slate-700">
+                            {request?.is_half_day ??
+                              request?.isHalfDay
+                              ? 0.5
+                              : request?.total_days ??
+                                request?.totalDays ??
+                                "--"}
+                          </td>
+
+                          {/* REASON */}
+
+                          <td className="max-w-xs px-4 py-4 text-sm text-slate-600">
+                            <div className="truncate">
+                              {request?.reason ??
+                                "--"}
+                            </div>
+                          </td>
+
+                          {/* STATUS */}
+
+                          <td className="px-4 py-4">
+
+                            <span
+                              className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+                                status ===
+                                "approved"
+                                  ? "bg-emerald-100 text-emerald-700"
+                                  : status ===
+                                    "rejected"
+                                  ? "bg-red-100 text-red-700"
+                                  : "bg-yellow-100 text-yellow-700"
+                              }`}
+                            >
+                              {status
+                                .replaceAll(
+                                  "_",
+                                  " "
+                                )
+                                .replace(
+                                  /\b\w/g,
+                                  (
+                                    char
+                                  ) =>
+                                    char.toUpperCase()
+                                )}
+                            </span>
+
+                          </td>
+
+                        </tr>
+                      );
+                    }
+                  )}
+
+                </tbody>
+
+              </table>
+
+            </div>
+          )}
+
+        </div>
       </div>
 
-      {/* =====================================================
-          REGULARIZATION MODAL
+      {/* ======================================================
+          REGULARIZATION POPUP
       ====================================================== */}
 
-      {isModalOpen && (
+      {isRegularizationModalOpen && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/45 p-4"
+          onMouseDown={(e) => {
+            if (
+              e.target ===
+                e.currentTarget &&
+              !submittingRegularization
+            ) {
+              closeRegularization();
+            }
+          }}
+        >
 
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+          <div className="w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl">
 
-          <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl border border-slate-200 animate-in fade-in zoom-in-95">
+            <div className="flex items-start justify-between border-b border-slate-200 px-6 py-5">
 
-            {/* MODAL HEADER */}
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">
+                  Request Attendance Regularization
+                </h2>
 
-            <div className="flex items-center justify-between pb-3 border-b border-slate-200">
-
-              <h3 className="text-base font-bold text-slate-900">
-                Request Regularization
-              </h3>
+                <p className="mt-1 text-sm text-slate-500">
+                  Correct your attendance for the
+                  selected date
+                </p>
+              </div>
 
               <button
                 type="button"
-                onClick={() =>
-                  setIsModalOpen(false)
+                onClick={
+                  closeRegularization
                 }
-                className="text-slate-400 hover:text-slate-600 cursor-pointer"
+                disabled={
+                  submittingRegularization
+                }
+                className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
-
-                <XCircle className="w-5 h-5" />
-
+                <X className="h-5 w-5" />
               </button>
 
             </div>
 
-            {/* FORM */}
-
             <form
-              onSubmit={handleRegularizeSubmit}
-              className="mt-4 space-y-3 text-xs"
+              onSubmit={
+                handleRegularizationSubmit
+              }
             >
 
-              {/* DATE */}
-
-              <div>
-
-                <label className="font-semibold text-slate-700 block mb-1">
-                  Date
-                </label>
-
-                <input
-                  type="date"
-                  required
-                  value={
-                    formData.attendanceDate
-                  }
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      attendanceDate:
-                        e.target.value,
-                    })
-                  }
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-1 focus:ring-indigo-500"
-                />
-
-              </div>
-
-              {/* TIME */}
-
-              <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-5 px-6 py-5">
 
                 <div>
 
-                  <label className="font-semibold text-slate-700 block mb-1">
-                    Punch In Time
+                  <label className="mb-2 block text-sm font-semibold text-slate-700">
+                    Attendance Date
                   </label>
 
-                  <input
-                    type="time"
-                    required
-                    value={
-                      formData.proposedCheckIn
-                    }
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        proposedCheckIn:
-                          e.target.value,
-                      })
-                    }
-                    className="w-full px-3 py-2 border rounded-lg focus:ring-1 focus:ring-indigo-500"
-                  />
+                  <div className="relative">
+
+                    <Calendar className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+
+                    <input
+                      type="date"
+                      value={
+                        regularizationForm.attendanceDate
+                      }
+                      onChange={(e) =>
+                        handleRegularizationDateChange(
+                          e.target.value
+                        )
+                      }
+                      required
+                      className="h-11 w-full rounded-lg border border-slate-300 bg-white pl-10 pr-3 text-sm text-slate-800 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-100"
+                    />
+
+                  </div>
+
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+
+                  <div>
+
+                    <label className="mb-2 block text-sm font-semibold text-slate-700">
+                      Punch In Time
+                    </label>
+
+                    <div className="relative">
+
+                      <Clock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+
+                      <input
+                        type="time"
+                        value={
+                          regularizationForm.proposedCheckIn
+                        }
+                        onChange={(e) =>
+                          setRegularizationForm(
+                            (prev) => ({
+                              ...prev,
+                              proposedCheckIn:
+                                e.target
+                                  .value,
+                            })
+                          )
+                        }
+                        required
+                        className="h-11 w-full rounded-lg border border-slate-300 bg-white pl-10 pr-3 text-sm text-slate-800 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-100"
+                      />
+
+                    </div>
+
+                  </div>
+
+                  <div>
+
+                    <label className="mb-2 block text-sm font-semibold text-slate-700">
+                      Punch Out Time
+                    </label>
+
+                    <div className="relative">
+
+                      <Clock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+
+                      <input
+                        type="time"
+                        value={
+                          regularizationForm.proposedCheckOut
+                        }
+                        onChange={(e) =>
+                          setRegularizationForm(
+                            (prev) => ({
+                              ...prev,
+                              proposedCheckOut:
+                                e.target
+                                  .value,
+                            })
+                          )
+                        }
+                        required
+                        className="h-11 w-full rounded-lg border border-slate-300 bg-white pl-10 pr-3 text-sm text-slate-800 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-100"
+                      />
+
+                    </div>
+
+                  </div>
 
                 </div>
 
                 <div>
 
-                  <label className="font-semibold text-slate-700 block mb-1">
-                    Punch Out Time
+                  <label className="mb-2 block text-sm font-semibold text-slate-700">
+                    Reason
                   </label>
 
-                  <input
-                    type="time"
-                    required
+                  <textarea
                     value={
-                      formData.proposedCheckOut
+                      regularizationForm.reason
                     }
                     onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        proposedCheckOut:
-                          e.target.value,
-                      })
+                      setRegularizationForm(
+                        (prev) => ({
+                          ...prev,
+                          reason:
+                            e.target
+                              .value,
+                        })
+                      )
                     }
-                    className="w-full px-3 py-2 border rounded-lg focus:ring-1 focus:ring-indigo-500"
+                    rows={4}
+                    required
+                    placeholder="Please enter the reason for attendance regularization..."
+                    className="w-full resize-none rounded-lg border border-slate-300 bg-white px-3 py-3 text-sm text-slate-800 outline-none placeholder:text-slate-400 focus:border-slate-500 focus:ring-2 focus:ring-slate-100"
                   />
 
                 </div>
 
-              </div>
+                {regularizationError && (
+                  <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-3 text-sm text-red-700">
 
-              {/* REASON */}
+                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
 
-              <div>
+                    <span>
+                      {
+                        regularizationError
+                      }
+                    </span>
 
-                <label className="font-semibold text-slate-700 block mb-1">
-                  Reason for Regularization
-                </label>
-
-                <textarea
-                  required
-                  rows={3}
-                  value={formData.reason}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      reason: e.target.value,
-                    })
-                  }
-                  placeholder="e.g. Forgot biometric punch / client on-site visit / power outage"
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-1 focus:ring-indigo-500"
-                />
+                  </div>
+                )}
 
               </div>
 
-              {/* BUTTONS */}
-
-              <div className="flex items-center justify-end gap-2 pt-3 border-t">
+              <div className="flex items-center justify-end gap-3 border-t border-slate-200 bg-slate-50 px-6 py-4">
 
                 <button
                   type="button"
-                  onClick={() =>
-                    setIsModalOpen(false)
+                  onClick={
+                    closeRegularization
                   }
-                  className="px-3 py-1.5 font-semibold text-slate-600 hover:bg-slate-100 rounded cursor-pointer"
+                  disabled={
+                    submittingRegularization
+                  }
+                  className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Cancel
                 </button>
 
                 <button
                   type="submit"
-                  disabled={submitting}
-                  className="px-4 py-2 font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
+                  disabled={
+                    submittingRegularization
+                  }
+                  className="inline-flex min-w-[100px] items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
                 >
 
-                  {submitting && (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  {submittingRegularization ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Submitting...
+                    </>
+                  ) : (
+                    "Submit"
                   )}
-
-                  <span>
-                    Submit to HR
-                  </span>
 
                 </button>
 
@@ -1087,7 +2605,332 @@ export default function EmployeeAttendanceView({
           </div>
 
         </div>
+      )}
 
+      {/* ======================================================
+          LEAVE POPUP
+      ====================================================== */}
+
+      {showLeaveModal && (
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-black/40 p-4"
+          onMouseDown={(e) => {
+            if (
+              e.target ===
+                e.currentTarget &&
+              !submittingLeave
+            ) {
+              closeLeaveModal();
+            }
+          }}
+        >
+
+          <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl">
+
+            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5">
+
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">
+                  Apply for Leave
+                </h2>
+
+                <p className="mt-1 text-sm text-slate-500">
+                  Submit a new leave request
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={
+                  closeLeaveModal
+                }
+                disabled={
+                  submittingLeave
+                }
+                className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+              >
+                <X className="h-5 w-5" />
+              </button>
+
+            </div>
+
+            <form
+              onSubmit={
+                handleLeaveSubmit
+              }
+            >
+
+              <div className="space-y-4 px-6 py-5">
+
+                {/* LEAVE TYPE */}
+
+                <div>
+
+                  <label className="mb-2 block text-sm font-semibold text-slate-700">
+                    Leave Type
+                  </label>
+
+                  <select
+                    value={
+                      leaveForm.leaveTypeId
+                    }
+                    onChange={(e) =>
+                      setLeaveForm(
+                        (prev) => ({
+                          ...prev,
+                          leaveTypeId:
+                            e.target
+                              .value,
+                        })
+                      )
+                    }
+                    required
+                    className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-slate-500 focus:ring-2 focus:ring-slate-100"
+                  >
+
+                    <option value="">
+                      Select Leave Type
+                    </option>
+
+                    {visibleLeaveTypes.map(
+                      (type: any) => (
+                        <option
+                          key={type.id}
+                          value={type.id}
+                        >
+                          {getLeaveTypeCode(
+                            type
+                          )}
+                        </option>
+                      )
+                    )}
+
+                  </select>
+
+                </div>
+
+                {/* DATES */}
+
+                <div className="grid grid-cols-2 gap-3">
+
+                  <div>
+
+                    <label className="mb-2 block text-sm font-semibold text-slate-700">
+                      Start Date
+                    </label>
+
+                    <input
+                      type="date"
+                      value={
+                        leaveForm.startDate
+                      }
+                      onChange={(e) =>
+                        setLeaveForm(
+                          (prev) => ({
+                            ...prev,
+                            startDate:
+                              e.target
+                                .value,
+                          })
+                        )
+                      }
+                      required
+                      className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-500 focus:ring-2 focus:ring-slate-100"
+                    />
+
+                  </div>
+
+                  <div>
+
+                    <label className="mb-2 block text-sm font-semibold text-slate-700">
+                      End Date
+                    </label>
+
+                    <input
+                      type="date"
+                      value={
+                        leaveForm.endDate
+                      }
+                      onChange={(e) =>
+                        setLeaveForm(
+                          (prev) => ({
+                            ...prev,
+                            endDate:
+                              e.target
+                                .value,
+                          })
+                        )
+                      }
+                      required
+                      className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-500 focus:ring-2 focus:ring-slate-100"
+                    />
+
+                  </div>
+
+                </div>
+
+                {/* HALF DAY */}
+
+                <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-200 p-3">
+
+                  <input
+                    type="checkbox"
+                    checked={
+                      leaveForm.isHalfDay
+                    }
+                    onChange={(e) =>
+                      setLeaveForm(
+                        (prev) => ({
+                          ...prev,
+                          isHalfDay:
+                            e.target
+                              .checked,
+                          totalDays:
+                            e.target
+                              .checked
+                              ? 0.5
+                              : Math.max(
+                                  calculateDaysBetween(
+                                    prev.startDate,
+                                    prev.endDate
+                                  ),
+                                  1
+                                ),
+                        })
+                      )
+                    }
+                    className="h-4 w-4 rounded border-slate-300"
+                  />
+
+                  <span className="text-sm font-medium text-slate-700">
+                    Half Day
+                  </span>
+
+                </label>
+
+                {/* TOTAL DAYS */}
+
+                <div>
+
+                  <label className="mb-2 block text-sm font-semibold text-slate-700">
+                    Total Days
+                  </label>
+
+                  <input
+                    type="number"
+                    min="0.5"
+                    step="0.5"
+                    value={
+                      leaveForm.totalDays
+                    }
+                    onChange={(e) =>
+                      setLeaveForm(
+                        (prev) => ({
+                          ...prev,
+                          totalDays:
+                            Number(
+                              e.target
+                                .value
+                            ),
+                        })
+                      )
+                    }
+                    required
+                    className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-500 focus:ring-2 focus:ring-slate-100"
+                  />
+
+                </div>
+
+                {/* REASON */}
+
+                <div>
+
+                  <label className="mb-2 block text-sm font-semibold text-slate-700">
+                    Reason
+                  </label>
+
+                  <textarea
+                    rows={3}
+                    value={
+                      leaveForm.reason
+                    }
+                    onChange={(e) =>
+                      setLeaveForm(
+                        (prev) => ({
+                          ...prev,
+                          reason:
+                            e.target
+                              .value,
+                        })
+                      )
+                    }
+                    required
+                    placeholder="Enter reason..."
+                    className="w-full resize-none rounded-lg border border-slate-300 px-3 py-3 text-sm outline-none focus:border-slate-500 focus:ring-2 focus:ring-slate-100"
+                  />
+
+                </div>
+
+                {leaveError && (
+                  <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-3 text-sm text-red-700">
+
+                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+
+                    <span>
+                      {leaveError}
+                    </span>
+
+                  </div>
+                )}
+
+                {leaveSuccess && (
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-3 text-sm text-emerald-700">
+                    {leaveSuccess}
+                  </div>
+                )}
+
+              </div>
+
+              <div className="flex justify-end gap-3 border-t border-slate-200 bg-slate-50 px-6 py-4">
+
+                <button
+                  type="button"
+                  onClick={
+                    closeLeaveModal
+                  }
+                  disabled={
+                    submittingLeave
+                  }
+                  className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={
+                    submittingLeave
+                  }
+                  className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
+                >
+
+                  {submittingLeave && (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  )}
+
+                  {submittingLeave
+                    ? "Submitting..."
+                    : "Submit Leave"}
+
+                </button>
+
+              </div>
+
+            </form>
+
+          </div>
+
+        </div>
       )}
 
     </div>

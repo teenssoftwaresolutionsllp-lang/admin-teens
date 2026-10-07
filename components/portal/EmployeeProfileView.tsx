@@ -1,10 +1,20 @@
 "use client";
 
-import { useState } from "react";
-
 import {
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+
+import type {
+  ChangeEvent,
+  FormEvent,
+} from "react";
+
+import type {
   Department,
   Employee,
+  EmployeeDocument,
   ProfileChangeRequest,
 } from "@/lib/types";
 
@@ -20,15 +30,13 @@ import {
   XCircle,
   Loader2,
   Phone,
-  Mail,
   Building,
-  UploadCloud,
-  Trash2,
-  Plus,
-  CalendarDays,
   UserRound,
   MapPinned,
-  Timer,
+  Upload,
+  Trash2,
+  Download,
+  Eye,
 } from "lucide-react";
 
 import ProfileProgressBar from "./ProfileProgressBar";
@@ -39,1011 +47,1713 @@ interface EmployeeProfileViewProps {
   departments: Department[];
 }
 
-interface PreviousEmployment {
-  id: number;
-  company_name: string;
+type EditFormData = {
+  phone: string;
+  date_of_birth: string;
+  gender: string;
+  blood_group: string;
+  marital_status: string;
+
+  address: string;
+  city: string;
+  state: string;
+  pincode: string;
+
+  communication_address: string;
+  communication_city: string;
+  communication_state: string;
+  communication_pincode: string;
+
+  emergency_contact_name: string;
+  emergency_contact_phone: string;
+  emergency_contact_relation: string;
+
+  emergency_contact_2_name: string;
+  emergency_contact_2_phone: string;
+  emergency_contact_2_relation: string;
+
+  emergency_contact_3_name: string;
+  emergency_contact_3_phone: string;
+  emergency_contact_3_relation: string;
+
+  department_id: string;
   designation: string;
-  start_date: string;
-  end_date: string;
+  probation_end_date: string;
+  confirmation_date: string;
   reporting_manager: string;
   work_location: string;
-}
+
+  bank_name: string;
+  bank_account_number: string;
+  ifsc_code: string;
+  pan_number: string;
+  aadhar_number: string;
+  passport_number: string;
+
+  pf: string;
+  esi: string;
+  pt: string;
+  tds: string;
+};
+
+const documentTypes = [
+  "10th Certificate",
+  "12th Certificate",
+  "Graduation Certificate",
+  "Post-Graduation Certificate",
+  "Experience Letter",
+  "Relieving Letter",
+  "Offer Letter",
+  "Resume",
+  "Aadhar Card",
+  "PAN Card",
+  "Passport",
+  "Other",
+];
+
+const MAX_DOCUMENT_SIZE = 5 * 1024 * 1024;
+
+const emptyEditForm: EditFormData = {
+  phone: "",
+  date_of_birth: "",
+  gender: "",
+  blood_group: "",
+  marital_status: "single",
+
+  address: "",
+  city: "",
+  state: "",
+  pincode: "",
+
+  communication_address: "",
+  communication_city: "",
+  communication_state: "",
+  communication_pincode: "",
+
+  emergency_contact_name: "",
+  emergency_contact_phone: "",
+  emergency_contact_relation: "",
+
+  emergency_contact_2_name: "",
+  emergency_contact_2_phone: "",
+  emergency_contact_2_relation: "",
+
+  emergency_contact_3_name: "",
+  emergency_contact_3_phone: "",
+  emergency_contact_3_relation: "",
+
+  department_id: "",
+  designation: "",
+  probation_end_date: "",
+  confirmation_date: "",
+  reporting_manager: "",
+  work_location: "",
+
+  bank_name: "",
+  bank_account_number: "",
+  ifsc_code: "",
+  pan_number: "",
+  aadhar_number: "",
+  passport_number: "",
+
+  pf: "",
+  esi: "",
+  pt: "",
+  tds: "",
+};
+
+type EditSection =
+  | "all"
+  | "personal"
+  | "address"
+  | "bank"
+  | "employment"
+  | "document"
+  | "statutory"
+  | null;
 
 export default function EmployeeProfileView({
   employee,
   pendingRequest: initialPendingRequest,
   departments,
 }: EmployeeProfileViewProps) {
-  /* =========================================================
-     TAB STATE
-  ========================================================= */
+  const employeeData =
+    employee as Employee & Record<string, any>;
+
+  const employeeFullName =
+    employeeData.full_name ||
+    [employeeData.first_name, employeeData.last_name]
+      .filter(Boolean)
+      .join(" ") ||
+    employeeData.name ||
+    "Employee";
+
+  const departmentName = () => {
+    const department = departments.find(
+      (item) =>
+        String(item?.id ?? "") ===
+        String(employeeData.department_id ?? "")
+    );
+
+    return (
+      department?.name ||
+      employeeData.department_name ||
+      "Not specified"
+    );
+  };
 
   const [activeTab, setActiveTab] = useState<
-    "personal" | "address" | "bank" | "employment" | "document"
+    | "personal"
+    | "address"
+    | "bank"
+    | "employment"
+    | "document"
+    | "statutory"
   >("personal");
 
-  /* =========================================================
-     PROFILE EDIT STATE
-  ========================================================= */
-
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-
-  const [hasStartedProfileEditing, setHasStartedProfileEditing] =
+  const [isEditModalOpen, setIsEditModalOpen] =
     useState(false);
 
-  const [pendingRequest, setPendingRequest] =
-    useState<ProfileChangeRequest | null>(initialPendingRequest);
+  const [editSection, setEditSection] =
+    useState<EditSection>(null);
 
-  const [loading, setLoading] = useState(false);
+  const [pendingRequest, setPendingRequest] =
+    useState<ProfileChangeRequest | null>(
+      initialPendingRequest
+    );
+
+  const [loading, setLoading] =
+    useState(false);
 
   const [successMessage, setSuccessMessage] =
     useState<string | null>(null);
 
-  /* =========================================================
-     PROFILE PHOTO STATE
-  ========================================================= */
-
-  const [profilePhoto, setProfilePhoto] =
-    useState<string | null>(
-      employee.profile_photo_url || null
-    );
-
-  const [profilePhotoError, setProfilePhotoError] =
+  const [errorMessage, setErrorMessage] =
     useState<string | null>(null);
 
-  /* =========================================================
-     PROFILE PHOTO CHANGE
-  ========================================================= */
+  const [editFormData, setEditFormData] =
+    useState<EditFormData>({
+      ...emptyEditForm,
+    });
 
-  const handleProfilePhotoChange = (
-    e: React.ChangeEvent<HTMLInputElement>
+  /* ============================================================
+     PROFILE PHOTO
+
+     Database photo is the primary source.
+
+     Sidebar sends:
+       "profile-photo-updated"
+
+     Sidebar also stores:
+       "profile-avatar-url"
+
+     The event updates the image immediately.
+     localStorage is only used when database photo is unavailable.
+  ============================================================ */
+
+  const [profilePhotoUrl, setProfilePhotoUrl] =
+    useState<string | null>(
+      employeeData.profile_photo_url || null
+    );
+
+  /* ============================================================
+     DOCUMENT STATE
+  ============================================================ */
+
+  const [documents, setDocuments] =
+    useState<EmployeeDocument[]>([]);
+
+  const [isUploading, setIsUploading] =
+    useState(false);
+
+  const [documentError, setDocumentError] =
+    useState<string | null>(null);
+
+  const [docType, setDocType] =
+    useState<string>("Resume");
+
+  const [documentName, setDocumentName] =
+    useState("");
+
+  const documentFileInputRef =
+    useRef<HTMLInputElement | null>(null);
+
+  /* ============================================================
+     OPEN PROFILE EDIT
+  ============================================================ */
+
+  const openEditSection = (
+    section: EditSection
   ) => {
-    setProfilePhotoError(null);
+    setSuccessMessage(null);
+    setErrorMessage(null);
+    setEditSection(section);
+    setIsEditModalOpen(true);
+  };
 
-    const file = e.target.files?.[0];
+  /* ============================================================
+     CLOSE PROFILE EDIT
+  ============================================================ */
+
+  const closeEditModal = () => {
+    setIsEditModalOpen(false);
+    setEditSection(null);
+    setLoading(false);
+  };
+
+  /* ============================================================
+     RESET EDIT FORM WHEN EMPLOYEE CHANGES
+  ============================================================ */
+
+  useEffect(() => {
+    const data =
+      employee as Employee & Record<string, any>;
+
+    setEditFormData({
+      phone: data.phone || "",
+
+      date_of_birth:
+        data.date_of_birth || "",
+
+      gender:
+        data.gender || "",
+
+      blood_group:
+        data.blood_group || "",
+
+      marital_status:
+        data.marital_status || "single",
+
+      address:
+        data.permanent_address || "",
+
+      city:
+        data.permanent_city || "",
+
+      state:
+        data.permanent_state || "",
+
+      pincode:
+        data.permanent_pincode || "",
+
+      communication_address:
+        data.communication_address || "",
+
+      communication_city:
+        data.communication_city || "",
+
+      communication_state:
+        data.communication_state || "",
+
+      communication_pincode:
+        data.communication_pincode || "",
+
+      emergency_contact_name:
+        data.emergency_contact_name || "",
+
+      emergency_contact_phone:
+        data.emergency_contact_phone || "",
+
+      emergency_contact_relation:
+        data.emergency_contact_relation || "",
+
+      emergency_contact_2_name:
+        data.emergency_contact_2_name || "",
+
+      emergency_contact_2_phone:
+        data.emergency_contact_2_phone || "",
+
+      emergency_contact_2_relation:
+        data.emergency_contact_2_relation || "",
+
+      emergency_contact_3_name:
+        data.emergency_contact_3_name || "",
+
+      emergency_contact_3_phone:
+        data.emergency_contact_3_phone || "",
+
+      emergency_contact_3_relation:
+        data.emergency_contact_3_relation || "",
+
+      department_id:
+        data.department_id || "",
+
+      designation:
+        data.designation || "",
+
+      probation_end_date:
+        data.probation_end_date || "",
+
+      confirmation_date:
+        data.confirmation_date || "",
+
+      reporting_manager:
+        data.reporting_manager || "",
+
+      work_location:
+        data.work_location || "",
+
+      bank_name:
+        data.bank_name || "",
+
+      bank_account_number:
+        data.bank_account_number || "",
+
+      ifsc_code:
+        data.ifsc_code || "",
+
+      pan_number:
+        data.pan_number || "",
+
+      aadhar_number:
+        data.aadhar_number || "",
+
+      passport_number:
+        data.passport_number || "",
+
+      pf:
+        data.pf || "",
+
+      esi:
+        data.esi || "",
+
+      pt:
+        data.pt || "",
+
+      tds:
+        data.tds || "",
+    });
+
+    setPendingRequest(
+      initialPendingRequest
+    );
+  }, [
+    employee,
+    initialPendingRequest,
+  ]);
+
+  /* ============================================================
+     CORRECTED PROFILE PHOTO SYNC
+
+     IMPORTANT:
+     - DB photo is preferred.
+     - localStorage is fallback only.
+     - Sidebar event always updates immediately.
+     - Event listener is removed on unmount.
+  ============================================================ */
+
+  useEffect(() => {
+    const databasePhoto =
+      employeeData.profile_photo_url || null;
+
+    /* ----------------------------------------------------------
+       1. FIRST USE DATABASE PHOTO
+    ---------------------------------------------------------- */
+
+    setProfilePhotoUrl(databasePhoto);
+
+    /* ----------------------------------------------------------
+       2. USE LOCAL STORAGE ONLY IF DB HAS NO PHOTO
+
+       This prevents an old localStorage photo from replacing
+       a valid database photo.
+    ---------------------------------------------------------- */
+
+    if (!databasePhoto) {
+      try {
+        const savedPhoto =
+          window.localStorage.getItem(
+            "profile-avatar-url"
+          );
+
+        if (savedPhoto) {
+          setProfilePhotoUrl(savedPhoto);
+        }
+      } catch (error) {
+        console.error(
+          "Unable to restore profile photo:",
+          error
+        );
+      }
+    }
+
+    /* ----------------------------------------------------------
+       3. LISTEN FOR SIDEBAR PHOTO UPLOAD
+    ---------------------------------------------------------- */
+
+    const handlePhotoUpdate = (
+      event: Event
+    ) => {
+      const customEvent =
+        event as CustomEvent<{
+          avatarUrl?: string | null;
+        }>;
+
+      const newAvatarUrl =
+        customEvent.detail?.avatarUrl || null;
+
+      if (!newAvatarUrl) {
+        return;
+      }
+
+      /* Immediately update Employee Profile image */
+      setProfilePhotoUrl(
+        newAvatarUrl
+      );
+
+      /* Keep Sidebar/Profile synchronized */
+      try {
+        window.localStorage.setItem(
+          "profile-avatar-url",
+          newAvatarUrl
+        );
+      } catch (error) {
+        console.error(
+          "Unable to save profile photo:",
+          error
+        );
+      }
+    };
+
+    window.addEventListener(
+      "profile-photo-updated",
+      handlePhotoUpdate
+    );
+
+    /* ----------------------------------------------------------
+       4. CLEANUP
+    ---------------------------------------------------------- */
+
+    return () => {
+      window.removeEventListener(
+        "profile-photo-updated",
+        handlePhotoUpdate
+      );
+    };
+  }, [
+    employeeData.profile_photo_url,
+  ]);
+
+  /* ============================================================
+     LOAD EMPLOYEE DOCUMENTS
+  ============================================================ */
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadDocuments = async () => {
+      if (!employeeData.id) {
+        return;
+      }
+
+      try {
+        const response =
+          await fetch(
+            `/api/documents?employee_id=${encodeURIComponent(
+              String(employeeData.id)
+            )}`,
+            {
+              method: "GET",
+              cache: "no-store",
+            }
+          );
+
+        if (!response.ok) {
+          return;
+        }
+
+        const data =
+          await response.json();
+
+        if (cancelled) {
+          return;
+        }
+
+        const loadedDocuments =
+          Array.isArray(data)
+            ? data
+            : Array.isArray(
+                data?.documents
+              )
+            ? data.documents
+            : [];
+
+        setDocuments(
+          loadedDocuments as EmployeeDocument[]
+        );
+      } catch (error) {
+        console.error(
+          "Failed to load employee documents:",
+          error
+        );
+      }
+    };
+
+    loadDocuments();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [employeeData.id]);
+
+  /* ============================================================
+     INPUT CHANGE
+  ============================================================ */
+
+  const handleInputChange = (
+    e: ChangeEvent<
+      HTMLInputElement |
+      HTMLTextAreaElement |
+      HTMLSelectElement
+    >
+  ) => {
+    const {
+      name,
+      value,
+    } = e.target;
+
+    setEditFormData(
+      (previous) => ({
+        ...previous,
+        [name]: value,
+      })
+    );
+  };
+
+  /* ============================================================
+     DOCUMENT UPLOAD
+  ============================================================ */
+
+  const handleFileChange = async (
+    e: ChangeEvent<HTMLInputElement>
+  ) => {
+    const file =
+      e.target.files?.[0];
 
     if (!file) {
       return;
     }
 
-    if (!file.type.startsWith("image/")) {
-      setProfilePhotoError(
-        "Please select a valid image file."
+    if (
+      file.size >
+      MAX_DOCUMENT_SIZE
+    ) {
+      setDocumentError(
+        "File size exceeds 5MB limit"
       );
 
       e.target.value = "";
-
       return;
     }
 
-    const maxSize = 5 * 1024 * 1024;
-
-    if (file.size > maxSize) {
-      setProfilePhotoError(
-        "Profile photo must be less than 5MB."
+    if (!employeeData.id) {
+      setDocumentError(
+        "Employee ID is required to upload documents"
       );
 
       e.target.value = "";
-
       return;
     }
 
-    const reader = new FileReader();
+    setIsUploading(true);
+    setDocumentError(null);
 
-    reader.onload = () => {
-      if (typeof reader.result === "string") {
-        setProfilePhoto(reader.result);
+    try {
+      const trimmedDocumentName =
+        documentName.trim() ||
+        file.name;
+
+      const formData =
+        new FormData();
+
+      formData.append(
+        "file",
+        file
+      );
+
+      formData.append(
+        "document_type",
+        docType
+      );
+
+      formData.append(
+        "document_name",
+        trimmedDocumentName
+      );
+
+      formData.append(
+        "employee_id",
+        String(employeeData.id)
+      );
+
+      const response =
+        await fetch(
+          "/api/upload",
+          {
+            method: "POST",
+            body: formData,
+          }
+        );
+
+      const contentType =
+        response.headers.get(
+          "content-type"
+        ) || "";
+
+      let data: any;
+
+      if (
+        contentType.includes(
+          "application/json"
+        )
+      ) {
+        data =
+          await response.json();
+      } else {
+        const text =
+          await response.text();
+
+        throw new Error(
+          text ||
+            "Upload failed"
+        );
       }
-    };
 
-    reader.readAsDataURL(file);
+      if (!response.ok) {
+        throw new Error(
+          data?.error ||
+            "Upload failed"
+        );
+      }
 
-    setHasStartedProfileEditing(true);
+      if (!data?.document) {
+        throw new Error(
+          "Document was uploaded but not saved"
+        );
+      }
+
+      const newDocument =
+        data.document as EmployeeDocument;
+
+      setDocuments(
+        (previous) => [
+          ...previous,
+          newDocument,
+        ]
+      );
+
+      setDocumentName("");
+      setDocumentError(null);
+    } catch (error: any) {
+      console.error(
+        "Document upload error:",
+        error
+      );
+
+      setDocumentError(
+        error?.message ||
+          "Failed to upload file"
+      );
+    } finally {
+      setIsUploading(false);
+      e.target.value = "";
+    }
   };
 
-  /* =========================================================
-     DOCUMENT STATE
-  ========================================================= */
+  /* ============================================================
+     DELETE DOCUMENT
+  ============================================================ */
 
-  const [selectedDocumentType, setSelectedDocumentType] =
-    useState("");
-
-  const [selectedDocumentFile, setSelectedDocumentFile] =
-    useState<File | null>(null);
-
-  const [documentError, setDocumentError] =
-    useState<string | null>(null);
-
-  const [documentSuccess, setDocumentSuccess] =
-    useState<string | null>(null);
-
-  /* =========================================================
-     DOCUMENT TYPES
-  ========================================================= */
-
-  const documentTypes = [
-    "10th Certificate",
-    "12th Certificate",
-    "Graduation Certificate",
-    "Post-Graduation Certificate",
-    "Experience Letter",
-    "Relieving Letter",
-    "Offer Letter",
-    "Resume",
-    "Aadhar Card",
-    "PAN Card",
-    "Passport",
-    "Other",
-  ];
-
-  /* =========================================================
-     EDIT FORM DATA
-  ========================================================= */
-
-  const [editFormData, setEditFormData] = useState({
-    /* Personal */
-
-    phone: employee.phone || "",
-
-    date_of_birth: employee.date_of_birth || "",
-
-    gender: employee.gender || "",
-
-    blood_group: employee.blood_group || "",
-
-    marital_status: employee.marital_status || "single",
-
-    /* Address */
-
-    address: employee.address || "",
-
-    city: employee.city || "",
-
-    state: employee.state || "",
-
-    pincode: employee.pincode || "",
-
-    /* Emergency */
-
-    emergency_contact_name:
-      employee.emergency_contact_name || "",
-
-    emergency_contact_phone:
-      employee.emergency_contact_phone || "",
-
-    emergency_contact_relation:
-      employee.emergency_contact_relation || "",
-
-    /* Employment */
-
-    department_id: employee.department_id || "",
-
-    designation: employee.designation || "",
-
-    probation_end_date:
-      employee.probation_end_date || "",
-
-    confirmation_date:
-      employee.confirmation_date || "",
-
-    reporting_manager:
-      employee.reporting_manager || "",
-
-    work_location:
-      employee.work_location || "",
-
-    /* Bank & KYC */
-
-    bank_name: employee.bank_name || "",
-
-    bank_account_number:
-      employee.bank_account_number || "",
-
-    ifsc_code: employee.ifsc_code || "",
-
-    pan_number: employee.pan_number || "",
-
-    aadhar_number:
-      employee.aadhar_number || "",
-
-    uan_number:
-      employee.uan_number || "",
-  });
-
-  /* =========================================================
-     PREVIOUS EMPLOYMENT STATE
-  ========================================================= */
-
-  const [previousEmployments, setPreviousEmployments] =
-    useState<PreviousEmployment[]>([
-      {
-        id: Date.now(),
-        company_name: "",
-        designation: "",
-        start_date: "",
-        end_date: "",
-        reporting_manager: "",
-        work_location: "",
-      },
-    ]);
-
-  /* =========================================================
-     INPUT CHANGE
-  ========================================================= */
-
-  const handleInputChange = (
-    e: React.ChangeEvent<
-      HTMLInputElement |
-        HTMLSelectElement |
-        HTMLTextAreaElement
-    >
+  const handleDelete = async (
+    id: string
   ) => {
-    const { name, value } = e.target;
+    try {
+      setDocumentError(null);
 
-    setHasStartedProfileEditing(true);
+      const response =
+        await fetch(
+          `/api/documents/${id}`,
+          {
+            method: "DELETE",
+          }
+        );
 
-    setEditFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
+      if (!response.ok) {
+        const contentType =
+          response.headers.get(
+            "content-type"
+          ) || "";
+
+        let message =
+          "Delete failed";
+
+        if (
+          contentType.includes(
+            "application/json"
+          )
+        ) {
+          const data =
+            await response.json();
+
+          message =
+            data?.error ||
+            message;
+        }
+
+        throw new Error(
+          message
+        );
+      }
+
+      setDocuments(
+        (previous) =>
+          previous.filter(
+            (document) =>
+              document.id !== id
+          )
+      );
+    } catch (error: any) {
+      console.error(
+        "Document delete error:",
+        error
+      );
+
+      setDocumentError(
+        error?.message ||
+          "Failed to delete file"
+      );
+    }
   };
 
-  /* =========================================================
-     ADD PREVIOUS EMPLOYMENT
-  ========================================================= */
-
-  const addPreviousEmployment = () => {
-    setHasStartedProfileEditing(true);
-
-    setPreviousEmployments((prev) => [
-      ...prev,
-      {
-        id: Date.now(),
-        company_name: "",
-        designation: "",
-        start_date: "",
-        end_date: "",
-        reporting_manager: "",
-        work_location: "",
-      },
-    ]);
-  };
-
-  /* =========================================================
-     DELETE PREVIOUS EMPLOYMENT
-  ========================================================= */
-
-  const deletePreviousEmployment = (id: number) => {
-    setHasStartedProfileEditing(true);
-
-    setPreviousEmployments((prev) =>
-      prev.filter(
-        (employment) => employment.id !== id
-      )
-    );
-  };
-
-  /* =========================================================
-     PREVIOUS EMPLOYMENT INPUT CHANGE
-  ========================================================= */
-
-  const handlePreviousEmploymentChange = (
-    id: number,
-    field: keyof Omit<PreviousEmployment, "id">,
-    value: string
-  ) => {
-    setHasStartedProfileEditing(true);
-
-    setPreviousEmployments((prev) =>
-      prev.map((employment) =>
-        employment.id === id
-          ? {
-              ...employment,
-              [field]: value,
-            }
-          : employment
-      )
-    );
-  };
-
-  /* =========================================================
-     PROFILE FORM SUBMIT
-  ========================================================= */
+  /* ============================================================
+     PROFILE CHANGE REQUEST
+  ============================================================ */
 
   const handleFormSubmit = async (
-    e: React.FormEvent
+    e: FormEvent<HTMLFormElement>
   ) => {
     e.preventDefault();
 
     setLoading(true);
     setSuccessMessage(null);
+    setErrorMessage(null);
 
     try {
-      const changedFields = Object.fromEntries(
-        Object.entries(editFormData).filter(
-          ([key, value]) => {
-            const currentValue =
-              employee[key as keyof Employee] ?? "";
+      const changedFields: Record<
+        string,
+        unknown
+      > = {};
 
-            return (
-              String(value ?? "") !==
-              String(currentValue)
-            );
+      const previousValues: Record<
+        string,
+        unknown
+      > = {};
+
+      const comparisons: Record<
+        string,
+        unknown
+      > = {
+        phone:
+          editFormData.phone,
+
+        date_of_birth:
+          editFormData.date_of_birth,
+
+        gender:
+          editFormData.gender,
+
+        blood_group:
+          editFormData.blood_group,
+
+        marital_status:
+          editFormData.marital_status,
+
+        permanent_address:
+          editFormData.address,
+
+        permanent_city:
+          editFormData.city,
+
+        permanent_state:
+          editFormData.state,
+
+        permanent_pincode:
+          editFormData.pincode,
+
+        communication_address:
+          editFormData.communication_address,
+
+        communication_city:
+          editFormData.communication_city,
+
+        communication_state:
+          editFormData.communication_state,
+
+        communication_pincode:
+          editFormData.communication_pincode,
+
+        emergency_contact_name:
+          editFormData.emergency_contact_name,
+
+        emergency_contact_phone:
+          editFormData.emergency_contact_phone,
+
+        emergency_contact_relation:
+          editFormData.emergency_contact_relation,
+
+        emergency_contact_2_name:
+          editFormData.emergency_contact_2_name,
+
+        emergency_contact_2_phone:
+          editFormData.emergency_contact_2_phone,
+
+        emergency_contact_2_relation:
+          editFormData.emergency_contact_2_relation,
+
+        emergency_contact_3_name:
+          editFormData.emergency_contact_3_name,
+
+        emergency_contact_3_phone:
+          editFormData.emergency_contact_3_phone,
+
+        emergency_contact_3_relation:
+          editFormData.emergency_contact_3_relation,
+
+        department_id:
+          editFormData.department_id,
+
+        designation:
+          editFormData.designation,
+
+        probation_end_date:
+          editFormData.probation_end_date,
+
+        confirmation_date:
+          editFormData.confirmation_date,
+
+        reporting_manager:
+          editFormData.reporting_manager,
+
+        work_location:
+          editFormData.work_location,
+
+        bank_name:
+          editFormData.bank_name,
+
+        bank_account_number:
+          editFormData.bank_account_number,
+
+        ifsc_code:
+          editFormData.ifsc_code,
+
+        pan_number:
+          editFormData.pan_number,
+
+        aadhar_number:
+          editFormData.aadhar_number,
+
+        passport_number:
+          editFormData.passport_number,
+
+        pf:
+          editFormData.pf,
+
+        esi:
+          editFormData.esi,
+
+        pt:
+          editFormData.pt,
+
+        tds:
+          editFormData.tds,
+      };
+
+      const fieldMap: Record<
+        string,
+        string
+      > = {
+        phone: "phone",
+
+        date_of_birth:
+          "date_of_birth",
+
+        gender:
+          "gender",
+
+        blood_group:
+          "blood_group",
+
+        marital_status:
+          "marital_status",
+
+        permanent_address:
+          "permanent_address",
+
+        permanent_city:
+          "permanent_city",
+
+        permanent_state:
+          "permanent_state",
+
+        permanent_pincode:
+          "permanent_pincode",
+
+        communication_address:
+          "communication_address",
+
+        communication_city:
+          "communication_city",
+
+        communication_state:
+          "communication_state",
+
+        communication_pincode:
+          "communication_pincode",
+
+        emergency_contact_name:
+          "emergency_contact_name",
+
+        emergency_contact_phone:
+          "emergency_contact_phone",
+
+        emergency_contact_relation:
+          "emergency_contact_relation",
+
+        emergency_contact_2_name:
+          "emergency_contact_2_name",
+
+        emergency_contact_2_phone:
+          "emergency_contact_2_phone",
+
+        emergency_contact_2_relation:
+          "emergency_contact_2_relation",
+
+        emergency_contact_3_name:
+          "emergency_contact_3_name",
+
+        emergency_contact_3_phone:
+          "emergency_contact_3_phone",
+
+        emergency_contact_3_relation:
+          "emergency_contact_3_relation",
+
+        department_id:
+          "department_id",
+
+        designation:
+          "designation",
+
+        probation_end_date:
+          "probation_end_date",
+
+        confirmation_date:
+          "confirmation_date",
+
+        reporting_manager:
+          "reporting_manager",
+
+        work_location:
+          "work_location",
+
+        bank_name:
+          "bank_name",
+
+        bank_account_number:
+          "bank_account_number",
+
+        ifsc_code:
+          "ifsc_code",
+
+        pan_number:
+          "pan_number",
+
+        aadhar_number:
+          "aadhar_number",
+
+        passport_number:
+          "passport_number",
+
+        pf: "pf",
+
+        esi: "esi",
+
+        pt: "pt",
+
+        tds: "tds",
+      };
+
+      const sectionFields: Record<
+        Exclude<
+          EditSection,
+          null | "all" | "document"
+        >,
+        string[]
+      > = {
+        personal: [
+          "phone",
+          "date_of_birth",
+          "gender",
+          "blood_group",
+          "marital_status",
+        ],
+
+        address: [
+          "permanent_address",
+          "permanent_city",
+          "permanent_state",
+          "permanent_pincode",
+
+          "communication_address",
+          "communication_city",
+          "communication_state",
+          "communication_pincode",
+
+          "emergency_contact_name",
+          "emergency_contact_phone",
+          "emergency_contact_relation",
+
+          "emergency_contact_2_name",
+          "emergency_contact_2_phone",
+          "emergency_contact_2_relation",
+
+          "emergency_contact_3_name",
+          "emergency_contact_3_phone",
+          "emergency_contact_3_relation",
+        ],
+
+        bank: [
+          "bank_name",
+          "bank_account_number",
+          "ifsc_code",
+          "pan_number",
+          "aadhar_number",
+          "passport_number",
+        ],
+
+        employment: [
+          "department_id",
+          "designation",
+          "probation_end_date",
+          "confirmation_date",
+          "reporting_manager",
+          "work_location",
+        ],
+
+        statutory: [
+          "pf",
+          "esi",
+          "pt",
+          "tds",
+        ],
+      };
+
+      Object.entries(
+        comparisons
+      ).forEach(
+        ([field, newValue]) => {
+          if (
+            editSection &&
+            editSection !== "all" &&
+            editSection !== "document"
+          ) {
+            const allowedFields =
+              sectionFields[
+                editSection
+              ];
+
+            if (
+              !allowedFields.includes(
+                field
+              )
+            ) {
+              return;
+            }
           }
-        )
+
+          const employeeField =
+            fieldMap[field];
+
+          if (!employeeField) {
+            return;
+          }
+
+          const oldValue =
+            employeeData[
+              employeeField
+            ] ?? "";
+
+          const oldNormalized =
+            String(
+              oldValue ?? ""
+            ).trim();
+
+          const newNormalized =
+            String(
+              newValue ?? ""
+            ).trim();
+
+          if (
+            oldNormalized !==
+            newNormalized
+          ) {
+            changedFields[field] =
+              newValue;
+
+            previousValues[field] =
+              oldValue;
+          }
+        }
       );
 
-      /* =====================================================
-         PREVIOUS EMPLOYMENT DATA
-      ===================================================== */
-
-      const filledPreviousEmployments =
-        previousEmployments.filter(
-          (employment) =>
-            employment.company_name ||
-            employment.designation ||
-            employment.start_date ||
-            employment.end_date ||
-            employment.reporting_manager ||
-            employment.work_location
-        );
-
       if (
-        filledPreviousEmployments.length > 0
+        Object.keys(
+          changedFields
+        ).length === 0
       ) {
-        (
-          changedFields as Record<
-            string,
-            unknown
-          >
-        ).previous_employments =
-          filledPreviousEmployments;
-      }
-
-      const previousValues =
-        Object.fromEntries(
-          Object.keys(changedFields).map(
-            (key) => [
-              key,
-              employee[
-                key as keyof Employee
-              ] ?? "",
-            ]
-          )
+        setErrorMessage(
+          "No changes found."
         );
-
-      if (
-        Object.keys(changedFields).length === 0
-      ) {
-        setSuccessMessage(
-          "No profile changes were made."
-        );
-
-        setLoading(false);
 
         return;
       }
 
-      const res = await fetch(
-        "/api/profile-change-requests",
-        {
-          method: "POST",
+      const response =
+        await fetch(
+          "/api/profile-change-requests",
+          {
+            method: "POST",
 
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
 
-          body: JSON.stringify({
-            employeeId: employee.id,
+            body: JSON.stringify({
+              employeeId:
+                employeeData.id,
 
-            requestedChanges:
-              changedFields,
+              requestedChanges:
+                changedFields,
 
-            previousValues,
-          }),
-        }
-      );
+              previousValues:
+                previousValues,
+            }),
+          }
+        );
 
-      if (!res.ok) {
+      const contentType =
+        response.headers.get(
+          "content-type"
+        ) || "";
+
+      let data: any = null;
+
+      if (
+        contentType.includes(
+          "application/json"
+        )
+      ) {
+        data =
+          await response.json();
+      } else {
+        const text =
+          await response.text();
+
         throw new Error(
-          "Failed to submit profile change request"
+          text ||
+            "Server returned an invalid response."
         );
       }
 
-      const data = await res.json();
+      if (!response.ok) {
+        throw new Error(
+          data?.error ||
+            "Failed to submit profile change request."
+        );
+      }
 
       setPendingRequest(
-        data.request
+        data?.request || data
       );
-
-      setIsEditModalOpen(false);
 
       setSuccessMessage(
-        "Your profile change request has been sent to HR for approval."
+        "Profile change request submitted successfully. HR can now review your changes."
       );
-    } catch (err) {
+
+      closeEditModal();
+    } catch (error: unknown) {
       console.error(
-        "Submit edit error:",
-        err
+        "Profile change request error:",
+        error
       );
 
-      setSuccessMessage(
-        "Unable to submit your profile change request."
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Failed to submit profile change request."
       );
     } finally {
       setLoading(false);
     }
   };
 
-  /* =========================================================
-     DOCUMENT FILE CHANGE
-  ========================================================= */
-
-  const handleDocumentFileChange = (
-    e: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    setDocumentError(null);
-    setDocumentSuccess(null);
-
-    const file = e.target.files?.[0];
-
-    if (!file) {
-      setSelectedDocumentFile(null);
-      return;
-    }
-
-    const maxSize = 5 * 1024 * 1024;
-
-    if (file.size > maxSize) {
-      setSelectedDocumentFile(null);
-
-      setDocumentError(
-        "File size must be less than 5MB."
-      );
-
-      e.target.value = "";
-
-      return;
-    }
-
-    const allowedTypes = [
-      "application/pdf",
-      "image/png",
-      "image/jpeg",
-    ];
-
-    if (
-      !allowedTypes.includes(file.type)
-    ) {
-      setSelectedDocumentFile(null);
-
-      setDocumentError(
-        "Only PDF, PNG and JPG files are allowed."
-      );
-
-      e.target.value = "";
-
-      return;
-    }
-
-    setSelectedDocumentFile(file);
-  };
-
-  /* =========================================================
-     DOCUMENT UPLOAD
-  ========================================================= */
-
-  const handleDocumentUpload = () => {
-    setDocumentError(null);
-    setDocumentSuccess(null);
-
-    if (!selectedDocumentType) {
-      setDocumentError(
-        "Please select a document type."
-      );
-
-      return;
-    }
-
-    if (!selectedDocumentFile) {
-      setDocumentError(
-        "Please choose a file."
-      );
-
-      return;
-    }
-
-    setDocumentSuccess(
-      `${selectedDocumentFile.name} is ready to upload.`
-    );
-  };
-
-  /* =========================================================
-     HELPER
-  ========================================================= */
+  /* ============================================================
+     DATE
+  ============================================================ */
 
   const formatDate = (
-    date?: string | null
+    value?: string | null
   ) => {
-    if (!date) {
+    if (!value) {
       return "Not specified";
     }
 
-    try {
-      return new Date(
-        `${date}T00:00:00`
-      ).toLocaleDateString("en-IN", {
+    const date =
+      new Date(value);
+
+    if (
+      Number.isNaN(
+        date.getTime()
+      )
+    ) {
+      return value;
+    }
+
+    return date.toLocaleDateString(
+      "en-IN",
+      {
         day: "2-digit",
         month: "short",
         year: "numeric",
-      });
-    } catch {
-      return date;
+      }
+    );
+  };
+
+  /* ============================================================
+     MODAL TITLE
+  ============================================================ */
+
+  const getEditTitle = () => {
+    switch (editSection) {
+      case "personal":
+        return "Request Personal Information Edit";
+
+      case "address":
+        return "Request Address & Emergency Edit";
+
+      case "bank":
+        return "Request Bank & Identity Edit";
+
+      case "employment":
+        return "Request Employment Edit";
+
+      case "statutory":
+        return "Request Statutory Edit";
+
+      case "document":
+        return "Documents";
+
+      default:
+        return "Request Profile Edit";
     }
   };
 
+  /* ============================================================
+     TABS
+  ============================================================ */
+
+  const tabs = [
+    {
+      id: "personal" as const,
+      label: "Personal",
+      icon: User,
+    },
+
+    {
+      id: "address" as const,
+      label: "Address & Emergency",
+      icon: MapPin,
+    },
+
+    {
+      id: "bank" as const,
+      label: "Bank & Identity",
+      icon: CreditCard,
+    },
+
+    {
+      id: "employment" as const,
+      label: "Employment",
+      icon: Briefcase,
+    },
+
+    {
+      id: "document" as const,
+      label: "Documents",
+      icon: FileText,
+    },
+
+    {
+      id: "statutory" as const,
+      label: "Statutory",
+      icon: CreditCard,
+    },
+  ];
+
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
+    <div className="w-full space-y-6">
 
-      {/* =====================================================
-          PROFILE COMPLETION
-      ===================================================== */}
+      {/* ============================================================
+          PROFILE HEADER
+      ============================================================ */}
 
-      <ProfileProgressBar
-        employee={employee}
-        profileData={editFormData}
-        showProgress={hasStartedProfileEditing}
-        onCompleteProfile={() =>
-          setIsEditModalOpen(true)
-        }
-      />
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
 
-      {/* =====================================================
-          SUCCESS MESSAGE
-      ===================================================== */}
+        <div className="p-6">
 
-      {successMessage && (
-        <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-sm flex items-center gap-2">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
 
-          <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+            <div className="flex items-center gap-5">
 
-          <span>{successMessage}</span>
+              <div className="w-20 h-20 rounded-2xl bg-indigo-100 flex items-center justify-center overflow-hidden">
 
-        </div>
-      )}
-
-      {/* =====================================================
-          PENDING REQUEST
-      ===================================================== */}
-
-      {pendingRequest &&
-        pendingRequest.status ===
-          "pending" && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 shadow-sm">
-
-          <div className="flex items-start gap-3">
-
-            <Clock className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-
-            <div className="flex-1">
-
-              <div className="flex items-center justify-between gap-4">
-
-                <h4 className="text-sm font-bold text-amber-900">
-                  Profile Edit Request Pending HR Approval
-                </h4>
-
-                <span className="text-[10px] font-bold bg-amber-200 text-amber-900 px-2 py-0.5 rounded-full uppercase whitespace-nowrap">
-                  Pending Review
-                </span>
+                {profilePhotoUrl ? (
+                  <img
+                    src={profilePhotoUrl}
+                    alt={employeeFullName}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <UserRound className="w-10 h-10 text-indigo-600" />
+                )}
 
               </div>
 
-              <p className="text-xs text-amber-700 mt-1">
-                You recently submitted changes
-                to your profile. Once HR verifies
-                and approves them, your employee
-                master record and completion bar
-                will automatically update.
-              </p>
+              <div>
 
-              <div className="mt-3 bg-white/80 p-3 rounded-lg border border-amber-200 text-xs text-slate-700 space-y-1">
+                <h2 className="text-2xl font-bold text-slate-900">
+                  {employeeFullName}
+                </h2>
 
-                <span className="font-semibold text-slate-900 block mb-1">
-                  Requested modifications:
-                </span>
+                <p className="text-sm text-slate-500 mt-1">
+                  {employeeData.employee_id ||
+                    employeeData.id ||
+                    "Not specified"}
+                </p>
 
-                {Object.entries(
-                  pendingRequest.requested_changes
-                )
-                  .filter(
-                    ([_, val]) =>
-                      val !== null &&
-                      val !== ""
-                  )
-                  .slice(0, 6)
-                  .map(
-                    ([key, val]) => (
-                      <div
-                        key={key}
-                        className="flex justify-between gap-4 border-b border-slate-100 py-1 last:border-0"
-                      >
+                <div className="flex flex-wrap items-center gap-3 mt-3">
 
-                        <span className="text-slate-500 capitalize">
-                          {key.replace(
-                            /_/g,
-                            " "
-                          )}
-                          :
-                        </span>
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-50 text-indigo-700 text-xs font-semibold">
 
-                        <span className="font-medium text-slate-800 text-right">
-                          {String(val)}
-                        </span>
+                    <Briefcase className="w-3.5 h-3.5" />
 
-                      </div>
-                    )
-                  )}
+                    {employeeData.designation ||
+                      "Not specified"}
+
+                  </span>
+
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-semibold">
+
+                    <Building className="w-3.5 h-3.5" />
+
+                    {departmentName()}
+
+                  </span>
+
+                </div>
 
               </div>
+
+            </div>
+
+            <div>
+
+              <button
+                type="button"
+                onClick={() =>
+                  openEditSection("all")
+                }
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition"
+              >
+
+                <Edit3 className="w-4 h-4" />
+
+                Request Profile Edit
+
+              </button>
 
             </div>
 
           </div>
 
         </div>
+
+        <div className="px-6 pb-6">
+
+          <ProfileProgressBar
+            employee={employee}
+          />
+
+        </div>
+
+      </div>
+
+      {/* ============================================================
+          SUCCESS
+      ============================================================ */}
+
+      {successMessage && (
+        <div className="flex items-center gap-3 p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700">
+
+          <CheckCircle2 className="w-5 h-5" />
+
+          <span className="text-sm font-medium">
+            {successMessage}
+          </span>
+
+        </div>
       )}
 
-      {/* =====================================================
-          MAIN PROFILE CARD
-      ===================================================== */}
+      {/* ============================================================
+          ERROR
+      ============================================================ */}
 
-      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden">
+      {errorMessage && (
+        <div className="flex items-center gap-3 p-4 rounded-xl bg-red-50 border border-red-200 text-red-700">
 
-        {/* ===================================================
-            PROFILE HEADER
-        =================================================== */}
+          <XCircle className="w-5 h-5" />
 
-        <div className="p-6 sm:p-8 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+          <span className="text-sm font-medium">
+            {errorMessage}
+          </span>
 
-          <div className="flex flex-col sm:flex-row sm:items-center gap-5">
+        </div>
+      )}
 
-            {/* PROFILE PHOTO */}
+      {/* ============================================================
+          PENDING PROFILE REQUEST
+      ============================================================ */}
 
-            <div className="shrink-0">
+      {pendingRequest && (
+        <div className="flex items-start gap-3 p-4 rounded-xl bg-amber-50 border border-amber-200">
 
-              <label
-                htmlFor="profile-photo-upload"
-                className="relative w-20 h-20 rounded-2xl bg-indigo-500/20 border-2 border-indigo-400/40 flex items-center justify-center text-white shadow-inner overflow-hidden cursor-pointer group hover:border-indigo-300/70 hover:bg-indigo-500/30 transition-all"
-              >
+          <Clock className="w-5 h-5 text-amber-600 mt-0.5" />
 
-                {profilePhoto ? (
-                  <>
-                    <img
-                      src={profilePhoto}
-                      alt="Profile"
-                      className="w-full h-full object-cover"
-                    />
+          <div>
 
-                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center">
+            <p className="font-semibold text-amber-800">
+              Profile change request pending
+            </p>
 
-                      <UploadCloud className="w-5 h-5 text-white mb-1" />
+            <p className="text-sm text-amber-700 mt-1">
+              Your requested changes are waiting for HR approval.
+            </p>
 
-                      <span className="text-[9px] font-semibold text-white">
-                        Change Photo
+          </div>
+
+        </div>
+      )}
+
+      {/* ============================================================
+          MAIN TABS
+      ============================================================ */}
+
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+
+        <div className="border-b border-slate-200 overflow-x-auto">
+
+          <div className="flex min-w-max">
+
+            {tabs.map((tab) => {
+              const Icon =
+                tab.icon;
+
+              const active =
+                activeTab ===
+                tab.id;
+
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() =>
+                    setActiveTab(
+                      tab.id
+                    )
+                  }
+                  className={`flex items-center gap-2 px-5 py-4 text-sm font-semibold border-b-2 transition ${
+                    active
+                      ? "text-indigo-600 border-indigo-600"
+                      : "text-slate-500 border-transparent hover:text-slate-800"
+                  }`}
+                >
+
+                  <Icon className="w-4 h-4" />
+
+                  {tab.label}
+
+                </button>
+              );
+            })}
+
+          </div>
+
+        </div>
+
+        <div className="p-6">
+
+          {/* ========================================================
+              PERSONAL
+          ======================================================== */}
+
+          {activeTab === "personal" && (
+            <div className="space-y-8">
+
+              <div className="flex items-start justify-between gap-4">
+
+                <div>
+
+                  <h3 className="text-lg font-bold text-slate-900">
+                    Personal Information
+                  </h3>
+
+                  <p className="text-sm text-slate-500 mt-1">
+                    Basic personal information of the employee.
+                  </p>
+
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    openEditSection(
+                      "personal"
+                    )
+                  }
+                  className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 text-xs font-bold transition-colors shrink-0"
+                >
+
+                  <Edit3 className="w-4 h-4" />
+
+                  Edit
+
+                </button>
+
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5 text-sm">
+
+                {[
+                  [
+                    "Full Name",
+                    employeeFullName,
+                  ],
+
+                  [
+                    "Employee ID",
+                    employeeData.employee_id ||
+                      employeeData.id ||
+                      "Not specified",
+                  ],
+
+                  [
+                    "Email",
+                    employeeData.email ||
+                      "Not specified",
+                  ],
+
+                  [
+                    "Phone",
+                    employeeData.phone ||
+                      "Not specified",
+                  ],
+
+                  [
+                    "Date of Birth",
+                    formatDate(
+                      employeeData.date_of_birth
+                    ),
+                  ],
+
+                  [
+                    "Gender",
+                    employeeData.gender ||
+                      "Not specified",
+                  ],
+
+                  [
+                    "Blood Group",
+                    employeeData.blood_group ||
+                      "Not specified",
+                  ],
+
+                  [
+                    "Marital Status",
+                    employeeData.marital_status ||
+                      "Not specified",
+                  ],
+                ].map(
+                  ([label, value]) => (
+                    <div
+                      key={label}
+                      className="p-4 bg-slate-50/70 rounded-xl border border-slate-100"
+                    >
+
+                      <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
+                        {label}
+                      </span>
+
+                      <span className="font-semibold text-slate-800 break-all capitalize">
+                        {value}
                       </span>
 
                     </div>
-                  </>
-                ) : (
-                  <div className="flex flex-col items-center justify-center gap-1.5">
-
-                    <UploadCloud className="w-7 h-7 text-indigo-200" />
-
-                    <span className="text-[10px] font-semibold text-indigo-100">
-                      Upload Photo
-                    </span>
-
-                  </div>
-                )}
-
-              </label>
-
-              <input
-                id="profile-photo-upload"
-                type="file"
-                accept="image/png,image/jpeg,image/jpg,image/webp"
-                className="hidden"
-                onChange={
-                  handleProfilePhotoChange
-                }
-              />
-
-              {profilePhotoError && (
-                <p className="mt-2 text-[10px] text-red-300 max-w-20 leading-tight">
-                  {profilePhotoError}
-                </p>
-              )}
-
-            </div>
-
-            <div className="space-y-1">
-
-              <div className="flex flex-wrap items-center gap-2">
-
-                <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
-                  {employee.first_name}{" "}
-                  {employee.last_name}
-                </h2>
-
-                <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 uppercase tracking-wider">
-                  {employee.status ||
-                    "Active"}
-                </span>
-
-              </div>
-
-              <p className="text-indigo-200 text-sm font-medium">
-
-                {employee.designation ||
-                  "Senior Software Engineer"}
-
-                {" "}&bull; ID:{" "}
-
-                <span className="font-mono font-bold text-white">
-                  {employee.employee_id}
-                </span>
-
-              </p>
-
-              <div className="flex flex-wrap items-center gap-4 pt-1 text-xs text-slate-300">
-
-                <span className="inline-flex items-center gap-1.5">
-
-                  <Mail className="w-3.5 h-3.5 text-indigo-300" />
-
-                  {employee.email}
-
-                </span>
-
-                {employee.phone && (
-                  <span className="inline-flex items-center gap-1.5">
-
-                    <Phone className="w-3.5 h-3.5 text-indigo-300" />
-
-                    {employee.phone}
-
-                  </span>
-                )}
-
-                <span className="inline-flex items-center gap-1.5">
-
-                  <Building className="w-3.5 h-3.5 text-indigo-300" />
-
-                  {employee.work_location ||
-                    "Hyderabad HQ"}
-
-                </span>
-
-              </div>
-
-            </div>
-
-          </div>
-
-          <button
-            type="button"
-            onClick={() =>
-              setIsEditModalOpen(true)
-            }
-            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white rounded-xl text-xs font-bold shadow-md hover:shadow-lg transition-all shrink-0 cursor-pointer"
-          >
-
-            <Edit3 className="w-4 h-4" />
-
-            <span>
-              Request Profile Edit
-            </span>
-
-          </button>
-
-        </div>
-
-        {/* ===================================================
-            PROFILE TABS
-        =================================================== */}
-
-        <div className="border-b border-slate-200 flex overflow-x-auto bg-slate-50/80 px-4 pt-2 gap-2">
-
-          {[
-            {
-              id: "personal",
-              label: "Personal Details",
-              icon: User,
-            },
-            {
-              id: "address",
-              label: "Address & Emergency",
-              icon: MapPin,
-            },
-            {
-              id: "bank",
-              label: "Bank & Statutory KYC",
-              icon: CreditCard,
-            },
-            {
-              id: "employment",
-              label: "Employment & Shift",
-              icon: Briefcase,
-            },
-            {
-              id: "document",
-              label: "Document",
-              icon: FileText,
-            },
-          ].map((tab) => {
-            const Icon = tab.icon;
-
-            const isActive =
-              activeTab === tab.id;
-
-            return (
-              <button
-                type="button"
-                key={tab.id}
-                onClick={() =>
-                  setActiveTab(
-                    tab.id as
-                      | "personal"
-                      | "address"
-                      | "bank"
-                      | "employment"
-                      | "document"
                   )
-                }
-                className={`flex items-center gap-2 px-5 py-3.5 text-xs font-bold rounded-t-xl transition-all whitespace-nowrap cursor-pointer ${
-                  isActive
-                    ? "bg-white text-indigo-700 border-t-2 border-indigo-600 shadow-xs"
-                    : "text-slate-500 hover:text-slate-800 hover:bg-slate-100/60"
-                }`}
-              >
-
-                <Icon className="w-4 h-4" />
-
-                <span>{tab.label}</span>
-
-              </button>
-            );
-          })}
-
-        </div>
-
-        {/* ===================================================
-            TAB CONTENT
-        =================================================== */}
-
-        <div className="p-6 sm:p-8">
-
-          {/* =================================================
-              PERSONAL DETAILS
-          ================================================= */}
-
-          {activeTab ===
-            "personal" && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 text-sm">
-
-              <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
-
-                <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
-                  First Name
-                </span>
-
-                <span className="font-bold text-slate-900 text-base">
-                  {employee.first_name}
-                </span>
-
-              </div>
-
-              <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
-
-                <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
-                  Last Name
-                </span>
-
-                <span className="font-bold text-slate-900 text-base">
-                  {employee.last_name}
-                </span>
-
-              </div>
-
-              <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
-
-                <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
-                  Official Email
-                </span>
-
-                <span className="font-medium text-slate-900 font-mono text-xs">
-                  {employee.email}
-                </span>
-
-              </div>
-
-              <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
-
-                <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
-                  Phone Number
-                </span>
-
-                <span className="font-semibold text-slate-900">
-                  {employee.phone ||
-                    "Not specified"}
-                </span>
-
-              </div>
-
-              <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
-
-                <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
-                  Date of Birth
-                </span>
-
-                <span className="font-semibold text-slate-900 font-mono">
-                  {employee.date_of_birth ||
-                    "Not specified"}
-                </span>
-
-              </div>
-
-              <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
-
-                <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
-                  Gender
-                </span>
-
-                <span className="font-semibold text-slate-900 capitalize">
-                  {employee.gender ||
-                    "Not specified"}
-                </span>
-
-              </div>
-
-              <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
-
-                <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
-                  Blood Group
-                </span>
-
-                <span className="font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md inline-block">
-                  {employee.blood_group ||
-                    "Not specified"}
-                </span>
-
-              </div>
-
-              <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
-
-                <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
-                  Marital Status
-                </span>
-
-                <span className="font-semibold text-slate-900 capitalize">
-                  {employee.marital_status ||
-                    "Single"}
-                </span>
+                )}
 
               </div>
 
             </div>
           )}
 
-          {/* =================================================
-              ADDRESS & EMERGENCY
-          ================================================= */}
+          {/* ========================================================
+              ADDRESS
+          ======================================================== */}
 
-          {activeTab ===
-            "address" && (
-            <div className="space-y-6">
+          {activeTab === "address" && (
+            <div className="space-y-8">
+
+              <div className="flex items-start justify-between gap-4">
+
+                <div>
+
+                  <h3 className="text-lg font-bold text-slate-900">
+                    Address & Emergency
+                  </h3>
+
+                  <p className="text-sm text-slate-500 mt-1">
+                    Address and emergency contact information.
+                  </p>
+
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    openEditSection(
+                      "address"
+                    )
+                  }
+                  className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 text-xs font-bold transition-colors shrink-0"
+                >
+
+                  <Edit3 className="w-4 h-4" />
+
+                  Edit
+
+                </button>
+
+              </div>
 
               <div>
 
@@ -1051,9 +1761,7 @@ export default function EmployeeProfileView({
 
                   <MapPin className="w-4 h-4 text-indigo-600" />
 
-                  <span>
-                    Residential Address
-                  </span>
+                  Permanent Address
 
                 </h4>
 
@@ -1066,1415 +1774,228 @@ export default function EmployeeProfileView({
                     </span>
 
                     <span className="font-semibold text-slate-800">
-                      {employee.address ||
+                      {employeeData.permanent_address ||
                         "Not specified"}
                     </span>
 
                   </div>
 
-                  <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
+                  {[
+                    [
+                      "City",
+                      employeeData.permanent_city,
+                    ],
 
-                    <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
-                      City
-                    </span>
+                    [
+                      "State",
+                      employeeData.permanent_state,
+                    ],
 
-                    <span className="font-semibold text-slate-800">
-                      {employee.city ||
-                        "Not specified"}
-                    </span>
+                    [
+                      "Pincode",
+                      employeeData.permanent_pincode,
+                    ],
+                  ].map(
+                    ([label, value]) => (
+                      <div
+                        key={label}
+                        className="p-4 bg-slate-50/70 rounded-xl border border-slate-100"
+                      >
 
-                  </div>
+                        <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
+                          {label}
+                        </span>
 
-                  <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
+                        <span className="font-semibold text-slate-800">
+                          {value ||
+                            "Not specified"}
+                        </span>
 
-                    <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
-                      State
-                    </span>
-
-                    <span className="font-semibold text-slate-800">
-                      {employee.state ||
-                        "Not specified"}
-                    </span>
-
-                  </div>
-
-                  <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
-
-                    <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
-                      Postal Pincode
-                    </span>
-
-                    <span className="font-semibold text-slate-800 font-mono">
-                      {employee.pincode ||
-                        "Not specified"}
-                    </span>
-
-                  </div>
+                      </div>
+                    )
+                  )}
 
                 </div>
 
               </div>
 
-              <div className="border-t border-slate-200/80 pt-6">
+              <div>
+
+                <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-4 flex items-center gap-2">
+
+                  <MapPinned className="w-4 h-4 text-indigo-600" />
+
+                  Communication Address
+
+                </h4>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5 text-sm">
+
+                  <div className="sm:col-span-2 md:col-span-3 p-4 bg-slate-50/70 rounded-xl border border-slate-100">
+
+                    <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
+                      Street Address
+                    </span>
+
+                    <span className="font-semibold text-slate-800">
+                      {employeeData.communication_address ||
+                        "Not specified"}
+                    </span>
+
+                  </div>
+
+                  {[
+                    [
+                      "City",
+                      employeeData.communication_city,
+                    ],
+
+                    [
+                      "State",
+                      employeeData.communication_state,
+                    ],
+
+                    [
+                      "Pincode",
+                      employeeData.communication_pincode,
+                    ],
+                  ].map(
+                    ([label, value]) => (
+                      <div
+                        key={label}
+                        className="p-4 bg-slate-50/70 rounded-xl border border-slate-100"
+                      >
+
+                        <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
+                          {label}
+                        </span>
+
+                        <span className="font-semibold text-slate-800">
+                          {value ||
+                            "Not specified"}
+                        </span>
+
+                      </div>
+                    )
+                  )}
+
+                </div>
+
+              </div>
+
+              <div>
 
                 <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-4 flex items-center gap-2">
 
                   <Phone className="w-4 h-4 text-indigo-600" />
 
-                  <span>
-                    Emergency Contact Details
-                  </span>
+                  Emergency Contacts
 
                 </h4>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 text-sm">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-5 text-sm">
 
-                  <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
+                  {[
+                    {
+                      title:
+                        "Emergency Contact 1",
 
-                    <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
-                      Contact Name
-                    </span>
+                      name:
+                        employeeData.emergency_contact_name,
 
-                    <span className="font-bold text-slate-900">
-                      {employee.emergency_contact_name ||
-                        "Not specified"}
-                    </span>
+                      phone:
+                        employeeData.emergency_contact_phone,
 
-                  </div>
+                      relation:
+                        employeeData.emergency_contact_relation,
+                    },
 
-                  <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
+                    {
+                      title:
+                        "Emergency Contact 2",
 
-                    <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
-                      Contact Phone
-                    </span>
+                      name:
+                        employeeData.emergency_contact_2_name,
 
-                    <span className="font-semibold text-slate-900">
-                      {employee.emergency_contact_phone ||
-                        "Not specified"}
-                    </span>
+                      phone:
+                        employeeData.emergency_contact_2_phone,
 
-                  </div>
+                      relation:
+                        employeeData.emergency_contact_2_relation,
+                    },
 
-                  <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
+                    {
+                      title:
+                        "Emergency Contact 3",
 
-                    <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
-                      Relationship
-                    </span>
+                      name:
+                        employeeData.emergency_contact_3_name,
 
-                    <span className="font-semibold text-indigo-700">
-                      {employee.emergency_contact_relation ||
-                        "Not specified"}
-                    </span>
+                      phone:
+                        employeeData.emergency_contact_3_phone,
 
-                  </div>
-
-                </div>
-
-              </div>
-
-            </div>
-          )}
-
-          {/* =================================================
-              BANK & STATUTORY KYC
-          ================================================= */}
-
-          {activeTab ===
-            "bank" && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5 text-sm">
-
-              <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
-
-                <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
-                  Bank Name
-                </span>
-
-                <span className="font-bold text-slate-900">
-                  {employee.bank_name ||
-                    "Not specified"}
-                </span>
-
-              </div>
-
-              <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
-
-                <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
-                  Account Number
-                </span>
-
-                <span className="font-mono font-bold text-slate-900 text-sm">
-                  {employee.bank_account_number
-                    ? `•••• •••• ${employee.bank_account_number.slice(
-                        -4
-                      )}`
-                    : "Not specified"}
-                </span>
-
-              </div>
-
-              <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
-
-                <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
-                  IFSC Code
-                </span>
-
-                <span className="font-mono font-bold text-indigo-700">
-                  {employee.ifsc_code ||
-                    "Not specified"}
-                </span>
-
-              </div>
-
-              <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
-
-                <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
-                  PAN Number
-                </span>
-
-                <span className="font-mono font-bold text-slate-900">
-                  {employee.pan_number ||
-                    "Not specified"}
-                </span>
-
-              </div>
-
-              <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
-
-                <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
-                  Aadhaar Number
-                </span>
-
-                <span className="font-mono font-bold text-slate-900">
-                  {employee.aadhar_number
-                    ? `•••• •••• ${employee.aadhar_number.slice(
-                        -4
-                      )}`
-                    : "Not specified"}
-                </span>
-
-              </div>
-
-              <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
-
-                <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
-                  UAN (PF Number)
-                </span>
-
-                <span className="font-mono font-bold text-slate-900">
-                  {employee.uan_number ||
-                    "Auto-assigned by HR"}
-                </span>
-
-              </div>
-
-            </div>
-          )}
-
-          {/* =================================================
-              EMPLOYMENT & SHIFT
-          ================================================= */}
-
-          {activeTab ===
-            "employment" && (
-            <div className="space-y-8">
-
-              {/* CURRENT EMPLOYMENT */}
-
-              <section>
-
-                <div className="flex items-center gap-3 mb-5">
-
-                  <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center">
-                    <Briefcase className="w-5 h-5 text-indigo-600" />
-                  </div>
-
-                  <div>
-                    <h3 className="text-base font-bold text-slate-900">
-                      Current Employment
-                    </h3>
-
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Employment details assigned by HR
-                    </p>
-                  </div>
-
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5">
-
-                  {/* EMPLOYEE ID */}
-
-                  <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
-
-                    <div className="flex items-center gap-2 mb-2">
-
-                      <UserRound className="w-4 h-4 text-indigo-500" />
-
-                      <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">
-                        Employee ID
-                      </span>
-
-                    </div>
-
-                    <span className="font-mono font-bold text-slate-900">
-                      {employee.employee_id ||
-                        "Not specified"}
-                    </span>
-
-                  </div>
-
-                  {/* DEPARTMENT */}
-
-                  <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
-
-                    <div className="flex items-center gap-2 mb-2">
-
-                      <Building className="w-4 h-4 text-indigo-500" />
-
-                      <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">
-                        Department
-                      </span>
-
-                    </div>
-
-                    <span className="font-bold text-slate-900">
-                      {employee.department?.name ||
-                        departments.find(
-                          (department) =>
-                            department.id ===
-                            employee.department_id
-                        )?.name ||
-                        "Not assigned"}
-                    </span>
-
-                  </div>
-
-                  {/* DESIGNATION */}
-
-                  <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
-
-                    <div className="flex items-center gap-2 mb-2">
-
-                      <UserRound className="w-4 h-4 text-indigo-500" />
-
-                      <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">
-                        Designation
-                      </span>
-
-                    </div>
-
-                    <span className="font-bold text-slate-900">
-                      {employee.designation ||
-                        "Not assigned"}
-                    </span>
-
-                  </div>
-
-                  {/* EMPLOYMENT TYPE */}
-
-                  <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
-
-                    <div className="flex items-center gap-2 mb-2">
-
-                      <Briefcase className="w-4 h-4 text-indigo-500" />
-
-                      <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">
-                        Employment Type
-                      </span>
-
-                    </div>
-
-                    <span className="font-bold text-emerald-700 capitalize bg-emerald-50 px-2 py-1 rounded-md inline-block">
-                      {employee.employment_type ||
-                        "Not specified"}
-                    </span>
-
-                  </div>
-
-                  {/* JOINING DATE */}
-
-                  <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
-
-                    <div className="flex items-center gap-2 mb-2">
-
-                      <CalendarDays className="w-4 h-4 text-indigo-500" />
-
-                      <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">
-                        Joining Date
-                      </span>
-
-                    </div>
-
-                    <span className="font-semibold text-slate-900">
-                      {formatDate(
-                        employee.joining_date
-                      )}
-                    </span>
-
-                  </div>
-
-                  {/* PROBATION END */}
-
-                  <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
-
-                    <div className="flex items-center gap-2 mb-2">
-
-                      <CalendarDays className="w-4 h-4 text-indigo-500" />
-
-                      <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">
-                        Probation End Date
-                      </span>
-
-                    </div>
-
-                    <span className="font-semibold text-slate-900">
-                      {formatDate(
-                        employee.probation_end_date
-                      )}
-                    </span>
-
-                  </div>
-
-                  {/* CONFIRMATION DATE */}
-
-                  <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
-
-                    <div className="flex items-center gap-2 mb-2">
-
-                      <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-
-                      <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">
-                        Confirmation Date
-                      </span>
-
-                    </div>
-
-                    <span className="font-semibold text-slate-900">
-                      {formatDate(
-                        employee.confirmation_date
-                      )}
-                    </span>
-
-                  </div>
-
-                  {/* REPORTING MANAGER */}
-
-                  <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
-
-                    <div className="flex items-center gap-2 mb-2">
-
-                      <UserRound className="w-4 h-4 text-indigo-500" />
-
-                      <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">
-                        Reporting Manager
-                      </span>
-
-                    </div>
-
-                    <span className="font-semibold text-slate-900">
-                      {employee.reporting_manager ||
-                        "Not assigned"}
-                    </span>
-
-                  </div>
-
-                  {/* WORK LOCATION */}
-
-                  <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
-
-                    <div className="flex items-center gap-2 mb-2">
-
-                      <MapPinned className="w-4 h-4 text-indigo-500" />
-
-                      <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">
-                        Work Location
-                      </span>
-
-                    </div>
-
-                    <span className="font-semibold text-slate-900">
-                      {employee.work_location ||
-                        "Not assigned"}
-                    </span>
-
-                  </div>
-
-                  {/* STATUS */}
-
-                  <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
-
-                    <div className="flex items-center gap-2 mb-2">
-
-                      <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-
-                      <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">
-                        Employment Status
-                      </span>
-
-                    </div>
-
-                    <span className="font-bold text-emerald-700 capitalize">
-                      {employee.status ||
-                        "Active"}
-                    </span>
-
-                  </div>
-
-                </div>
-
-              </section>
-
-              {/* PROJECT & SHIFT */}
-
-              <section className="border-t border-slate-200 pt-7">
-
-                <div className="flex items-center gap-3 mb-5">
-
-                  <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center">
-                    <Clock className="w-5 h-5 text-indigo-600" />
-                  </div>
-
-                  <div>
-
-                    <h3 className="text-base font-bold text-slate-900">
-                      Project & Shift
-                    </h3>
-
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Project and shift schedule assigned by HR
-                    </p>
-
-                  </div>
-
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5">
-
-                  {/* PROJECT */}
-
-                  <div className="md:col-span-2 p-5 bg-indigo-50/50 rounded-xl border border-indigo-100">
-
-                    <span className="text-[11px] text-indigo-500 font-bold block uppercase tracking-wider mb-2">
-                      Assigned Project
-                    </span>
-
-                    <span className="font-bold text-indigo-900 text-base">
-                      {employee.project?.name ||
-                        "No project assigned"}
-                    </span>
-
-                  </div>
-
-                  {/* PROJECT ID */}
-
-                  <div className="p-5 bg-slate-50/70 rounded-xl border border-slate-100">
-
-                    <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-2">
-                      Project ID
-                    </span>
-
-                    <span className="font-mono font-semibold text-slate-900">
-                      {employee.project_id ||
-                        "Not assigned"}
-                    </span>
-
-                  </div>
-
-                  {/* SHIFT START */}
-
-                  <div className="p-5 bg-slate-50/70 rounded-xl border border-slate-100">
-
-                    <div className="flex items-center gap-2 mb-2">
-
-                      <Timer className="w-4 h-4 text-indigo-500" />
-
-                      <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">
-                        Shift Start
-                      </span>
-
-                    </div>
-
-                    <span className="font-mono font-bold text-slate-900 text-lg">
-                      {employee.project?.shift_start_time ||
-                        "Not assigned"}
-                    </span>
-
-                  </div>
-
-                  {/* SHIFT END */}
-
-                  <div className="p-5 bg-slate-50/70 rounded-xl border border-slate-100">
-
-                    <div className="flex items-center gap-2 mb-2">
-
-                      <Timer className="w-4 h-4 text-indigo-500" />
-
-                      <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">
-                        Shift End
-                      </span>
-
-                    </div>
-
-                    <span className="font-mono font-bold text-slate-900 text-lg">
-                      {employee.project?.shift_end_time ||
-                        "Not assigned"}
-                    </span>
-
-                  </div>
-
-                  {/* SHIFT TIME */}
-
-                  <div className="p-5 bg-emerald-50/60 rounded-xl border border-emerald-100">
-
-                    <div className="flex items-center gap-2 mb-2">
-
-                      <Clock className="w-4 h-4 text-emerald-600" />
-
-                      <span className="text-[11px] text-emerald-600 font-bold uppercase tracking-wider">
-                        Shift Schedule
-                      </span>
-
-                    </div>
-
-                    <span className="font-mono font-bold text-emerald-800">
-                      {employee.project?.shift_start_time ||
-                        "--:--"}
-                      {" - "}
-                      {employee.project?.shift_end_time ||
-                        "--:--"}
-                    </span>
-
-                  </div>
-
-                  {/* TIMEZONE */}
-
-                  <div className="p-5 bg-slate-50/70 rounded-xl border border-slate-100">
-
-                    <div className="flex items-center gap-2 mb-2">
-
-                      <Clock className="w-4 h-4 text-indigo-500" />
-
-                      <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">
-                        Timezone
-                      </span>
-
-                    </div>
-
-                    <span className="font-semibold text-slate-900">
-                      {employee.project?.timezone ||
-                        "Not assigned"}
-                    </span>
-
-                  </div>
-
-                </div>
-
-                {/* SHIFT INFORMATION */}
-
-                <div className="mt-5 p-4 bg-amber-50 border border-amber-100 rounded-xl">
-
-                  <div className="flex items-start gap-3">
-
-                    <Clock className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
-
-                    <div>
-
-                      <p className="text-xs font-bold text-amber-900">
-                        Shift Information
-                      </p>
-
-                      <p className="text-xs text-amber-700 mt-1 leading-relaxed">
-                        Your attendance schedule is based on
-                        the project assigned by HR. The project
-                        timezone and shift timings shown above
-                        are used for your attendance calculations.
-                      </p>
-
-                    </div>
-
-                  </div>
-
-                </div>
-
-              </section>
-
-            </div>
-          )}
-
-          {/* =================================================
-              DOCUMENT
-          ================================================= */}
-
-          {activeTab ===
-            "document" && (
-            <div className="max-w-2xl">
-
-              <div className="mb-6">
-
-                <div className="flex items-center gap-2">
-
-                  <FileText className="w-5 h-5 text-indigo-600" />
-
-                  <h4 className="text-sm font-bold text-slate-900">
-                    Upload Document
-                  </h4>
-
-                </div>
-
-                <p className="text-xs text-slate-500 mt-1">
-                  Select the document type and choose
-                  the file you want to upload.
-                </p>
-
-              </div>
-
-              <div className="mb-5">
-
-                <label className="text-[11px] text-slate-500 font-bold block uppercase tracking-wider mb-2">
-                  Document Type
-                </label>
-
-                <select
-                  value={selectedDocumentType}
-                  onChange={(e) => {
-                    setSelectedDocumentType(
-                      e.target.value
-                    );
-
-                    setDocumentError(null);
-                    setDocumentSuccess(null);
-                  }}
-                  className="w-full px-3 py-3 border border-slate-200 rounded-xl bg-white text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 cursor-pointer"
-                >
-
-                  <option value="">
-                    Select Document
-                  </option>
-
-                  {documentTypes.map(
-                    (document) => (
-                      <option
-                        key={document}
-                        value={document}
-                      >
-                        {document}
-                      </option>
-                    )
-                  )}
-
-                </select>
-
-              </div>
-
-              <div>
-
-                <label className="text-[11px] text-slate-500 font-bold block uppercase tracking-wider mb-2">
-                  Choose File
-                </label>
-
-                <label
-                  htmlFor="document-file"
-                  className="w-full min-h-[165px] border-2 border-dashed border-indigo-100 rounded-xl bg-slate-50/50 hover:bg-indigo-50/30 hover:border-indigo-300 transition-all cursor-pointer flex flex-col items-center justify-center text-center px-4"
-                >
-
-                  <div className="w-12 h-12 rounded-full bg-indigo-50 flex items-center justify-center mb-3">
-
-                    <UploadCloud className="w-6 h-6 text-indigo-600" />
-
-                  </div>
-
-                  <span className="px-8 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full text-xs font-semibold transition-colors">
-                    Choose File
-                  </span>
-
-                  {selectedDocumentFile ? (
-                    <span className="mt-2 text-xs font-medium text-slate-700 truncate max-w-[90%]">
-                      {selectedDocumentFile.name}
-                    </span>
-                  ) : (
-                    <span className="mt-2 text-[11px] text-slate-400">
-                      Supports PDF, PNG, JPG
-                      files up to 5MB
-                    </span>
-                  )}
-
-                  <input
-                    id="document-file"
-                    type="file"
-                    accept=".pdf,.png,.jpg,.jpeg"
-                    className="hidden"
-                    onChange={
-                      handleDocumentFileChange
-                    }
-                  />
-
-                </label>
-
-              </div>
-
-              {documentError && (
-                <div className="mt-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-medium">
-                  {documentError}
-                </div>
-              )}
-
-              {documentSuccess && (
-                <div className="mt-4 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-medium flex items-center gap-2">
-
-                  <CheckCircle2 className="w-4 h-4 shrink-0" />
-
-                  <span>{documentSuccess}</span>
-
-                </div>
-              )}
-
-              <div className="flex justify-end mt-5">
-
-                <button
-                  type="button"
-                  onClick={
-                    handleDocumentUpload
-                  }
-                  className="inline-flex items-center justify-center gap-2 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-colors shadow-sm cursor-pointer"
-                >
-
-                  <UploadCloud className="w-4 h-4" />
-
-                  <span>
-                    Upload File
-                  </span>
-
-                </button>
-
-              </div>
-
-            </div>
-          )}
-
-        </div>
-
-      </div>
-
-      {/* =====================================================
-          REQUEST PROFILE UPDATE MODAL
-      ===================================================== */}
-
-      {isEditModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm overflow-y-auto">
-
-          <div className="bg-white rounded-2xl max-w-3xl w-full shadow-2xl border border-slate-200 my-8">
-
-            {/* MODAL HEADER */}
-
-            <div className="flex items-center justify-between px-6 py-5 border-b border-slate-200">
-
-              <div>
-
-                <h3 className="text-lg font-bold text-slate-900">
-                  Request Profile Update
-                </h3>
-
-                <p className="text-xs text-slate-500 mt-1">
-                  Edits will be submitted to HR for approval
-                  before updating the master record.
-                </p>
-
-              </div>
-
-              <button
-                type="button"
-                onClick={() =>
-                  setIsEditModalOpen(false)
-                }
-                className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
-              >
-
-                <XCircle className="w-5 h-5" />
-
-              </button>
-
-            </div>
-
-            {/* FORM */}
-
-            <form
-              onSubmit={handleFormSubmit}
-              className="px-6 py-5 space-y-8 max-h-[75vh] overflow-y-auto"
-            >
-
-              {/* PERSONAL INFORMATION */}
-
-              <section>
-
-                <div className="mb-4 pb-3 border-b border-slate-200">
-
-                  <h4 className="text-sm font-bold text-slate-900">
-                    Personal Information
-                  </h4>
-
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-
-                  <div>
-
-                    <label className="block text-xs text-slate-600 font-semibold mb-1.5">
-                      Phone Number
-                    </label>
-
-                    <input
-                      name="phone"
-                      value={editFormData.phone}
-                      onChange={
-                        handleInputChange
-                      }
-                      className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
-                    />
-
-                  </div>
-
-                  <div>
-
-                    <label className="block text-xs text-slate-600 font-semibold mb-1.5">
-                      Date of Birth
-                    </label>
-
-                    <input
-                      type="date"
-                      name="date_of_birth"
-                      value={
-                        editFormData.date_of_birth
-                      }
-                      onChange={
-                        handleInputChange
-                      }
-                      className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
-                    />
-
-                  </div>
-
-                  <div>
-
-                    <label className="block text-xs text-slate-600 font-semibold mb-1.5">
-                      Gender
-                    </label>
-
-                    <select
-                      name="gender"
-                      value={
-                        editFormData.gender
-                      }
-                      onChange={
-                        handleInputChange
-                      }
-                      className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
-                    >
-
-                      <option value="">
-                        Select Gender
-                      </option>
-
-                      <option value="male">
-                        Male
-                      </option>
-
-                      <option value="female">
-                        Female
-                      </option>
-
-                      <option value="other">
-                        Other
-                      </option>
-
-                    </select>
-
-                  </div>
-
-                  <div>
-
-                    <label className="block text-xs text-slate-600 font-semibold mb-1.5">
-                      Blood Group
-                    </label>
-
-                    <select
-                      name="blood_group"
-                      value={
-                        editFormData.blood_group
-                      }
-                      onChange={
-                        handleInputChange
-                      }
-                      className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
-                    >
-
-                      <option value="">
-                        Select Blood Group
-                      </option>
-
-                      <option value="A+">
-                        A+
-                      </option>
-
-                      <option value="A-">
-                        A-
-                      </option>
-
-                      <option value="B+">
-                        B+
-                      </option>
-
-                      <option value="B-">
-                        B-
-                      </option>
-
-                      <option value="AB+">
-                        AB+
-                      </option>
-
-                      <option value="AB-">
-                        AB-
-                      </option>
-
-                      <option value="O+">
-                        O+
-                      </option>
-
-                      <option value="O-">
-                        O-
-                      </option>
-
-                    </select>
-
-                  </div>
-
-                  <div>
-
-                    <label className="block text-xs text-slate-600 font-semibold mb-1.5">
-                      Marital Status
-                    </label>
-
-                    <select
-                      name="marital_status"
-                      value={
-                        editFormData.marital_status
-                      }
-                      onChange={
-                        handleInputChange
-                      }
-                      className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
-                    >
-
-                      <option value="single">
-                        Single
-                      </option>
-
-                      <option value="married">
-                        Married
-                      </option>
-
-                      <option value="divorced">
-                        Divorced
-                      </option>
-
-                      <option value="widowed">
-                        Widowed
-                      </option>
-
-                    </select>
-
-                  </div>
-
-                </div>
-
-              </section>
-
-              {/* ADDRESS & EMERGENCY */}
-
-              <section>
-
-                <div className="mb-4 pb-3 border-b border-slate-200">
-
-                  <h4 className="text-sm font-bold text-slate-900">
-                    Address & Emergency
-                  </h4>
-
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-
-                  <div className="md:col-span-2">
-
-                    <label className="block text-xs text-slate-600 font-semibold mb-1.5">
-                      Permanent Address
-                    </label>
-
-                    <textarea
-                      name="address"
-                      value={
-                        editFormData.address
-                      }
-                      onChange={
-                        handleInputChange
-                      }
-                      rows={2}
-                      className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 resize-none"
-                    />
-
-                  </div>
-
-                  <div className="md:col-span-2">
-
-                    <label className="block text-xs text-slate-600 font-semibold mb-1.5">
-                      Temporary Address
-                    </label>
-
-                    <textarea
-                      name="address"
-                      value={
-                        editFormData.address
-                      }
-                      onChange={
-                        handleInputChange
-                      }
-                      rows={2}
-                      className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 resize-none"
-                    />
-
-                  </div>
-
-                  <div>
-
-                    <label className="block text-xs text-slate-600 font-semibold mb-1.5">
-                      City
-                    </label>
-
-                    <input
-                      name="city"
-                      value={editFormData.city}
-                      onChange={
-                        handleInputChange
-                      }
-                      className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
-                    />
-
-                  </div>
-
-                  <div>
-
-                    <label className="block text-xs text-slate-600 font-semibold mb-1.5">
-                      State
-                    </label>
-
-                    <input
-                      name="state"
-                      value={editFormData.state}
-                      onChange={
-                        handleInputChange
-                      }
-                      className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
-                    />
-
-                  </div>
-
-                  <div>
-
-                    <label className="block text-xs text-slate-600 font-semibold mb-1.5">
-                      Pincode
-                    </label>
-
-                    <input
-                      name="pincode"
-                      value={
-                        editFormData.pincode
-                      }
-                      onChange={
-                        handleInputChange
-                      }
-                      className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
-                    />
-
-                  </div>
-
-                  <div>
-
-                    <label className="block text-xs text-slate-600 font-semibold mb-1.5">
-                      Emergency Contact Name
-                    </label>
-
-                    <input
-                      name="emergency_contact_name"
-                      value={
-                        editFormData.emergency_contact_name
-                      }
-                      onChange={
-                        handleInputChange
-                      }
-                      className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
-                    />
-
-                  </div>
-
-                  <div>
-
-                    <label className="block text-xs text-slate-600 font-semibold mb-1.5">
-                      Emergency Contact Phone
-                    </label>
-
-                    <input
-                      name="emergency_contact_phone"
-                      value={
-                        editFormData.emergency_contact_phone
-                      }
-                      onChange={
-                        handleInputChange
-                      }
-                      className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
-                    />
-
-                  </div>
-
-                  <div>
-
-                    <label className="block text-xs text-slate-600 font-semibold mb-1.5">
-                      Emergency Contact Relation
-                    </label>
-
-                    <input
-                      name="emergency_contact_relation"
-                      value={
-                        editFormData.emergency_contact_relation
-                      }
-                      onChange={
-                        handleInputChange
-                      }
-                      className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
-                    />
-
-                  </div>
-
-                </div>
-
-              </section>
-
-              {/* PREVIOUS EMPLOYMENT */}
-
-              <section>
-
-                <div className="mb-4 pb-3 border-b border-slate-200">
-
-                  <h4 className="text-sm font-bold text-slate-900">
-                    Previous Employment
-                  </h4>
-
-                </div>
-
-                <div className="space-y-5">
-
-                  {previousEmployments.map(
-                    (
-                      employment,
-                      index
-                    ) => (
+                      relation:
+                        employeeData.emergency_contact_3_relation,
+                    },
+                  ].map(
+                    (contact) => (
                       <div
-                        key={employment.id}
-                        className="border border-slate-200 rounded-xl p-5 bg-slate-50/50"
+                        key={
+                          contact.title
+                        }
+                        className="p-5 bg-slate-50/70 rounded-xl border border-slate-100"
                       >
 
-                        <div className="flex items-center justify-between mb-5">
+                        <div className="flex items-center justify-between mb-4">
 
-                          <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-indigo-600 uppercase tracking-wider">
+                            {
+                              contact.title
+                            }
+                          </span>
 
-                            <div className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center text-xs font-bold">
-                              {index + 1}
-                            </div>
-
-                            <h5 className="text-sm font-bold text-slate-800">
-                              Previous Employment{" "}
-                              {index + 1}
-                            </h5>
-
-                          </div>
-
-                          {previousEmployments.length >
-                            1 && (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                deletePreviousEmployment(
-                                  employment.id
-                                )
-                              }
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 border border-red-100 rounded-lg transition-colors cursor-pointer"
-                            >
-
-                              <Trash2 className="w-3.5 h-3.5" />
-
-                              <span>
-                                Delete
-                              </span>
-
-                            </button>
-                          )}
+                          <Phone className="w-4 h-4 text-slate-400" />
 
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-4">
 
                           <div>
 
-                            <label className="block text-xs text-slate-600 font-semibold mb-1.5">
-                              Previous Company
-                            </label>
+                            <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
+                              Name
+                            </span>
 
-                            <input
-                              value={
-                                employment.company_name
-                              }
-                              onChange={(e) =>
-                                handlePreviousEmploymentChange(
-                                  employment.id,
-                                  "company_name",
-                                  e.target.value
-                                )
-                              }
-                              placeholder="Enter company name"
-                              className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
-                            />
+                            <span className="font-semibold text-slate-800">
+                              {contact.name ||
+                                "Not specified"}
+                            </span>
 
                           </div>
 
                           <div>
 
-                            <label className="block text-xs text-slate-600 font-semibold mb-1.5">
-                              Previous Designation
-                            </label>
+                            <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
+                              Phone
+                            </span>
 
-                            <input
-                              value={
-                                employment.designation
-                              }
-                              onChange={(e) =>
-                                handlePreviousEmploymentChange(
-                                  employment.id,
-                                  "designation",
-                                  e.target.value
-                                )
-                              }
-                              placeholder="Enter designation"
-                              className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
-                            />
+                            <span className="font-semibold text-slate-800">
+                              {contact.phone ||
+                                "Not specified"}
+                            </span>
 
                           </div>
 
                           <div>
 
-                            <label className="block text-xs text-slate-600 font-semibold mb-1.5">
-                              Start Date
-                            </label>
+                            <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
+                              Relationship
+                            </span>
 
-                            <input
-                              type="date"
-                              value={
-                                employment.start_date
-                              }
-                              onChange={(e) =>
-                                handlePreviousEmploymentChange(
-                                  employment.id,
-                                  "start_date",
-                                  e.target.value
-                                )
-                              }
-                              className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
-                            />
-
-                          </div>
-
-                          <div>
-
-                            <label className="block text-xs text-slate-600 font-semibold mb-1.5">
-                              End Date
-                            </label>
-
-                            <input
-                              type="date"
-                              value={
-                                employment.end_date
-                              }
-                              onChange={(e) =>
-                                handlePreviousEmploymentChange(
-                                  employment.id,
-                                  "end_date",
-                                  e.target.value
-                                )
-                              }
-                              className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
-                            />
-
-                          </div>
-
-                          <div>
-
-                            <label className="block text-xs text-slate-600 font-semibold mb-1.5">
-                              Previous Reporting Manager
-                            </label>
-
-                            <input
-                              value={
-                                employment.reporting_manager
-                              }
-                              onChange={(e) =>
-                                handlePreviousEmploymentChange(
-                                  employment.id,
-                                  "reporting_manager",
-                                  e.target.value
-                                )
-                              }
-                              placeholder="Enter reporting manager"
-                              className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
-                            />
-
-                          </div>
-
-                          <div>
-
-                            <label className="block text-xs text-slate-600 font-semibold mb-1.5">
-                              Previous Work Location
-                            </label>
-
-                            <div className="flex items-center gap-2">
-
-                              <input
-                                value={
-                                  employment.work_location
-                                }
-                                onChange={(e) =>
-                                  handlePreviousEmploymentChange(
-                                    employment.id,
-                                    "work_location",
-                                    e.target.value
-                                  )
-                                }
-                                placeholder="Enter work location"
-                                className="flex-1 min-w-0 border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
-                              />
-
-                              <button
-                                type="button"
-                                onClick={
-                                  addPreviousEmployment
-                                }
-                                className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold transition-colors cursor-pointer"
-                              >
-
-                                <Plus className="w-3.5 h-3.5" />
-
-                                <span>
-                                  Add Employment
-                                </span>
-
-                              </button>
-
-                            </div>
+                            <span className="font-semibold text-slate-800">
+                              {contact.relation ||
+                                "Not specified"}
+                            </span>
 
                           </div>
 
@@ -2486,173 +2007,1495 @@ export default function EmployeeProfileView({
 
                 </div>
 
-              </section>
+              </div>
 
-              {/* BANK DETAILS */}
+            </div>
+          )}
 
-              <section>
+          {/* ========================================================
+              BANK
+          ======================================================== */}
 
-                <div className="mb-4 pb-3 border-b border-slate-200">
+          {activeTab === "bank" && (
+            <div className="space-y-8">
 
-                  <h4 className="text-sm font-bold text-slate-900">
-                    Bank Details
-                  </h4>
+              <div className="flex items-start justify-between gap-4">
 
-                </div>
+                <div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <h3 className="text-lg font-bold text-slate-900">
+                    Bank & Identity Details
+                  </h3>
 
-                  <div>
-
-                    <label className="block text-xs text-slate-600 font-semibold mb-1.5">
-                      Bank Name
-                    </label>
-
-                    <input
-                      name="bank_name"
-                      value={
-                        editFormData.bank_name
-                      }
-                      onChange={
-                        handleInputChange
-                      }
-                      className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
-                    />
-
-                  </div>
-
-                  <div>
-
-                    <label className="block text-xs text-slate-600 font-semibold mb-1.5">
-                      Bank Account Number
-                    </label>
-
-                    <input
-                      name="bank_account_number"
-                      value={
-                        editFormData.bank_account_number
-                      }
-                      onChange={
-                        handleInputChange
-                      }
-                      className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
-                    />
-
-                  </div>
-
-                  <div>
-
-                    <label className="block text-xs text-slate-600 font-semibold mb-1.5">
-                      IFSC Code
-                    </label>
-
-                    <input
-                      name="ifsc_code"
-                      value={
-                        editFormData.ifsc_code
-                      }
-                      onChange={
-                        handleInputChange
-                      }
-                      className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
-                    />
-
-                  </div>
-
-                  <div>
-
-                    <label className="block text-xs text-slate-600 font-semibold mb-1.5">
-                      PAN Number
-                    </label>
-
-                    <input
-                      name="pan_number"
-                      value={
-                        editFormData.pan_number
-                      }
-                      onChange={
-                        handleInputChange
-                      }
-                      className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
-                    />
-
-                  </div>
-
-                  <div>
-
-                    <label className="block text-xs text-slate-600 font-semibold mb-1.5">
-                      Aadhaar Number
-                    </label>
-
-                    <input
-                      name="aadhar_number"
-                      value={
-                        editFormData.aadhar_number
-                      }
-                      onChange={
-                        handleInputChange
-                      }
-                      className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
-                    />
-
-                  </div>
-
-                  <div>
-
-                    <label className="block text-xs text-slate-600 font-semibold mb-1.5">
-                      UAN Number
-                    </label>
-
-                    <input
-                      name="uan_number"
-                      value={
-                        editFormData.uan_number
-                      }
-                      onChange={
-                        handleInputChange
-                      }
-                      className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
-                    />
-
-                  </div>
+                  <p className="text-sm text-slate-500 mt-1">
+                    Bank account and identification information.
+                  </p>
 
                 </div>
-
-              </section>
-
-              {/* FORM BUTTONS */}
-
-              <div className="flex items-center justify-end gap-3 pt-5 border-t border-slate-200 sticky bottom-0 bg-white">
 
                 <button
                   type="button"
                   onClick={() =>
-                    setIsEditModalOpen(false)
+                    openEditSection(
+                      "bank"
+                    )
                   }
-                  className="px-5 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-lg cursor-pointer"
-                >
-                  Cancel
-                </button>
-
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="px-5 py-2.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                  className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 text-xs font-bold transition-colors shrink-0"
                 >
 
-                  {loading && (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  )}
+                  <Edit3 className="w-4 h-4" />
 
-                  <span>
-                    Submit to HR for Approval
-                  </span>
+                  Edit
 
                 </button>
 
               </div>
 
-            </form>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5 text-sm">
+
+                {[
+                  [
+                    "Bank Name",
+                    employeeData.bank_name,
+                  ],
+
+                  [
+                    "Account Number",
+                    employeeData.bank_account_number,
+                  ],
+
+                  [
+                    "IFSC Code",
+                    employeeData.ifsc_code,
+                  ],
+
+                  [
+                    "PAN Number",
+                    employeeData.pan_number,
+                  ],
+
+                  [
+                    "Aadhaar Number",
+                    employeeData.aadhar_number,
+                  ],
+
+                  [
+                    "Passport Number",
+                    employeeData.passport_number,
+                  ],
+                ].map(
+                  ([label, value]) => (
+                    <div
+                      key={label}
+                      className="p-4 bg-slate-50/70 rounded-xl border border-slate-100"
+                    >
+
+                      <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
+                        {label}
+                      </span>
+
+                      <span className="font-semibold text-slate-800 font-mono break-all">
+                        {value ||
+                          "Not specified"}
+                      </span>
+
+                    </div>
+                  )
+                )}
+
+              </div>
+
+            </div>
+          )}
+
+          {/* ========================================================
+              EMPLOYMENT
+          ======================================================== */}
+
+          {activeTab === "employment" && (
+            <div className="space-y-8">
+
+              <div className="flex items-start justify-between gap-4">
+
+                <div>
+
+                  <h3 className="text-lg font-bold text-slate-900">
+                    Employment Information
+                  </h3>
+
+                  <p className="text-sm text-slate-500 mt-1">
+                    Current employment and reporting information.
+                  </p>
+
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    openEditSection(
+                      "employment"
+                    )
+                  }
+                  className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 text-xs font-bold transition-colors shrink-0"
+                >
+
+                  <Edit3 className="w-4 h-4" />
+
+                  Edit
+
+                </button>
+
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5 text-sm">
+
+                {[
+                  [
+                    "Department",
+                    departmentName(),
+                  ],
+
+                  [
+                    "Designation",
+                    employeeData.designation,
+                  ],
+
+                  [
+                    "Work Location",
+                    employeeData.work_location,
+                  ],
+
+                  [
+                    "Reporting Manager",
+                    employeeData.reporting_manager,
+                  ],
+
+                  [
+                    "Probation End Date",
+                    formatDate(
+                      employeeData.probation_end_date
+                    ),
+                  ],
+
+                  [
+                    "Confirmation Date",
+                    formatDate(
+                      employeeData.confirmation_date
+                    ),
+                  ],
+
+                  [
+                    "Joining Date",
+                    formatDate(
+                      employeeData.joining_date
+                    ),
+                  ],
+
+                  [
+                    "Employment Type",
+                    employeeData.employment_type,
+                  ],
+
+                  [
+                    "Employment Status",
+                    employeeData.status,
+                  ],
+                ].map(
+                  ([label, value]) => (
+                    <div
+                      key={label}
+                      className="p-4 bg-slate-50/70 rounded-xl border border-slate-100"
+                    >
+
+                      <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
+                        {label}
+                      </span>
+
+                      <span className="font-semibold text-slate-800 capitalize">
+                        {value ||
+                          "Not specified"}
+                      </span>
+
+                    </div>
+                  )
+                )}
+
+              </div>
+
+            </div>
+          )}
+
+          {/* ========================================================
+              DOCUMENTS
+          ======================================================== */}
+
+          {activeTab === "document" && (
+            <div className="space-y-6">
+
+              <div className="flex items-start justify-between gap-4">
+
+                <div>
+
+                  <h3 className="text-lg font-bold text-slate-900">
+                    Documents
+                  </h3>
+
+                  <p className="text-sm text-slate-500 mt-1">
+                    Upload and manage employee documents.
+                  </p>
+
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    openEditSection(
+                      "document"
+                    )
+                  }
+                  className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 text-xs font-bold transition-colors shrink-0"
+                >
+
+                  <Edit3 className="w-4 h-4" />
+
+                  Edit
+
+                </button>
+
+              </div>
+
+              <div className="bg-slate-50/70 border-2 border-dashed border-slate-200 rounded-2xl p-6 sm:p-7">
+
+                <div className="max-w-xl mx-auto space-y-4">
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+
+                    <div>
+
+                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                        Document Type
+                      </label>
+
+                      <select
+                        value={docType}
+                        onChange={(e) => {
+                          setDocType(
+                            e.target.value
+                          );
+
+                          setDocumentError(
+                            null
+                          );
+                        }}
+                        className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-xs font-semibold bg-white text-slate-800 shadow-sm focus:outline-none focus:border-indigo-500"
+                        disabled={
+                          isUploading
+                        }
+                      >
+
+                        {documentTypes.map(
+                          (type) => (
+                            <option
+                              key={type}
+                              value={type}
+                            >
+                              {type}
+                            </option>
+                          )
+                        )}
+
+                      </select>
+
+                    </div>
+
+                    <div>
+
+                      <label
+                        htmlFor="document-name"
+                        className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5"
+                      >
+                        Custom Label{" "}
+
+                        <span className="font-normal text-slate-400 normal-case">
+                          (optional)
+                        </span>
+
+                      </label>
+
+                      <input
+                        id="document-name"
+                        type="text"
+                        value={
+                          documentName
+                        }
+                        onChange={(e) =>
+                          setDocumentName(
+                            e.target.value
+                          )
+                        }
+                        placeholder="Defaults to filename"
+                        className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-xs font-semibold bg-white text-slate-800 shadow-sm focus:outline-none focus:border-indigo-500"
+                        disabled={
+                          isUploading
+                        }
+                      />
+
+                    </div>
+
+                  </div>
+
+                  <label className="flex flex-col items-center justify-center w-full py-8 px-4 bg-white border border-slate-200 rounded-2xl shadow-sm hover:border-indigo-400 hover:shadow-md transition-all cursor-pointer">
+
+                    <div className="h-12 w-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mb-3">
+
+                      {isUploading ? (
+                        <Loader2 className="w-6 h-6 animate-spin" />
+                      ) : (
+                        <Upload className="w-6 h-6" />
+                      )}
+
+                    </div>
+
+                    <span className="text-sm font-bold text-slate-800">
+
+                      {isUploading
+                        ? "Uploading Document..."
+                        : "Choose Document to Upload"}
+
+                    </span>
+
+                    <span className="text-xs text-slate-400 mt-1 font-medium">
+                      Supports PDF, PNG, JPG files up to 5MB
+                    </span>
+
+                    <input
+                      ref={
+                        documentFileInputRef
+                      }
+                      type="file"
+                      name="file_upload"
+                      className="hidden"
+                      accept=".pdf,image/*"
+                      onChange={
+                        handleFileChange
+                      }
+                      disabled={
+                        isUploading
+                      }
+                    />
+
+                  </label>
+
+                </div>
+
+                {documentError && (
+                  <p className="mt-3 text-xs font-bold text-rose-600 text-center">
+                    {documentError}
+                  </p>
+                )}
+
+              </div>
+
+              <div className="space-y-3">
+
+                <div className="flex items-center justify-between">
+
+                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                    Verified Documents (
+                    {documents.length}
+                    )
+                  </h4>
+
+                </div>
+
+                {documents.length === 0 ? (
+                  <div className="text-center py-10 bg-slate-50/50 rounded-2xl border border-slate-100">
+
+                    <p className="text-xs text-slate-400 font-medium">
+                      No documents uploaded yet for this employee record.
+                    </p>
+
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+
+                    {documents.map(
+                      (doc) => (
+                        <div
+                          key={doc.id}
+                          className="flex items-center justify-between p-4 bg-white rounded-xl border border-slate-200/90 shadow-2xs hover:shadow-sm transition-all"
+                        >
+
+                          <div className="flex items-center gap-3 min-w-0">
+
+                            <div className="h-10 w-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+
+                              <FileText className="w-5 h-5" />
+
+                            </div>
+
+                            <div className="min-w-0">
+
+                              <p className="text-xs font-bold text-slate-900 truncate">
+                                {
+                                  doc.document_name
+                                }
+                              </p>
+
+                              <div className="flex items-center gap-2 mt-1">
+
+                                <span className="text-[10px] font-bold px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md">
+                                  {
+                                    doc.document_type
+                                  }
+                                </span>
+
+                                <span className="text-[10px] text-slate-400 font-mono">
+                                  {[
+                                    "Aadhar Card",
+                                    "Aadhaar Card",
+                                  ].includes(
+                                    doc.document_type
+                                  )
+                                    ? employeeData.aadhar_number ||
+                                      "Not specified"
+                                    : new Date(
+                                        doc.uploaded_at
+                                      ).toLocaleDateString()}
+                                </span>
+
+                              </div>
+
+                            </div>
+
+                          </div>
+
+                          <div className="flex items-center gap-1 shrink-0 ml-3">
+
+                            <a
+                              href={
+                                doc.document_url
+                              }
+                              target="_blank"
+                              rel="noreferrer"
+                              className="p-1.5 rounded-lg text-slate-400 hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
+                              title="View"
+                            >
+
+                              <Eye className="w-4 h-4" />
+
+                            </a>
+
+                            <a
+                              href={
+                                doc.document_url
+                              }
+                              download
+                              className="p-1.5 rounded-lg text-slate-400 hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
+                              title="Download"
+                            >
+
+                              <Download className="w-4 h-4" />
+
+                            </a>
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleDelete(
+                                  doc.id
+                                )
+                              }
+                              className="p-1.5 rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-colors"
+                              title="Delete"
+                            >
+
+                              <Trash2 className="w-4 h-4" />
+
+                            </button>
+
+                          </div>
+
+                        </div>
+                      )
+                    )}
+
+                  </div>
+                )}
+
+              </div>
+
+            </div>
+          )}
+
+          {/* ========================================================
+              STATUTORY
+          ======================================================== */}
+
+          {activeTab === "statutory" && (
+            <div className="space-y-8">
+
+              <div className="flex items-start justify-between gap-4">
+
+                <div>
+
+                  <h3 className="text-lg font-bold text-slate-900">
+                    Statutory Details
+                  </h3>
+
+                  <p className="text-sm text-slate-500 mt-1">
+                    PF, ESI, Professional Tax and TDS information.
+                  </p>
+
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    openEditSection(
+                      "statutory"
+                    )
+                  }
+                  className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 text-xs font-bold transition-colors shrink-0"
+                >
+
+                  <Edit3 className="w-4 h-4" />
+
+                  Edit
+
+                </button>
+
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-5 text-sm">
+
+                {[
+                  [
+                    "PF",
+                    employeeData.pf,
+                  ],
+
+                  [
+                    "ESI",
+                    employeeData.esi,
+                  ],
+
+                  [
+                    "PT",
+                    employeeData.pt,
+                  ],
+
+                  [
+                    "TDS",
+                    employeeData.tds,
+                  ],
+                ].map(
+                  ([label, value]) => (
+                    <div
+                      key={label}
+                      className="p-4 bg-slate-50/70 rounded-xl border border-slate-100"
+                    >
+
+                      <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
+                        {label}
+                      </span>
+
+                      <span className="font-semibold text-slate-800 break-all">
+                        {value ||
+                          "Not specified"}
+                      </span>
+
+                    </div>
+                  )
+                )}
+
+              </div>
+
+            </div>
+          )}
+
+        </div>
+
+      </div>
+
+      {/* ============================================================
+          EDIT PROFILE MODAL
+      ============================================================ */}
+
+      {isEditModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+
+          <div className="w-full max-w-4xl max-h-[90vh] overflow-y-auto bg-white rounded-2xl shadow-2xl">
+
+            <div className="sticky top-0 z-10 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
+
+              <div>
+
+                <h2 className="text-lg font-bold text-slate-900">
+                  {getEditTitle()}
+                </h2>
+
+                <p className="text-xs text-slate-500 mt-1">
+                  Submit your changes for HR approval.
+                </p>
+
+              </div>
+
+              <button
+                type="button"
+                onClick={
+                  closeEditModal
+                }
+                className="p-2 rounded-lg hover:bg-slate-100 text-slate-500"
+              >
+
+                <XCircle className="w-5 h-5" />
+
+              </button>
+
+            </div>
+
+            {editSection ===
+            "document" ? (
+              <div className="p-6 space-y-6">
+
+                <div className="bg-slate-50/70 border-2 border-dashed border-slate-200 rounded-2xl p-6">
+
+                  <div className="max-w-xl mx-auto space-y-4">
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+
+                      <div>
+
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                          Document Type
+                        </label>
+
+                        <select
+                          value={
+                            docType
+                          }
+                          onChange={(e) => {
+                            setDocType(
+                              e.target.value
+                            );
+
+                            setDocumentError(
+                              null
+                            );
+                          }}
+                          className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-xs font-semibold bg-white text-slate-800 shadow-sm focus:outline-none focus:border-indigo-500"
+                          disabled={
+                            isUploading
+                          }
+                        >
+
+                          {documentTypes.map(
+                            (type) => (
+                              <option
+                                key={type}
+                                value={type}
+                              >
+                                {type}
+                              </option>
+                            )
+                          )}
+
+                        </select>
+
+                      </div>
+
+                      <div>
+
+                        <label
+                          htmlFor="document-name-modal"
+                          className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5"
+                        >
+                          Custom Label{" "}
+
+                          <span className="font-normal text-slate-400 normal-case">
+                            (optional)
+                          </span>
+
+                        </label>
+
+                        <input
+                          id="document-name-modal"
+                          type="text"
+                          value={
+                            documentName
+                          }
+                          onChange={(e) =>
+                            setDocumentName(
+                              e.target.value
+                            )
+                          }
+                          placeholder="Defaults to filename"
+                          className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-xs font-semibold bg-white text-slate-800 shadow-sm focus:outline-none focus:border-indigo-500"
+                          disabled={
+                            isUploading
+                          }
+                        />
+
+                      </div>
+
+                    </div>
+
+                    <label className="flex flex-col items-center justify-center w-full py-8 px-4 bg-white border border-slate-200 rounded-2xl shadow-sm hover:border-indigo-400 hover:shadow-md transition-all cursor-pointer">
+
+                      <div className="h-12 w-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mb-3">
+
+                        {isUploading ? (
+                          <Loader2 className="w-6 h-6 animate-spin" />
+                        ) : (
+                          <Upload className="w-6 h-6" />
+                        )}
+
+                      </div>
+
+                      <span className="text-sm font-bold text-slate-800">
+
+                        {isUploading
+                          ? "Uploading Document..."
+                          : "Choose Document to Upload"}
+
+                      </span>
+
+                      <span className="text-xs text-slate-400 mt-1 font-medium">
+                        Supports PDF, PNG, JPG files up to 5MB
+                      </span>
+
+                      <input
+                        ref={
+                          documentFileInputRef
+                        }
+                        type="file"
+                        name="file_upload_modal"
+                        className="hidden"
+                        accept=".pdf,image/*"
+                        onChange={
+                          handleFileChange
+                        }
+                        disabled={
+                          isUploading
+                        }
+                      />
+
+                    </label>
+
+                  </div>
+
+                  {documentError && (
+                    <p className="mt-3 text-xs font-bold text-rose-600 text-center">
+                      {documentError}
+                    </p>
+                  )}
+
+                </div>
+
+                <div className="flex justify-end">
+
+                  <button
+                    type="button"
+                    onClick={
+                      closeEditModal
+                    }
+                    className="px-5 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                  >
+                    Close
+                  </button>
+
+                </div>
+
+              </div>
+            ) : (
+              <form
+                onSubmit={
+                  handleFormSubmit
+                }
+                className="p-6 space-y-8"
+              >
+
+                {/* PERSONAL */}
+
+                {(editSection ===
+                  "all" ||
+                  editSection ===
+                    "personal") && (
+                  <section>
+
+                    <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-4">
+                      Personal Information
+                    </h3>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                      <input
+                        name="phone"
+                        value={
+                          editFormData.phone
+                        }
+                        onChange={
+                          handleInputChange
+                        }
+                        placeholder="Phone"
+                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
+                      />
+
+                      <input
+                        type="date"
+                        name="date_of_birth"
+                        value={
+                          editFormData.date_of_birth
+                        }
+                        onChange={
+                          handleInputChange
+                        }
+                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
+                      />
+
+                      <select
+                        name="gender"
+                        value={
+                          editFormData.gender
+                        }
+                        onChange={
+                          handleInputChange
+                        }
+                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
+                      >
+
+                        <option value="">
+                          Select Gender
+                        </option>
+
+                        <option value="male">
+                          Male
+                        </option>
+
+                        <option value="female">
+                          Female
+                        </option>
+
+                        <option value="other">
+                          Other
+                        </option>
+
+                      </select>
+
+                      <input
+                        name="blood_group"
+                        value={
+                          editFormData.blood_group
+                        }
+                        onChange={
+                          handleInputChange
+                        }
+                        placeholder="Blood Group"
+                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
+                      />
+
+                      <select
+                        name="marital_status"
+                        value={
+                          editFormData.marital_status
+                        }
+                        onChange={
+                          handleInputChange
+                        }
+                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
+                      >
+
+                        <option value="single">
+                          Single
+                        </option>
+
+                        <option value="married">
+                          Married
+                        </option>
+
+                        <option value="divorced">
+                          Divorced
+                        </option>
+
+                        <option value="widowed">
+                          Widowed
+                        </option>
+
+                      </select>
+
+                    </div>
+
+                  </section>
+                )}
+
+                {/* ADDRESS */}
+
+                {(editSection ===
+                  "all" ||
+                  editSection ===
+                    "address") && (
+                  <>
+                    <section>
+
+                      <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-4 flex items-center gap-2">
+
+                        <MapPin className="w-4 h-4 text-indigo-600" />
+
+                        Permanent Address
+
+                      </h3>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                        <textarea
+                          name="address"
+                          value={
+                            editFormData.address
+                          }
+                          onChange={
+                            handleInputChange
+                          }
+                          placeholder="Permanent Street Address"
+                          rows={3}
+                          className="md:col-span-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none resize-none focus:border-indigo-500"
+                        />
+
+                        <input
+                          name="city"
+                          value={
+                            editFormData.city
+                          }
+                          onChange={
+                            handleInputChange
+                          }
+                          placeholder="City"
+                          className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
+                        />
+
+                        <input
+                          name="state"
+                          value={
+                            editFormData.state
+                          }
+                          onChange={
+                            handleInputChange
+                          }
+                          placeholder="State"
+                          className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
+                        />
+
+                        <input
+                          name="pincode"
+                          value={
+                            editFormData.pincode
+                          }
+                          onChange={
+                            handleInputChange
+                          }
+                          placeholder="Pincode"
+                          className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
+                        />
+
+                      </div>
+
+                    </section>
+
+                    <section>
+
+                      <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-4 flex items-center gap-2">
+
+                        <MapPinned className="w-4 h-4 text-indigo-600" />
+
+                        Communication Address
+
+                      </h3>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                        <textarea
+                          name="communication_address"
+                          value={
+                            editFormData.communication_address
+                          }
+                          onChange={
+                            handleInputChange
+                          }
+                          placeholder="Communication Street Address"
+                          rows={3}
+                          className="md:col-span-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none resize-none focus:border-indigo-500"
+                        />
+
+                        <input
+                          name="communication_city"
+                          value={
+                            editFormData.communication_city
+                          }
+                          onChange={
+                            handleInputChange
+                          }
+                          placeholder="City"
+                          className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
+                        />
+
+                        <input
+                          name="communication_state"
+                          value={
+                            editFormData.communication_state
+                          }
+                          onChange={
+                            handleInputChange
+                          }
+                          placeholder="State"
+                          className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
+                        />
+
+                        <input
+                          name="communication_pincode"
+                          value={
+                            editFormData.communication_pincode
+                          }
+                          onChange={
+                            handleInputChange
+                          }
+                          placeholder="Pincode"
+                          className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
+                        />
+
+                      </div>
+
+                    </section>
+
+                    {[
+                      {
+                        title:
+                          "Emergency Contact 1",
+
+                        name:
+                          "emergency_contact_name",
+
+                        phone:
+                          "emergency_contact_phone",
+
+                        relation:
+                          "emergency_contact_relation",
+                      },
+
+                      {
+                        title:
+                          "Emergency Contact 2",
+
+                        name:
+                          "emergency_contact_2_name",
+
+                        phone:
+                          "emergency_contact_2_phone",
+
+                        relation:
+                          "emergency_contact_2_relation",
+                      },
+
+                      {
+                        title:
+                          "Emergency Contact 3",
+
+                        name:
+                          "emergency_contact_3_name",
+
+                        phone:
+                          "emergency_contact_3_phone",
+
+                        relation:
+                          "emergency_contact_3_relation",
+                      },
+                    ].map(
+                      (contact) => (
+                        <section
+                          key={
+                            contact.title
+                          }
+                        >
+
+                          <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-4 flex items-center gap-2">
+
+                            <Phone className="w-4 h-4 text-indigo-600" />
+
+                            {
+                              contact.title
+                            }
+
+                          </h3>
+
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+
+                            <input
+                              name={
+                                contact.name
+                              }
+                              value={
+                                editFormData[
+                                  contact.name as keyof EditFormData
+                                ] as string
+                              }
+                              onChange={
+                                handleInputChange
+                              }
+                              placeholder="Contact Name"
+                              className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
+                            />
+
+                            <input
+                              name={
+                                contact.phone
+                              }
+                              value={
+                                editFormData[
+                                  contact.phone as keyof EditFormData
+                                ] as string
+                              }
+                              onChange={
+                                handleInputChange
+                              }
+                              placeholder="Contact Phone"
+                              className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
+                            />
+
+                            <input
+                              name={
+                                contact.relation
+                              }
+                              value={
+                                editFormData[
+                                  contact.relation as keyof EditFormData
+                                ] as string
+                              }
+                              onChange={
+                                handleInputChange
+                              }
+                              placeholder="Relationship"
+                              className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
+                            />
+
+                          </div>
+
+                        </section>
+                      )
+                    )}
+
+                  </>
+                )}
+
+                {/* BANK */}
+
+                {(editSection ===
+                  "all" ||
+                  editSection ===
+                    "bank") && (
+                  <section>
+
+                    <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-4">
+                      Bank & Identity
+                    </h3>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                      <input
+                        name="bank_name"
+                        value={
+                          editFormData.bank_name
+                        }
+                        onChange={
+                          handleInputChange
+                        }
+                        placeholder="Bank Name"
+                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
+                      />
+
+                      <input
+                        name="bank_account_number"
+                        value={
+                          editFormData.bank_account_number
+                        }
+                        onChange={
+                          handleInputChange
+                        }
+                        placeholder="Bank Account Number"
+                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
+                      />
+
+                      <input
+                        name="ifsc_code"
+                        value={
+                          editFormData.ifsc_code
+                        }
+                        onChange={
+                          handleInputChange
+                        }
+                        placeholder="IFSC Code"
+                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
+                      />
+
+                      <input
+                        name="pan_number"
+                        value={
+                          editFormData.pan_number
+                        }
+                        onChange={
+                          handleInputChange
+                        }
+                        placeholder="PAN Number"
+                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
+                      />
+
+                      <input
+                        name="aadhar_number"
+                        value={
+                          editFormData.aadhar_number
+                        }
+                        onChange={
+                          handleInputChange
+                        }
+                        placeholder="Aadhaar Number"
+                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
+                      />
+
+                      <input
+                        name="passport_number"
+                        value={
+                          editFormData.passport_number
+                        }
+                        onChange={
+                          handleInputChange
+                        }
+                        placeholder="Passport Number"
+                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
+                      />
+
+                    </div>
+
+                  </section>
+                )}
+
+                {/* STATUTORY */}
+
+                {(editSection ===
+                  "all" ||
+                  editSection ===
+                    "statutory") && (
+                  <section>
+
+                    <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-4">
+                      Statutory
+                    </h3>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                      <input
+                        name="pf"
+                        value={
+                          editFormData.pf
+                        }
+                        onChange={
+                          handleInputChange
+                        }
+                        placeholder="PF"
+                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
+                      />
+
+                      <input
+                        name="esi"
+                        value={
+                          editFormData.esi
+                        }
+                        onChange={
+                          handleInputChange
+                        }
+                        placeholder="ESI"
+                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
+                      />
+
+                      <input
+                        name="pt"
+                        value={
+                          editFormData.pt
+                        }
+                        onChange={
+                          handleInputChange
+                        }
+                        placeholder="PT"
+                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
+                      />
+
+                      <input
+                        name="tds"
+                        value={
+                          editFormData.tds
+                        }
+                        onChange={
+                          handleInputChange
+                        }
+                        placeholder="TDS"
+                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
+                      />
+
+                    </div>
+
+                  </section>
+                )}
+
+                {/* EMPLOYMENT */}
+
+                {(editSection ===
+                  "all" ||
+                  editSection ===
+                    "employment") && (
+                  <section>
+
+                    <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-4">
+                      Employment
+                    </h3>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                      <select
+                        name="department_id"
+                        value={
+                          editFormData.department_id
+                        }
+                        onChange={
+                          handleInputChange
+                        }
+                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
+                      >
+
+                        <option value="">
+                          Select Department
+                        </option>
+
+                        {departments.map(
+                          (department) => (
+                            <option
+                              key={
+                                department.id
+                              }
+                              value={
+                                department.id
+                              }
+                            >
+                              {
+                                department.name
+                              }
+                            </option>
+                          )
+                        )}
+
+                      </select>
+
+                      <input
+                        name="designation"
+                        value={
+                          editFormData.designation
+                        }
+                        onChange={
+                          handleInputChange
+                        }
+                        placeholder="Designation"
+                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
+                      />
+
+                      <input
+                        name="probation_end_date"
+                        type="date"
+                        value={
+                          editFormData.probation_end_date
+                        }
+                        onChange={
+                          handleInputChange
+                        }
+                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
+                      />
+
+                      <input
+                        name="confirmation_date"
+                        type="date"
+                        value={
+                          editFormData.confirmation_date
+                        }
+                        onChange={
+                          handleInputChange
+                        }
+                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
+                      />
+
+                      <input
+                        name="reporting_manager"
+                        value={
+                          editFormData.reporting_manager
+                        }
+                        onChange={
+                          handleInputChange
+                        }
+                        placeholder="Reporting Manager"
+                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
+                      />
+
+                      <input
+                        name="work_location"
+                        value={
+                          editFormData.work_location
+                        }
+                        onChange={
+                          handleInputChange
+                        }
+                        placeholder="Work Location"
+                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
+                      />
+
+                    </div>
+
+                  </section>
+                )}
+
+                {/* ACTIONS */}
+
+                <div className="sticky bottom-0 bg-white border-t border-slate-200 pt-5 flex justify-end gap-3">
+
+                  <button
+                    type="button"
+                    onClick={
+                      closeEditModal
+                    }
+                    className="px-5 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    type="submit"
+                    disabled={
+                      loading
+                    }
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50"
+                  >
+
+                    {loading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Submitting...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="w-4 h-4" />
+                        Submit Request
+                      </>
+                    )}
+
+                  </button>
+
+                </div>
+
+              </form>
+            )}
 
           </div>
 
