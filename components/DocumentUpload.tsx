@@ -74,7 +74,26 @@ export default function DocumentUpload({ employeeId, documents: initialDocs, onU
       if (!data.document) throw new Error("Document was uploaded but not saved");
 
       const newDoc = data.document as EmployeeDocument;
-      setDocuments(prev => [...prev, newDoc]);
+      setDocuments((prev) => {
+        const exists = prev.some((doc) => doc.id === newDoc.id);
+          // Existing document was replaced
+        if (exists) {
+          return prev.map((doc) =>doc.id === newDoc.id ? newDoc : doc);
+        }
+
+        const multipleTypes = ["Experience Letter","Other",];
+
+        if (!multipleTypes.includes(newDoc.document_type)) {
+          return [
+            ...prev.filter(
+              (doc) =>doc.document_type !== newDoc.document_type
+            ),
+            newDoc,
+          ];
+        }
+        // Multiple-document types
+        return [...prev, newDoc];
+      });
       if (onUpload) onUpload(newDoc);
       setDocumentName("");
       router.refresh();
@@ -163,8 +182,8 @@ export default function DocumentUpload({ employeeId, documents: initialDocs, onU
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {documents.map((doc) => (
-              <div key={doc.id} className="flex items-center justify-between p-4 bg-white rounded-xl border border-slate-200/90 shadow-2xs hover:shadow-sm transition-all">
+            {documents.map((doc, index) => (
+              <div key={`${doc.id}-${index}`} className="flex items-center justify-between p-4 bg-white rounded-xl border border-slate-200/90 shadow-2xs hover:shadow-sm transition-all">
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="h-10 w-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
                     <FileText className="w-5 h-5" />
@@ -175,9 +194,34 @@ export default function DocumentUpload({ employeeId, documents: initialDocs, onU
                       <span className="text-[10px] font-bold px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md">
                         {doc.document_type}
                       </span>
-                      <span className="text-[10px] text-slate-400 font-mono">
-                        {new Date(doc.uploaded_at).toLocaleDateString()}
-                      </span>
+
+                      {doc.aadhaar_number && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 bg-green-50 text-green-700 rounded-md">
+                          Aadhaar:{" "}
+                          {doc.aadhaar_number.replace(
+                            /(\d{4})(\d{4})(\d{4})/,
+                            "$1 $2 $3"
+                          )}
+                        </span>
+                      )}
+
+                      {doc.pan_number && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 bg-green-50 text-green-700 rounded-md">
+                          PAN: {doc.pan_number}
+                        </span>
+                      )}
+
+                      {doc.passport_number && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 bg-green-50 text-green-700 rounded-md">
+                          Passport: {doc.passport_number}
+                        </span>
+                      )}
+
+                      {doc.uploaded_at && (
+                        <span className="text-[10px] text-slate-400 font-mono">
+                          {new Date(doc.uploaded_at).toLocaleDateString()}
+                        </span>
+                      )}
                     </div>
                   </div>
                   
@@ -200,13 +244,15 @@ export default function DocumentUpload({ employeeId, documents: initialDocs, onU
                   >
                     <Download className="w-4 h-4" />
                   </a>
-                  <button
-                    onClick={() => handleDelete(doc.id)}
-                    className="p-1.5 rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-colors"
-                    title="Delete"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  {canUpload && (
+                    <button
+                      onClick={() => handleDelete(doc.id)}
+                      className="p-1.5 rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-colors"
+                      title="Delete"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
               </div>
             ))}

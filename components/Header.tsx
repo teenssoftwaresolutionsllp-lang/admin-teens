@@ -21,7 +21,7 @@ export default function Header({ profile }: HeaderProps) {
     if (pathname === "/dashboard/employees/add" || pathname === "/dashboard/employees/new") return "Add New Employee";
     if (pathname.includes("/dashboard/employees/")) return "Employee Profile Details";
     if (pathname === "/dashboard/approvals") return "Approvals Hub";
-    if (pathname === "/dashboard/attendance") return "Company Attendance & Shifts";
+    if (pathname === "/dashboard/attendance") return "Organization Attendance & Shifts";
     if (pathname === "/dashboard/leaves") return "Leave Policy & Balances";
     if (pathname === "/dashboard/payroll") return "Payroll & Salary Processing";
     if (pathname === "/dashboard/projects") return "Client & Vendors";

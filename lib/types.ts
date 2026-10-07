@@ -66,11 +66,15 @@ export interface Employee {
   blood_group?: string | null;
   marital_status?: "single" | "married" | "divorced" | "widowed" | null;
 
+  //doc
+  documents?: EmployeeDocument[];
+
   // Address Information
   permanent_address?: string | null;
   permanent_city?: string | null;
   permanent_state?: string | null;
   permanent_pincode?: string | null;
+  grade?:string | null;
 
   temporary_address?: string | null;
   temporary_city?: string | null;
@@ -83,6 +87,15 @@ export interface Employee {
   emergency_contact_name?: string | null;
   emergency_contact_phone?: string | null;
   emergency_contact_relation?: string | null;
+  // Emergency Contact 2
+  emergency_contact_name_2?: string | null;
+  emergency_contact_phone_2?: string | null;
+  emergency_contact_relation_2?: string | null;
+
+  // Emergency Contact 3
+  emergency_contact_name_3?: string | null;
+  emergency_contact_phone_3?: string | null;
+  emergency_contact_relation_3?: string | null;
 
   // ==============================
   // Employment Information
@@ -101,6 +114,7 @@ export interface Employee {
   joining_date?: string | null;
   probation_duration?: number;
   probation_end_date?: string | null;
+  appointment_date?: string | null;
   confirmation_date?: string | null;
 
   reporting_manager?: string | null;
@@ -127,10 +141,21 @@ export interface Employee {
 
   pan_number?: string | null;
   aadhar_number?: string | null;
+  passport_number?:string |null;
+  payment_mode?:string | null;
 
+  // ==============================
+  // Accessories Information
+  // ==============================
 
-
+  accessory_type ?:string | null;
+  accessory_serial?: string | null;
+  peripherals?:{type: string;
+    serial: string;
+  }[];
+  // ==============================
   // Statutory Information
+  // ==============================
   esi_healthcare_eligible?: boolean;
   esi_number?: string | null;
 
@@ -183,7 +208,18 @@ export interface EmployeeDocument {
   document_name: string;
   document_url: string;
   cloudinary_public_id: string | null;
-  uploaded_at: string;
+  cloudinary_resource_type?: string | null;
+
+  aadhaar_number?: string | null;
+  pan_number?: string | null;
+  passport_number?: string | null;
+
+
+  created_at?: string;
+  updated_at?: string;
+  uploaded_at?: string;
+  
+  [key: string]: any;
 }
 
 export interface ProfileChangeRequest {
@@ -278,11 +314,28 @@ export interface SalaryComponent {
   code: string;
   type: SalaryComponentType;
   calculation_type: CalculationType;
-  value: number; // e.g. 50 (for 50% of gross), or 40 (for 40% of basic), or fixed amount
+  value: number; 
   affects_lop: boolean;
   is_active: boolean;
   is_statutory: boolean;
   description: string;
+}
+
+export interface EmployeeSalaryComponent {
+  id: string;
+  employee_id: string;
+  salary_component_id: string;
+  calculation_type: string;
+  value: number;
+  is_active: boolean;
+  gratuity_5_year_taken: boolean;
+  gratuity_5_year_taken_date?: string | null;
+  gratuity_5_year_amount: number;
+  gratuity_10_year_taken: boolean;
+  gratuity_10_year_taken_date?: string | null;
+  gratuity_10_year_amount: number;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface PayslipBreakupItem {

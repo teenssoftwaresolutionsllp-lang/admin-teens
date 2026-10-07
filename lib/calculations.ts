@@ -113,57 +113,125 @@ export function calculateSalaryBreakdown({
   totalDeductions: number;
   netSalary: number;
 } {
-  const perDayRate = Number((grossSalary / totalDaysInMonth).toFixed(2));
-  const lopDeduction = Number((lopDays * perDayRate).toFixed(2));
-  const adjustedGross = Math.max(0, grossSalary - lopDeduction);
+  const perDayRate = Number(
+    (grossSalary / Math.max(totalDaysInMonth, 1)).toFixed(2)
+  );
 
-  const earningsComponents = activeComponents.filter((c) => c.type === "earning" && c.is_active);
-  const deductionsComponents = activeComponents.filter((c) => c.type === "deduction" && c.is_active);
+  const lopDeduction = Number(
+    (lopDays * perDayRate).toFixed(2)
+  );
 
-  // 1. Calculate Basic Pay (standard 50% of gross)
-  const basicComp = earningsComponents.find((c) => c.code === "BASIC");
-  const basicPercent = basicComp?.value ?? 50;
-  const basicAmount = Number(((grossSalary * basicPercent) / 100).toFixed(2));
+  const adjustedGross = Math.max(
+    0,
+    Number((grossSalary - lopDeduction).toFixed(2))
+  );
 
-  // 2. Compute each active Earning
+  // ---------------------------------------------------------
+  // EMPLOYEE EARNINGS
+  // ---------------------------------------------------------
+
+  const earningsComponents = activeComponents.filter(
+    (component) =>
+      component.type === "earning" &&
+      component.is_active &&
+      component.code !== "GRATUITY"
+  );
+
+  // ---------------------------------------------------------
+  // EMPLOYEE DEDUCTIONS
+  // Employer PF must NEVER be deducted from employee salary.
+  // Gratuity must NEVER be deducted from employee salary.
+  // ---------------------------------------------------------
+
+  const deductionsComponents = activeComponents.filter(
+    (component) =>
+      component.type === "deduction" &&
+      component.is_active &&
+      component.code !== "EMPLOYER_PF" &&
+      component.code !== "GRATUITY"
+  );
+
+  // ---------------------------------------------------------
+  // BASIC
+  // ---------------------------------------------------------
+
+  const basicComp = earningsComponents.find(
+    (component) => component.code === "BASIC"
+  );
+
+  const basicPercent = basicComp?.value ?? 47;
+
+  const basicAmount = Number(
+    ((grossSalary * basicPercent) / 100).toFixed(2)
+  );
+
+  // ---------------------------------------------------------
+  // EARNINGS BREAKDOWN
+  // ---------------------------------------------------------
+
   const earningsBreakdown: PayslipBreakupItem[] = [];
+
   let accountedEarnings = 0;
 
-  for (const comp of earningsComponents) {
+  for (const component of earningsComponents) {
     let amount = 0;
-    if (comp.code === "BASIC") {
+
+    if (component.code === "BASIC") {
       amount = basicAmount;
-    } else if (comp.code === "HRA") {
-      // Typically 40% of Basic
-      const hraPercent = comp.value ?? 40;
-      amount = Number(((basicAmount * hraPercent) / 100).toFixed(2));
-    } else if (comp.code === "SPECIAL_ALLOWANCE") {
-      // Floating balancing component: Gross - (Basic + HRA + other fixed earnings)
-      amount = 0; // calculated after others
-    } else if (comp.calculation_type === "percentage_of_basic") {
-      amount = Number(((basicAmount * comp.value) / 100).toFixed(2));
-    } else if (comp.calculation_type === "percentage_of_gross") {
-      amount = Number(((grossSalary * comp.value) / 100).toFixed(2));
+    } else if (component.code === "HRA") {
+      const hraPercent = component.value ?? 50;
+
+      amount = Number(
+        ((basicAmount * hraPercent) / 100).toFixed(2)
+      );
+    } else if (component.code === "SPECIAL_ALLOWANCE") {
+      // Calculated after all fixed/percentage earnings.
+      continue;
+    } else if (
+      component.calculation_type === "percentage_of_basic"
+    ) {
+      amount = Number(
+        ((basicAmount * component.value) / 100).toFixed(2)
+      );
+    } else if (
+      component.calculation_type === "percentage_of_gross"
+    ) {
+      amount = Number(
+        ((grossSalary * component.value) / 100).toFixed(2)
+      );
     } else {
-      amount = Number(comp.value);
+      amount = Number(component.value);
     }
 
-    if (comp.code !== "SPECIAL_ALLOWANCE") {
+    if (amount > 0) {
       accountedEarnings += amount;
+
       earningsBreakdown.push({
-        component_id: comp.id,
-        name: comp.name,
-        code: comp.code,
+        component_id: component.id,
+        name: component.name,
+        code: component.code,
         type: "earning",
         amount,
       });
     }
   }
 
-  // Handle Special Allowance as balancing figure if active
-  const specialComp = earningsComponents.find((c) => c.code === "SPECIAL_ALLOWANCE");
+  // ---------------------------------------------------------
+  // SPECIAL ALLOWANCE
+  // Remaining amount required to make employee earnings
+  // equal to gross salary.
+  // ---------------------------------------------------------
+
+  const specialComp = earningsComponents.find(
+    (component) => component.code === "SPECIAL_ALLOWANCE"
+  );
+
   if (specialComp) {
-    const specialAllowance = Math.max(0, Number((grossSalary - accountedEarnings).toFixed(2)));
+    const specialAllowance = Math.max(
+      0,
+      Number((grossSalary - accountedEarnings).toFixed(2))
+    );
+
     earningsBreakdown.push({
       component_id: specialComp.id,
       name: specialComp.name,
@@ -171,16 +239,23 @@ export function calculateSalaryBreakdown({
       type: "earning",
       amount: specialAllowance,
     });
+
     accountedEarnings += specialAllowance;
   }
 
-  const totalEarnings = grossSalary;
+  const totalEarnings = Number(
+    accountedEarnings.toFixed(2)
+  );
 
-  // 3. Compute each active Deduction
+  // ---------------------------------------------------------
+  // EMPLOYEE DEDUCTIONS
+  // ---------------------------------------------------------
+
   const deductionsBreakdown: PayslipBreakupItem[] = [];
+
   let totalDeductions = 0;
 
-  // Add LOP Deduction as an item if lopDays > 0
+  // LOP
   if (lopDays > 0 && lopDeduction > 0) {
     deductionsBreakdown.push({
       component_id: "lop_deduction",
@@ -189,46 +264,70 @@ export function calculateSalaryBreakdown({
       type: "deduction",
       amount: lopDeduction,
     });
+
     totalDeductions += lopDeduction;
   }
 
-  for (const comp of deductionsComponents) {
+  for (const component of deductionsComponents) {
     let amount = 0;
-    if (comp.code === "PF") {
-      // Statutory PF: 12% of Basic Pay (commonly capped at 12% of ₹15,000 = ₹1,800 or 12% of basic)
-      const pfPercent = comp.value ?? 12;
-      amount = Number(((basicAmount * pfPercent) / 100).toFixed(2));
-    } else if (comp.code === "ESI") {
-      // ESI: 0.75% of Gross if gross <= 21,000
+
+    if (component.code === "PF") {
+      const pfPercent = component.value ?? 12;
+
+      amount = Number(
+        ((basicAmount * pfPercent) / 100).toFixed(2)
+      );
+    } else if (component.code === "ESI") {
+      // Employee ESI applies only when gross salary
+      // is within the ESI wage limit.
       if (grossSalary <= 21000) {
-        amount = Number(((grossSalary * 0.75) / 100).toFixed(2));
-      } else {
-        amount = 0;
+        amount = Number(
+          ((grossSalary * component.value) / 100).toFixed(2)
+        );
       }
-    } else if (comp.code === "PT") {
-      // Professional tax: flat standard ₹200
-      amount = comp.value || 200;
-    } else if (comp.calculation_type === "percentage_of_basic") {
-      amount = Number(((basicAmount * comp.value) / 100).toFixed(2));
-    } else if (comp.calculation_type === "percentage_of_gross") {
-      amount = Number(((grossSalary * comp.value) / 100).toFixed(2));
+    } else if (component.code === "PT") {
+      amount = Number(component.value || 0);
+    } else if (
+      component.calculation_type === "percentage_of_basic"
+    ) {
+      amount = Number(
+        ((basicAmount * component.value) / 100).toFixed(2)
+      );
+    } else if (
+      component.calculation_type === "percentage_of_gross"
+    ) {
+      amount = Number(
+        ((grossSalary * component.value) / 100).toFixed(2)
+      );
     } else {
-      amount = Number(comp.value);
+      amount = Number(component.value || 0);
     }
 
     if (amount > 0) {
       deductionsBreakdown.push({
-        component_id: comp.id,
-        name: comp.name,
-        code: comp.code,
+        component_id: component.id,
+        name: component.name,
+        code: component.code,
         type: "deduction",
         amount,
       });
+
       totalDeductions += amount;
     }
   }
 
-  const netSalary = Math.max(0, Number((totalEarnings - totalDeductions).toFixed(2)));
+  totalDeductions = Number(
+    totalDeductions.toFixed(2)
+  );
+
+  // ---------------------------------------------------------
+  // NET SALARY
+  // ---------------------------------------------------------
+
+  const netSalary = Math.max(
+    0,
+    Number((totalEarnings - totalDeductions).toFixed(2))
+  );
 
   return {
     grossSalary,
@@ -241,6 +340,76 @@ export function calculateSalaryBreakdown({
     totalEarnings,
     totalDeductions,
     netSalary,
+  };
+}
+
+// gratuity
+export function calculateGratuity(
+  joiningDate: string,
+  basicSalary: number,
+  asOfDate = new Date()
+): {
+  completedYears: number;
+  completedMonths: number;
+  serviceYearsText: string;
+  gratuityServiceYears: number;
+  gratuityAmount: number;
+} {
+  const joining = new Date(joiningDate);
+
+  if (Number.isNaN(joining.getTime())) {
+    return {
+      completedYears: 0,
+      completedMonths: 0,
+      serviceYearsText: "0 Years",
+      gratuityServiceYears: 0,
+      gratuityAmount: 0,
+    };
+  }
+
+  let years = asOfDate.getFullYear() - joining.getFullYear();
+  let months = asOfDate.getMonth() - joining.getMonth();
+
+  if (asOfDate.getDate() < joining.getDate()) {
+    months -= 1;
+  }
+
+  if (months < 0) {
+    years -= 1;
+    months += 12;
+  }
+
+  years = Math.max(0, years);
+  months = Math.max(0, months);
+
+  // Gratuity calculation:
+  // 6 months or more = next year
+  const gratuityServiceYears =
+    months >= 6 ? years + 1 : years;
+
+  const gratuityAmount =
+    gratuityServiceYears >= 5
+      ? Number(
+          (
+            (basicSalary * 15 * gratuityServiceYears) /
+            26
+          ).toFixed(2)
+        )
+      : 0;
+
+  const serviceYearsText =
+    months === 0
+      ? `${years} ${years === 1 ? "Year" : "Years"}`
+      : `${years} ${years === 1 ? "Year" : "Years"} ${months} ${
+          months === 1 ? "Month" : "Months"
+        }`;
+
+  return {
+    completedYears: years,
+    completedMonths: months,
+    serviceYearsText,
+    gratuityServiceYears,
+    gratuityAmount,
   };
 }
 

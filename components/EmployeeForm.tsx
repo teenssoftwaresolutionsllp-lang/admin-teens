@@ -4,7 +4,7 @@ import { useState , useEffect, useRef} from "react";
 import { toast } from "react-hot-toast"
 import { useRouter } from "next/navigation";
 import { Department, Employee, UserRole, EmployeeDocument, Project, } from "@/lib/types";
-import { User, Briefcase, Loader2, KeyRound, File, CreditCard, FileText, MapPin, Copy } from "lucide-react";
+import { User, Briefcase, Loader2, KeyRound, File, CreditCard, FileText, MapPin, Copy, LaptopMinimal } from "lucide-react";
 import companiesData from "@/data/companies.json";
 import DocumentUpload from "./DocumentUpload";
 
@@ -31,7 +31,13 @@ export default function EmployeeForm({ employee, departments, projects, generate
   const [pfEligible, setPfEligible] = useState(false);
   const [ptEligible, setPtEligible] = useState(false);
   const [ptNumber, setPtNumber] = useState("");
+  const [accessoryType, setAccessoryType] = useState( employee?.accessory_type || "");
+  const [accessorySerial,setAccessorySerial] = useState(employee?.accessory_serial || "");
+  const [peripheralType,setPeripheralType] = useState("");
+  const [peripheralSerial,setPeripheralSerial] = useState("");
+  const [peripherals,setPeripherals] = useState<{ type: string; serial: string }[]>(employee?.peripherals || []);
   const [tdsEligible, setTdsEligible] = useState(false);
+  const [documents, setDocuments] = useState<EmployeeDocument[]>([]);
   const [error, setError] = useState<string []>([]);
 
   const [companySearch, setCompanySearch] = useState(
@@ -70,6 +76,7 @@ export default function EmployeeForm({ employee, departments, projects, generate
     employment_type: employee?.employment_type || null,
     joining_date: employee?.joining_date?.split("T")[0] || "",
     probation_duration: employee?.probation_duration || 6,
+    appointment_date :employee?.appointment_date?.split("T")[0] || "",
     probation_end_date: employee?.probation_end_date?.split("T")[0] || "",
     confirmation_date: employee?.confirmation_date?.split("T")[0] || "",
     reporting_manager: employee?.reporting_manager || "",
@@ -88,6 +95,7 @@ export default function EmployeeForm({ employee, departments, projects, generate
     ifsc_code: employee?.ifsc_code || "",
     pan_number: employee?.pan_number || "",
     aadhar_number: employee?.aadhar_number || "",
+    passport_number : employee?.passport_number||"",
 
     // Address Information
     permanent_address: employee?.permanent_address || "",
@@ -100,10 +108,26 @@ export default function EmployeeForm({ employee, departments, projects, generate
     temporary_state: employee?.temporary_state || "",
     temporary_pincode: employee?.temporary_pincode || "",
 
-    // Emergency Contact
+    // Emergency Contact 1
     emergency_contact_name: employee?.emergency_contact_name || "",
     emergency_contact_relation: employee?.emergency_contact_relation || "",
     emergency_contact_phone: employee?.emergency_contact_phone || "",
+
+    // Emergency Contact 2
+    emergency_contact_name_2: employee?.emergency_contact_name_2 || "",
+    emergency_contact_relation_2: employee?.emergency_contact_relation_2 || "",
+    emergency_contact_phone_2: employee?.emergency_contact_phone_2 || "",
+
+    // Emergency Contact 3
+    emergency_contact_name_3: employee?.emergency_contact_name_3 || "",
+    emergency_contact_relation_3: employee?.emergency_contact_relation_3 || "",
+    emergency_contact_phone_3: employee?.emergency_contact_phone_3 || "",
+
+
+    // Accessories 
+    accessory_type: employee?.accessory_type || "",
+    accessory_serial: employee?.accessory_serial || "",
+    peripherals: employee?.peripherals || [],
 
     // Statutory Information
     esi_number: employee?.esi_number || "",
@@ -138,6 +162,9 @@ export default function EmployeeForm({ employee, departments, projects, generate
   useEffect(() => {
     if (!employee) return;
 
+    // =========================
+    // STATUTORY
+    // =========================
     setEsiEligible(employee.esi_healthcare_eligible ?? false);
     setEsiNumber(employee.esi_number ?? "");
 
@@ -147,10 +174,135 @@ export default function EmployeeForm({ employee, departments, projects, generate
     setPtNumber(employee.pt_number ?? "");
 
     setTdsEligible(employee.tds_eligible ?? false);
+
+    // =========================
+    // ACCESSORIES
+    // =========================
+    setAccessoryType(employee.accessory_type ?? "");
+    setAccessorySerial(employee.accessory_serial ?? "");
+    setPeripherals(employee.peripherals ?? []);
+
+    // Documents
+    setDocuments(employee.documents ?? []);
+
+    // =========================
+    // CLIENT
+    // =========================
+    setCompanySearch(employee.company_name ?? "");
+
+    // =========================
+    // FORM DATA
+    // =========================
+    setFormData({
+      first_name: employee.first_name ?? "",
+      last_name: employee.last_name ?? "",
+      email: employee.email ?? "",
+      phone: employee.phone ?? "",
+
+      date_of_birth: employee.date_of_birth
+        ? employee.date_of_birth.split("T")[0]
+        : "",
+
+      gender: employee.gender ?? null,
+      blood_group: employee.blood_group ?? "",
+      marital_status: employee.marital_status ?? null,
+
+      employee_id: employee.employee_id ?? "",
+      department_id: employee.department_id ?? "",
+      project_id: employee.project_id ?? "",
+      designation: employee.designation ?? "",
+      employment_type: employee.employment_type ?? null,
+
+      joining_date: employee.joining_date
+        ? employee.joining_date.split("T")[0]
+        : "",
+
+      probation_duration: employee.probation_duration ?? 6,
+
+      appointment_date: employee.appointment_date
+        ? employee.appointment_date.split("T")[0]
+        : "",
+
+      probation_end_date: employee.probation_end_date
+        ? employee.probation_end_date.split("T")[0]
+        : "",
+
+      confirmation_date: employee.confirmation_date
+        ? employee.confirmation_date.split("T")[0]
+        : "",
+
+      reporting_manager: employee.reporting_manager ?? "",
+      work_location: employee.work_location ?? "",
+
+      // Client
+      client_type: employee.client_type ?? "",
+      company_name: employee.company_name ?? "",
+
+      // Salary
+      salary: employee.salary ?? undefined,
+
+      // Bank & Identity
+      bank_name: employee.bank_name ?? "",
+      bank_account_number: employee.bank_account_number ?? "",
+      ifsc_code: employee.ifsc_code ?? "",
+      pan_number: employee.pan_number ?? "",
+      aadhar_number: employee.aadhar_number ?? "",
+      passport_number: employee.passport_number ?? "",
+
+      // Permanent Address
+      permanent_address: employee.permanent_address ?? "",
+      permanent_city: employee.permanent_city ?? "",
+      permanent_state: employee.permanent_state ?? "",
+      permanent_pincode: employee.permanent_pincode ?? "",
+
+      // Temporary Address
+      temporary_address: employee.temporary_address ?? "",
+      temporary_city: employee.temporary_city ?? "",
+      temporary_state: employee.temporary_state ?? "",
+      temporary_pincode: employee.temporary_pincode ?? "",
+
+      // Emergency Contact 1
+      emergency_contact_name: employee.emergency_contact_name ?? "",
+      emergency_contact_relation:
+        employee.emergency_contact_relation ?? "",
+      emergency_contact_phone:
+        employee.emergency_contact_phone ?? "",
+
+      // Emergency Contact 2
+      emergency_contact_name_2:
+        employee.emergency_contact_name_2 ?? "",
+      emergency_contact_relation_2:
+        employee.emergency_contact_relation_2 ?? "",
+      emergency_contact_phone_2:
+        employee.emergency_contact_phone_2 ?? "",
+
+      // Emergency Contact 3
+      emergency_contact_name_3:
+        employee.emergency_contact_name_3 ?? "",
+      emergency_contact_relation_3:
+        employee.emergency_contact_relation_3 ?? "",
+      emergency_contact_phone_3:
+        employee.emergency_contact_phone_3 ?? "",
+
+      // Accessories
+      accessory_type: employee.accessory_type ?? "",
+      accessory_serial: employee.accessory_serial ?? "",
+      peripherals: employee.peripherals ?? [],
+
+      // Statutory
+      esi_number: employee.esi_number ?? "",
+      uan_number: employee.uan_number ?? "",
+      // Status
+      status: employee.status ?? "active",
+
+      // Don't change this in edit
+      initial_password: "Employee@123",
+    } as any);
   }, [employee]);
 
-  const [documents, setDocuments] = useState<EmployeeDocument[]>([]);
 
+
+  
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value === "" ? null : value }));
@@ -356,12 +508,18 @@ const handleSubmit = async (e: React.FormEvent) => {
       esi_number: esiEligible ? esiNumber : null,
 
       pf_eligible: pfEligible,
+      uan_number: pfEligible ? formData.uan_number : null,
 
       pt_eligible: ptEligible,
       pt_number: ptEligible ? ptNumber : null,
 
       tds_eligible: tdsEligible,
-     
+
+      //accessory
+      accessory_type: accessoryType || null,
+      accessory_serial: accessorySerial || null,
+      peripherals: peripherals || [],
+          
     };
 
     if (mode === "add") {
@@ -404,6 +562,8 @@ const handleSubmit = async (e: React.FormEvent) => {
       throw new Error("Employee ID not found after saving");
     }
 
+
+
     router.push(
       `/dashboard/employees/${employeeId}`
     );
@@ -427,7 +587,8 @@ const handleSubmit = async (e: React.FormEvent) => {
     { name: "Employment", icon: Briefcase },
     { name: "Bank & Identity", icon: CreditCard },
     { name: "Address & Emergency", icon: MapPin },
-    { name: "Documents", icon: FileText },
+    { name: "Documentation", icon: FileText },
+    { name:"Accessory Management", icon: LaptopMinimal},
     { name: "Statutory", icon: File},
   ]
   return (
@@ -800,6 +961,7 @@ const handleSubmit = async (e: React.FormEvent) => {
                 <option value={12}>12 Months</option>
               </select>
             </div>
+            
 
             {/* Probation End Date */}
             <div>
@@ -812,6 +974,25 @@ const handleSubmit = async (e: React.FormEvent) => {
                 name="probation_end_date"
                 value={formData.probation_end_date || ""}
                 readOnly
+                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
+              />
+            </div>
+
+            {/* Appointment Date */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                Appointment Date
+              </label>
+
+              <input
+                type="date"
+                name="appointment_date"
+                value={formData.appointment_date || ""}
+                onChange={(e) => setFormData((prev) => ({
+                    ...prev,
+                    appointment_date: e.target.value,
+                  }))
+                }
                 className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
               />
             </div>
@@ -877,6 +1058,7 @@ const handleSubmit = async (e: React.FormEvent) => {
               />
               <p className="text-[11px] text-slate-500 mt-1.5">Enter annual CTC in lakhs. Example: 5.5 = ₹5.5 Lakhs per year. </p>
             </div>
+
             
             {/* Client Type */}
             <div>
@@ -1105,6 +1287,21 @@ const handleSubmit = async (e: React.FormEvent) => {
                 className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
               />
             </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                Passport Number
+              </label>
+
+              <input
+                type="text"
+                name="passport_number"
+                value={formData.passport_number || ""}
+                onChange={handleChange}
+                placeholder="Enter Passport number"
+                maxLength={12}
+                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
+              />
+            </div>
 
           </div>
         </div>
@@ -1232,7 +1429,7 @@ const handleSubmit = async (e: React.FormEvent) => {
 
                 <div>
                   <h3 className="text-sm font-bold text-gray-900">
-                    Temporary Address
+                    Communication Address
                   </h3>
                   <p className="text-xs text-gray-500">
                     Employee&apos;s current or temporary residential address
@@ -1320,77 +1517,227 @@ const handleSubmit = async (e: React.FormEvent) => {
 
                 <div>
                   <h3 className="text-sm font-bold text-gray-900">
-                    Emergency Contact
+                    Emergency Contacts
                   </h3>
                   <p className="text-xs text-gray-500">
-                    Person to contact in case of an emergency
+                    People to contact in case of an emergency
                   </p>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div className="space-y-6">
 
-                {/* Emergency Contact Name */}
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-2">
-                    Contact Name
-                  </label>
+                {/* ================= CONTACT 1 ================= */}
+                <div className="rounded-xl border border-gray-200 p-5">
+                  <h4 className="text-sm font-bold text-gray-900 mb-4">
+                    Emergency Contact 1
+                  </h4>
 
-                  <input
-                    type="text"
-                    name="emergency_contact_name"
-                    value={formData.emergency_contact_name || ""}
-                    onChange={handleChange}
-                    placeholder="Enter contact name"
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+
+                    {/* Name */}
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-2">
+                        Contact Name
+                      </label>
+
+                      <input
+                        type="text"
+                        name="emergency_contact_name"
+                        value={formData.emergency_contact_name || ""}
+                        onChange={handleChange}
+                        placeholder="Enter contact name"
+                        className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      />
+                    </div>
+
+                    {/* Relationship */}
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-2">
+                        Relationship
+                      </label>
+
+                      <select
+                        name="emergency_contact_relation"
+                        value={formData.emergency_contact_relation || ""}
+                        onChange={handleChange}
+                        className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      >
+                        <option value="">Select relationship</option>
+                        <option value="Father">Father</option>
+                        <option value="Mother">Mother</option>
+                        <option value="Spouse">Spouse</option>
+                        <option value="Brother">Brother</option>
+                        <option value="Sister">Sister</option>
+                        <option value="Son">Son</option>
+                        <option value="Daughter">Daughter</option>
+                        <option value="Guardian">Guardian</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </div>
+
+                    {/* Phone */}
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-2">
+                        Contact Phone
+                      </label>
+
+                      <input
+                        type="tel"
+                        name="emergency_contact_phone"
+                        value={formData.emergency_contact_phone || ""}
+                        onChange={handleChange}
+                        placeholder="Enter emergency contact number"
+                        maxLength={10}
+                        className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      />
+                    </div>
+
+                  </div>
                 </div>
 
-                {/* Relationship */}
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-2">
-                    Relationship
-                  </label>
 
-                  <select
-                    name="emergency_contact_relation"
-                    value={formData.emergency_contact_relation || ""}
-                    onChange={handleChange}
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  >
-                    <option value="">Select relationship</option>
-                    <option value="Father">Father</option>
-                    <option value="Mother">Mother</option>
-                    <option value="Spouse">Spouse</option>
-                    <option value="Brother">Brother</option>
-                    <option value="Sister">Sister</option>
-                    <option value="Son">Son</option>
-                    <option value="Daughter">Daughter</option>
-                    <option value="Guardian">Guardian</option>
-                    <option value="Other">Other</option>
-                  </select>
+                {/* ================= CONTACT 2 ================= */}
+                <div className="rounded-xl border border-gray-200 p-5">
+                  <h4 className="text-sm font-bold text-gray-900 mb-4">
+                    Emergency Contact 2
+                  </h4>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+
+                    {/* Name */}
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-2">
+                        Contact Name
+                      </label>
+
+                      <input
+                        type="text"
+                        name="emergency_contact_name_2"
+                        value={formData.emergency_contact_name_2 || ""}
+                        onChange={handleChange}
+                        placeholder="Enter contact name"
+                        className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      />
+                    </div>
+
+                    {/* Relationship */}
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-2">
+                        Relationship
+                      </label>
+
+                      <select
+                        name="emergency_contact_relation_2"
+                        value={formData.emergency_contact_relation_2 || ""}
+                        onChange={handleChange}
+                        className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      >
+                        <option value="">Select relationship</option>
+                        <option value="Father">Father</option>
+                        <option value="Mother">Mother</option>
+                        <option value="Spouse">Spouse</option>
+                        <option value="Brother">Brother</option>
+                        <option value="Sister">Sister</option>
+                        <option value="Son">Son</option>
+                        <option value="Daughter">Daughter</option>
+                        <option value="Guardian">Guardian</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </div>
+
+                    {/* Phone */}
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-2">
+                        Contact Phone
+                      </label>
+
+                      <input
+                        type="tel"
+                        name="emergency_contact_phone_2"
+                        value={formData.emergency_contact_phone_2 || ""}
+                        onChange={handleChange}
+                        placeholder="Enter emergency contact number"
+                        maxLength={10}
+                        className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      />
+                    </div>
+
+                  </div>
                 </div>
 
-                {/* Emergency Contact Phone */}
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-2">
-                    Contact Phone
-                  </label>
 
-                  <input
-                    type="tel"
-                    name="emergency_contact_phone"
-                    value={formData.emergency_contact_phone || ""}
-                    onChange={handleChange}
-                    placeholder="Enter emergency contact number"
-                    maxLength={10}
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  />
+                {/* ================= CONTACT 3 ================= */}
+                <div className="rounded-xl border border-gray-200 p-5">
+                  <h4 className="text-sm font-bold text-gray-900 mb-4">
+                    Emergency Contact 3
+                  </h4>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+
+                    {/* Name */}
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-2">
+                        Contact Name
+                      </label>
+
+                      <input
+                        type="text"
+                        name="emergency_contact_name_3"
+                        value={formData.emergency_contact_name_3 || ""}
+                        onChange={handleChange}
+                        placeholder="Enter contact name"
+                        className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      />
+                    </div>
+
+                    {/* Relationship */}
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-2">
+                        Relationship
+                      </label>
+
+                      <select
+                        name="emergency_contact_relation_3"
+                        value={formData.emergency_contact_relation_3 || ""}
+                        onChange={handleChange}
+                        className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      >
+                        <option value="">Select relationship</option>
+                        <option value="Father">Father</option>
+                        <option value="Mother">Mother</option>
+                        <option value="Spouse">Spouse</option>
+                        <option value="Brother">Brother</option>
+                        <option value="Sister">Sister</option>
+                        <option value="Son">Son</option>
+                        <option value="Daughter">Daughter</option>
+                        <option value="Guardian">Guardian</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </div>
+
+                    {/* Phone */}
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-2">
+                        Contact Phone
+                      </label>
+
+                      <input
+                        type="tel"
+                        name="emergency_contact_phone_3"
+                        value={formData.emergency_contact_phone_3 || ""}
+                        onChange={handleChange}
+                        placeholder="Enter emergency contact number"
+                        maxLength={10}
+                        className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      />
+                    </div>
+
+                  </div>
                 </div>
 
               </div>
             </section>
-
           </div>
         </div>
         {/* Tab 4: Documents */}
@@ -1398,12 +1745,174 @@ const handleSubmit = async (e: React.FormEvent) => {
           <div>
             <DocumentUpload
             documents={documents || []}
+            employeeId={employee?.id}
             />
           </div>
         )}
 
-        {/* {tab 5: options to selct eligabilty of pt ,tds} */}
-        <div className={activeTab === 5 ? "block" : "hidden"}>
+        {/* Tab 5: Accessory management*/}
+        {activeTab === 5 && (
+          <div className="space-y-6">
+
+            {/* ================= ASSIGNED EQUIPMENT ================= */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                Accessory Type
+              </label>
+
+              <select
+                value={accessoryType}
+                onChange={(e) => {
+                  setAccessoryType(e.target.value);
+
+                  if (e.target.value === "") {
+                    setAccessorySerial("");
+                  }
+                }}
+                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
+              >
+                <option value="">No Main Accessory</option>
+                <option value="Desktop">Desktop</option>
+                <option value="Laptop">Laptop</option>
+              </select>
+            </div>
+
+            {/* Desktop / Laptop Serial Number */}
+            {(accessoryType === "Desktop" || accessoryType === "Laptop") && (
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  {accessoryType} S.No
+                </label>
+
+                <input
+                  type="text"
+                  value={accessorySerial}
+                  onChange={(e) => setAccessorySerial(e.target.value)}
+                  placeholder={`Enter ${accessoryType} S.No`}
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
+                />
+              </div>
+            )}
+
+            {/* ================= PERIPHERALS ================= */}
+            <div className="border-t border-slate-200 pt-6 space-y-4">
+
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">
+                  Peripherals
+                </h3>
+
+                <p className="text-xs text-slate-500 mt-1">
+                  Add peripherals assigned to this employee.
+                </p>
+              </div>
+
+              {/* Add Peripheral */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Peripheral
+                  </label>
+
+                  <select
+                    value={peripheralType}
+                    onChange={(e) => setPeripheralType(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
+                  >
+                    <option value="">Select Peripheral</option>
+                    <option value="Mouse">Mouse</option>
+                    <option value="Keyboard">Keyboard</option>
+                    <option value="Monitor">Monitor</option>
+                    <option value="Headset">Headset</option>
+                    <option value="Webcam">Webcam</option>
+                    <option value="Printer">Printer</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    S.No
+                  </label>
+
+                  <input
+                    type="text"
+                    value={peripheralSerial}
+                    onChange={(e) => setPeripheralSerial(e.target.value)}
+                    placeholder="Enter S.No"
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
+                  />
+                </div>
+
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (!peripheralType || !peripheralSerial.trim()) return;
+
+                  setPeripherals((prev) => [
+                    ...prev,
+                    {
+                      type: peripheralType,
+                      serial: peripheralSerial.trim(),
+                    },
+                  ]);
+
+                  setPeripheralType("");
+                  setPeripheralSerial("");
+                }}
+                className="px-4 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-bold hover:bg-indigo-700 transition-all"
+              >
+                + Add Peripheral
+              </button>
+
+              {/* ================= EXISTING PERIPHERALS ================= */}
+              {peripherals.length > 0 && (
+                <div className="space-y-2">
+
+                  <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    Assigned Peripherals
+                  </h4>
+
+                  {peripherals.map((item, index) => (
+                    <div
+                      key={`${item.type}-${item.serial}-${index}`}
+                      className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"
+                    >
+                      <div>
+                        <p className="text-sm font-bold text-slate-900">
+                          {item.type}
+                        </p>
+
+                        <p className="text-xs text-slate-500">
+                          S.No: {item.serial}
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPeripherals((prev) =>
+                            prev.filter((_, i) => i !== index)
+                          );
+                        }}
+                        className="text-xs font-bold text-red-600 hover:text-red-700"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+            </div>
+          </div>
+        )}
+
+        {/* {tab 6: options to selct eligabilty of pt ,tds} */}
+        <div className={activeTab === 6 ? "block" : "hidden"}>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
 
             {/* ESI */}
@@ -1590,8 +2099,8 @@ const handleSubmit = async (e: React.FormEvent) => {
           </button>
         )}
 
-        {/* ADD MODE - TAB 2-4 */}
-        {mode === "add" && activeTab >= 1 && activeTab < 5 && (
+        {/* ADD MODE - TAB 2-5 */}
+        {mode === "add" && activeTab >= 1 && activeTab < 6 && (
           <>
             <button
               type="button"
@@ -1707,8 +2216,8 @@ const handleSubmit = async (e: React.FormEvent) => {
           </>
         )}
 
-        {/* ADD MODE - TAB 5 */}
-        {mode === "add" && activeTab === 5 && (
+        {/* ADD MODE - TAB 6 */}
+        {mode === "add" && activeTab === 6 && (
           <>
             <button
               type="button"

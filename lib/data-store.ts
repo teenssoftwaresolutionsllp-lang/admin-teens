@@ -10,6 +10,7 @@ import {
   EmployeeLeaveBalance,
   LeaveRequest,
   SalaryComponent,
+  EmployeeSalaryComponent,
   Payslip,
 } from "./types";
 import { calculateSalaryBreakdown, evaluateAttendancePunch } from "./calculations";
@@ -63,6 +64,46 @@ function getCache() {
     };
   }
   return global.__hrmsCache;
+}
+
+// ==========================================
+// PAYROLL WORKING DAYS
+// Sunday = Holiday
+// Saturday = Holiday by default
+// Selected Saturdays can be made working days
+// ==========================================
+
+function getWorkingDatesInMonth(
+  year: number,
+  month: number,
+  workingSaturdays: number[] = []
+): string[] {
+  const workingDates: string[] = [];
+
+  const daysInMonth = new Date(year, month, 0).getDate();
+
+  for (let day = 1; day <= daysInMonth; day++) {
+    const date = new Date(year, month - 1, day);
+    const dayOfWeek = date.getDay();
+
+    // Sunday = holiday
+    if (dayOfWeek === 0) {
+      continue;
+    }
+
+    // Saturday = holiday unless HR has enabled it
+    if (dayOfWeek === 6) {
+      if (!workingSaturdays.includes(day)) {
+        continue;
+      }
+    }
+
+    const dateString = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+
+    workingDates.push(dateString);
+  }
+
+  return workingDates;
 }
 
 export class DataStore {
@@ -312,9 +353,20 @@ export class DataStore {
       // =========================
       // EMERGENCY CONTACT
       // =========================
+      // Emergency Contact 1
       emergency_contact_name: empData.emergency_contact_name || null,
       emergency_contact_phone: empData.emergency_contact_phone || null,
       emergency_contact_relation: empData.emergency_contact_relation || null,
+
+      // Emergency Contact 2
+      emergency_contact_name_2: empData.emergency_contact_name_2 || null,
+      emergency_contact_phone_2: empData.emergency_contact_phone_2 || null,
+      emergency_contact_relation_2: empData.emergency_contact_relation_2 || null,
+
+      // Emergency Contact 3
+      emergency_contact_name_3: empData.emergency_contact_name_3 || null,
+      emergency_contact_phone_3: empData.emergency_contact_phone_3 || null,
+      emergency_contact_relation_3: empData.emergency_contact_relation_3 || null,
 
       // =========================
       // EMPLOYMENT INFORMATION
@@ -324,6 +376,7 @@ export class DataStore {
       employment_type: empData.employment_type || "full-time",
       joining_date: empData.joining_date || new Date().toISOString().split("T")[0],
       probation_end_date: empData.probation_end_date || null,
+      appointment_date: empData.appointment_date || null,
       confirmation_date: empData.confirmation_date || null,
       reporting_manager: empData.reporting_manager || null,
       work_location: empData.work_location || null,
@@ -356,6 +409,14 @@ export class DataStore {
       ifsc_code: empData.ifsc_code || null,
       pan_number: empData.pan_number || null,
       aadhar_number: empData.aadhar_number || null,
+      passport_number: empData.passport_number || null,
+
+      // =========================
+      // ACCESSORIES
+      // =========================
+      accessory_type: empData.accessory_type || null,
+      accessory_serial: empData.accessory_serial || null,
+      peripherals: empData.peripherals || [],
 
       // =========================
       // PROJECT
@@ -855,6 +916,232 @@ export class DataStore {
       console.warn("getHolidayCalendars database warning:", error);
     }
     return cache.holidayCalendars;
+  }
+
+  // ==========================================
+// PAYROLL WORKING SATURDAYS
+// Uses existing public.holidays table
+//
+// A Saturday with title:
+// "Working Saturday"
+// ==========================================
+// =========================================================
+// GET WORKING SATURDAYS
+// =========================================================
+
+  static async getWorkingSaturdays(
+    year: number,
+    month: number,
+    calendarId?: string | null
+  ): Promise<number[]> {
+    const supabase = await createAdminClient();
+
+    const startDate =
+      `${year}-${String(month).padStart(2, "0")}-01`;
+
+    const endDate =
+      `${year}-${String(month).padStart(2, "0")}-${String(
+        new Date(year, month, 0).getDate()
+      ).padStart(2, "0")}`;
+
+    let query = supabase
+      .from("holidays")
+      .select(`
+        holiday_date,
+        title,
+        is_working_day,
+        calendar_id
+      `)
+      .gte("holiday_date", startDate)
+      .lte("holiday_date", endDate)
+      .eq("is_working_day", true);
+
+    // ---------------------------------------------------------
+    // USE EMPLOYEE PROJECT CALENDAR
+    // ---------------------------------------------------------
+
+    if (calendarId) {
+      query = query.eq(
+        "calendar_id",
+        calendarId
+      );
+    } else {
+      // No project calendar:
+      // only use company-wide holidays / overrides
+      query = query.is(
+        "calendar_id",
+        null
+      );
+    }
+
+    const {
+      data,
+      error,
+    } = await query;
+
+    if (error) {
+      throw new Error(
+        `Failed to load working Saturdays: ${error.message}`
+      );
+    }
+
+    return (data || [])
+      .map((row: any) => {
+        const date =
+          String(
+            row.holiday_date
+          ).slice(0, 10);
+
+        return {
+          day: Number(
+            date.slice(8, 10)
+          ),
+          date,
+        };
+      })
+      .filter((item) => {
+        if (
+          !Number.isInteger(
+            item.day
+          )
+        ) {
+          return false;
+        }
+
+        const date = new Date(
+          `${item.date}T00:00:00`
+        );
+
+        // Only Saturdays
+        return date.getDay() === 6;
+      })
+      .map(
+        (item) => item.day
+      )
+      .sort(
+        (a, b) => a - b
+      );
+  }
+
+
+  // =========================================================
+  // SET WORKING SATURDAY
+  // =========================================================
+
+  static async setWorkingSaturday(
+    date: string,
+    enabled: boolean,
+    calendarId?: string | null
+  ): Promise<void> {
+    const supabase =
+      await createAdminClient();
+
+    const selectedDate =
+      new Date(
+        `${date}T00:00:00`
+      );
+
+    // ---------------------------------------------------------
+    // VALIDATE DATE
+    // ---------------------------------------------------------
+
+    if (
+      Number.isNaN(
+        selectedDate.getTime()
+      )
+    ) {
+      throw new Error(
+        "Invalid date"
+      );
+    }
+
+    // ---------------------------------------------------------
+    // ONLY SATURDAY CAN BE CHANGED
+    // ---------------------------------------------------------
+
+    if (
+      selectedDate.getDay() !== 6
+    ) {
+      throw new Error(
+        "Only Saturdays can be marked as working days"
+      );
+    }
+
+    // =========================================================
+    // REMOVE EXISTING WORKING SATURDAY OVERRIDE
+    // =========================================================
+
+    let deleteQuery = supabase
+      .from("holidays")
+      .delete()
+      .eq(
+        "holiday_date",
+        date
+      )
+      .ilike(
+        "title",
+        "Working Saturday"
+      );
+
+    if (calendarId) {
+      deleteQuery =
+        deleteQuery.eq(
+          "calendar_id",
+          calendarId
+        );
+    } else {
+      deleteQuery =
+        deleteQuery.is(
+          "calendar_id",
+          null
+        );
+    }
+
+    const {
+      error: deleteError,
+    } = await deleteQuery;
+
+    if (deleteError) {
+      throw new Error(
+        `Failed to update working Saturday: ${deleteError.message}`
+      );
+    }
+
+    // =========================================================
+    // ENABLE WORKING SATURDAY
+    // =========================================================
+
+    if (enabled) {
+      const {
+        error: insertError,
+      } = await supabase
+        .from("holidays")
+        .insert({
+          calendar_id:
+            calendarId || null,
+
+          holiday_date:
+            date,
+
+          title:
+            "Working Saturday",
+
+          // Optional because this is an override
+          is_optional:
+            true,
+
+          // IMPORTANT:
+          // Payroll treats this Saturday as working
+          is_working_day:
+            true,
+        });
+
+      if (insertError) {
+        throw new Error(
+          `Failed to mark Saturday as working: ${insertError.message}`
+        );
+      }
+    }
   }
 
   // ==========================================
@@ -1691,7 +1978,13 @@ export class DataStore {
 
       let query = supabase
         .from("leave_requests")
-        .select("*")
+        .select(`*, 
+          employee:employees (
+            id,
+            employee_id,
+            first_name,
+            last_name
+        )`)
         .order("created_at", { ascending: false });
 
       if (employeeUuid) {
@@ -1923,48 +2216,280 @@ export class DataStore {
   // SALARY COMPONENTS & PAYROLL ENGINE
   // ==========================================
   static async getSalaryComponents(): Promise<SalaryComponent[]> {
-    return getCache().salaryComponents;
+    const supabase = await createAdminClient();
+
+    const { data, error } = await supabase
+      .from("salary_components")
+      .select(`id, name, code, type, calculation_type, value, affects_lop, is_active, is_statutory, description`)
+      .order("type", { ascending: true })
+      .order("name", { ascending: true });
+
+    if (error) {
+      throw new Error(`Failed to load salary components: ${error.message}`);
+    }
+
+    return (data || []) as SalaryComponent[];
+  }
+
+  static async getEmployeeSalaryComponents(employeeId: string): Promise<EmployeeSalaryComponent[]> {
+    const supabase = await createAdminClient();
+
+    const { data, error } = await supabase
+      .from("employee_salary_components")
+      .select(`
+        id,
+        employee_id,
+        salary_component_id,
+        calculation_type,
+        value,
+        is_active,
+        gratuity_5_year_taken,
+        gratuity_5_year_taken_date,
+        gratuity_5_year_amount,
+        gratuity_10_year_taken,
+        gratuity_10_year_taken_date,
+        gratuity_10_year_amount,
+        created_at,
+        updated_at
+      `)
+      .eq("employee_id", employeeId)
+      .eq("is_active", true);
+
+    if (error) {
+      throw new Error(
+        `Failed to load employee salary components: ${error.message}`
+      );
+    }
+
+    return (data || []) as EmployeeSalaryComponent[];
+  }
+
+  static async updateGratuityStatus(employeeId: string,type: "5_year" | "10_year",amount: number): Promise<EmployeeSalaryComponent> 
+  {
+    const supabase = await createAdminClient();
+
+    const { data: components, error: componentError } =
+      await supabase
+        .from("employee_salary_components")
+        .select(`
+          id,
+          employee_id,
+          salary_component_id,
+          calculation_type,
+          value,
+          is_active,
+          gratuity_5_year_taken,
+          gratuity_5_year_taken_date,
+          gratuity_5_year_amount,
+          gratuity_10_year_taken,
+          gratuity_10_year_taken_date,
+          gratuity_10_year_amount,
+          created_at,
+          updated_at,
+          salary_components!inner (
+            code
+          )
+        `)
+        .eq("employee_id", employeeId)
+        .eq("salary_components.code", "BASIC")
+        .eq("is_active", true)
+        .limit(1);
+
+    if (componentError) {
+      throw new Error(
+        `Failed to find BASIC component: ${componentError.message}`
+      );
+    }
+
+    const basicComponent = components?.[0];
+
+    if (!basicComponent) {
+      throw new Error("Basic salary component not found");
+    }
+
+    const today = new Date()
+      .toISOString()
+      .split("T")[0];
+
+    const updateData =
+      type === "5_year"
+        ? {
+            gratuity_5_year_taken: true,
+            gratuity_5_year_taken_date: today,
+            gratuity_5_year_amount: amount,
+          }
+        : {
+            gratuity_10_year_taken: true,
+            gratuity_10_year_taken_date: today,
+            gratuity_10_year_amount: amount,
+          };
+
+    const { data, error } = await supabase
+      .from("employee_salary_components")
+      .update(updateData)
+      .eq("id", basicComponent.id)
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(
+        `Failed to update gratuity status: ${error.message}`
+      );
+    }
+
+    return data as EmployeeSalaryComponent;
   }
 
   static async updateSalaryComponent(
     id: string,
     updates: Partial<SalaryComponent>
   ): Promise<SalaryComponent | null> {
+    const supabase = await createAdminClient();
+
+    const { data, error } = await supabase
+      .from("salary_components")
+      .update(updates)
+      .eq("id", id)
+      .select("*")
+      .single();
+
+    if (error) {
+      throw new Error(`Failed to update salary component: ${error.message}`);
+    }
+
+    const updated = data as SalaryComponent;
     const cache = getCache();
-    const idx = cache.salaryComponents.findIndex((sc) => sc.id === id);
-    if (idx < 0) return null;
-    cache.salaryComponents[idx] = { ...cache.salaryComponents[idx], ...updates };
-    return cache.salaryComponents[idx];
+    const index = cache.salaryComponents.findIndex(component => component.id === id);
+
+    if (index >= 0) {
+      cache.salaryComponents[index] = updated;
+    }
+
+    return updated;
   }
 
-  static async toggleSalaryComponent(id: string): Promise<SalaryComponent | null> {
-    const cache = getCache();
-    const item = cache.salaryComponents.find((sc) => sc.id === id);
-    if (!item) return null;
-    item.is_active = !item.is_active;
-    return item;
+  static async toggleSalaryComponent(
+    id: string
+  ): Promise<SalaryComponent | null> {
+    const supabase = await createAdminClient();
+
+    const { data: current, error: fetchError } = await supabase
+      .from("salary_components")
+      .select("is_active")
+      .eq("id", id)
+      .single();
+
+    if (fetchError) {
+      throw new Error(`Failed to load salary component: ${fetchError.message}`);
+    }
+
+    const { data, error } = await supabase
+      .from("salary_components")
+      .update({
+        is_active: !current.is_active
+      })
+      .eq("id", id)
+      .select("*")
+      .single();
+
+    if (error) {
+      throw new Error(`Failed to toggle salary component: ${error.message}`);
+    }
+
+    return data as SalaryComponent;
   }
 
-  static async getPayslips(employeeId?: string, month?: number, year?: number): Promise<Payslip[]> {
+  static async getPayslips(employeeId?: string,month?: number,year?: number): Promise<Payslip[]> {
     const cache = getCache();
-    let slips = [...cache.payslips];
-    if (employeeId) {
-      const employee = await this.getEmployeeById(employeeId);
-       if (!employee) {
-        return [];
+
+    try {
+      const supabase = await createAdminClient();
+
+      let query = supabase
+        .from("payslips")
+        .select("*")
+        .order("payroll_year", { ascending: false })
+        .order("payroll_month", { ascending: false });
+
+      if (employeeId) {
+        const employee = await this.getEmployeeById(employeeId);
+
+        if (!employee) {
+          return [];
+        }
+
+        query = query.eq("employee_id", employee.id);
       }
 
-      const employeeUuid = employee.id;
+      if (month) {
+        query = query.eq("payroll_month", month);
+      }
 
-      slips = slips.filter((p) => p.employee_id === employeeUuid);
+      if (year) {
+        query = query.eq("payroll_year", year);
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        console.error("getPayslips database error:", error);
+        throw error;
+      }
+
+      const slips: Payslip[] = [];
+
+      for (const row of data || []) {
+        const employee = await this.getEmployeeById(
+          row.employee_id
+        );
+
+        slips.push({
+          ...(row as Payslip),
+          employee: employee || undefined,
+        });
+      }
+
+      cache.payslips = slips;
+
+      return slips;
+    } catch (error) {
+      console.warn(
+        "getPayslips database warning, using cache:",
+        error
+      );
+
+      let slips = [...cache.payslips];
+
+      if (employeeId) {
+        const employee = await this.getEmployeeById(employeeId);
+
+        if (!employee) {
+          return [];
+        }
+
+        slips = slips.filter(
+          (p) => p.employee_id === employee.id
+        );
+      }
+
+      if (month) {
+        slips = slips.filter(
+          (p) => p.payroll_month === month
+        );
+      }
+
+      if (year) {
+        slips = slips.filter(
+          (p) => p.payroll_year === year
+        );
+      }
+
+      return slips.sort(
+        (a, b) =>
+          b.payroll_year - a.payroll_year ||
+          b.payroll_month - a.payroll_month
+      );
     }
-    if (month) {
-      slips = slips.filter((p) => p.payroll_month === month);
-    }
-    if (year) {
-      slips = slips.filter((p) => p.payroll_year === year);
-    }
-    return slips.sort((a, b) => b.payroll_year - a.payroll_year || b.payroll_month - a.payroll_month);
   }
 
   static async getPayslipById(id: string): Promise<Payslip | null> {
@@ -2029,161 +2554,699 @@ export class DataStore {
    * Calculates LOP days based on approved unpaid leaves and absent/half days.
    */
   static async generateMonthlyPayroll({
-    month,
-    year,
-  }: {
-    month: number;
-    year: number;
-  }): Promise<{ generatedCount: number; payslips: Payslip[] }> {
-    const cache = getCache();
-    const supabase = await createAdminClient();
+  month,
+  year,
+  employeeId,
+}: {
+  month: number;
+  year: number;
+  employeeId: string;
+}): Promise<{ generatedCount: number; payslips: Payslip[] }> {
+  const cache = getCache();
+  const supabase = await createAdminClient();
 
-    const employees = await this.getEmployees();
-    const activeComponents = cache.salaryComponents;
+  // =========================================================
+  // GET EMPLOYEE
+  // =========================================================
 
-    const monthNames = [
-      "January", "February", "March", "April", "May", "June",
-      "July", "August", "September", "October", "November", "December"
-    ];
+  const selectedEmployee = await this.getEmployeeById(employeeId);
 
-    const monthName = monthNames[month - 1];
-    const totalDaysInMonth = new Date(year, month, 0).getDate();
+  if (!selectedEmployee) {
+    throw new Error("Employee not found");
+  }
 
-    const generatedSlips: Payslip[] = [];
+  if (selectedEmployee.status !== "active") {
+    throw new Error("Selected employee is not active");
+  }
 
-    for (const emp of employees) {
-      if (emp.status !== "active") continue;
+  const employees: Employee[] = [selectedEmployee];
 
-        const annualCtc = emp.salary ?? 0;
+  const employeeSalaryComponents =  await this.getEmployeeSalaryComponents(selectedEmployee.id);
 
-        const baseSalary = (annualCtc * 100000) / 12;
+  const salaryComponents = await this.getSalaryComponents();
 
-        // Calculate LOP days from approved leave requests
-        const empLeaves = cache.leaveRequests.filter((lr) => {
-          if (lr.employee_id !== emp.id || lr.status !== "approved") {
-            return false;
-          }
-
-          const start = new Date(lr.start_date);
-
-          return (
-            start.getFullYear() === year &&
-            start.getMonth() + 1 === month
-          );
-      });
-
-      let lopDays = 0;
-
-      for (const req of empLeaves) {
-        const type = cache.leaveTypes.find(
-          (lt) => lt.id === req.leave_type_id
-        );
-
-        if (type && !type.is_paid) {
-          lopDays += req.total_days;
-        }
+  const activeComponents: SalaryComponent[] = employeeSalaryComponents.map((employeeComponent) => {
+    const masterComponent = salaryComponents.find((component) => component.id === employeeComponent.salary_component_id);
+      if (!masterComponent) {
+        return null;
       }
 
-      // Also factor half-days from attendance
-      const prefix = `${year}-${String(month).padStart(2, "0")}`;
-
-      const attLogs = cache.attendanceLogs.filter(
-        (a) =>
-          a.employee_id === emp.id &&
-          a.attendance_date.startsWith(prefix)
+      return {
+        ...masterComponent,
+        calculation_type: employeeComponent.calculation_type as SalaryComponent["calculation_type"],
+        value: Number(employeeComponent.value),
+        is_active: employeeComponent.is_active,
+        };
+      })
+      .filter(
+        (component): component is SalaryComponent =>
+          component !== null
       );
 
-      const halfDays = attLogs.filter(
-        (a) => a.status === "half_day"
-      ).length;
+  const monthNames = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+  ];
 
-      lopDays += halfDays * 0.5;
+  const monthName = monthNames[month - 1];
 
-      const workingDays = Math.min(totalDaysInMonth, 26);
-      const presentDays = Math.max(0, workingDays - lopDays);
+  const totalDaysInMonth =
+    new Date(year, month, 0).getDate();
 
-      const breakdown = calculateSalaryBreakdown({
+  // =========================================================
+  // PAYROLL MONTH DATES
+  // =========================================================
+
+  const monthStart =
+    `${year}-${String(month).padStart(2, "0")}-01`;
+
+  const monthEnd =
+    `${year}-${String(month).padStart(2, "0")}-${String(
+      totalDaysInMonth
+    ).padStart(2, "0")}`;
+
+  // =========================================================
+  // GET EMPLOYEE PROJECT HOLIDAY CALENDAR
+  // =========================================================
+
+  let calendarId: string | null = null;
+
+  if (selectedEmployee.project_id) {
+    const {
+      data: project,
+      error: projectError,
+    } = await supabase
+      .from("projects")
+      .select("calendar_id")
+      .eq("id", selectedEmployee.project_id)
+      .maybeSingle();
+
+    if (projectError) {
+      throw new Error(
+        `Failed to load employee project calendar: ${projectError.message}`
+      );
+    }
+
+    calendarId =
+      project?.calendar_id || null;
+  }
+
+  // =========================================================
+  // GET WORKING SATURDAYS
+  //
+  // Saturday is normally a holiday.
+  // HR can mark specific Saturdays as working.
+  // =========================================================
+
+  const workingSaturdays =
+    await this.getWorkingSaturdays(
+      year,
+      month,
+      calendarId
+    );
+
+  // =========================================================
+  // GET HOLIDAYS FOR EMPLOYEE'S CALENDAR
+  // =========================================================
+
+  let holidayQuery = supabase
+    .from("holidays")
+    .select(`
+      holiday_date,
+      title,
+      is_optional,
+      is_working_day,
+      calendar_id
+    `)
+    .gte("holiday_date", monthStart)
+    .lte("holiday_date", monthEnd);
+
+  if (calendarId) {
+    holidayQuery = holidayQuery.eq(
+      "calendar_id",
+      calendarId
+    );
+  }
+  else {
+    holidayQuery = holidayQuery.is(
+      "calendar_id",
+      null
+    );
+  }
+
+  const {
+    data: holidayRows,
+    error: holidayError,
+  } = await holidayQuery;
+
+  if (holidayError) {
+    throw new Error(
+      `Failed to load holidays: ${holidayError.message}`
+    );
+  }
+
+  // =========================================================
+  // CREATE HOLIDAY MAP
+  // =========================================================
+
+  const holidayMap = new Map<string, any[]>();
+
+  for (const holiday of holidayRows || []) {
+    const holidayDate = String(
+      holiday.holiday_date
+    ).slice(0, 10);
+
+    const existing =
+      holidayMap.get(holidayDate) || [];
+
+    existing.push(holiday);
+
+    holidayMap.set(
+      holidayDate,
+      existing
+    );
+  }
+
+  // =========================================================
+  // GENERATE WORKING DATES
+  //
+  // Monday-Friday = working
+  // Saturday = holiday by default
+  // Working Saturday = working
+  // Sunday = holiday
+  // Normal holiday = holiday
+  // Optional holiday = working by default
+  // =========================================================
+
+  const workingDates: string[] = [];
+
+  for (
+    let day = 1;
+    day <= totalDaysInMonth;
+    day++
+  ) {
+    const date =
+      `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+
+    const currentDate = new Date(
+      `${date}T00:00:00`
+    );
+
+    const dayOfWeek =
+      currentDate.getDay();
+
+    // -------------------------------------------------------
+    // Sunday = holiday
+    // -------------------------------------------------------
+
+    if (dayOfWeek === 0) {
+      continue;
+    }
+
+    const holidaysForDate =
+      holidayMap.get(date) || [];
+
+    // -------------------------------------------------------
+    // Working Saturday override
+    // -------------------------------------------------------
+
+    if (
+      dayOfWeek === 6 &&
+      workingSaturdays.includes(day)
+    ) {
+      workingDates.push(date);
+      continue;
+    }
+
+    // -------------------------------------------------------
+    // Saturday = holiday by default
+    // -------------------------------------------------------
+
+    if (dayOfWeek === 6) {
+      continue;
+    }
+
+    // -------------------------------------------------------
+    // Normal company holiday
+    //
+    // Optional holidays remain working days unless
+    // employee leave is approved separately.
+    // -------------------------------------------------------
+
+    const isHoliday =
+      holidaysForDate.some(
+        (holiday) =>
+          holiday.is_working_day !== true &&
+          holiday.is_optional !== true
+      );
+
+    if (isHoliday) {
+      continue;
+    }
+
+    workingDates.push(date);
+  }
+
+  // =========================================================
+  // GENERATED PAYSLIPS
+  // =========================================================
+
+  const generatedSlips: Payslip[] = [];
+
+  // =========================================================
+  // PROCESS EMPLOYEE
+  // =========================================================
+
+  for (const emp of employees) {
+    if (emp.status !== "active") {
+      continue;
+    }
+
+    // =======================================================
+    // SALARY
+    // =======================================================
+
+    const annualCtcLakh =
+      Number(emp.salary ?? 0);
+
+    const annualCtc =
+      annualCtcLakh * 100000;
+
+    const baseSalary = Number(
+      (annualCtc / 12).toFixed(2)
+    );
+
+    // =======================================================
+    // EMPLOYEE JOINING DATE
+    //
+    // Do not count working days before employee joined.
+    // =======================================================
+
+    const joiningDate = emp.joining_date
+      ? String(emp.joining_date).slice(0, 10)
+      : null;
+
+    const effectiveWorkingDates =
+      joiningDate
+        ? workingDates.filter(
+            (date) => date >= joiningDate
+          )
+        : workingDates;
+
+    const workingDays =
+      effectiveWorkingDates.length;
+
+    // =======================================================
+    // ATTENDANCE
+    //
+    // Read directly from Supabase.
+    // Do not depend on cache.attendanceLogs.
+    // =======================================================
+
+    const {
+      data: attendanceRows,
+      error: attendanceError,
+    } = await supabase
+      .from("attendance_logs")
+      .select("*")
+      .eq("employee_id", emp.id)
+      .gte("attendance_date", monthStart)
+      .lte("attendance_date", monthEnd);
+
+    if (attendanceError) {
+      throw new Error(
+        `Failed to load attendance for ${emp.employee_id}: ${attendanceError.message}`
+      );
+    }
+
+    // =======================================================
+    // MAP ATTENDANCE BY DATE
+    // =======================================================
+
+    const attendanceMap =
+      new Map<string, AttendanceLog>();
+
+    for (
+      const attendance of attendanceRows || []
+    ) {
+      const attendanceDate =
+        String(
+          attendance.attendance_date
+        ).slice(0, 10);
+
+      attendanceMap.set(
+        attendanceDate,
+        attendance as AttendanceLog
+      );
+    }
+
+    // =======================================================
+    // APPROVED LEAVES
+    //
+    // Only load leaves that overlap this payroll month.
+    // =======================================================
+
+    const {
+      data: empLeaves,
+      error: leaveError,
+    } = await supabase
+      .from("leave_requests")
+      .select(`
+        *,
+        leave_type:leave_types(*)
+      `)
+      .eq("employee_id", emp.id)
+      .eq("status", "approved")
+      .lte("start_date", monthEnd)
+      .gte("end_date", monthStart);
+
+    if (leaveError) {
+      throw new Error(
+        `Failed to load leave requests for ${emp.employee_id}: ${leaveError.message}`
+      );
+    }
+
+    // =======================================================
+    // CALCULATE:
+    //
+    // presentDays = actual attendance
+    // paidLeaves  = approved paid leave
+    // lopDays     = unpaid leave + absence + half-day loss
+    // =======================================================
+
+    let presentDays = 0;
+    let paidLeaves = 0;
+    let lopDays = 0;
+
+    for (
+      const workingDate of effectiveWorkingDates
+    ) {
+      // -----------------------------------------------------
+      // FIND APPROVED LEAVE COVERING THIS DATE
+      // -----------------------------------------------------
+
+      const leave =
+        (empLeaves || []).find(
+          (request: any) => {
+            const startDate =
+              String(
+                request.start_date
+              ).slice(0, 10);
+
+            const endDate =
+              String(
+                request.end_date ||
+                  request.start_date
+              ).slice(0, 10);
+
+            return (
+              workingDate >= startDate &&
+              workingDate <= endDate
+            );
+          }
+        );
+
+      // -----------------------------------------------------
+      // LEAVE TAKES PRIORITY OVER ATTENDANCE
+      // -----------------------------------------------------
+
+      if (leave) {
+        const leaveUnit =
+          leave.is_half_day
+            ? 0.5
+            : 1;
+
+        const isPaid =
+          Boolean(
+            leave.leave_type?.is_paid
+          );
+
+        if (isPaid) {
+          paidLeaves += leaveUnit;
+        } else {
+          lopDays += leaveUnit;
+        }
+
+        continue;
+      }
+
+      // -----------------------------------------------------
+      // NO LEAVE → CHECK ATTENDANCE
+      // -----------------------------------------------------
+
+      const attendance =
+        attendanceMap.get(
+          workingDate
+        );
+
+      // No attendance = absent = LOP
+      if (!attendance) {
+        lopDays += 1;
+        continue;
+      }
+
+      const status =
+        String(
+          attendance.status || ""
+        ).toLowerCase();
+
+      // -----------------------------------------------------
+      // FULL DAY PRESENT
+      // -----------------------------------------------------
+
+      if (status === "present") {
+        presentDays += 1;
+        continue;
+      }
+
+      // -----------------------------------------------------
+      // HALF DAY
+      // -----------------------------------------------------
+
+      if (status === "half_day") {
+        presentDays += 0.5;
+        lopDays += 0.5;
+        continue;
+      }
+
+      // -----------------------------------------------------
+      // ABSENT / UNKNOWN STATUS
+      // -----------------------------------------------------
+
+      lopDays += 1;
+    }
+
+    // =======================================================
+    // SAFETY
+    // =======================================================
+
+    presentDays = Number(
+      Math.max(
+        0,
+        presentDays
+      ).toFixed(2)
+    );
+
+    paidLeaves = Number(
+      Math.max(
+        0,
+        paidLeaves
+      ).toFixed(2)
+    );
+
+    lopDays = Number(
+      Math.max(
+        0,
+        lopDays
+      ).toFixed(2)
+    );
+
+    // =======================================================
+    // PREVENT ACCOUNTED DAYS FROM EXCEEDING WORKING DAYS
+    // =======================================================
+
+    const totalAccountedDays =
+      presentDays +
+      paidLeaves +
+      lopDays;
+
+    if (
+      totalAccountedDays >
+      workingDays
+    ) {
+      const excess =
+        totalAccountedDays -
+        workingDays;
+
+      lopDays = Number(
+        Math.max(
+          0,
+          lopDays - excess
+        ).toFixed(2)
+      );
+    }
+
+    // =======================================================
+    // SALARY BREAKDOWN
+    //
+    // LOP is calculated against actual working days.
+    // =======================================================
+
+    const breakdown =
+      calculateSalaryBreakdown({
         grossSalary: baseSalary,
-        totalDaysInMonth,
+
+        totalDaysInMonth:
+          workingDays,
+
         lopDays,
+
         activeComponents,
       });
 
-      const paidLeaves = empLeaves
-        .filter((l) => l.leave_type?.is_paid)
-        .reduce((acc, c) => acc + c.total_days, 0);
 
-      /*
-      * Persist payslip in Supabase.
-      *
-      * employee_id = employees.id (UUID)
-      * Do NOT use emp.employee_id (TN5000 etc.)
-      */
-      const payslipData = {
-        employee_id: emp.id,
-        payroll_month: month,
-        payroll_year: year,
-        month_name: monthName,
-        working_days: workingDays,
-        present_days: presentDays,
-        paid_leaves: paidLeaves,
-        lop_days: lopDays,
-        gross_salary: breakdown.grossSalary,
-        lop_deduction: breakdown.lopDeduction,
-        total_earnings: breakdown.totalEarnings,
-        total_deductions: breakdown.totalDeductions,
-        net_salary: breakdown.netSalary,
-        earnings_breakup: breakdown.earningsBreakdown,
-        deductions_breakup: breakdown.deductionsBreakdown,
-        payment_status: "processed",
-      };
+    // =======================================================
+    // EMPLOYER CONTRIBUTIONS
+    // =======================================================
 
-      /*
-      * Because the database has:
-      * UNIQUE(employee_id, payroll_month, payroll_year)
-      *
-      * upsert will replace the existing payroll for the same
-      * employee/month/year instead of creating duplicates.
-      */
-      const { data: savedPayslip, error: payslipError } = await supabase
-        .from("payslips")
-        .upsert(payslipData, {
-          onConflict: "employee_id,payroll_month,payroll_year",
-        })
-        .select()
-        .single();
+    const basicComponent = activeComponents.find(
+      (component) => component.code === "BASIC"
+    );
 
-      if (payslipError) {
-        throw new Error(
-          `Failed to generate payslip for ${emp.employee_id}: ${payslipError.message}`
-        );
-      }
+    const basicSalary = basicComponent ? Number(((baseSalary * basicComponent.value) /100).toFixed(2)): 0;
+    const employerPfComponent = activeComponents.find((component) => component.code === "EMPLOYER_PF");
+    const employerPf = employerPfComponent? Number(((basicSalary * employerPfComponent.value) /100).toFixed(2)): 0;
 
-      const payslip = {
-        ...(savedPayslip as Payslip),
-        employee: emp,
-      };
+    // Monthly gratuity provision.
+    // Statutory formula: Basic × 15 / 26 per completed year.
+    // Monthly provision = Basic × 15 / (26 × 12).
+    const gratuityProvision = Number(((basicSalary * 15) /(26 * 12)).toFixed(2));
 
-      // Keep cache synchronized
-      const existingIdx = cache.payslips.findIndex(
+    // =======================================================
+    // PAYSLIP DATA
+    // =======================================================
+
+    const payslipData = {
+      employee_id: emp.id,
+
+      payroll_month: month,
+      payroll_year: year,
+      month_name: monthName,
+
+      // Actual working days
+      working_days: workingDays,
+
+      // Actual attendance
+      present_days: presentDays,
+
+      // Approved paid leave
+      paid_leaves: paidLeaves,
+
+      // Unpaid leave + absence
+      lop_days: lopDays,
+
+      gross_salary: breakdown.grossSalary,
+
+      lop_deduction: breakdown.lopDeduction,
+
+      total_earnings: breakdown.totalEarnings,
+
+      total_deductions: breakdown.totalDeductions,
+
+      net_salary: breakdown.netSalary,
+
+      employer_pf: employerPf,
+
+      gratuity_provision: gratuityProvision,
+
+      earnings_breakup: breakdown.earningsBreakdown,
+
+      deductions_breakup: breakdown.deductionsBreakdown,
+
+      payment_status: "processed",
+    };
+
+    // =======================================================
+    // SAVE / UPDATE PAYSLIP
+    // =======================================================
+
+    const {
+      data: savedPayslip,
+      error: payslipError,
+    } = await supabase
+      .from("payslips")
+      .upsert(
+        payslipData,
+        {
+          onConflict:
+            "employee_id,payroll_month,payroll_year",
+        }
+      )
+      .select()
+      .single();
+
+    if (payslipError) {
+      throw new Error(
+        `Failed to generate payslip for ${emp.employee_id}: ${payslipError.message}`
+      );
+    }
+
+    // =======================================================
+    // PAYSLIP OBJECT
+    // =======================================================
+
+    const payslip: Payslip = {
+      ...(savedPayslip as Payslip),
+      employee: emp,
+    };
+
+    // =======================================================
+    // UPDATE CACHE
+    // =======================================================
+
+    const existingIdx =
+      cache.payslips.findIndex(
         (p) =>
           p.employee_id === emp.id &&
           p.payroll_month === month &&
           p.payroll_year === year
       );
 
-      if (existingIdx >= 0) {
-        cache.payslips[existingIdx] = payslip;
-      } else {
-        cache.payslips.unshift(payslip);
-      }
-
-      generatedSlips.push(payslip);
+    if (existingIdx >= 0) {
+      cache.payslips[
+        existingIdx
+      ] = payslip;
+    } else {
+      cache.payslips.unshift(
+        payslip
+      );
     }
 
-    return {
-      generatedCount: generatedSlips.length,
-      payslips: generatedSlips,
-    };
+    generatedSlips.push(
+      payslip
+    );
   }
+
+  // =========================================================
+  // RETURN
+  // =========================================================
+
+  return {
+    generatedCount:
+      generatedSlips.length,
+
+    payslips:
+      generatedSlips,
+  };
+}
 }

@@ -19,8 +19,6 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   UploadCloud,
-  Award,
-  Loader2,
 } from "lucide-react";
 
 import Image from "next/image";
@@ -558,6 +556,12 @@ export default function Sidebar({
       name: "Projects & Calendars",
       href: "/dashboard/projects",
       icon: Globe,
+      roles: ["ceo", "hr"],
+    },
+    {
+      name: "Policies",
+      href: "/dashboard/policies",
+      icon: ShieldCheck,
       roles: ["ceo", "hr"],
     },
   ];

@@ -72,7 +72,7 @@ export default function AttendanceManager({
             <div className="w-9 h-9 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shrink-0">
               <Clock className="w-5 h-5" />
             </div>
-            <h2 className="text-xl font-bold text-slate-900 tracking-tight">Company Attendance & Shifts</h2>
+            <h2 className="text-xl font-bold text-slate-900 tracking-tight">Organization Attendance & Shifts</h2>
           </div>
           <p className="text-xs text-slate-500 mt-1.5 leading-relaxed pl-11">
             Monitor real-time employee check-ins, punctuality, shift hours, and late marks across teams.
