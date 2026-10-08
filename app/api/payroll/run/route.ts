@@ -33,7 +33,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { employeeId, month, year } = body;
+    const { employeeId, month, year, additionalEarnings = [] } = body;
 
     // =========================================================
     // BASIC VALIDATION
@@ -157,6 +157,108 @@ export async function POST(request: Request) {
       );
     }
 
+
+    // Insentive nad bonus validation
+    const allowedAdditionalEarningTypes = ["Incentive","Bonus","Compensation",] as const;
+
+    const requestedAdditionalEarnings = Array.isArray(additionalEarnings)? additionalEarnings: [];
+
+    for (const earning of requestedAdditionalEarnings) {
+      if (!allowedAdditionalEarningTypes.includes(earning.type)) {
+        return NextResponse.json(
+          {
+            error: `Invalid additional earning type: ${earning.type}`,
+          },
+          { status: 400 }
+        );
+      }
+
+      const amount = Number(earning.amount);
+
+      if (!Number.isFinite(amount) || amount <= 0) {
+        return NextResponse.json(
+          {
+            error: `Invalid amount for ${earning.type}.`,
+          },
+          { status: 400 }
+        );
+      }
+    }
+
+
+    const requestedTypes = requestedAdditionalEarnings.map((earning: 
+      {
+        type: "Incentive" | "Bonus" | "Compensation";
+        amount: number;
+      }) => earning.type
+    );
+
+    if (new Set(requestedTypes).size !== requestedTypes.length) {
+      return NextResponse.json(
+        {
+          error: "The same additional earning cannot be added more than once.",
+        },
+        { status: 400 }
+      );
+    }
+
+
+    // =========================================================
+    // PREVENT DUPLICATE ADDITIONAL EARNINGS
+    // =========================================================
+
+    const { data: existingPayslip, error: existingPayslipError } =
+      await supabase
+        .from("payslips")
+        .select("incentive, bonus, compensation")
+        .eq("employee_id", employee.id)
+        .eq("payroll_month", payrollMonth)
+        .eq("payroll_year", payrollYear)
+        .maybeSingle();
+
+    if (existingPayslipError) {
+      console.error(
+        "Failed to check existing payslip:",
+        existingPayslipError
+      );
+
+      return NextResponse.json(
+        {
+          error: "Failed to check existing payroll.",
+        },
+        { status: 500 }
+      );
+    }
+
+    const duplicateAdditionalEarning =
+      requestedAdditionalEarnings.find((earning: {
+        type: "Incentive" | "Bonus" | "Compensation";
+        amount: number;
+      }) => {
+        if (earning.type === "Incentive") {
+          return Number(existingPayslip?.incentive || 0) > 0;
+        }
+
+        if (earning.type === "Bonus") {
+          return Number(existingPayslip?.bonus || 0) > 0;
+        }
+
+        if (earning.type === "Compensation") {
+          return Number(existingPayslip?.compensation || 0) > 0;
+        }
+
+        return false;
+      });
+
+    if (duplicateAdditionalEarning) {
+      return NextResponse.json(
+        {
+          error: `${duplicateAdditionalEarning.type} has already been added for ${monthNames[payrollMonth - 1]} ${payrollYear}.`,
+        },
+        { status: 400 }
+      );
+    }
+
     // =========================================================
     // GENERATE PAYROLL
     // =========================================================
@@ -165,6 +267,7 @@ export async function POST(request: Request) {
       employeeId,
       month: payrollMonth,
       year: payrollYear,
+      additionalEarnings:requestedAdditionalEarnings,
     });
 
     return NextResponse.json({

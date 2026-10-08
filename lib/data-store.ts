@@ -2558,10 +2558,12 @@ export class DataStore {
   month,
   year,
   employeeId,
+  additionalEarnings = [],
 }: {
   month: number;
   year: number;
   employeeId: string;
+  additionalEarnings: { type: "Incentive" | "Bonus" | "Compensation"; amount: number }[];
 }): Promise<{ generatedCount: number; payslips: Payslip[] }> {
   const cache = getCache();
   const supabase = await createAdminClient();
@@ -3090,10 +3092,7 @@ export class DataStore {
     // EMPLOYER CONTRIBUTIONS
     // =======================================================
 
-    const basicComponent = activeComponents.find(
-      (component) => component.code === "BASIC"
-    );
-
+    const basicComponent = activeComponents.find((component) => component.code === "BASIC");
     const basicSalary = basicComponent ? Number(((baseSalary * basicComponent.value) /100).toFixed(2)): 0;
     const employerPfComponent = activeComponents.find((component) => component.code === "EMPLOYER_PF");
     const employerPf = employerPfComponent? Number(((basicSalary * employerPfComponent.value) /100).toFixed(2)): 0;
@@ -3106,6 +3105,162 @@ export class DataStore {
     // =======================================================
     // PAYSLIP DATA
     // =======================================================
+
+    // -------------------------------------------------------
+    // GET EXISTING ADDITIONAL EARNINGS
+    //
+    // If this employee already has a payslip for this month,
+    // preserve Incentive / Bonus / Compensation.
+    // -------------------------------------------------------
+
+    const {
+      data: existingPayslip,
+      error: existingPayslipError,
+    } = await supabase
+      .from("payslips")
+      .select(`
+        incentive,
+        bonus,
+        compensation,
+        earnings_breakup
+      `)
+      .eq("employee_id", emp.id)
+      .eq("payroll_month", month)
+      .eq("payroll_year", year)
+      .maybeSingle();
+
+    if (existingPayslipError) {
+      throw new Error(
+        `Failed to load existing payslip for ${emp.employee_id}: ${existingPayslipError.message}`
+      );
+    }
+
+    // -------------------------------------------------------
+    // EXISTING AMOUNTS
+    // -------------------------------------------------------
+
+    const hasNewAdditionalEarnings = additionalEarnings.length > 0;
+
+    const existingIncentive = hasNewAdditionalEarnings ? Number(existingPayslip?.incentive || 0) : 0;
+
+    const existingBonus = hasNewAdditionalEarnings ? Number(existingPayslip?.bonus || 0) : 0;
+
+    const existingCompensation = hasNewAdditionalEarnings ? Number(existingPayslip?.compensation || 0) : 0;
+
+    // -------------------------------------------------------
+    // NEW AMOUNTS
+    //
+    // The API already prevents adding the same type twice.
+    // -------------------------------------------------------
+
+    const newIncentive = Number(
+      additionalEarnings.find(
+        (earning) => earning.type === "Incentive"
+      )?.amount || 0
+    );
+
+    const newBonus = Number(
+      additionalEarnings.find(
+        (earning) => earning.type === "Bonus"
+      )?.amount || 0
+    );
+
+    const newCompensation = Number(
+      additionalEarnings.find(
+        (earning) => earning.type === "Compensation"
+      )?.amount || 0
+    );
+
+    // -------------------------------------------------------
+    // FINAL AMOUNTS
+    // -------------------------------------------------------
+
+    const incentiveAmount =
+      existingIncentive + newIncentive;
+
+    const bonusAmount =
+      existingBonus + newBonus;
+
+    const compensationAmount =
+      existingCompensation + newCompensation;
+
+    const additionalEarningsTotal =
+      incentiveAmount +
+      bonusAmount +
+      compensationAmount;
+
+    // -------------------------------------------------------
+    // EXISTING ADDITIONAL EARNING BREAKUP
+    //
+    // Keep previously saved Incentive / Bonus / Compensation.
+    // -------------------------------------------------------
+
+    const existingEarningsBreakup = Array.isArray(
+      existingPayslip?.earnings_breakup
+    )
+      ? existingPayslip.earnings_breakup
+      : [];
+
+    const existingAdditionalEarningBreakup = hasNewAdditionalEarnings ?
+      existingEarningsBreakup.filter(
+        (earning: any) =>
+          earning?.code === "INCENTIVE" ||
+          earning?.code === "BONUS" ||
+          earning?.code === "COMPENSATION"
+      )
+    : [];
+
+    // -------------------------------------------------------
+    // NEW ADDITIONAL EARNING BREAKUP
+    // -------------------------------------------------------
+
+    const newAdditionalEarningBreakup = additionalEarnings.filter
+     (
+        (earning) => Number(earning.amount) > 0
+     )
+      .map((earning) => ({
+        component_id:`additional_${earning.type.toLowerCase()}`,
+        name: earning.type, 
+        code: earning.type.toUpperCase(),
+        type: "earning" as const,
+        amount: Number(earning.amount),
+        }));
+
+    // -------------------------------------------------------
+    // FINAL EARNINGS BREAKUP
+    //
+    // Normal salary earnings
+    // + previously saved additional earnings
+    // + newly added additional earnings
+    // -------------------------------------------------------
+
+    const finalEarningsBreakup = [
+      ...breakdown.earningsBreakdown,
+      ...existingAdditionalEarningBreakup,
+      ...newAdditionalEarningBreakup,
+    ];
+
+    // -------------------------------------------------------
+    // FINAL TOTALS
+    // -------------------------------------------------------
+
+    const finalTotalEarnings = Number(
+      (
+        breakdown.totalEarnings +
+        additionalEarningsTotal
+      ).toFixed(2)
+    );
+
+    const finalNetSalary = Number(
+      (
+        breakdown.netSalary +
+        additionalEarningsTotal
+      ).toFixed(2)
+    );
+
+    // -------------------------------------------------------
+    // PAYSLIP DATA
+    // -------------------------------------------------------
 
     const payslipData = {
       employee_id: emp.id,
@@ -3126,23 +3281,36 @@ export class DataStore {
       // Unpaid leave + absence
       lop_days: lopDays,
 
-      gross_salary: breakdown.grossSalary,
+      // Normal salary + all additional earnings
+      gross_salary: Number(
+        (
+          breakdown.grossSalary +
+          additionalEarningsTotal
+        ).toFixed(2)
+      ),
 
       lop_deduction: breakdown.lopDeduction,
 
-      total_earnings: breakdown.totalEarnings,
+      total_earnings: finalTotalEarnings,
 
       total_deductions: breakdown.totalDeductions,
 
-      net_salary: breakdown.netSalary,
+      net_salary: finalNetSalary,
 
       employer_pf: employerPf,
 
       gratuity_provision: gratuityProvision,
 
-      earnings_breakup: breakdown.earningsBreakdown,
+      earnings_breakup: finalEarningsBreakup,
 
       deductions_breakup: breakdown.deductionsBreakdown,
+
+      // Additional earnings
+      incentive: incentiveAmount,
+
+      bonus: bonusAmount,
+
+      compensation: compensationAmount,
 
       payment_status: "processed",
     };

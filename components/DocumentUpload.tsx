@@ -228,7 +228,7 @@ export default function DocumentUpload({ employeeId, documents: initialDocs, onU
                 </div>
                 <div className="flex items-center gap-1 shrink-0 ml-3">
                   <a
-                    href={doc.document_url}
+                    href={`/api/documents/${doc.id}/view`}
                     target="_blank"
                     rel="noreferrer"
                     className="p-1.5 rounded-lg text-slate-400 hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
@@ -262,4 +262,3 @@ export default function DocumentUpload({ employeeId, documents: initialDocs, onU
     </div>
   );
 }
-
