@@ -259,34 +259,52 @@ const isExitStatus = [
 
   return (
     <div className="space-y-6">
-      {/* Profile Header */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200/90 p-6 sm:p-7 flex flex-col md:flex-row items-start md:items-center justify-between gap-5">
         <div className="flex items-center gap-5">
-          <div className="w-18 h-18 sm:w-20 sm:h-20 bg-gradient-to-tr from-indigo-500 to-indigo-600 text-white rounded-2xl flex items-center justify-center text-2xl font-bold shadow-md shadow-indigo-100">
-            {employee.first_name[0]}{employee.last_name[0]}
+
+          {/* Employee Profile Photo */}
+          <div className="w-18 h-18 sm:w-20 sm:h-20 overflow-hidden rounded-2xl bg-indigo-100 shadow-md shadow-indigo-100">
+            {employee.profile_photo_url ? (
+              <img
+                src={employee.profile_photo_url}
+                alt={`${employee.first_name} ${employee.last_name}`}
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center bg-gradient-to-tr from-indigo-500 to-indigo-600 text-2xl font-bold text-white">
+                {employee.first_name?.[0]}
+                {employee.last_name?.[0]}
+              </div>
+            )}
           </div>
           <div>
             <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
               {employee.first_name} {employee.last_name}
             </h1>
+
             <div className="text-slate-500 mt-1 flex flex-wrap items-center gap-2.5 text-xs sm:text-sm font-medium">
-              <span className="text-indigo-600 font-semibold">{employee.designation || "No Designation"}</span>
+              <span className="text-indigo-600 font-semibold">
+                {employee.designation || "No Designation"}
+              </span>
               <span>&bull;</span>
               <span>{employee.department?.name || "General"}</span>
               <span>&bull;</span>
               <span className="font-mono text-slate-400">{employee.email}</span>
             </div>
+
             <div className="mt-3 flex items-center gap-2.5">
-              <span className={`px-2.5 py-0.5 rounded-full font-bold text-[10px] uppercase tracking-wider border ${getStatusBadge(employee.status)}`}>
+              <span
+                className={`px-2.5 py-0.5 rounded-full font-bold text-[10px] uppercase tracking-wider border ${getStatusBadge(employee.status)}`}
+              >
                 {employee.status.replace("_", " ")}
               </span>
+
               <span className="font-mono text-xs font-semibold px-2.5 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200">
                 {employee.employee_id}
               </span>
             </div>
           </div>
         </div>
-        
         {role === "ceo" || role === "hr" &&  !["resigned", "laid_off", "terminated", "inactive"].includes(employee.status?.toLowerCase()) &&(
           <Link
             href={`/dashboard/employees/${employee.id}/edit`}

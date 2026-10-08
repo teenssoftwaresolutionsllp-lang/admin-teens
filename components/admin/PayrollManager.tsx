@@ -1055,14 +1055,28 @@ function PayslipBreakupRow({
                   <div className="mt-4 rounded-xl border border-indigo-100 bg-indigo-50/60 p-4">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <div className="flex items-center gap-3">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-600 text-xs font-bold text-white">
-                          {selectedEmployeeData.first_name?.charAt(0)}
-                          {selectedEmployeeData.last_name?.charAt(0)}
+
+                        {/* Employee Profile Photo */}
+                        <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full bg-indigo-100">
+                          {selectedEmployeeData.profile_photo_url ? (
+                            <img
+                              src={selectedEmployeeData.profile_photo_url}
+                              alt={`${selectedEmployeeData.first_name ?? ""} ${selectedEmployeeData.last_name ?? ""}`}
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center text-xs font-bold text-indigo-700">
+                              {selectedEmployeeData.first_name?.charAt(0)}
+                              {selectedEmployeeData.last_name?.charAt(0)}
+                            </div>
+                          )}
                         </div>
+
                         <div>
                           <p className="text-sm font-semibold text-slate-900">
                             {selectedEmployeeData.first_name} {selectedEmployeeData.last_name}
                           </p>
+
                           <div className="mt-0.5 flex flex-wrap gap-x-2 text-[10px] text-slate-500">
                             <span>{selectedEmployeeData.employee_id}</span>
                             <span>•</span>
@@ -1070,11 +1084,16 @@ function PayslipBreakupRow({
                           </div>
                         </div>
                       </div>
+
                       <div className="flex items-center gap-2 rounded-lg bg-white px-3 py-2">
                         <IndianRupee className="h-4 w-4 text-indigo-600" />
                         <div>
-                          <p className="text-[9px] font-semibold uppercase tracking-wider text-slate-400">Annual CTC</p>
-                          <p className="text-xs font-bold text-slate-800">{formatNumber(Number(selectedEmployeeData.salary || 0))} Lakh</p>
+                          <p className="text-[9px] font-semibold uppercase tracking-wider text-slate-400">
+                            Annual CTC
+                          </p>
+                          <p className="text-xs font-bold text-slate-800">
+                            {formatNumber(Number(selectedEmployeeData.salary || 0))} Lakh
+                          </p>
                         </div>
                       </div>
                     </div>
@@ -1170,10 +1189,7 @@ function PayslipBreakupRow({
 
                         <select
                           value={additionalEarningType}
-                          onChange={(event) =>
-                            setAdditionalEarningType(
-event.target.value as AdditionalEarningType)
-                          }
+                          onChange={(event) =>setAdditionalEarningType(event.target.value as AdditionalEarningType)}
                           className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50"
                         >
                           <option value="">
@@ -1391,29 +1407,38 @@ event.target.value as AdditionalEarningType)
                       {/* EMPLOYEE IDENTITY */}
                       {/* ================================================= */}
                       <div className="flex min-w-0 items-center gap-3">
-
-                        {/* Profile */}
-                        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-sm font-bold text-indigo-700">
-                          {initials || "E"}
-                        </div>
-
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-bold text-slate-900">
-                            {employee.first_name} {employee.last_name}
-                          </p>
-
-                          <div className="mt-1 flex flex-wrap items-center gap-2">
-                            <span className="rounded-md bg-indigo-50 px-2 py-1 text-[10px] font-bold text-indigo-700">
-                              {employee.employee_id}
-                            </span>
-
-                            {employee.designation && (
-                              <span className="text-[11px] text-slate-500">
-                                {employee.designation}
-                              </span>
+                          {/* Profile */}
+                          <div className="flex h-12 w-12 shrink-0 overflow-hidden rounded-full bg-indigo-100">
+                            {employee.profile_photo_url ? (
+                              <img
+                                src={employee.profile_photo_url}
+                                alt={`${employee.first_name} ${employee.last_name}`}
+                                className="h-full w-full object-cover"
+                              />
+                            ) : (
+                              <div className="flex h-full w-full items-center justify-center text-sm font-bold text-indigo-700">
+                                {initials || "E"}
+                              </div>
                             )}
                           </div>
-                        </div>
+
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-bold text-slate-900">
+                              {employee.first_name} {employee.last_name}
+                            </p>
+
+                            <div className="mt-1 flex flex-wrap items-center gap-2">
+                              <span className="rounded-md bg-indigo-50 px-2 py-1 text-[10px] font-bold text-indigo-700">
+                                {employee.employee_id}
+                              </span>
+
+                              {employee.designation && (
+                                <span className="text-[11px] text-slate-500">
+                                  {employee.designation}
+                                </span>
+                              )}
+                            </div>
+                          </div>
                       </div>
 
                       {/* ================================================= */}
@@ -1801,8 +1826,19 @@ event.target.value as AdditionalEarningType)
                         <tr key={slip.id} className="hover:bg-slate-50/60">
                           <td className="px-5 py-3">
                             <div className="flex items-center gap-2">
-                              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-100 text-[10px] font-bold text-indigo-700">
-                                {employee?.first_name?.charAt(0)}{employee?.last_name?.charAt(0)}
+                              <div className="h-8 w-8 overflow-hidden rounded-full bg-indigo-100">
+                                {employee?.profile_photo_url ? (
+                                  <img
+                                    src={employee.profile_photo_url}
+                                    alt={`${employee?.first_name ?? ""} ${employee?.last_name ?? ""}`}
+                                    className="h-full w-full object-cover"
+                                  />
+                                ) : (
+                                  <div className="flex h-full w-full items-center justify-center text-[10px] font-bold text-indigo-700">
+                                    {employee?.first_name?.charAt(0)}
+                                    {employee?.last_name?.charAt(0)}
+                                  </div>
+                                )}
                               </div>
                               <div>
                                 <p className="text-xs font-semibold text-slate-800">{employee?.first_name} {employee?.last_name}</p>
