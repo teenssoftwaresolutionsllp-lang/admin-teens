@@ -154,28 +154,128 @@ function getLogDate(
   return `${year}-${month}-${day}`;
 }
 
+/* ============================================================
+   UPDATED TIME FORMATTER
+
+   IMPORTANT:
+   Supports:
+   09:30
+   09:30:00
+   09:30 AM
+   2026-10-08T09:30:00
+============================================================ */
+
 function formatAttendanceTime(
   value?: string | null
 ) {
   if (!value) return "--";
 
-  if (
-    /^\d{1,2}:\d{2}\s?(AM|PM)$/i.test(value)
-  ) {
-    return value;
+  const stringValue = String(value).trim();
+
+  if (!stringValue) return "--";
+
+  /* HH:mm */
+  const shortTimeMatch =
+    stringValue.match(
+      /^(\d{1,2}):(\d{2})$/
+    );
+
+  if (shortTimeMatch) {
+    let hours = Number(
+      shortTimeMatch[1]
+    );
+
+    const minutes = Number(
+      shortTimeMatch[2]
+    );
+
+    if (
+      hours >= 0 &&
+      hours <= 23 &&
+      minutes >= 0 &&
+      minutes <= 59
+    ) {
+      const period =
+        hours >= 12 ? "PM" : "AM";
+
+      const displayHour =
+        hours % 12 || 12;
+
+      return `${String(
+        displayHour
+      ).padStart(2, "0")}:${String(
+        minutes
+      ).padStart(2, "0")} ${period}`;
+    }
   }
 
-  const date = new Date(value);
+  /* HH:mm:ss */
+  const longTimeMatch =
+    stringValue.match(
+      /^(\d{1,2}):(\d{2}):(\d{2})$/
+    );
+
+  if (longTimeMatch) {
+    let hours = Number(
+      longTimeMatch[1]
+    );
+
+    const minutes = Number(
+      longTimeMatch[2]
+    );
+
+    const seconds = Number(
+      longTimeMatch[3]
+    );
+
+    if (
+      hours >= 0 &&
+      hours <= 23 &&
+      minutes >= 0 &&
+      minutes <= 59 &&
+      seconds >= 0 &&
+      seconds <= 59
+    ) {
+      const period =
+        hours >= 12 ? "PM" : "AM";
+
+      const displayHour =
+        hours % 12 || 12;
+
+      return `${String(
+        displayHour
+      ).padStart(2, "0")}:${String(
+        minutes
+      ).padStart(2, "0")} ${period}`;
+    }
+  }
+
+  /* Already formatted AM/PM */
+  if (
+    /^\d{1,2}:\d{2}\s?(AM|PM)$/i.test(
+      stringValue
+    )
+  ) {
+    return stringValue;
+  }
+
+  /* ISO / timestamp */
+  const date = new Date(
+    stringValue
+  );
 
   if (Number.isNaN(date.getTime())) {
     return "--";
   }
 
-  return date.toLocaleTimeString("en-IN", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: true,
-  });
+  return date.toLocaleTimeString(
+    "en-IN",
+    {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    }
+  );
 }
 
 function getTimeInputValue(
@@ -183,15 +283,61 @@ function getTimeInputValue(
 ) {
   if (!value) return "";
 
-  if (/^\d{2}:\d{2}$/.test(value)) {
-    return value;
+  const stringValue = String(value).trim();
+
+  if (
+    /^\d{2}:\d{2}$/.test(
+      stringValue
+    )
+  ) {
+    return stringValue;
   }
 
-  if (/^\d{2}:\d{2}:\d{2}$/.test(value)) {
-    return value.slice(0, 5);
+  if (
+    /^\d{2}:\d{2}:\d{2}$/.test(
+      stringValue
+    )
+  ) {
+    return stringValue.slice(0, 5);
   }
 
-  const date = new Date(value);
+  const amPmMatch =
+    stringValue.match(
+      /^(\d{1,2}):(\d{2})\s?(AM|PM)$/i
+    );
+
+  if (amPmMatch) {
+    let hours = Number(
+      amPmMatch[1]
+    );
+
+    const minutes = Number(
+      amPmMatch[2]
+    );
+
+    const period =
+      amPmMatch[3].toUpperCase();
+
+    if (period === "PM" && hours < 12) {
+      hours += 12;
+    }
+
+    if (period === "AM" && hours === 12) {
+      hours = 0;
+    }
+
+    return `${String(hours).padStart(
+      2,
+      "0"
+    )}:${String(minutes).padStart(
+      2,
+      "0"
+    )}`;
+  }
+
+  const date = new Date(
+    stringValue
+  );
 
   if (Number.isNaN(date.getTime())) {
     return "";
@@ -217,11 +363,14 @@ function formatDateForDisplay(
     return value;
   }
 
-  return date.toLocaleDateString("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
+  return date.toLocaleDateString(
+    "en-IN",
+    {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    }
+  );
 }
 
 function calculateWorkingHours(
@@ -232,32 +381,71 @@ function calculateWorkingHours(
     return "--";
   }
 
-  const start = new Date(clockIn);
-  const end = new Date(clockOut);
+  /*
+   * Handle HH:mm / HH:mm:ss values
+   * used by regularization.
+   */
+  const parseTime = (
+    value: string
+  ) => {
+    const match = String(value)
+      .trim()
+      .match(
+        /^(\d{1,2}):(\d{2})(?::(\d{2}))?$/
+      );
+
+    if (match) {
+      return (
+        Number(match[1]) * 60 +
+        Number(match[2])
+      );
+    }
+
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+      return null;
+    }
+
+    return (
+      date.getHours() * 60 +
+      date.getMinutes()
+    );
+  };
+
+  const startMinutes =
+    parseTime(clockIn);
+
+  const endMinutes =
+    parseTime(clockOut);
 
   if (
-    Number.isNaN(start.getTime()) ||
-    Number.isNaN(end.getTime())
+    startMinutes === null ||
+    endMinutes === null
   ) {
     return "--";
   }
 
-  const difference =
-    end.getTime() - start.getTime();
+  let difference =
+    endMinutes - startMinutes;
+
+  /*
+   * Support overnight shifts.
+   */
+  if (difference < 0) {
+    difference += 24 * 60;
+  }
 
   if (difference <= 0) {
     return "--";
   }
 
-  const totalMinutes = Math.floor(
-    difference / (1000 * 60)
-  );
-
   const hours = Math.floor(
-    totalMinutes / 60
+    difference / 60
   );
 
-  const minutes = totalMinutes % 60;
+  const minutes =
+    difference % 60;
 
   if (hours === 0) {
     return `${minutes}m`;
@@ -312,7 +500,7 @@ function getBalanceValue(
 }
 
 /* ============================================================
-   ATTENDANCE STATUS HELPER
+   ATTENDANCE STATUS
 ============================================================ */
 
 function normalizeAttendanceStatus(
@@ -357,7 +545,9 @@ function getLeaveRequestDays(
     request?.days ??
     0;
 
-  const days = Number(totalDays);
+  const days = Number(
+    totalDays
+  );
 
   if (
     Number.isFinite(days) &&
@@ -387,7 +577,7 @@ function getLeaveRequestDays(
 }
 
 /* ============================================================
-   LEAVE TYPE DISPLAY HELPER
+   LEAVE TYPE HELPERS
 ============================================================ */
 
 function getLeaveTypeId(
@@ -427,19 +617,17 @@ export default function EmployeeAttendanceView({
   leaveRequests: initialLeaveRequests = [],
   leaveTypes: initialLeaveTypes = [],
 }: EmployeeAttendanceViewProps) {
-  /* ============================================================
-     ATTENDANCE STATE
-  ============================================================ */
-
   const [logs, setLogs] =
     useState<AttendanceLog[]>(
       historyLogs ?? []
     );
 
-  const [currentTodayLog, setCurrentTodayLog] =
-    useState<AttendanceLog | null>(
-      todayLog
-    );
+  const [
+    currentTodayLog,
+    setCurrentTodayLog,
+  ] = useState<AttendanceLog | null>(
+    todayLog
+  );
 
   const [regs, setRegs] =
     useState<AttendanceRegularization[]>(
@@ -460,19 +648,19 @@ export default function EmployeeAttendanceView({
     getTodayString()
   );
 
-  /* ============================================================
-     LEAVE STATE
-  ============================================================ */
+  const [
+    leaveRequests,
+    setLeaveRequests,
+  ] = useState<LeaveRequest[]>(
+    initialLeaveRequests ?? []
+  );
 
-  const [leaveRequests, setLeaveRequests] =
-    useState<LeaveRequest[]>(
-      initialLeaveRequests ?? []
-    );
-
-  const [leaveBalances, setLeaveBalances] =
-    useState<EmployeeLeaveBalance[]>(
-      initialLeaveBalances ?? []
-    );
+  const [
+    leaveBalances,
+    setLeaveBalances,
+  ] = useState<EmployeeLeaveBalance[]>(
+    initialLeaveBalances ?? []
+  );
 
   const [leaveTypes, setLeaveTypes] =
     useState<LeaveType[]>(
@@ -485,23 +673,28 @@ export default function EmployeeAttendanceView({
   const [showLeaveModal, setShowLeaveModal] =
     useState(false);
 
-  const [submittingLeave, setSubmittingLeave] =
-    useState(false);
+  const [
+    submittingLeave,
+    setSubmittingLeave,
+  ] = useState(false);
 
   const [leaveError, setLeaveError] =
     useState<string | null>(null);
 
-  const [leaveSuccess, setLeaveSuccess] =
-    useState<string | null>(null);
+  const [
+    leaveSuccess,
+    setLeaveSuccess,
+  ] = useState<string | null>(null);
 
-  const [leaveForm, setLeaveForm] = useState({
-    leaveTypeId: "",
-    startDate: "",
-    endDate: "",
-    totalDays: 1,
-    isHalfDay: false,
-    reason: "",
-  });
+  const [leaveForm, setLeaveForm] =
+    useState({
+      leaveTypeId: "",
+      startDate: "",
+      endDate: "",
+      totalDays: 1,
+      isHalfDay: false,
+      reason: "",
+    });
 
   /* ============================================================
      REGULARIZATION STATE
@@ -542,18 +735,15 @@ export default function EmployeeAttendanceView({
     reason: "",
   });
 
-  /* ============================================================
-     TODAY
-  ============================================================ */
-
-  const todayString = getTodayString();
+  const todayString =
+    getTodayString();
 
   /* ============================================================
      LOAD LEAVE DATA
   ============================================================ */
 
-  const refreshLeaveData = useCallback(
-    async () => {
+  const refreshLeaveData =
+    useCallback(async () => {
       try {
         setLoadingLeaves(true);
 
@@ -568,21 +758,11 @@ export default function EmployeeAttendanceView({
         );
 
         const data =
-          await response.json().catch(
-            () => null
-          );
+          await response
+            .json()
+            .catch(() => null);
 
         if (!response.ok) {
-          console.error(
-            "Leave API Error:",
-            {
-              status: response.status,
-              statusText:
-                response.statusText,
-              data,
-            }
-          );
-
           throw new Error(
             data?.error ||
               data?.message ||
@@ -623,8 +803,12 @@ export default function EmployeeAttendanceView({
             ? data.types
             : [];
 
-        setLeaveRequests(requests);
-        setLeaveBalances(balances);
+        setLeaveRequests(
+          requests
+        );
+        setLeaveBalances(
+          balances
+        );
         setLeaveTypes(types);
       } catch (error) {
         console.error(
@@ -634,16 +818,15 @@ export default function EmployeeAttendanceView({
       } finally {
         setLoadingLeaves(false);
       }
-    },
-    [employee.id]
-  );
+    }, [employee.id]);
 
   useEffect(() => {
     refreshLeaveData();
 
-    const interval = setInterval(() => {
-      refreshLeaveData();
-    }, 30000);
+    const interval =
+      setInterval(() => {
+        refreshLeaveData();
+      }, 30000);
 
     return () => {
       clearInterval(interval);
@@ -654,229 +837,228 @@ export default function EmployeeAttendanceView({
      CURRENT ATTENDANCE
   ============================================================ */
 
-  const currentAttendanceLog = useMemo(() => {
-    if (selectedAttendance?.date) {
-      const selected = logs.find(
-        (log) =>
-          getLogDate(log) ===
-          selectedAttendance.date
-      );
-
-      if (selected) {
-        return selected;
-      }
-
-      if (
-        currentTodayLog &&
-        getLogDate(currentTodayLog) ===
-          selectedAttendance.date
-      ) {
-        return currentTodayLog;
-      }
-    }
-
-    return currentTodayLog;
-  }, [
-    selectedAttendance,
-    logs,
-    currentTodayLog,
-  ]);
-
-  /* ============================================================
-     ATTENDANCE SUMMARY
-  ============================================================ */
-
-  const presentCount = useMemo(() => {
-    return logs.filter((log) => {
-      const status = normalizeAttendanceStatus(
-        (log as any).status
-      );
-
-      return (
-        status === "present" ||
-        status === "half_day" ||
-        Boolean((log as any).is_late)
-      );
-    }).length;
-  }, [logs]);
-
-  const absentCount = useMemo(() => {
-    return logs.filter((log) => {
-      const status =
-        normalizeAttendanceStatus(
-          (log as any).status
-        );
-
-      return (
-        status === "absent" ||
-        status === "not_present"
-      );
-    }).length;
-  }, [logs]);
-
-  const leaveCount = useMemo(() => {
-    return leaveRequests.reduce(
-      (total, request: any) => {
-        const status =
-          getLeaveRequestStatus(
-            request
+  const currentAttendanceLog =
+    useMemo(() => {
+      if (selectedAttendance?.date) {
+        const selected =
+          logs.find(
+            (log) =>
+              getLogDate(log) ===
+              selectedAttendance.date
           );
 
-        if (
-          status !== "approved"
-        ) {
-          return total;
+        if (selected) {
+          return selected;
         }
 
-        const days =
-          getLeaveRequestDays(
-            request
-          );
-
-        return total + days;
-      },
-      0
-    );
-  }, [leaveRequests]);
-
-  /* ============================================================
-     YEARLY SL / CL BALANCE
-  ============================================================ */
-
-  const sickLeaveRemaining = useMemo(() => {
-    const balance = leaveBalances.find(
-      (item: any) =>
-        getLeaveTypeCode(item) ===
-        "SL"
-    );
-
-    if (!balance) {
-      return 12;
-    }
-
-    return Math.max(
-      0,
-      getBalanceValue(balance)
-    );
-  }, [leaveBalances]);
-
-  const casualLeaveRemaining = useMemo(() => {
-    const balance = leaveBalances.find(
-      (item: any) =>
-        getLeaveTypeCode(item) ===
-        "CL"
-    );
-
-    if (!balance) {
-      return 12;
-    }
-
-    return Math.max(
-      0,
-      getBalanceValue(balance)
-    );
-  }, [leaveBalances]);
-
-  const leaveBalance = useMemo(() => {
-    return (
-      sickLeaveRemaining +
-      casualLeaveRemaining
-    );
-  }, [
-    sickLeaveRemaining,
-    casualLeaveRemaining,
-  ]);
-
-  /* ============================================================
-     LEAVE TYPES
-  ============================================================ */
-
-  const visibleLeaveTypes = useMemo(() => {
-    const allowed = [
-      "CL",
-      "SL",
-      "EL",
-      "LOP",
-    ];
-
-    return leaveTypes.filter(
-      (type: any) => {
-        const code =
-          getLeaveTypeCode(type);
-
-        return allowed.includes(code);
+        if (
+          currentTodayLog &&
+          getLogDate(
+            currentTodayLog
+          ) ===
+            selectedAttendance.date
+        ) {
+          return currentTodayLog;
+        }
       }
-    );
-  }, [leaveTypes]);
+
+      return currentTodayLog;
+    }, [
+      selectedAttendance,
+      logs,
+      currentTodayLog,
+    ]);
 
   /* ============================================================
-     GET REQUEST LEAVE TYPE
-     
-     IMPORTANT:
-     Sometimes request contains only leave_type_id.
-     So match that ID with leaveTypes.
+     SUMMARY
   ============================================================ */
 
-  const getRequestLeaveType = useCallback(
-    (request: any) => {
-      const requestTypeId =
-        getLeaveTypeId(request);
-
-      const matchedType =
-        leaveTypes.find(
-          (type: any) => {
-            const typeId = String(
-              type?.id ?? ""
-            ).trim();
-
-            return (
-              typeId &&
-              requestTypeId &&
-              typeId === requestTypeId
+  const presentCount = useMemo(
+    () => {
+      return logs.filter(
+        (log) => {
+          const status =
+            normalizeAttendanceStatus(
+              (log as any).status
             );
+
+          return (
+            status === "present" ||
+            status === "half_day" ||
+            Boolean(
+              (log as any).is_late
+            )
+          );
+        }
+      ).length;
+    },
+    [logs]
+  );
+
+  const absentCount = useMemo(
+    () => {
+      return logs.filter(
+        (log) => {
+          const status =
+            normalizeAttendanceStatus(
+              (log as any).status
+            );
+
+          return (
+            status === "absent" ||
+            status ===
+              "not_present"
+          );
+        }
+      ).length;
+    },
+    [logs]
+  );
+
+  const leaveCount = useMemo(
+    () => {
+      return leaveRequests.reduce(
+        (
+          total,
+          request: any
+        ) => {
+          const status =
+            getLeaveRequestStatus(
+              request
+            );
+
+          if (
+            status !== "approved"
+          ) {
+            return total;
           }
+
+          return (
+            total +
+            getLeaveRequestDays(
+              request
+            )
+          );
+        },
+        0
+      );
+    },
+    [leaveRequests]
+  );
+
+  const sickLeaveRemaining =
+    useMemo(() => {
+      const balance =
+        leaveBalances.find(
+          (item: any) =>
+            getLeaveTypeCode(
+              item
+            ) === "SL"
         );
 
-      if (matchedType) {
-        const code =
-          getLeaveTypeCode(
-            matchedType
+      if (!balance) {
+        return 12;
+      }
+
+      return Math.max(
+        0,
+        getBalanceValue(
+          balance
+        )
+      );
+    }, [leaveBalances]);
+
+  const casualLeaveRemaining =
+    useMemo(() => {
+      const balance =
+        leaveBalances.find(
+          (item: any) =>
+            getLeaveTypeCode(
+              item
+            ) === "CL"
+        );
+
+      if (!balance) {
+        return 12;
+      }
+
+      return Math.max(
+        0,
+        getBalanceValue(
+          balance
+        )
+      );
+    }, [leaveBalances]);
+
+  const leaveBalance = useMemo(
+    () =>
+      sickLeaveRemaining +
+      casualLeaveRemaining,
+    [
+      sickLeaveRemaining,
+      casualLeaveRemaining,
+    ]
+  );
+
+  const visibleLeaveTypes =
+    useMemo(() => {
+      const allowed = [
+        "CL",
+        "SL",
+        "EL",
+        "LOP",
+      ];
+
+      return leaveTypes.filter(
+        (type: any) =>
+          allowed.includes(
+            getLeaveTypeCode(type)
+          )
+      );
+    }, [leaveTypes]);
+
+  const getRequestLeaveType =
+    useCallback(
+      (request: any) => {
+        const requestTypeId =
+          getLeaveTypeId(request);
+
+        const matchedType =
+          leaveTypes.find(
+            (type: any) =>
+              String(
+                type?.id ?? ""
+              ).trim() ===
+                requestTypeId &&
+              requestTypeId
           );
 
-        const name =
-          getLeaveTypeName(
-            matchedType
-          );
+        if (matchedType) {
+          return {
+            code:
+              getLeaveTypeCode(
+                matchedType
+              ) || "--",
+            name:
+              getLeaveTypeName(
+                matchedType
+              ) || "",
+          };
+        }
 
         return {
-          code: code || "--",
-          name: name || "",
+          code:
+            getLeaveTypeCode(
+              request
+            ) || "--",
+          name:
+            getLeaveTypeName(
+              request
+            ) || "",
         };
-      }
-
-      /*
-       * If API already sends leave type
-       * inside request, use that as fallback.
-       */
-      const requestCode =
-        getLeaveTypeCode(
-          request
-        );
-
-      const requestName =
-        getLeaveTypeName(
-          request
-        );
-
-      return {
-        code:
-          requestCode || "--",
-        name:
-          requestName || "",
-      };
-    },
-    [leaveTypes]
-  );
+      },
+      [leaveTypes]
+    );
 
   /* ============================================================
      LEAVE MODAL
@@ -905,17 +1087,11 @@ export default function EmployeeAttendanceView({
   };
 
   const closeLeaveModal = () => {
-    if (submittingLeave) {
-      return;
-    }
+    if (submittingLeave) return;
 
     setShowLeaveModal(false);
     setLeaveError(null);
   };
-
-  /* ============================================================
-     AUTO CALCULATE LEAVE DAYS
-  ============================================================ */
 
   useEffect(() => {
     if (
@@ -945,220 +1121,234 @@ export default function EmployeeAttendanceView({
      SUBMIT LEAVE
   ============================================================ */
 
-  const handleLeaveSubmit = async (
-    e: FormEvent<HTMLFormElement>
-  ) => {
-    e.preventDefault();
+  const handleLeaveSubmit =
+    async (
+      e: FormEvent<HTMLFormElement>
+    ) => {
+      e.preventDefault();
 
-    setLeaveError(null);
-    setLeaveSuccess(null);
+      setLeaveError(null);
+      setLeaveSuccess(null);
 
-    if (!leaveForm.leaveTypeId) {
-      setLeaveError(
-        "Please select a leave type."
-      );
-      return;
-    }
+      if (!leaveForm.leaveTypeId) {
+        setLeaveError(
+          "Please select a leave type."
+        );
+        return;
+      }
 
-    if (!leaveForm.startDate) {
-      setLeaveError(
-        "Please select start date."
-      );
-      return;
-    }
+      if (!leaveForm.startDate) {
+        setLeaveError(
+          "Please select start date."
+        );
+        return;
+      }
 
-    if (!leaveForm.endDate) {
-      setLeaveError(
-        "Please select end date."
-      );
-      return;
-    }
+      if (!leaveForm.endDate) {
+        setLeaveError(
+          "Please select end date."
+        );
+        return;
+      }
 
-    if (
-      leaveForm.endDate <
-      leaveForm.startDate
-    ) {
-      setLeaveError(
-        "End date cannot be before start date."
-      );
-      return;
-    }
+      if (
+        leaveForm.endDate <
+        leaveForm.startDate
+      ) {
+        setLeaveError(
+          "End date cannot be before start date."
+        );
+        return;
+      }
 
-    if (
-      leaveForm.totalDays <= 0
-    ) {
-      setLeaveError(
-        "Total days must be greater than 0."
-      );
-      return;
-    }
+      if (
+        leaveForm.totalDays <= 0
+      ) {
+        setLeaveError(
+          "Total days must be greater than 0."
+        );
+        return;
+      }
 
-    if (!leaveForm.reason.trim()) {
-      setLeaveError(
-        "Please enter the reason."
-      );
-      return;
-    }
+      if (
+        !leaveForm.reason.trim()
+      ) {
+        setLeaveError(
+          "Please enter the reason."
+        );
+        return;
+      }
 
-    try {
-      setSubmittingLeave(true);
+      try {
+        setSubmittingLeave(true);
 
-      const response = await fetch(
-        "/api/leaves",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
-          body: JSON.stringify({
-            employeeId: employee.id,
-            leaveTypeId:
-              leaveForm.leaveTypeId,
-            startDate:
-              leaveForm.startDate,
-            endDate:
-              leaveForm.endDate,
-            totalDays:
-              leaveForm.totalDays,
-            isHalfDay:
-              leaveForm.isHalfDay,
-            reason:
-              leaveForm.reason.trim(),
-          }),
+        const response =
+          await fetch(
+            "/api/leaves",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type":
+                  "application/json",
+              },
+              body: JSON.stringify({
+                employeeId:
+                  employee.id,
+                leaveTypeId:
+                  leaveForm.leaveTypeId,
+                startDate:
+                  leaveForm.startDate,
+                endDate:
+                  leaveForm.endDate,
+                totalDays:
+                  leaveForm.totalDays,
+                isHalfDay:
+                  leaveForm.isHalfDay,
+                reason:
+                  leaveForm.reason.trim(),
+              }),
+            }
+          );
+
+        const data =
+          await response.json();
+
+        if (!response.ok) {
+          throw new Error(
+            data?.error ||
+              data?.message ||
+              "Failed to submit leave request."
+          );
         }
-      );
 
-      const data =
-        await response.json();
+        const newRequest =
+          data?.request ??
+          data?.leaveRequest;
 
-      if (!response.ok) {
-        throw new Error(
-          data?.error ||
-            data?.message ||
-            "Failed to submit leave request."
+        if (newRequest) {
+          setLeaveRequests(
+            (prev) => [
+              newRequest,
+              ...prev,
+            ]
+          );
+        }
+
+        await refreshLeaveData();
+
+        setLeaveSuccess(
+          "Leave request submitted successfully."
         );
-      }
 
-      const newRequest =
-        data?.request ??
-        data?.leaveRequest;
+        setLeaveForm({
+          leaveTypeId: "",
+          startDate: "",
+          endDate: "",
+          totalDays: 1,
+          isHalfDay: false,
+          reason: "",
+        });
 
-      if (newRequest) {
-        setLeaveRequests(
-          (prev) => [
-            newRequest,
-            ...prev,
-          ]
+        setTimeout(() => {
+          setShowLeaveModal(false);
+          setLeaveSuccess(null);
+        }, 900);
+      } catch (error) {
+        console.error(
+          "Leave submit error:",
+          error
         );
+
+        setLeaveError(
+          error instanceof Error
+            ? error.message
+            : "Failed to submit leave request."
+        );
+      } finally {
+        setSubmittingLeave(false);
       }
-
-      await refreshLeaveData();
-
-      setLeaveSuccess(
-        "Leave request submitted successfully."
-      );
-
-      setLeaveForm({
-        leaveTypeId: "",
-        startDate: "",
-        endDate: "",
-        totalDays: 1,
-        isHalfDay: false,
-        reason: "",
-      });
-
-      setTimeout(() => {
-        setShowLeaveModal(false);
-        setLeaveSuccess(null);
-      }, 900);
-    } catch (error) {
-      console.error(
-        "Leave submit error:",
-        error
-      );
-
-      setLeaveError(
-        error instanceof Error
-          ? error.message
-          : "Failed to submit leave request."
-      );
-    } finally {
-      setSubmittingLeave(false);
-    }
-  };
+    };
 
   /* ============================================================
      OPEN REGULARIZATION
   ============================================================ */
 
-  const openRegularization = () => {
-    setRegularizationError(null);
-    setRegularizationSuccess(null);
+  const openRegularization =
+    () => {
+      setRegularizationError(null);
+      setRegularizationSuccess(null);
 
-    const date =
-      selectedAttendance?.date ||
-      selectedDate ||
-      getLogDate(
-        currentAttendanceLog
-      ) ||
-      todayString;
+      const date =
+        selectedAttendance?.date ||
+        selectedDate ||
+        getLogDate(
+          currentAttendanceLog
+        ) ||
+        todayString;
 
-    const selectedLog =
-      logs.find(
-        (log) =>
-          getLogDate(log) === date
-      ) ??
-      (getLogDate(
-        currentAttendanceLog
-      ) === date
-        ? currentAttendanceLog
-        : null);
+      const selectedLog =
+        logs.find(
+          (log) =>
+            getLogDate(log) ===
+            date
+        ) ??
+        (getLogDate(
+          currentAttendanceLog
+        ) === date
+          ? currentAttendanceLog
+          : null);
 
-    const existingClockIn =
-      getClockIn(selectedLog);
+      setRegularizationForm({
+        attendanceDate: date,
 
-    const existingClockOut =
-      getClockOut(selectedLog);
+        proposedCheckIn:
+          getTimeInputValue(
+            getClockIn(
+              selectedLog
+            )
+          ),
 
-    setRegularizationForm({
-      attendanceDate: date,
-      proposedCheckIn:
-        getTimeInputValue(
-          existingClockIn
-        ),
-      proposedCheckOut:
-        getTimeInputValue(
-          existingClockOut
-        ),
-      reason: "",
-    });
+        proposedCheckOut:
+          getTimeInputValue(
+            getClockOut(
+              selectedLog
+            )
+          ),
 
-    setIsRegularizationModalOpen(
-      true
-    );
-  };
+        reason: "",
+      });
 
-  /* ============================================================
-     CLOSE REGULARIZATION
-  ============================================================ */
+      setIsRegularizationModalOpen(
+        true
+      );
+    };
 
-  const closeRegularization = () => {
-    if (
-      submittingRegularization
-    ) {
-      return;
-    }
+  const closeRegularization =
+    () => {
+      if (
+        submittingRegularization
+      ) {
+        return;
+      }
 
-    setIsRegularizationModalOpen(
-      false
-    );
+      setIsRegularizationModalOpen(
+        false
+      );
 
-    setRegularizationError(null);
-  };
+      setRegularizationError(
+        null
+      );
+    };
 
   /* ============================================================
      SUBMIT REGULARIZATION
+
+     IMPORTANT FIX:
+     The entered Punch In / Punch Out are explicitly added
+     to the new request before putting it into `regs`.
+
+     This guarantees that Pending requests show timings
+     immediately.
   ============================================================ */
 
   const handleRegularizationSubmit =
@@ -1247,22 +1437,71 @@ export default function EmployeeAttendanceView({
           );
         }
 
-        const newRegularization =
+        const apiRequest =
           data?.regularization ??
           data?.request ??
-          data?.data;
+          data?.data ??
+          {};
 
-        if (newRegularization) {
-          setRegs((prev) => [
-            newRegularization,
+        /*
+         * IMPORTANT:
+         *
+         * Always merge the values entered in the popup
+         * into the request object.
+         *
+         * This fixes the case where the POST API returns
+         * only id/status/reason but not the proposed times.
+         */
+        const newRegularization =
+          {
+            ...apiRequest,
+
+            attendance_date:
+              apiRequest?.attendance_date ??
+              apiRequest?.attendanceDate ??
+              attendanceDate,
+
+            proposed_check_in:
+              proposedCheckIn,
+
+            proposed_check_out:
+              proposedCheckOut,
+
+            proposedCheckIn:
+              proposedCheckIn,
+
+            proposedCheckOut:
+              proposedCheckOut,
+
+            reason:
+              apiRequest?.reason ??
+              reason,
+
+            status:
+              apiRequest?.status ??
+              "pending",
+          };
+
+        setRegs(
+          (prev) => [
+            newRegularization as AttendanceRegularization,
             ...prev,
-          ]);
-        }
+          ]
+        );
 
         setIsRegularizationModalOpen(
           false
         );
 
+        /*
+         * Automatically open the request table
+         * so the employee can immediately see:
+         *
+         * Punch In
+         * Punch Out
+         * Reason
+         * Pending
+         */
         setShowRegularizationRequests(
           true
         );
@@ -1315,8 +1554,9 @@ export default function EmployeeAttendanceView({
 
     if (
       currentTodayLog &&
-      getLogDate(currentTodayLog) ===
-        activeDate
+      getLogDate(
+        currentTodayLog
+      ) === activeDate
     ) {
       return currentTodayLog;
     }
@@ -1330,36 +1570,37 @@ export default function EmployeeAttendanceView({
 
   const selectedClockIn =
     selectedAttendance?.date ===
-      activeDate
+    activeDate
       ? selectedAttendance.clockIn ??
         getClockIn(selectedLog)
       : getClockIn(selectedLog);
 
   const selectedClockOut =
     selectedAttendance?.date ===
-      activeDate
+    activeDate
       ? selectedAttendance.clockOut ??
         getClockOut(selectedLog)
       : getClockOut(selectedLog);
 
   /* ============================================================
-     CALENDAR DATE SELECT
+     CALENDAR
   ============================================================ */
 
-  const handleCalendarDateSelect = (
-    attendance: SelectedAttendance
-  ) => {
-    setSelectedAttendance(
-      attendance
-    );
+  const handleCalendarDateSelect =
+    (
+      attendance: SelectedAttendance
+    ) => {
+      setSelectedAttendance(
+        attendance
+      );
 
-    setSelectedDate(
-      attendance.date
-    );
-  };
+      setSelectedDate(
+        attendance.date
+      );
+    };
 
   /* ============================================================
-     REGULARIZATION DATE CHANGE
+     REGULARIZATION DATE
   ============================================================ */
 
   const handleRegularizationDateChange =
@@ -1379,13 +1620,16 @@ export default function EmployeeAttendanceView({
       setRegularizationForm(
         (prev) => ({
           ...prev,
-          attendanceDate: value,
+          attendanceDate:
+            value,
+
           proposedCheckIn:
             getTimeInputValue(
               getClockIn(
                 matchingLog
               )
             ),
+
           proposedCheckOut:
             getTimeInputValue(
               getClockOut(
@@ -1400,42 +1644,44 @@ export default function EmployeeAttendanceView({
      REGULARIZATION STATUS
   ============================================================ */
 
-  const getRegularizationStatus = (
-    request: any
-  ) => {
-    return String(
-      request?.status ?? "pending"
-    ).toLowerCase();
-  };
+  const getRegularizationStatus =
+    (request: any) => {
+      return String(
+        request?.status ??
+          "pending"
+      ).toLowerCase();
+    };
 
-  const getStatusLabel = (
-    request: any
-  ) => {
-    const status =
-      getRegularizationStatus(
-        request
-      );
+  const getStatusLabel =
+    (request: any) => {
+      const status =
+        getRegularizationStatus(
+          request
+        );
 
-    switch (status) {
-      case "approved":
-        return "Approved";
+      switch (status) {
+        case "approved":
+          return "Approved";
 
-      case "rejected":
-        return "Rejected";
+        case "rejected":
+          return "Rejected";
 
-      case "pending":
-        return "Pending";
+        case "pending":
+          return "Pending";
 
-      default:
-        return status
-          .replaceAll("_", " ")
-          .replace(
-            /\b\w/g,
-            (char) =>
-              char.toUpperCase()
-          );
-    }
-  };
+        default:
+          return status
+            .replaceAll(
+              "_",
+              " "
+            )
+            .replace(
+              /\b\w/g,
+              (char) =>
+                char.toUpperCase()
+            );
+      }
+    };
 
   /* ============================================================
      RENDER
@@ -1497,14 +1743,11 @@ export default function EmployeeAttendanceView({
 
       <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
 
-        {/* PRESENT */}
-
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex items-center justify-between">
             <p className="text-sm text-slate-500">
               Present
             </p>
-
             <CheckCircle2 className="h-5 w-5 text-emerald-500" />
           </div>
 
@@ -1513,14 +1756,11 @@ export default function EmployeeAttendanceView({
           </p>
         </div>
 
-        {/* ABSENT */}
-
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex items-center justify-between">
             <p className="text-sm text-slate-500">
               Absent
             </p>
-
             <XCircle className="h-5 w-5 text-red-500" />
           </div>
 
@@ -1529,14 +1769,11 @@ export default function EmployeeAttendanceView({
           </p>
         </div>
 
-        {/* LEAVE */}
-
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex items-center justify-between">
             <p className="text-sm text-slate-500">
               Leave
             </p>
-
             <CalendarOff className="h-5 w-5 text-yellow-500" />
           </div>
 
@@ -1544,8 +1781,6 @@ export default function EmployeeAttendanceView({
             {leaveCount}
           </p>
         </div>
-
-        {/* YEARLY LEAVES */}
 
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex items-center justify-between">
@@ -1557,9 +1792,6 @@ export default function EmployeeAttendanceView({
           </div>
 
           <div className="mt-3 grid grid-cols-2">
-
-            {/* SL */}
-
             <div className="text-center">
               <p className="text-2xl font-bold text-slate-900">
                 {sickLeaveRemaining}
@@ -1574,8 +1806,6 @@ export default function EmployeeAttendanceView({
               </p>
             </div>
 
-            {/* CL */}
-
             <div className="border-l border-slate-200 text-center">
               <p className="text-2xl font-bold text-slate-900">
                 {casualLeaveRemaining}
@@ -1589,11 +1819,8 @@ export default function EmployeeAttendanceView({
                 Casual Leave
               </p>
             </div>
-
           </div>
         </div>
-
-        {/* TOTAL LEAVE BALANCE */}
 
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex items-center justify-between">
@@ -1615,13 +1842,9 @@ export default function EmployeeAttendanceView({
 
       </div>
 
-      {/* ======================================================
-          CALENDAR + CLOCK
-      ====================================================== */}
+      {/* CALENDAR + CLOCK */}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-
-        {/* CALENDAR */}
 
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="mb-4">
@@ -1655,8 +1878,6 @@ export default function EmployeeAttendanceView({
             }}
           />
         </div>
-
-        {/* CLOCK */}
 
         <div>
           <ClockInWidget
@@ -1719,11 +1940,12 @@ export default function EmployeeAttendanceView({
                   updatedLog
                 );
 
-              const status = String(
-                (updatedLog as any)
-                  .status ??
-                  "present"
-              ).toLowerCase();
+              const status =
+                String(
+                  (updatedLog as any)
+                    .status ??
+                    "present"
+                ).toLowerCase();
 
               let selectedStatus:
                 | "present"
@@ -1802,14 +2024,11 @@ export default function EmployeeAttendanceView({
         </div>
       </div>
 
-      {/* ======================================================
-          ATTENDANCE DETAILS
-      ====================================================== */}
+      {/* ATTENDANCE DETAILS */}
 
       <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
 
         <div className="flex items-center justify-between gap-4 border-b border-slate-200 p-5">
-
           <div>
             <h2 className="text-lg font-bold text-slate-900">
               Attendance Details
@@ -1823,13 +2042,11 @@ export default function EmployeeAttendanceView({
           <div className="rounded-lg bg-slate-50 p-2">
             <Clock className="h-5 w-5 text-slate-500" />
           </div>
-
         </div>
 
         <div className="p-5">
 
           <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
-
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
               Attendance Date
             </p>
@@ -1839,7 +2056,6 @@ export default function EmployeeAttendanceView({
                 activeDate
               )}
             </p>
-
           </div>
 
           <div className="overflow-x-auto rounded-xl border border-slate-200">
@@ -1877,7 +2093,6 @@ export default function EmployeeAttendanceView({
               </thead>
 
               <tbody>
-
                 <tr className="border-b border-slate-100 last:border-0">
 
                   <td className="px-5 py-4 text-sm font-medium text-slate-800">
@@ -1914,9 +2129,7 @@ export default function EmployeeAttendanceView({
                   </td>
 
                   <td className="px-5 py-4">
-
                     <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold capitalize text-slate-700">
-
                       {selectedAttendance?.date ===
                         activeDate &&
                       selectedAttendance?.status
@@ -1934,13 +2147,10 @@ export default function EmployeeAttendanceView({
                             " "
                           )
                         : "Not Available"}
-
                     </span>
-
                   </td>
 
                   <td className="px-5 py-4 text-sm text-slate-600">
-
                     {(selectedLog as any)
                       ?.shift_name ??
                       (selectedLog as any)
@@ -1949,24 +2159,17 @@ export default function EmployeeAttendanceView({
                         ?.shiftName ??
                       project?.name ??
                       "--"}
-
                   </td>
 
                 </tr>
-
               </tbody>
 
             </table>
-
           </div>
-
         </div>
-
       </div>
 
-      {/* ======================================================
-          ATTENDANCE REGULARIZATION
-      ====================================================== */}
+      {/* ATTENDANCE REGULARIZATION */}
 
       <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
 
@@ -2049,12 +2252,17 @@ export default function EmployeeAttendanceView({
                         request?.date ??
                         "";
 
+                      /*
+                       * Support every possible field name.
+                       */
                       const checkIn =
                         request?.proposed_check_in ??
                         request?.proposedCheckIn ??
                         request?.punch_in ??
                         request?.punchIn ??
                         request?.punchInTime ??
+                        request?.check_in ??
+                        request?.checkIn ??
                         null;
 
                       const checkOut =
@@ -2063,6 +2271,8 @@ export default function EmployeeAttendanceView({
                         request?.punch_out ??
                         request?.punchOut ??
                         request?.punchOutTime ??
+                        request?.check_out ??
+                        request?.checkOut ??
                         null;
 
                       const status =
@@ -2092,13 +2302,13 @@ export default function EmployeeAttendanceView({
                               : "--"}
                           </td>
 
-                          <td className="px-5 py-4 text-sm text-slate-600">
+                          <td className="px-5 py-4 text-sm font-semibold text-slate-700">
                             {formatAttendanceTime(
                               checkIn
                             )}
                           </td>
 
-                          <td className="px-5 py-4 text-sm text-slate-600">
+                          <td className="px-5 py-4 text-sm font-semibold text-slate-700">
                             {formatAttendanceTime(
                               checkOut
                             )}
@@ -2146,9 +2356,7 @@ export default function EmployeeAttendanceView({
 
       </div>
 
-      {/* ======================================================
-          LEAVE MANAGEMENT
-      ====================================================== */}
+      {/* LEAVE MANAGEMENT */}
 
       <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
 
@@ -2229,11 +2437,6 @@ export default function EmployeeAttendanceView({
                       index
                     ) => {
 
-                      /*
-                       * IMPORTANT:
-                       * Get the leave type using leave_type_id
-                       * and match it with leaveTypes.
-                       */
                       const requestLeaveType =
                         getRequestLeaveType(
                           request
@@ -2260,10 +2463,6 @@ export default function EmployeeAttendanceView({
                           className="border-b border-slate-100 last:border-0"
                         >
 
-                          {/* ==================================================
-                              LEAVE TYPE
-                          ================================================== */}
-
                           <td className="px-4 py-4">
 
                             <div className="flex items-center gap-2">
@@ -2284,23 +2483,17 @@ export default function EmployeeAttendanceView({
 
                           </td>
 
-                          {/* START */}
-
                           <td className="px-4 py-4 text-sm text-slate-600">
                             {request?.start_date ??
                               request?.startDate ??
                               "--"}
                           </td>
 
-                          {/* END */}
-
                           <td className="px-4 py-4 text-sm text-slate-600">
                             {request?.end_date ??
                               request?.endDate ??
                               "--"}
                           </td>
-
-                          {/* DAYS */}
 
                           <td className="px-4 py-4 text-sm font-semibold text-slate-700">
                             {request?.is_half_day ??
@@ -2311,16 +2504,12 @@ export default function EmployeeAttendanceView({
                                 "--"}
                           </td>
 
-                          {/* REASON */}
-
                           <td className="max-w-xs px-4 py-4 text-sm text-slate-600">
                             <div className="truncate">
                               {request?.reason ??
                                 "--"}
                             </div>
                           </td>
-
-                          {/* STATUS */}
 
                           <td className="px-4 py-4">
 
@@ -2662,8 +2851,6 @@ export default function EmployeeAttendanceView({
 
               <div className="space-y-4 px-6 py-5">
 
-                {/* LEAVE TYPE */}
-
                 <div>
 
                   <label className="mb-2 block text-sm font-semibold text-slate-700">
@@ -2708,8 +2895,6 @@ export default function EmployeeAttendanceView({
                   </select>
 
                 </div>
-
-                {/* DATES */}
 
                 <div className="grid grid-cols-2 gap-3">
 
@@ -2769,8 +2954,6 @@ export default function EmployeeAttendanceView({
 
                 </div>
 
-                {/* HALF DAY */}
-
                 <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-200 p-3">
 
                   <input
@@ -2808,8 +2991,6 @@ export default function EmployeeAttendanceView({
 
                 </label>
 
-                {/* TOTAL DAYS */}
-
                 <div>
 
                   <label className="mb-2 block text-sm font-semibold text-slate-700">
@@ -2840,8 +3021,6 @@ export default function EmployeeAttendanceView({
                   />
 
                 </div>
-
-                {/* REASON */}
 
                 <div>
 

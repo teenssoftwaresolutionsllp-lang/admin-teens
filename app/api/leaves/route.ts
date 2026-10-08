@@ -106,27 +106,6 @@ function getLeaveYear(request: any) {
    GET INITIAL / HR APPROVED ALLOCATION
 ============================================================ */
 
-/*
- * IMPORTANT
- *
- * HR-controlled leave allocation comes from leave type
- * annual_quota.
- *
- * Example:
- *
- * SL annual_quota = 12
- * CL annual_quota = 12
- *
- * HR changes:
- *
- * SL annual_quota = 19
- *
- * Employee page will automatically show:
- *
- * SL = 19
- *
- * We do NOT hardcode 12 here.
- */
 function getAllocatedDays(type: any) {
   const value =
     type?.annual_quota ??
@@ -145,12 +124,6 @@ function getAllocatedDays(type: any) {
     return number;
   }
 
-  /*
-   * Initial default values.
-   *
-   * These are used only when HR has not configured
-   * annual_quota yet.
-   */
   const code = getLeaveTypeCode(type);
 
   if (code === "SL") {
@@ -177,20 +150,9 @@ function calculateLeaveBalances(
     const typeId = getLeaveTypeId(type);
     const code = getLeaveTypeCode(type);
 
-    /*
-     * IMPORTANT:
-     *
-     * Do NOT hardcode SL/CL to 12.
-     *
-     * Read the allocation from HR's leave type.
-     */
     const yearlyBalance =
       getAllocatedDays(type);
 
-    /*
-     * Only APPROVED leave requests
-     * reduce the balance.
-     */
     const usedDays = leaveRequests
       .filter((request) => {
         const status = normalize(
@@ -201,9 +163,6 @@ function calculateLeaveBalances(
           return false;
         }
 
-        /*
-         * Match leave type by ID first.
-         */
         const requestTypeId =
           getRequestLeaveTypeId(
             request
@@ -219,9 +178,6 @@ function calculateLeaveBalances(
             return false;
           }
         } else {
-          /*
-           * Fallback to leave type code.
-           */
           const requestCode =
             getRequestLeaveTypeCode(
               request
@@ -235,10 +191,6 @@ function calculateLeaveBalances(
           }
         }
 
-        /*
-         * Only current year leaves
-         * affect current year balance.
-         */
         const requestYear =
           getLeaveYear(request);
 
@@ -260,15 +212,6 @@ function calculateLeaveBalances(
         0
       );
 
-    /*
-     * Remaining balance.
-     *
-     * Example:
-     *
-     * HR allocation = 19
-     * Approved used = 3
-     * Remaining = 16
-     */
     const remaining = Math.max(
       0,
       yearlyBalance - usedDays
@@ -279,41 +222,79 @@ function calculateLeaveBalances(
 
       code,
 
-      /*
-       * Keep both formats because
-       * different components use different names.
-       */
       leaveType: type,
       leave_type: type,
 
-      /*
-       * HR allocation
-       */
       allocated: yearlyBalance,
-
       allocated_days: yearlyBalance,
 
-      /*
-       * Approved leave used
-       */
       used: usedDays,
-
       used_days: usedDays,
 
-      /*
-       * Remaining leave
-       */
       remaining,
-
       balance_days: remaining,
 
       available: remaining,
-
       available_days: remaining,
-
       availableDays: remaining,
     };
   });
+}
+
+/* ============================================================
+   AUTHENTICATION HELPER
+============================================================ */
+
+async function getAuthenticatedUser() {
+  const supabase =
+    await createClient();
+
+  /*
+   * First try getUser().
+   *
+   * This is the preferred Supabase
+   * authentication check.
+   */
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+
+  if (user) {
+    return {
+      supabase,
+      user,
+    };
+  }
+
+  /*
+   * Fallback to getSession().
+   *
+   * This helps when the current request
+   * has a valid Supabase session but
+   * getUser() does not immediately return
+   * the user.
+   */
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (session?.user) {
+    return {
+      supabase,
+      user: session.user,
+    };
+  }
+
+  console.error(
+    "Leave API authentication failed:",
+    userError?.message || "No authenticated session"
+  );
+
+  return {
+    supabase,
+    user: null,
+  };
 }
 
 /* ============================================================
@@ -324,12 +305,9 @@ export async function GET(
   request: Request
 ) {
   try {
-    const supabase =
-      await createClient();
-
     const {
-      data: { user },
-    } = await supabase.auth.getUser();
+      user,
+    } = await getAuthenticatedUser();
 
     if (!user) {
       return NextResponse.json(
@@ -373,19 +351,6 @@ export async function GET(
        CALCULATE BALANCES
     ======================================================== */
 
-    /*
-     * Every GET request recalculates the balance.
-     *
-     * Therefore:
-     *
-     * HR changes SL 12 -> 19
-     *
-     * Employee refreshes page
-     *
-     * Employee sees SL = 19
-     *
-     * Approved leave then reduces 19.
-     */
     const leaveBalances =
       calculateLeaveBalances(
         leaveTypes ?? [],
@@ -451,12 +416,9 @@ export async function POST(
   request: Request
 ) {
   try {
-    const supabase =
-      await createClient();
-
     const {
-      data: { user },
-    } = await supabase.auth.getUser();
+      user,
+    } = await getAuthenticatedUser();
 
     if (!user) {
       return NextResponse.json(
@@ -529,13 +491,6 @@ export async function POST(
        CREATE PENDING REQUEST
     ======================================================== */
 
-    /*
-     * IMPORTANT:
-     *
-     * Applying leave does NOT reduce balance.
-     *
-     * HR approval reduces balance.
-     */
     const leaveRequest =
       await DataStore.createLeaveRequest(
         {

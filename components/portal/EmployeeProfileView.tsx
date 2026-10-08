@@ -37,6 +37,7 @@ import {
   Trash2,
   Download,
   Eye,
+  LaptopMinimal,
 } from "lucide-react";
 
 import ProfileProgressBar from "./ProfileProgressBar";
@@ -94,6 +95,14 @@ type EditFormData = {
   esi: string;
   pt: string;
   tds: string;
+
+  accessory_type: string;
+  accessory_serial: string;
+
+  peripherals: {
+    type: string;
+    serial: string;
+  }[];
 };
 
 const documentTypes = [
@@ -160,6 +169,11 @@ const emptyEditForm: EditFormData = {
   esi: "",
   pt: "",
   tds: "",
+
+  accessory_type: "",
+  accessory_serial: "",
+
+  peripherals: [],
 };
 
 type EditSection =
@@ -170,7 +184,14 @@ type EditSection =
   | "employment"
   | "document"
   | "statutory"
+  | "accessory"
   | null;
+
+const inputClass =
+  "w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100";
+
+const labelClass =
+  "block mb-2 text-xs font-bold text-slate-700 uppercase tracking-wider";
 
 export default function EmployeeProfileView({
   employee,
@@ -209,6 +230,7 @@ export default function EmployeeProfileView({
     | "employment"
     | "document"
     | "statutory"
+    | "accessory"
   >("personal");
 
   const [isEditModalOpen, setIsEditModalOpen] =
@@ -236,29 +258,10 @@ export default function EmployeeProfileView({
       ...emptyEditForm,
     });
 
-  /* ============================================================
-     PROFILE PHOTO
-
-     Database photo is the primary source.
-
-     Sidebar sends:
-       "profile-photo-updated"
-
-     Sidebar also stores:
-       "profile-avatar-url"
-
-     The event updates the image immediately.
-     localStorage is only used when database photo is unavailable.
-  ============================================================ */
-
   const [profilePhotoUrl, setProfilePhotoUrl] =
     useState<string | null>(
       employeeData.profile_photo_url || null
     );
-
-  /* ============================================================
-     DOCUMENT STATE
-  ============================================================ */
 
   const [documents, setDocuments] =
     useState<EmployeeDocument[]>([]);
@@ -287,6 +290,7 @@ export default function EmployeeProfileView({
   ) => {
     setSuccessMessage(null);
     setErrorMessage(null);
+    setDocumentError(null);
     setEditSection(section);
     setIsEditModalOpen(true);
   };
@@ -299,10 +303,11 @@ export default function EmployeeProfileView({
     setIsEditModalOpen(false);
     setEditSection(null);
     setLoading(false);
+    setErrorMessage(null);
   };
 
   /* ============================================================
-     RESET EDIT FORM WHEN EMPLOYEE CHANGES
+     RESET EDIT FORM
   ============================================================ */
 
   useEffect(() => {
@@ -422,6 +427,20 @@ export default function EmployeeProfileView({
 
       tds:
         data.tds || "",
+
+      accessory_type:
+        data.accessory_type || "",
+
+      accessory_serial:
+        data.accessory_serial || "",
+
+      peripherals:
+        Array.isArray(data.peripherals)
+          ? data.peripherals.map((item: any) => ({
+              type: item?.type || "",
+              serial: item?.serial || "",
+            }))
+          : [],
     });
 
     setPendingRequest(
@@ -433,31 +452,14 @@ export default function EmployeeProfileView({
   ]);
 
   /* ============================================================
-     CORRECTED PROFILE PHOTO SYNC
-
-     IMPORTANT:
-     - DB photo is preferred.
-     - localStorage is fallback only.
-     - Sidebar event always updates immediately.
-     - Event listener is removed on unmount.
+     PROFILE PHOTO SYNC
   ============================================================ */
 
   useEffect(() => {
     const databasePhoto =
       employeeData.profile_photo_url || null;
 
-    /* ----------------------------------------------------------
-       1. FIRST USE DATABASE PHOTO
-    ---------------------------------------------------------- */
-
     setProfilePhotoUrl(databasePhoto);
-
-    /* ----------------------------------------------------------
-       2. USE LOCAL STORAGE ONLY IF DB HAS NO PHOTO
-
-       This prevents an old localStorage photo from replacing
-       a valid database photo.
-    ---------------------------------------------------------- */
 
     if (!databasePhoto) {
       try {
@@ -477,10 +479,6 @@ export default function EmployeeProfileView({
       }
     }
 
-    /* ----------------------------------------------------------
-       3. LISTEN FOR SIDEBAR PHOTO UPLOAD
-    ---------------------------------------------------------- */
-
     const handlePhotoUpdate = (
       event: Event
     ) => {
@@ -496,12 +494,10 @@ export default function EmployeeProfileView({
         return;
       }
 
-      /* Immediately update Employee Profile image */
       setProfilePhotoUrl(
         newAvatarUrl
       );
 
-      /* Keep Sidebar/Profile synchronized */
       try {
         window.localStorage.setItem(
           "profile-avatar-url",
@@ -520,10 +516,6 @@ export default function EmployeeProfileView({
       handlePhotoUpdate
     );
 
-    /* ----------------------------------------------------------
-       4. CLEANUP
-    ---------------------------------------------------------- */
-
     return () => {
       window.removeEventListener(
         "profile-photo-updated",
@@ -535,7 +527,7 @@ export default function EmployeeProfileView({
   ]);
 
   /* ============================================================
-     LOAD EMPLOYEE DOCUMENTS
+     LOAD DOCUMENTS
   ============================================================ */
 
   useEffect(() => {
@@ -834,6 +826,10 @@ export default function EmployeeProfileView({
   ) => {
     e.preventDefault();
 
+    if (loading) {
+      return;
+    }
+
     setLoading(true);
     setSuccessMessage(null);
     setErrorMessage(null);
@@ -966,6 +962,15 @@ export default function EmployeeProfileView({
 
         tds:
           editFormData.tds,
+
+        accessory_type:
+          editFormData.accessory_type,
+
+        accessory_serial:
+          editFormData.accessory_serial,
+
+        peripherals:
+          editFormData.peripherals,
       };
 
       const fieldMap: Record<
@@ -973,18 +978,10 @@ export default function EmployeeProfileView({
         string
       > = {
         phone: "phone",
-
-        date_of_birth:
-          "date_of_birth",
-
-        gender:
-          "gender",
-
-        blood_group:
-          "blood_group",
-
-        marital_status:
-          "marital_status",
+        date_of_birth: "date_of_birth",
+        gender: "gender",
+        blood_group: "blood_group",
+        marital_status: "marital_status",
 
         permanent_address:
           "permanent_address",
@@ -1074,12 +1071,18 @@ export default function EmployeeProfileView({
           "passport_number",
 
         pf: "pf",
-
         esi: "esi",
-
         pt: "pt",
-
         tds: "tds",
+
+        accessory_type:
+          "accessory_type",
+
+        accessory_serial:
+          "accessory_serial",
+
+        peripherals:
+          "peripherals",
       };
 
       const sectionFields: Record<
@@ -1145,6 +1148,12 @@ export default function EmployeeProfileView({
           "pt",
           "tds",
         ],
+
+        accessory: [
+          "accessory_type",
+          "accessory_serial",
+          "peripherals",
+        ],
       };
 
       Object.entries(
@@ -1182,20 +1191,63 @@ export default function EmployeeProfileView({
               employeeField
             ] ?? "";
 
-          const oldNormalized =
-            String(
-              oldValue ?? ""
-            ).trim();
-
-          const newNormalized =
-            String(
-              newValue ?? ""
-            ).trim();
+          let isChanged = false;
 
           if (
-            oldNormalized !==
-            newNormalized
+            field === "peripherals"
           ) {
+            const oldPeripherals =
+              Array.isArray(oldValue)
+                ? oldValue.map(
+                    (item: any) => ({
+                      type:
+                        item?.type ||
+                        "",
+                      serial:
+                        item?.serial ||
+                        "",
+                    })
+                  )
+                : [];
+
+            const newPeripherals =
+              Array.isArray(newValue)
+                ? newValue.map(
+                    (item: any) => ({
+                      type:
+                        item?.type ||
+                        "",
+                      serial:
+                        item?.serial ||
+                        "",
+                    })
+                  )
+                : [];
+
+            isChanged =
+              JSON.stringify(
+                oldPeripherals
+              ) !==
+              JSON.stringify(
+                newPeripherals
+              );
+          } else {
+            const oldNormalized =
+              String(
+                oldValue ?? ""
+              ).trim();
+
+            const newNormalized =
+              String(
+                newValue ?? ""
+              ).trim();
+
+            isChanged =
+              oldNormalized !==
+              newNormalized;
+          }
+
+          if (isChanged) {
             changedFields[field] =
               newValue;
 
@@ -1350,6 +1402,9 @@ export default function EmployeeProfileView({
       case "statutory":
         return "Request Statutory Edit";
 
+      case "accessory":
+        return "Request Accessory Management Edit";
+
       case "document":
         return "Documents";
 
@@ -1397,6 +1452,12 @@ export default function EmployeeProfileView({
       id: "statutory" as const,
       label: "Statutory",
       icon: CreditCard,
+    },
+
+    {
+      id: "accessory" as const,
+      label: "Accessory Management",
+      icon: LaptopMinimal,
     },
   ];
 
@@ -1531,7 +1592,7 @@ export default function EmployeeProfileView({
       )}
 
       {/* ============================================================
-          PENDING PROFILE REQUEST
+          PENDING REQUEST
       ============================================================ */}
 
       {pendingRequest && (
@@ -2272,7 +2333,7 @@ export default function EmployeeProfileView({
 
                     <div>
 
-                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                      <label className={labelClass}>
                         Document Type
                       </label>
 
@@ -2287,7 +2348,7 @@ export default function EmployeeProfileView({
                             null
                           );
                         }}
-                        className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-xs font-semibold bg-white text-slate-800 shadow-sm focus:outline-none focus:border-indigo-500"
+                        className={inputClass}
                         disabled={
                           isUploading
                         }
@@ -2312,14 +2373,13 @@ export default function EmployeeProfileView({
 
                       <label
                         htmlFor="document-name"
-                        className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5"
+                        className={labelClass}
                       >
-                        Custom Label{" "}
-
+                        Custom Label
                         <span className="font-normal text-slate-400 normal-case">
+                          {" "}
                           (optional)
                         </span>
-
                       </label>
 
                       <input
@@ -2334,7 +2394,7 @@ export default function EmployeeProfileView({
                           )
                         }
                         placeholder="Defaults to filename"
-                        className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-xs font-semibold bg-white text-slate-800 shadow-sm focus:outline-none focus:border-indigo-500"
+                        className={inputClass}
                         disabled={
                           isUploading
                         }
@@ -2423,7 +2483,7 @@ export default function EmployeeProfileView({
                       (doc) => (
                         <div
                           key={doc.id}
-                          className="flex items-center justify-between p-4 bg-white rounded-xl border border-slate-200/90 shadow-2xs hover:shadow-sm transition-all"
+                          className="flex items-center justify-between p-4 bg-white rounded-xl border border-slate-200/90 shadow-sm hover:shadow-sm transition-all"
                         >
 
                           <div className="flex items-center gap-3 min-w-0">
@@ -2437,20 +2497,17 @@ export default function EmployeeProfileView({
                             <div className="min-w-0">
 
                               <p className="text-xs font-bold text-slate-900 truncate">
-                                {
-                                  doc.document_name
-                                }
+                                {doc.document_name}
                               </p>
 
                               <div className="flex items-center gap-2 mt-1">
 
                                 <span className="text-[10px] font-bold px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md">
-                                  {
-                                    doc.document_type
-                                  }
+                                  {doc.document_type}
                                 </span>
 
                                 <span className="text-[10px] text-slate-400 font-mono">
+
                                   {[
                                     "Aadhar Card",
                                     "Aadhaar Card",
@@ -2459,9 +2516,12 @@ export default function EmployeeProfileView({
                                   )
                                     ? employeeData.aadhar_number ||
                                       "Not specified"
-                                    : new Date(
+                                    : doc.uploaded_at
+                                    ? new Date(
                                         doc.uploaded_at
-                                      ).toLocaleDateString()}
+                                      ).toLocaleDateString()
+                                    : "Not specified"}
+
                                 </span>
 
                               </div>
@@ -2614,20 +2674,199 @@ export default function EmployeeProfileView({
             </div>
           )}
 
+          {/* ========================================================
+              ACCESSORY MANAGEMENT
+          ======================================================== */}
+
+          {activeTab === "accessory" && (
+            <div className="space-y-8">
+
+              <div className="flex items-start justify-between gap-4">
+
+                <div>
+
+                  <h3 className="text-lg font-bold text-slate-900">
+                    Accessory Management
+                  </h3>
+
+                  <p className="text-sm text-slate-500 mt-1">
+                    Employee assigned main accessory and peripheral details.
+                  </p>
+
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    openEditSection(
+                      "accessory"
+                    )
+                  }
+                  className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 text-xs font-bold transition-colors shrink-0"
+                >
+
+                  <Edit3 className="w-4 h-4" />
+
+                  Edit
+
+                </button>
+
+              </div>
+
+              <div>
+
+                <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-4 flex items-center gap-2">
+
+                  <LaptopMinimal className="w-4 h-4 text-indigo-600" />
+
+                  Main Accessory
+
+                </h4>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+
+                  <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
+
+                    <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
+                      Accessory Type
+                    </span>
+
+                    <span className="font-semibold text-slate-800">
+                      {employeeData.accessory_type ||
+                        "No Main Accessory"}
+                    </span>
+
+                  </div>
+
+                  <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
+
+                    <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
+                      Serial Number
+                    </span>
+
+                    <span className="font-semibold text-slate-800 font-mono">
+                      {employeeData.accessory_serial ||
+                        "Not specified"}
+                    </span>
+
+                  </div>
+
+                </div>
+
+              </div>
+
+              <div>
+
+                <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-4">
+                  Peripherals
+                </h4>
+
+                {Array.isArray(
+                  employeeData.peripherals
+                ) &&
+                employeeData.peripherals.length >
+                  0 ? (
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                    {employeeData.peripherals.map(
+                      (
+                        item: any,
+                        index: number
+                      ) => (
+
+                        <div
+                          key={`${item?.type || "peripheral"}-${index}`}
+                          className="p-4 bg-slate-50/70 rounded-xl border border-slate-100"
+                        >
+
+                          <div className="flex items-center justify-between gap-3">
+
+                            <span className="text-sm font-bold text-slate-900">
+                              {item?.type ||
+                                "Other"}
+                            </span>
+
+                            <span className="text-[10px] font-bold px-2 py-1 bg-indigo-50 text-indigo-600 rounded-md">
+                              Peripheral
+                            </span>
+
+                          </div>
+
+                          <div className="mt-3">
+
+                            <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
+                              Serial Number
+                            </span>
+
+                            <span className="font-semibold text-slate-800 font-mono">
+                              {item?.serial ||
+                                "Not specified"}
+                            </span>
+
+                          </div>
+
+                        </div>
+
+                      )
+                    )}
+
+                  </div>
+
+                ) : (
+
+                  <div className="p-6 bg-slate-50/70 rounded-xl border border-slate-100 text-center">
+
+                    <p className="text-sm font-semibold text-slate-500">
+                      No peripherals assigned
+                    </p>
+
+                  </div>
+
+                )}
+
+              </div>
+
+            </div>
+          )}
+
         </div>
 
       </div>
 
       {/* ============================================================
           EDIT PROFILE MODAL
+          
+          IMPORTANT:
+          fixed + inset-0 + flex + items-center + justify-center
+          makes the modal exactly center of the viewport.
       ============================================================ */}
 
       {isEditModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+          onMouseDown={(event) => {
+            if (
+              event.target ===
+              event.currentTarget
+            ) {
+              closeEditModal();
+            }
+          }}
+        >
 
-          <div className="w-full max-w-4xl max-h-[90vh] overflow-y-auto bg-white rounded-2xl shadow-2xl">
+          <div
+            className="relative w-full max-w-4xl max-h-[90vh] overflow-hidden rounded-2xl bg-white shadow-2xl flex flex-col"
+            onMouseDown={(event) =>
+              event.stopPropagation()
+            }
+          >
 
-            <div className="sticky top-0 z-10 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
+            {/* ======================================================
+                MODAL HEADER
+            ====================================================== */}
+
+            <div className="shrink-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
 
               <div>
 
@@ -2646,7 +2885,8 @@ export default function EmployeeProfileView({
                 onClick={
                   closeEditModal
                 }
-                className="p-2 rounded-lg hover:bg-slate-100 text-slate-500"
+                className="p-2 rounded-lg hover:bg-slate-100 text-slate-500 transition"
+                aria-label="Close modal"
               >
 
                 <XCircle className="w-5 h-5" />
@@ -2655,19 +2895,25 @@ export default function EmployeeProfileView({
 
             </div>
 
+            {/* ======================================================
+                DOCUMENT MODAL
+            ====================================================== */}
+
             {editSection ===
             "document" ? (
-              <div className="p-6 space-y-6">
+              <div className="overflow-y-auto p-6 space-y-6">
 
                 <div className="bg-slate-50/70 border-2 border-dashed border-slate-200 rounded-2xl p-6">
 
                   <div className="max-w-xl mx-auto space-y-4">
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
 
                       <div>
 
-                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                        <label
+                          className={labelClass}
+                        >
                           Document Type
                         </label>
 
@@ -2684,7 +2930,7 @@ export default function EmployeeProfileView({
                               null
                             );
                           }}
-                          className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-xs font-semibold bg-white text-slate-800 shadow-sm focus:outline-none focus:border-indigo-500"
+                          className={inputClass}
                           disabled={
                             isUploading
                           }
@@ -2709,14 +2955,13 @@ export default function EmployeeProfileView({
 
                         <label
                           htmlFor="document-name-modal"
-                          className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5"
+                          className={labelClass}
                         >
-                          Custom Label{" "}
-
+                          Custom Label
                           <span className="font-normal text-slate-400 normal-case">
+                            {" "}
                             (optional)
                           </span>
-
                         </label>
 
                         <input
@@ -2731,7 +2976,7 @@ export default function EmployeeProfileView({
                             )
                           }
                           placeholder="Defaults to filename"
-                          className="w-full rounded-xl border border-slate-200 px-3.5 py-2 text-xs font-semibold bg-white text-slate-800 shadow-sm focus:outline-none focus:border-indigo-500"
+                          className={inputClass}
                           disabled={
                             isUploading
                           }
@@ -2809,14 +3054,21 @@ export default function EmployeeProfileView({
 
               </div>
             ) : (
+
+              /* ======================================================
+                 PROFILE EDIT FORM
+              ====================================================== */
+
               <form
                 onSubmit={
                   handleFormSubmit
                 }
-                className="p-6 space-y-8"
+                className="flex-1 overflow-y-auto p-6 space-y-8"
               >
 
-                {/* PERSONAL */}
+                {/* ==================================================
+                    PERSONAL INFORMATION
+                ================================================== */}
 
                 {(editSection ===
                   "all" ||
@@ -2824,121 +3076,196 @@ export default function EmployeeProfileView({
                     "personal") && (
                   <section>
 
-                    <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-4">
+                    <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-5">
                       Personal Information
                     </h3>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
 
-                      <input
-                        name="phone"
-                        value={
-                          editFormData.phone
-                        }
-                        onChange={
-                          handleInputChange
-                        }
-                        placeholder="Phone"
-                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
-                      />
+                      {/* Mobile No */}
 
-                      <input
-                        type="date"
-                        name="date_of_birth"
-                        value={
-                          editFormData.date_of_birth
-                        }
-                        onChange={
-                          handleInputChange
-                        }
-                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
-                      />
+                      <div>
 
-                      <select
-                        name="gender"
-                        value={
-                          editFormData.gender
-                        }
-                        onChange={
-                          handleInputChange
-                        }
-                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
-                      >
+                        <label
+                          htmlFor="phone"
+                          className={labelClass}
+                        >
+                          Mobile No
+                        </label>
 
-                        <option value="">
-                          Select Gender
-                        </option>
+                        <input
+                          id="phone"
+                          name="phone"
+                          type="tel"
+                          value={
+                            editFormData.phone
+                          }
+                          onChange={
+                            handleInputChange
+                          }
+                          placeholder="Enter mobile number"
+                          className={inputClass}
+                        />
 
-                        <option value="male">
-                          Male
-                        </option>
+                      </div>
 
-                        <option value="female">
-                          Female
-                        </option>
+                      {/* Date of Birth */}
 
-                        <option value="other">
-                          Other
-                        </option>
+                      <div>
 
-                      </select>
+                        <label
+                          htmlFor="date_of_birth"
+                          className={labelClass}
+                        >
+                          Date of Birth
+                        </label>
 
-                      <input
-                        name="blood_group"
-                        value={
-                          editFormData.blood_group
-                        }
-                        onChange={
-                          handleInputChange
-                        }
-                        placeholder="Blood Group"
-                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
-                      />
+                        <input
+                          id="date_of_birth"
+                          type="date"
+                          name="date_of_birth"
+                          value={
+                            editFormData.date_of_birth
+                          }
+                          onChange={
+                            handleInputChange
+                          }
+                          className={inputClass}
+                        />
 
-                      <select
-                        name="marital_status"
-                        value={
-                          editFormData.marital_status
-                        }
-                        onChange={
-                          handleInputChange
-                        }
-                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
-                      >
+                      </div>
 
-                        <option value="single">
-                          Single
-                        </option>
+                      {/* Gender */}
 
-                        <option value="married">
-                          Married
-                        </option>
+                      <div>
 
-                        <option value="divorced">
-                          Divorced
-                        </option>
+                        <label
+                          htmlFor="gender"
+                          className={labelClass}
+                        >
+                          Gender
+                        </label>
 
-                        <option value="widowed">
-                          Widowed
-                        </option>
+                        <select
+                          id="gender"
+                          name="gender"
+                          value={
+                            editFormData.gender
+                          }
+                          onChange={
+                            handleInputChange
+                          }
+                          className={inputClass}
+                        >
 
-                      </select>
+                          <option value="">
+                            Select Gender
+                          </option>
+
+                          <option value="male">
+                            Male
+                          </option>
+
+                          <option value="female">
+                            Female
+                          </option>
+
+                          <option value="other">
+                            Other
+                          </option>
+
+                        </select>
+
+                      </div>
+
+                      {/* Blood Group */}
+
+                      <div>
+
+                        <label
+                          htmlFor="blood_group"
+                          className={labelClass}
+                        >
+                          Blood Group
+                        </label>
+
+                        <input
+                          id="blood_group"
+                          name="blood_group"
+                          value={
+                            editFormData.blood_group
+                          }
+                          onChange={
+                            handleInputChange
+                          }
+                          placeholder="Enter blood group"
+                          className={inputClass}
+                        />
+
+                      </div>
+
+                      {/* Marital Status */}
+
+                      <div>
+
+                        <label
+                          htmlFor="marital_status"
+                          className={labelClass}
+                        >
+                          Marital Status
+                        </label>
+
+                        <select
+                          id="marital_status"
+                          name="marital_status"
+                          value={
+                            editFormData.marital_status
+                          }
+                          onChange={
+                            handleInputChange
+                          }
+                          className={inputClass}
+                        >
+
+                          <option value="single">
+                            Single
+                          </option>
+
+                          <option value="married">
+                            Married
+                          </option>
+
+                          <option value="divorced">
+                            Divorced
+                          </option>
+
+                          <option value="widowed">
+                            Widowed
+                          </option>
+
+                        </select>
+
+                      </div>
 
                     </div>
 
                   </section>
                 )}
 
-                {/* ADDRESS */}
+                {/* ==================================================
+                    ADDRESS
+                ================================================== */}
 
                 {(editSection ===
                   "all" ||
                   editSection ===
                     "address") && (
                   <>
+                    {/* PERMANENT ADDRESS */}
+
                     <section>
 
-                      <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-4 flex items-center gap-2">
+                      <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-5 flex items-center gap-2">
 
                         <MapPin className="w-4 h-4 text-indigo-600" />
 
@@ -2946,64 +3273,115 @@ export default function EmployeeProfileView({
 
                       </h3>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
 
-                        <textarea
-                          name="address"
-                          value={
-                            editFormData.address
-                          }
-                          onChange={
-                            handleInputChange
-                          }
-                          placeholder="Permanent Street Address"
-                          rows={3}
-                          className="md:col-span-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none resize-none focus:border-indigo-500"
-                        />
+                        <div className="md:col-span-2">
 
-                        <input
-                          name="city"
-                          value={
-                            editFormData.city
-                          }
-                          onChange={
-                            handleInputChange
-                          }
-                          placeholder="City"
-                          className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
-                        />
+                          <label
+                            htmlFor="address"
+                            className={labelClass}
+                          >
+                            Permanent Address
+                          </label>
 
-                        <input
-                          name="state"
-                          value={
-                            editFormData.state
-                          }
-                          onChange={
-                            handleInputChange
-                          }
-                          placeholder="State"
-                          className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
-                        />
+                          <textarea
+                            id="address"
+                            name="address"
+                            value={
+                              editFormData.address
+                            }
+                            onChange={
+                              handleInputChange
+                            }
+                            placeholder="Enter permanent address"
+                            rows={3}
+                            className={`${inputClass} resize-none`}
+                          />
 
-                        <input
-                          name="pincode"
-                          value={
-                            editFormData.pincode
-                          }
-                          onChange={
-                            handleInputChange
-                          }
-                          placeholder="Pincode"
-                          className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
-                        />
+                        </div>
+
+                        <div>
+
+                          <label
+                            htmlFor="city"
+                            className={labelClass}
+                          >
+                            City
+                          </label>
+
+                          <input
+                            id="city"
+                            name="city"
+                            value={
+                              editFormData.city
+                            }
+                            onChange={
+                              handleInputChange
+                            }
+                            placeholder="Enter city"
+                            className={inputClass}
+                          />
+
+                        </div>
+
+                        <div>
+
+                          <label
+                            htmlFor="state"
+                            className={labelClass}
+                          >
+                            State
+                          </label>
+
+                          <input
+                            id="state"
+                            name="state"
+                            value={
+                              editFormData.state
+                            }
+                            onChange={
+                              handleInputChange
+                            }
+                            placeholder="Enter state"
+                            className={inputClass}
+                          />
+
+                        </div>
+
+                        <div>
+
+                          <label
+                            htmlFor="pincode"
+                            className={labelClass}
+                          >
+                            Pincode
+                          </label>
+
+                          <input
+                            id="pincode"
+                            name="pincode"
+                            type="text"
+                            value={
+                              editFormData.pincode
+                            }
+                            onChange={
+                              handleInputChange
+                            }
+                            placeholder="Enter pincode"
+                            className={inputClass}
+                          />
+
+                        </div>
 
                       </div>
 
                     </section>
 
+                    {/* COMMUNICATION ADDRESS */}
+
                     <section>
 
-                      <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-4 flex items-center gap-2">
+                      <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-5 flex items-center gap-2">
 
                         <MapPinned className="w-4 h-4 text-indigo-600" />
 
@@ -3011,60 +3389,110 @@ export default function EmployeeProfileView({
 
                       </h3>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
 
-                        <textarea
-                          name="communication_address"
-                          value={
-                            editFormData.communication_address
-                          }
-                          onChange={
-                            handleInputChange
-                          }
-                          placeholder="Communication Street Address"
-                          rows={3}
-                          className="md:col-span-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none resize-none focus:border-indigo-500"
-                        />
+                        <div className="md:col-span-2">
 
-                        <input
-                          name="communication_city"
-                          value={
-                            editFormData.communication_city
-                          }
-                          onChange={
-                            handleInputChange
-                          }
-                          placeholder="City"
-                          className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
-                        />
+                          <label
+                            htmlFor="communication_address"
+                            className={labelClass}
+                          >
+                            Communication Address
+                          </label>
 
-                        <input
-                          name="communication_state"
-                          value={
-                            editFormData.communication_state
-                          }
-                          onChange={
-                            handleInputChange
-                          }
-                          placeholder="State"
-                          className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
-                        />
+                          <textarea
+                            id="communication_address"
+                            name="communication_address"
+                            value={
+                              editFormData.communication_address
+                            }
+                            onChange={
+                              handleInputChange
+                            }
+                            placeholder="Enter communication address"
+                            rows={3}
+                            className={`${inputClass} resize-none`}
+                          />
 
-                        <input
-                          name="communication_pincode"
-                          value={
-                            editFormData.communication_pincode
-                          }
-                          onChange={
-                            handleInputChange
-                          }
-                          placeholder="Pincode"
-                          className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
-                        />
+                        </div>
+
+                        <div>
+
+                          <label
+                            htmlFor="communication_city"
+                            className={labelClass}
+                          >
+                            City
+                          </label>
+
+                          <input
+                            id="communication_city"
+                            name="communication_city"
+                            value={
+                              editFormData.communication_city
+                            }
+                            onChange={
+                              handleInputChange
+                            }
+                            placeholder="Enter city"
+                            className={inputClass}
+                          />
+
+                        </div>
+
+                        <div>
+
+                          <label
+                            htmlFor="communication_state"
+                            className={labelClass}
+                          >
+                            State
+                          </label>
+
+                          <input
+                            id="communication_state"
+                            name="communication_state"
+                            value={
+                              editFormData.communication_state
+                            }
+                            onChange={
+                              handleInputChange
+                            }
+                            placeholder="Enter state"
+                            className={inputClass}
+                          />
+
+                        </div>
+
+                        <div>
+
+                          <label
+                            htmlFor="communication_pincode"
+                            className={labelClass}
+                          >
+                            Pincode
+                          </label>
+
+                          <input
+                            id="communication_pincode"
+                            name="communication_pincode"
+                            value={
+                              editFormData.communication_pincode
+                            }
+                            onChange={
+                              handleInputChange
+                            }
+                            placeholder="Enter pincode"
+                            className={inputClass}
+                          />
+
+                        </div>
 
                       </div>
 
                     </section>
+
+                    {/* EMERGENCY CONTACTS */}
 
                     {[
                       {
@@ -3116,7 +3544,7 @@ export default function EmployeeProfileView({
                           }
                         >
 
-                          <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-4 flex items-center gap-2">
+                          <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-5 flex items-center gap-2">
 
                             <Phone className="w-4 h-4 text-indigo-600" />
 
@@ -3126,55 +3554,104 @@ export default function EmployeeProfileView({
 
                           </h3>
 
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
 
-                            <input
-                              name={
-                                contact.name
-                              }
-                              value={
-                                editFormData[
-                                  contact.name as keyof EditFormData
-                                ] as string
-                              }
-                              onChange={
-                                handleInputChange
-                              }
-                              placeholder="Contact Name"
-                              className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
-                            />
+                            <div>
 
-                            <input
-                              name={
-                                contact.phone
-                              }
-                              value={
-                                editFormData[
-                                  contact.phone as keyof EditFormData
-                                ] as string
-                              }
-                              onChange={
-                                handleInputChange
-                              }
-                              placeholder="Contact Phone"
-                              className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
-                            />
+                              <label
+                                htmlFor={
+                                  contact.name
+                                }
+                                className={labelClass}
+                              >
+                                Contact Name
+                              </label>
 
-                            <input
-                              name={
-                                contact.relation
-                              }
-                              value={
-                                editFormData[
-                                  contact.relation as keyof EditFormData
-                                ] as string
-                              }
-                              onChange={
-                                handleInputChange
-                              }
-                              placeholder="Relationship"
-                              className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
-                            />
+                              <input
+                                id={
+                                  contact.name
+                                }
+                                name={
+                                  contact.name
+                                }
+                                value={
+                                  editFormData[
+                                    contact.name as keyof EditFormData
+                                  ] as string
+                                }
+                                onChange={
+                                  handleInputChange
+                                }
+                                placeholder="Enter contact name"
+                                className={inputClass}
+                              />
+
+                            </div>
+
+                            <div>
+
+                              <label
+                                htmlFor={
+                                  contact.phone
+                                }
+                                className={labelClass}
+                              >
+                                Mobile No
+                              </label>
+
+                              <input
+                                id={
+                                  contact.phone
+                                }
+                                name={
+                                  contact.phone
+                                }
+                                type="tel"
+                                value={
+                                  editFormData[
+                                    contact.phone as keyof EditFormData
+                                  ] as string
+                                }
+                                onChange={
+                                  handleInputChange
+                                }
+                                placeholder="Enter mobile number"
+                                className={inputClass}
+                              />
+
+                            </div>
+
+                            <div>
+
+                              <label
+                                htmlFor={
+                                  contact.relation
+                                }
+                                className={labelClass}
+                              >
+                                Relationship
+                              </label>
+
+                              <input
+                                id={
+                                  contact.relation
+                                }
+                                name={
+                                  contact.relation
+                                }
+                                value={
+                                  editFormData[
+                                    contact.relation as keyof EditFormData
+                                  ] as string
+                                }
+                                onChange={
+                                  handleInputChange
+                                }
+                                placeholder="Enter relationship"
+                                className={inputClass}
+                              />
+
+                            </div>
 
                           </div>
 
@@ -3185,7 +3662,9 @@ export default function EmployeeProfileView({
                   </>
                 )}
 
-                {/* BANK */}
+                {/* ==================================================
+                    BANK & IDENTITY
+                ================================================== */}
 
                 {(editSection ===
                   "all" ||
@@ -3193,90 +3672,164 @@ export default function EmployeeProfileView({
                     "bank") && (
                   <section>
 
-                    <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-4">
+                    <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-5">
                       Bank & Identity
                     </h3>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
 
-                      <input
-                        name="bank_name"
-                        value={
-                          editFormData.bank_name
-                        }
-                        onChange={
-                          handleInputChange
-                        }
-                        placeholder="Bank Name"
-                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
-                      />
+                      <div>
 
-                      <input
-                        name="bank_account_number"
-                        value={
-                          editFormData.bank_account_number
-                        }
-                        onChange={
-                          handleInputChange
-                        }
-                        placeholder="Bank Account Number"
-                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
-                      />
+                        <label
+                          htmlFor="bank_name"
+                          className={labelClass}
+                        >
+                          Bank Name
+                        </label>
 
-                      <input
-                        name="ifsc_code"
-                        value={
-                          editFormData.ifsc_code
-                        }
-                        onChange={
-                          handleInputChange
-                        }
-                        placeholder="IFSC Code"
-                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
-                      />
+                        <input
+                          id="bank_name"
+                          name="bank_name"
+                          value={
+                            editFormData.bank_name
+                          }
+                          onChange={
+                            handleInputChange
+                          }
+                          placeholder="Enter bank name"
+                          className={inputClass}
+                        />
 
-                      <input
-                        name="pan_number"
-                        value={
-                          editFormData.pan_number
-                        }
-                        onChange={
-                          handleInputChange
-                        }
-                        placeholder="PAN Number"
-                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
-                      />
+                      </div>
 
-                      <input
-                        name="aadhar_number"
-                        value={
-                          editFormData.aadhar_number
-                        }
-                        onChange={
-                          handleInputChange
-                        }
-                        placeholder="Aadhaar Number"
-                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
-                      />
+                      <div>
 
-                      <input
-                        name="passport_number"
-                        value={
-                          editFormData.passport_number
-                        }
-                        onChange={
-                          handleInputChange
-                        }
-                        placeholder="Passport Number"
-                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
-                      />
+                        <label
+                          htmlFor="bank_account_number"
+                          className={labelClass}
+                        >
+                          Bank Account Number
+                        </label>
+
+                        <input
+                          id="bank_account_number"
+                          name="bank_account_number"
+                          value={
+                            editFormData.bank_account_number
+                          }
+                          onChange={
+                            handleInputChange
+                          }
+                          placeholder="Enter account number"
+                          className={inputClass}
+                        />
+
+                      </div>
+
+                      <div>
+
+                        <label
+                          htmlFor="ifsc_code"
+                          className={labelClass}
+                        >
+                          IFSC Code
+                        </label>
+
+                        <input
+                          id="ifsc_code"
+                          name="ifsc_code"
+                          value={
+                            editFormData.ifsc_code
+                          }
+                          onChange={
+                            handleInputChange
+                          }
+                          placeholder="Enter IFSC code"
+                          className={inputClass}
+                        />
+
+                      </div>
+
+                      <div>
+
+                        <label
+                          htmlFor="pan_number"
+                          className={labelClass}
+                        >
+                          PAN Number
+                        </label>
+
+                        <input
+                          id="pan_number"
+                          name="pan_number"
+                          value={
+                            editFormData.pan_number
+                          }
+                          onChange={
+                            handleInputChange
+                          }
+                          placeholder="Enter PAN number"
+                          className={inputClass}
+                        />
+
+                      </div>
+
+                      <div>
+
+                        <label
+                          htmlFor="aadhar_number"
+                          className={labelClass}
+                        >
+                          Aadhaar Number
+                        </label>
+
+                        <input
+                          id="aadhar_number"
+                          name="aadhar_number"
+                          value={
+                            editFormData.aadhar_number
+                          }
+                          onChange={
+                            handleInputChange
+                          }
+                          placeholder="Enter Aadhaar number"
+                          className={inputClass}
+                        />
+
+                      </div>
+
+                      <div>
+
+                        <label
+                          htmlFor="passport_number"
+                          className={labelClass}
+                        >
+                          Passport Number
+                        </label>
+
+                        <input
+                          id="passport_number"
+                          name="passport_number"
+                          value={
+                            editFormData.passport_number
+                          }
+                          onChange={
+                            handleInputChange
+                          }
+                          placeholder="Enter passport number"
+                          className={inputClass}
+                        />
+
+                      </div>
 
                     </div>
 
                   </section>
                 )}
 
-                {/* STATUTORY */}
+                {/* ==================================================
+                    STATUTORY
+                ================================================== */}
 
                 {(editSection ===
                   "all" ||
@@ -3284,66 +3837,398 @@ export default function EmployeeProfileView({
                     "statutory") && (
                   <section>
 
-                    <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-4">
-                      Statutory
+                    <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-5">
+                      Statutory Details
                     </h3>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
 
-                      <input
-                        name="pf"
-                        value={
-                          editFormData.pf
-                        }
-                        onChange={
-                          handleInputChange
-                        }
-                        placeholder="PF"
-                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
-                      />
+                      <div>
 
-                      <input
-                        name="esi"
-                        value={
-                          editFormData.esi
-                        }
-                        onChange={
-                          handleInputChange
-                        }
-                        placeholder="ESI"
-                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
-                      />
+                        <label
+                          htmlFor="pf"
+                          className={labelClass}
+                        >
+                          PF
+                        </label>
 
-                      <input
-                        name="pt"
-                        value={
-                          editFormData.pt
-                        }
-                        onChange={
-                          handleInputChange
-                        }
-                        placeholder="PT"
-                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
-                      />
+                        <input
+                          id="pf"
+                          name="pf"
+                          value={
+                            editFormData.pf
+                          }
+                          onChange={
+                            handleInputChange
+                          }
+                          placeholder="Enter PF details"
+                          className={inputClass}
+                        />
 
-                      <input
-                        name="tds"
-                        value={
-                          editFormData.tds
-                        }
-                        onChange={
-                          handleInputChange
-                        }
-                        placeholder="TDS"
-                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
-                      />
+                      </div>
+
+                      <div>
+
+                        <label
+                          htmlFor="esi"
+                          className={labelClass}
+                        >
+                          ESI
+                        </label>
+
+                        <input
+                          id="esi"
+                          name="esi"
+                          value={
+                            editFormData.esi
+                          }
+                          onChange={
+                            handleInputChange
+                          }
+                          placeholder="Enter ESI details"
+                          className={inputClass}
+                        />
+
+                      </div>
+
+                      <div>
+
+                        <label
+                          htmlFor="pt"
+                          className={labelClass}
+                        >
+                          Professional Tax (PT)
+                        </label>
+
+                        <input
+                          id="pt"
+                          name="pt"
+                          value={
+                            editFormData.pt
+                          }
+                          onChange={
+                            handleInputChange
+                          }
+                          placeholder="Enter PT details"
+                          className={inputClass}
+                        />
+
+                      </div>
+
+                      <div>
+
+                        <label
+                          htmlFor="tds"
+                          className={labelClass}
+                        >
+                          TDS
+                        </label>
+
+                        <input
+                          id="tds"
+                          name="tds"
+                          value={
+                            editFormData.tds
+                          }
+                          onChange={
+                            handleInputChange
+                          }
+                          placeholder="Enter TDS details"
+                          className={inputClass}
+                        />
+
+                      </div>
 
                     </div>
 
                   </section>
                 )}
 
-                {/* EMPLOYMENT */}
+                {/* ==================================================
+                    ACCESSORY MANAGEMENT
+                ================================================== */}
+
+                {(editSection ===
+                  "all" ||
+                  editSection ===
+                    "accessory") && (
+                  <section>
+
+                    <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-5 flex items-center gap-2">
+
+                      <LaptopMinimal className="w-4 h-4 text-indigo-600" />
+
+                      Accessory Management
+
+                    </h3>
+
+                    {/* MAIN ACCESSORY */}
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+
+                      <div>
+
+                        <label
+                          htmlFor="accessory_type"
+                          className={labelClass}
+                        >
+                          Accessory Type
+                        </label>
+
+                        <input
+                          id="accessory_type"
+                          name="accessory_type"
+                          value={
+                            editFormData.accessory_type
+                          }
+                          onChange={
+                            handleInputChange
+                          }
+                          placeholder="Example: Laptop"
+                          className={inputClass}
+                        />
+
+                      </div>
+
+                      <div>
+
+                        <label
+                          htmlFor="accessory_serial"
+                          className={labelClass}
+                        >
+                          Accessory Serial Number
+                        </label>
+
+                        <input
+                          id="accessory_serial"
+                          name="accessory_serial"
+                          value={
+                            editFormData.accessory_serial
+                          }
+                          onChange={
+                            handleInputChange
+                          }
+                          placeholder="Enter serial number"
+                          className={inputClass}
+                        />
+
+                      </div>
+
+                    </div>
+
+                    {/* PERIPHERALS */}
+
+                    <div className="mt-7">
+
+                      <div className="flex items-center justify-between mb-4">
+
+                        <div>
+
+                          <h4 className="text-sm font-bold text-slate-900">
+                            Peripherals
+                          </h4>
+
+                          <p className="text-xs text-slate-500 mt-1">
+                            Add keyboards, mouse, monitors and other assigned items.
+                          </p>
+
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setEditFormData(
+                              (previous) => ({
+                                ...previous,
+
+                                peripherals: [
+                                  ...previous.peripherals,
+                                  {
+                                    type: "",
+                                    serial: "",
+                                  },
+                                ],
+                              })
+                            )
+                          }
+                          className="px-3.5 py-2 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 text-xs font-bold"
+                        >
+                          + Add Peripheral
+                        </button>
+
+                      </div>
+
+                      {editFormData.peripherals.length ===
+                      0 ? (
+                        <div className="p-5 rounded-xl bg-slate-50 border border-slate-200 text-center">
+
+                          <p className="text-sm text-slate-500 font-medium">
+                            No peripherals added.
+                          </p>
+
+                        </div>
+                      ) : (
+
+                        <div className="space-y-4">
+
+                          {editFormData.peripherals.map(
+                            (
+                              peripheral,
+                              index
+                            ) => (
+
+                              <div
+                                key={index}
+                                className="p-4 rounded-xl border border-slate-200 bg-slate-50/60"
+                              >
+
+                                <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-4 items-end">
+
+                                  <div>
+
+                                    <label
+                                      className={labelClass}
+                                    >
+                                      Peripheral Type
+                                    </label>
+
+                                    <input
+                                      value={
+                                        peripheral.type
+                                      }
+                                      onChange={(
+                                        event
+                                      ) => {
+                                        const value =
+                                          event.target.value;
+
+                                        setEditFormData(
+                                          (
+                                            previous
+                                          ) => {
+                                            const updated =
+                                              [
+                                                ...previous.peripherals,
+                                              ];
+
+                                            updated[
+                                              index
+                                            ] = {
+                                              ...updated[
+                                                index
+                                              ],
+                                              type: value,
+                                            };
+
+                                            return {
+                                              ...previous,
+                                              peripherals:
+                                                updated,
+                                            };
+                                          }
+                                        );
+                                      }}
+                                      placeholder="Example: Mouse"
+                                      className={inputClass}
+                                    />
+
+                                  </div>
+
+                                  <div>
+
+                                    <label
+                                      className={labelClass}
+                                    >
+                                      Serial Number
+                                    </label>
+
+                                    <input
+                                      value={
+                                        peripheral.serial
+                                      }
+                                      onChange={(
+                                        event
+                                      ) => {
+                                        const value =
+                                          event.target.value;
+
+                                        setEditFormData(
+                                          (
+                                            previous
+                                          ) => {
+                                            const updated =
+                                              [
+                                                ...previous.peripherals,
+                                              ];
+
+                                            updated[
+                                              index
+                                            ] = {
+                                              ...updated[
+                                                index
+                                              ],
+                                              serial:
+                                                value,
+                                            };
+
+                                            return {
+                                              ...previous,
+                                              peripherals:
+                                                updated,
+                                            };
+                                          }
+                                        );
+                                      }}
+                                      placeholder="Enter serial number"
+                                      className={inputClass}
+                                    />
+
+                                  </div>
+
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setEditFormData(
+                                        (
+                                          previous
+                                        ) => ({
+                                          ...previous,
+
+                                          peripherals:
+                                            previous.peripherals.filter(
+                                              (
+                                                _,
+                                                itemIndex
+                                              ) =>
+                                                itemIndex !==
+                                                index
+                                            ),
+                                        })
+                                      )
+                                    }
+                                    className="h-[46px] px-4 rounded-xl bg-rose-50 text-rose-600 hover:bg-rose-100 text-sm font-bold"
+                                  >
+                                    Remove
+                                  </button>
+
+                                </div>
+
+                              </div>
+
+                            )
+                          )}
+
+                        </div>
+                      )}
+
+                    </div>
+
+                  </section>
+                )}
+
+                {/* ==================================================
+                    EMPLOYMENT
+                ================================================== */}
 
                 {(editSection ===
                   "all" ||
@@ -3351,121 +4236,200 @@ export default function EmployeeProfileView({
                     "employment") && (
                   <section>
 
-                    <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-4">
-                      Employment
+                    <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-5">
+                      Employment Information
                     </h3>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
 
-                      <select
-                        name="department_id"
-                        value={
-                          editFormData.department_id
-                        }
-                        onChange={
-                          handleInputChange
-                        }
-                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
-                      >
+                      <div>
 
-                        <option value="">
-                          Select Department
-                        </option>
+                        <label
+                          htmlFor="department_id"
+                          className={labelClass}
+                        >
+                          Department
+                        </label>
 
-                        {departments.map(
-                          (department) => (
-                            <option
-                              key={
-                                department.id
-                              }
-                              value={
-                                department.id
-                              }
-                            >
-                              {
-                                department.name
-                              }
-                            </option>
-                          )
-                        )}
+                        <select
+                          id="department_id"
+                          name="department_id"
+                          value={
+                            editFormData.department_id
+                          }
+                          onChange={
+                            handleInputChange
+                          }
+                          className={inputClass}
+                        >
 
-                      </select>
+                          <option value="">
+                            Select Department
+                          </option>
 
-                      <input
-                        name="designation"
-                        value={
-                          editFormData.designation
-                        }
-                        onChange={
-                          handleInputChange
-                        }
-                        placeholder="Designation"
-                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
-                      />
+                          {departments.map(
+                            (
+                              department
+                            ) => (
+                              <option
+                                key={
+                                  department.id
+                                }
+                                value={
+                                  department.id
+                                }
+                              >
+                                {
+                                  department.name
+                                }
+                              </option>
+                            )
+                          )}
 
-                      <input
-                        name="probation_end_date"
-                        type="date"
-                        value={
-                          editFormData.probation_end_date
-                        }
-                        onChange={
-                          handleInputChange
-                        }
-                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
-                      />
+                        </select>
 
-                      <input
-                        name="confirmation_date"
-                        type="date"
-                        value={
-                          editFormData.confirmation_date
-                        }
-                        onChange={
-                          handleInputChange
-                        }
-                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
-                      />
+                      </div>
 
-                      <input
-                        name="reporting_manager"
-                        value={
-                          editFormData.reporting_manager
-                        }
-                        onChange={
-                          handleInputChange
-                        }
-                        placeholder="Reporting Manager"
-                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
-                      />
+                      <div>
 
-                      <input
-                        name="work_location"
-                        value={
-                          editFormData.work_location
-                        }
-                        onChange={
-                          handleInputChange
-                        }
-                        placeholder="Work Location"
-                        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500"
-                      />
+                        <label
+                          htmlFor="designation"
+                          className={labelClass}
+                        >
+                          Designation
+                        </label>
+
+                        <input
+                          id="designation"
+                          name="designation"
+                          value={
+                            editFormData.designation
+                          }
+                          onChange={
+                            handleInputChange
+                          }
+                          placeholder="Enter designation"
+                          className={inputClass}
+                        />
+
+                      </div>
+
+                      <div>
+
+                        <label
+                          htmlFor="probation_end_date"
+                          className={labelClass}
+                        >
+                          Probation End Date
+                        </label>
+
+                        <input
+                          id="probation_end_date"
+                          name="probation_end_date"
+                          type="date"
+                          value={
+                            editFormData.probation_end_date
+                          }
+                          onChange={
+                            handleInputChange
+                          }
+                          className={inputClass}
+                        />
+
+                      </div>
+
+                      <div>
+
+                        <label
+                          htmlFor="confirmation_date"
+                          className={labelClass}
+                        >
+                          Confirmation Date
+                        </label>
+
+                        <input
+                          id="confirmation_date"
+                          name="confirmation_date"
+                          type="date"
+                          value={
+                            editFormData.confirmation_date
+                          }
+                          onChange={
+                            handleInputChange
+                          }
+                          className={inputClass}
+                        />
+
+                      </div>
+
+                      <div>
+
+                        <label
+                          htmlFor="reporting_manager"
+                          className={labelClass}
+                        >
+                          Reporting Manager
+                        </label>
+
+                        <input
+                          id="reporting_manager"
+                          name="reporting_manager"
+                          value={
+                            editFormData.reporting_manager
+                          }
+                          onChange={
+                            handleInputChange
+                          }
+                          placeholder="Enter reporting manager"
+                          className={inputClass}
+                        />
+
+                      </div>
+
+                      <div>
+
+                        <label
+                          htmlFor="work_location"
+                          className={labelClass}
+                        >
+                          Work Location
+                        </label>
+
+                        <input
+                          id="work_location"
+                          name="work_location"
+                          value={
+                            editFormData.work_location
+                          }
+                          onChange={
+                            handleInputChange
+                          }
+                          placeholder="Enter work location"
+                          className={inputClass}
+                        />
+
+                      </div>
 
                     </div>
 
                   </section>
                 )}
 
-                {/* ACTIONS */}
+                {/* ==================================================
+                    ACTIONS
+                ================================================== */}
 
-                <div className="sticky bottom-0 bg-white border-t border-slate-200 pt-5 flex justify-end gap-3">
+                <div className="sticky bottom-0 z-10 -mx-6 px-6 py-5 bg-white/95 backdrop-blur border-t border-slate-200 flex justify-end gap-3">
 
                   <button
                     type="button"
                     onClick={
                       closeEditModal
                     }
-                    className="px-5 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                    disabled={
+                      loading
+                    }
+                    className="px-5 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
                   >
                     Cancel
                   </button>
@@ -3475,7 +4439,7 @@ export default function EmployeeProfileView({
                     disabled={
                       loading
                     }
-                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50"
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 transition"
                   >
 
                     {loading ? (

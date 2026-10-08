@@ -1,258 +1,330 @@
 import { NextResponse } from "next/server";
 import { v2 as cloudinary } from "cloudinary";
+
 import {
   createClient,
   createAdminClient,
 } from "@/lib/supabase-server";
 
-// ============================================================
-// CLOUDINARY CONFIGURATION
-// ============================================================
+export const runtime = "nodejs";
+export const maxDuration = 60;
+
+// =========================================================
+// CLOUDINARY CONFIG
+// =========================================================
 
 cloudinary.config({
-  cloud_name:
-    process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME,
-
-  api_key:
-    process.env.CLOUDINARY_API_KEY,
-
-  api_secret:
-    process.env.CLOUDINARY_API_SECRET,
+  cloud_name: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-// ============================================================
-// MAXIMUM IMAGE SIZE = 5 MB
-// ============================================================
+// =========================================================
+// CONSTANTS
+// =========================================================
 
-const MAX_FILE_SIZE = 5 * 1024 * 1024;
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
 
-// ============================================================
-// POST - EMPLOYEE PROFILE PHOTO UPLOAD
-// ============================================================
+const ALLOWED_TYPES = [
+  "image/jpeg",
+  "image/jpg",
+  "image/png",
+  "image/webp",
+];
+
+// =========================================================
+// HELPERS
+// =========================================================
+
+function getCloudinaryPublicIdFromUrl(url: string | null | undefined) {
+  if (!url) return null;
+
+  try {
+    const parsed = new URL(url);
+
+    const pathname = parsed.pathname;
+
+    // Example:
+    // /image/upload/v1234567890/teens-hr/profile-photos/abc123.jpg
+
+    const uploadIndex = pathname.indexOf("/upload/");
+
+    if (uploadIndex === -1) {
+      return null;
+    }
+
+    let publicPath = pathname.substring(uploadIndex + "/upload/".length);
+
+    // Remove version
+    publicPath = publicPath.replace(/^v\d+\//, "");
+
+    // Remove extension
+    publicPath = publicPath.replace(/\.[^/.]+$/, "");
+
+    return publicPath;
+  } catch {
+    return null;
+  }
+}
+
+async function deleteCloudinaryImage(publicId: string | null) {
+  if (!publicId) return;
+
+  try {
+    await cloudinary.uploader.destroy(publicId);
+  } catch (error) {
+    console.warn(
+      "Failed to delete Cloudinary image:",
+      error
+    );
+  }
+}
+
+// =========================================================
+// POST - UPLOAD PROFILE PHOTO
+// =========================================================
 
 export async function POST(request: Request) {
+  let uploadedPublicId: string | null = null;
+
   try {
-    // ========================================================
-    // 1. GET LOGGED-IN USER
-    // ========================================================
+    // -----------------------------------------------------
+    // 1. CHECK CLOUDINARY CONFIG
+    // -----------------------------------------------------
+
+    if (
+      !process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME ||
+      !process.env.CLOUDINARY_API_KEY ||
+      !process.env.CLOUDINARY_API_SECRET
+    ) {
+      console.error("Cloudinary environment variables are missing.");
+
+      return NextResponse.json(
+        {
+          error:
+            "Cloudinary is not configured. Please check environment variables.",
+        },
+        { status: 500 }
+      );
+    }
+
+    // -----------------------------------------------------
+    // 2. GET AUTHENTICATED USER
+    // -----------------------------------------------------
 
     const supabase = await createClient();
 
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
+    let authUser = null;
 
-    if (userError) {
-      console.error(
-        "Supabase Auth error:",
-        userError
+    // First attempt: getUser()
+    try {
+      const {
+        data,
+        error,
+      } = await supabase.auth.getUser();
+
+      if (!error && data?.user) {
+        authUser = data.user;
+      }
+    } catch (error) {
+      console.warn(
+        "getUser() failed:",
+        error
       );
+    }
 
+    // Second attempt: getSession()
+    if (!authUser) {
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+
+        if (session?.user) {
+          authUser = session.user;
+        }
+      } catch (error) {
+        console.warn(
+          "getSession() failed:",
+          error
+        );
+      }
+    }
+
+    if (!authUser) {
       return NextResponse.json(
         {
           error:
-            `Authentication error: ${userError.message}`,
+            "You are not authenticated. Please login again.",
         },
         { status: 401 }
       );
     }
 
-    if (!user) {
-      return NextResponse.json(
-        {
-          error:
-            "Unauthorized. Please login again.",
-        },
-        { status: 401 }
-      );
-    }
-
-    // ========================================================
-    // LOGGED-IN USER DETAILS
-    // ========================================================
-
-    const authUserId = user.id;
+    const authUserId = authUser.id;
 
     const authEmail =
-      user.email?.trim().toLowerCase() || "";
+      authUser.email?.trim().toLowerCase() || null;
 
     console.log(
       "=========================================="
     );
+
     console.log(
-      "EMPLOYEE PROFILE PHOTO UPLOAD"
+      "PROFILE PHOTO UPLOAD - AUTH USER"
     );
+
     console.log(
-      "Auth User ID:",
+      "Supabase Auth User ID:",
       authUserId
     );
+
     console.log(
-      "Auth Email:",
+      "Supabase Auth Email:",
       authEmail
     );
+
     console.log(
       "=========================================="
     );
 
-    if (!authEmail) {
-      return NextResponse.json(
-        {
-          error:
-            "Logged-in user does not have an email address.",
-        },
-        { status: 400 }
-      );
-    }
+    // -----------------------------------------------------
+    // 3. GET FORM DATA
+    // -----------------------------------------------------
 
-    // ========================================================
-    // 2. GET IMAGE FILE
-    // ========================================================
+    const formData = await request.formData();
 
-    const formData =
-      await request.formData();
-
-    const file =
-      formData.get("file");
+    const file = formData.get("file");
 
     if (!(file instanceof File)) {
       return NextResponse.json(
         {
           error:
-            "Please select an image file.",
+            "No image file was provided.",
         },
         { status: 400 }
       );
     }
 
-    // ========================================================
-    // CHECK FILE TYPE
-    // ========================================================
+    // -----------------------------------------------------
+    // 4. VALIDATE FILE
+    // -----------------------------------------------------
 
-    if (!file.type.startsWith("image/")) {
+    if (!ALLOWED_TYPES.includes(file.type)) {
       return NextResponse.json(
         {
           error:
-            "Only image files are allowed.",
+            "Invalid image type. Please upload JPG, JPEG, PNG, or WEBP.",
         },
         { status: 400 }
       );
     }
-
-    // ========================================================
-    // CHECK FILE SIZE
-    // ========================================================
 
     if (file.size > MAX_FILE_SIZE) {
       return NextResponse.json(
         {
           error:
-            "Image size must be less than 5MB.",
+            "Image size must be less than 5 MB.",
         },
         { status: 400 }
       );
     }
 
-    // ========================================================
-    // 3. CREATE ADMIN SUPABASE CLIENT
-    // ========================================================
+    if (file.size === 0) {
+      return NextResponse.json(
+        {
+          error:
+            "The uploaded image is empty.",
+        },
+        { status: 400 }
+      );
+    }
 
-    const adminSupabase =
-      await createAdminClient();
+    // -----------------------------------------------------
+    // 5. ADMIN SUPABASE CLIENT
+    // -----------------------------------------------------
+
+    const adminClient = await createAdminClient();
+
+    // -----------------------------------------------------
+    // 6. FIND EMPLOYEE
+    //
+    // IMPORTANT:
+    // We only use columns that actually exist based on
+    // your employee creation code.
+    //
+    // Priority:
+    //   1. user_id
+    //   2. email
+    // -----------------------------------------------------
 
     let employee: {
       id: string;
+      employee_id: string | null;
       user_id: string | null;
       email: string | null;
       profile_photo_url: string | null;
     } | null = null;
 
-    // ========================================================
-    // 4. FIRST TRY: USER ID
-    // ========================================================
+    // -----------------------------------------------------
+    // 6A. FIND BY USER_ID
+    // -----------------------------------------------------
 
-    console.log(
-      "Searching employee by user_id..."
-    );
-
-    const {
-      data: employeeByUserId,
-      error: userIdError,
-    } = await adminSupabase
-      .from("employees")
-      .select(
-        "id, user_id, email, profile_photo_url"
-      )
-      .eq(
-        "user_id",
-        authUserId
-      )
-      .maybeSingle();
-
-    if (userIdError) {
-      console.error(
-        "User ID lookup error:",
-        userIdError
-      );
-    }
-
-    if (employeeByUserId) {
-      employee = employeeByUserId;
-
-      console.log(
-        "Employee found using user_id:",
-        employee
-      );
-    }
-
-    // ========================================================
-    // 5. SECOND TRY: EMAIL
-    // ========================================================
-
-    if (!employee) {
-      console.log(
-        "Employee not found by user_id."
-      );
-
-      console.log(
-        "Searching employee by email:",
-        authEmail
-      );
-
+    if (authUserId) {
       const {
-        data: employeeByEmail,
-        error: emailError,
-      } = await adminSupabase
+        data,
+        error,
+      } = await adminClient
         .from("employees")
         .select(
-          "id, user_id, email, profile_photo_url"
+          "id, employee_id, user_id, email, profile_photo_url"
         )
-        .ilike(
-          "email",
-          authEmail
-        )
+        .eq("user_id", authUserId)
         .maybeSingle();
 
-      if (emailError) {
+      if (error) {
         console.error(
-          "Email lookup error:",
-          emailError
+          "Employee lookup by user_id failed:",
+          error
         );
       }
 
-      if (employeeByEmail) {
-        employee = employeeByEmail;
-
-        console.log(
-          "Employee found using email:",
-          employee
-        );
+      if (data) {
+        employee = data;
       }
     }
 
-    // ========================================================
-    // 6. EMPLOYEE NOT FOUND
-    // ========================================================
+    // -----------------------------------------------------
+    // 6B. FIND BY EMAIL
+    // -----------------------------------------------------
+
+    if (!employee && authEmail) {
+      const {
+        data,
+        error,
+      } = await adminClient
+        .from("employees")
+        .select(
+          "id, employee_id, user_id, email, profile_photo_url"
+        )
+        .ilike("email", authEmail)
+        .maybeSingle();
+
+      if (error) {
+        console.error(
+          "Employee lookup by email failed:",
+          error
+        );
+      }
+
+      if (data) {
+        employee = data;
+      }
+    }
+
+    // -----------------------------------------------------
+    // 7. EMPLOYEE NOT FOUND
+    // -----------------------------------------------------
 
     if (!employee) {
       console.error(
@@ -280,186 +352,188 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           error:
-            "Employee record not found.",
-
-          authUserId:
-            authUserId,
-
-          authEmail:
-            authEmail,
-
-          message:
-            "No employee record matches this Supabase Auth user ID or email.",
+            "Employee record not found for your login account. Please contact HR.",
+          authUserId,
+          authEmail,
         },
         { status: 404 }
       );
     }
 
-    // ========================================================
-    // EMPLOYEE FOUND
-    // ========================================================
-
     console.log(
-      "=========================================="
+      "Employee found:",
+      {
+        id: employee.id,
+        employee_id: employee.employee_id,
+        user_id: employee.user_id,
+        email: employee.email,
+      }
     );
 
-    console.log(
-      "EMPLOYEE FOUND"
-    );
+    // -----------------------------------------------------
+    // 8. FIX USER_ID IF EMAIL MATCHED BUT USER_ID IS EMPTY
+    // -----------------------------------------------------
 
-    console.log(
-      "Employee ID:",
-      employee.id
-    );
+    if (
+      authUserId &&
+      employee.user_id !== authUserId
+    ) {
+      const {
+        error: updateUserIdError,
+      } = await adminClient
+        .from("employees")
+        .update({
+          user_id: authUserId,
+        })
+        .eq("id", employee.id);
 
-    console.log(
-      "Employee Email:",
-      employee.email
-    );
+      if (updateUserIdError) {
+        console.warn(
+          "Could not synchronize employee user_id:",
+          updateUserIdError
+        );
+      } else {
+        console.log(
+          "Employee user_id synchronized:",
+          authUserId
+        );
+      }
+    }
 
-    console.log(
-      "Employee User ID:",
-      employee.user_id
-    );
+    // -----------------------------------------------------
+    // 9. CONVERT IMAGE TO BUFFER
+    // -----------------------------------------------------
 
-    console.log(
-      "=========================================="
-    );
+    const arrayBuffer = await file.arrayBuffer();
 
-    // ========================================================
-    // 7. CONVERT IMAGE TO BASE64
-    // ========================================================
+    const buffer = Buffer.from(arrayBuffer);
 
-    const buffer =
-      await file.arrayBuffer();
+    if (!buffer.length) {
+      return NextResponse.json(
+        {
+          error:
+            "Unable to read uploaded image.",
+        },
+        { status: 400 }
+      );
+    }
 
-    const base64Data =
-      Buffer.from(buffer)
-        .toString("base64");
+    // -----------------------------------------------------
+    // 10. UPLOAD TO CLOUDINARY
+    // -----------------------------------------------------
 
-    const dataURI =
-      `data:${file.type};base64,${base64Data}`;
-
-    // ========================================================
-    // 8. UPLOAD TO CLOUDINARY
-    // ========================================================
-
-    console.log(
-      "Uploading image to Cloudinary..."
-    );
+    const folder =
+      "teens-hr/profile-photos";
 
     const uploadResult =
       await new Promise<any>(
         (resolve, reject) => {
-          cloudinary.uploader.upload(
-            dataURI,
-            {
-              folder:
-                "teens-hr/profile-photos",
+          const uploadStream =
+            cloudinary.uploader.upload_stream(
+              {
+                folder,
+                resource_type: "image",
+                unique_filename: true,
+                overwrite: false,
+              },
+              (
+                error,
+                result
+              ) => {
+                if (error) {
+                  reject(error);
+                  return;
+                }
 
-              resource_type:
-                "image",
-
-              overwrite:
-                true,
-            },
-            (
-              error,
-              result
-            ) => {
-              if (error) {
-                reject(error);
-              } else {
                 resolve(result);
               }
-            }
-          );
+            );
+
+          uploadStream.end(buffer);
         }
       );
 
-    // ========================================================
-    // 9. GET CLOUDINARY URL
-    // ========================================================
+    if (!uploadResult?.secure_url) {
+      throw new Error(
+        "Cloudinary did not return an image URL."
+      );
+    }
+
+    uploadedPublicId =
+      uploadResult.public_id || null;
 
     const avatarUrl =
-      uploadResult?.secure_url;
-
-    if (!avatarUrl) {
-      console.error(
-        "Cloudinary did not return secure_url:",
-        uploadResult
-      );
-
-      return NextResponse.json(
-        {
-          error:
-            "Photo uploaded but Cloudinary did not return a URL.",
-        },
-        { status: 500 }
-      );
-    }
+      uploadResult.secure_url;
 
     console.log(
-      "Cloudinary URL:",
-      avatarUrl
+      "Cloudinary upload successful:",
+      {
+        publicId: uploadedPublicId,
+        url: avatarUrl,
+      }
     );
 
-    // ========================================================
-    // 10. SAVE PHOTO URL TO EMPLOYEES TABLE
-    // ========================================================
-
-    console.log(
-      "Updating employees.profile_photo_url..."
-    );
+    // -----------------------------------------------------
+    // 11. SAVE PHOTO URL IN EMPLOYEES TABLE
+    // -----------------------------------------------------
 
     const {
-      error: updateError,
-    } = await adminSupabase
+      data: updatedEmployee,
+      error: updateEmployeeError,
+    } = await adminClient
       .from("employees")
       .update({
-        profile_photo_url:
-          avatarUrl,
+        profile_photo_url: avatarUrl,
       })
-      .eq(
-        "id",
-        employee.id
-      );
+      .eq("id", employee.id)
+      .select(
+        "id, employee_id, user_id, email, profile_photo_url"
+      )
+      .single();
 
-    if (updateError) {
+    if (updateEmployeeError) {
       console.error(
-        "Database photo update error:",
-        updateError
+        "Failed to update employee profile photo:",
+        updateEmployeeError
       );
 
-      return NextResponse.json(
-        {
-          error:
-            `Photo uploaded, but employee profile could not be updated: ${updateError.message}`,
-        },
-        { status: 500 }
+      // Delete newly uploaded Cloudinary image
+      await deleteCloudinaryImage(
+        uploadedPublicId
+      );
+
+      uploadedPublicId = null;
+
+      throw new Error(
+        `Failed to save profile photo: ${updateEmployeeError.message}`
       );
     }
 
-    // ========================================================
-    // 11. SUCCESS
-    // ========================================================
+    // -----------------------------------------------------
+    // 12. SUCCESS
+    // -----------------------------------------------------
 
     console.log(
       "=========================================="
     );
 
     console.log(
-      "PROFILE PHOTO UPDATED SUCCESSFULLY"
+      "PROFILE PHOTO SAVED SUCCESSFULLY"
     );
 
     console.log(
       "Employee ID:",
-      employee.id
+      updatedEmployee.employee_id
+    );
+
+    console.log(
+      "Auth User ID:",
+      authUserId
     );
 
     console.log(
       "Photo URL:",
-      avatarUrl
+      updatedEmployee.profile_photo_url
     );
 
     console.log(
@@ -469,40 +543,45 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         success: true,
-
         avatarUrl:
-
-          avatarUrl,
-
+          updatedEmployee.profile_photo_url,
         employeeId:
-
-          employee.id,
-
+          updatedEmployee.id,
+        employeeCode:
+          updatedEmployee.employee_id,
         email:
-
-          employee.email,
+          updatedEmployee.email,
       },
       { status: 200 }
     );
-  } catch (error) {
-    // ========================================================
-    // GENERAL ERROR
-    // ========================================================
-
+  } catch (error: any) {
     console.error(
-      "PROFILE PHOTO UPLOAD ERROR:",
-      error
+      "=========================================="
     );
 
-    const errorMessage =
-      error instanceof Error
-        ? error.message
-        : String(error);
+    console.error(
+      "PROFILE PHOTO UPLOAD ERROR"
+    );
+
+    console.error(error);
+
+    console.error(
+      "=========================================="
+    );
+
+    // If Cloudinary upload succeeded but something else failed,
+    // remove the uploaded image so unused files don't remain.
+    if (uploadedPublicId) {
+      await deleteCloudinaryImage(
+        uploadedPublicId
+      );
+    }
 
     return NextResponse.json(
       {
         error:
-          `Profile photo upload failed: ${errorMessage}`,
+          error?.message ||
+          "Failed to upload profile photo.",
       },
       { status: 500 }
     );

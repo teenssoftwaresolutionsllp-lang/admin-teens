@@ -19,6 +19,9 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   UploadCloud,
+  Award,
+  Loader2,
+  ShieldCheck,
 } from "lucide-react";
 
 import Image from "next/image";
@@ -92,11 +95,6 @@ export default function Sidebar({
     if (avatarUrl !== undefined) {
       setProfileImage(avatarUrl || null);
 
-      /*
-       * Keep localStorage synchronized with the database value.
-       * This prevents an old local image from replacing the
-       * latest database image after refresh.
-       */
       try {
         if (avatarUrl) {
           window.localStorage.setItem(
@@ -118,8 +116,7 @@ export default function Sidebar({
   }, [avatarUrl]);
 
   // ============================================================
-  // RESTORE AVATAR
-  // Only use localStorage when server prop is not available.
+  // RESTORE AVATAR FROM LOCAL STORAGE
   // ============================================================
 
   useEffect(() => {
@@ -146,9 +143,6 @@ export default function Sidebar({
 
   // ============================================================
   // LISTEN FOR PROFILE PHOTO UPDATES
-  //
-  // Employee Profile and Sidebar both listen to:
-  // "profile-photo-updated"
   // ============================================================
 
   useEffect(() => {
@@ -244,10 +238,6 @@ export default function Sidebar({
       return {};
     }
 
-    // ----------------------------------------------------------
-    // JSON RESPONSE
-    // ----------------------------------------------------------
-
     if (
       contentType.includes(
         "application/json"
@@ -268,10 +258,6 @@ export default function Sidebar({
         );
       }
     }
-
-    // ----------------------------------------------------------
-    // TRY JSON EVEN IF CONTENT TYPE IS WRONG
-    // ----------------------------------------------------------
 
     try {
       return JSON.parse(
@@ -334,7 +320,6 @@ export default function Sidebar({
       | string
       | null = null;
 
-    // Save current image so it can be restored if upload fails.
     const previousImage =
       profileImage;
 
@@ -365,7 +350,7 @@ export default function Sidebar({
       );
 
       // --------------------------------------------------------
-      // UPLOAD TO EMPLOYEE PORTAL API
+      // UPLOAD
       // --------------------------------------------------------
 
       const response =
@@ -374,11 +359,12 @@ export default function Sidebar({
           {
             method: "POST",
             body: formData,
+            credentials: "include",
           }
         );
 
       // --------------------------------------------------------
-      // SAFE RESPONSE
+      // PARSE RESPONSE
       // --------------------------------------------------------
 
       const data =
@@ -406,7 +392,7 @@ export default function Sidebar({
       }
 
       // --------------------------------------------------------
-      // GET CLOUDINARY URL
+      // CLOUDINARY URL
       // --------------------------------------------------------
 
       const newAvatarUrl =
@@ -421,18 +407,16 @@ export default function Sidebar({
         );
       }
 
-      // ========================================================
-      // IMPORTANT:
-      // THIS IS THE SINGLE PHOTO URL USED BY BOTH
-      // SIDEBAR AND EMPLOYEE PROFILE
-      // ========================================================
+      // --------------------------------------------------------
+      // UPDATE SIDEBAR
+      // --------------------------------------------------------
 
       setProfileImage(
         newAvatarUrl
       );
 
       // --------------------------------------------------------
-      // SAVE SAME URL LOCALLY
+      // SAVE URL
       // --------------------------------------------------------
 
       try {
@@ -448,7 +432,7 @@ export default function Sidebar({
       }
 
       // --------------------------------------------------------
-      // NOTIFY EMPLOYEE PROFILE PAGE
+      // NOTIFY OTHER COMPONENTS
       // --------------------------------------------------------
 
       window.dispatchEvent(
@@ -464,7 +448,7 @@ export default function Sidebar({
       );
 
       // --------------------------------------------------------
-      // REFRESH SERVER COMPONENTS
+      // REFRESH
       // --------------------------------------------------------
 
       router.refresh();
@@ -473,10 +457,6 @@ export default function Sidebar({
         "Photo upload failed:",
         error
       );
-
-      // --------------------------------------------------------
-      // RESTORE PREVIOUS IMAGE
-      // --------------------------------------------------------
 
       setProfileImage(
         previousImage || null
@@ -488,10 +468,6 @@ export default function Sidebar({
           : "Failed to upload photo."
       );
     } finally {
-      // --------------------------------------------------------
-      // CLEAN PREVIEW URL
-      // --------------------------------------------------------
-
       if (localPreview) {
         URL.revokeObjectURL(
           localPreview
@@ -500,7 +476,6 @@ export default function Sidebar({
 
       setUploading(false);
 
-      // Allow selecting the same file again.
       event.target.value = "";
     }
   };
@@ -654,9 +629,7 @@ export default function Sidebar({
           : "md:w-64"
       }`}
     >
-      {/* ======================================================
-          HEADER
-      ====================================================== */}
+      {/* HEADER */}
 
       <div
         className={`p-4 sm:p-5 flex items-center border-b border-slate-800 ${
@@ -701,21 +674,17 @@ export default function Sidebar({
         </div>
       </div>
 
-      {/* ======================================================
-          CONTENT
-      ====================================================== */}
+      {/* CONTENT */}
 
       <div className="flex-1 px-3 py-4 overflow-y-auto">
-        {/* ====================================================
-            PHOTO UPLOAD
-        ==================================================== */}
+        {/* PHOTO UPLOAD */}
 
         {role === "employee" && (
           <div className="mb-5">
             <input
               id="sidebar-photo-upload"
               type="file"
-              accept="image/*"
+              accept="image/jpeg,image/jpg,image/png,image/webp"
               className="hidden"
               onChange={
                 handlePhotoUpload
@@ -740,10 +709,6 @@ export default function Sidebar({
                   : ""
               }`}
             >
-              {/* =================================================
-                  IMAGE
-              ================================================= */}
-
               {profileImage ? (
                 <Image
                   src={profileImage}
@@ -783,10 +748,6 @@ export default function Sidebar({
                 </div>
               )}
 
-              {/* =================================================
-                  HOVER UPLOAD LAYER
-              ================================================= */}
-
               {profileImage && (
                 <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity">
                   {uploading ? (
@@ -800,9 +761,7 @@ export default function Sidebar({
           </div>
         )}
 
-        {/* ====================================================
-            NAVIGATION
-        ==================================================== */}
+        {/* NAVIGATION */}
 
         <div className="space-y-1">
           {visibleItems.map(
@@ -854,9 +813,7 @@ export default function Sidebar({
         </div>
       </div>
 
-      {/* ======================================================
-          FOOTER
-      ====================================================== */}
+      {/* FOOTER */}
 
       <div className="p-3 border-t border-slate-800">
         <div
@@ -866,10 +823,6 @@ export default function Sidebar({
               : "gap-2"
           }`}
         >
-          {/* ====================================================
-              COLLAPSE
-          ==================================================== */}
-
           <button
             type="button"
             onClick={
@@ -893,10 +846,6 @@ export default function Sidebar({
               <PanelLeftClose className="h-4 w-4" />
             )}
           </button>
-
-          {/* ====================================================
-              LOGOUT
-          ==================================================== */}
 
           <button
             type="button"
