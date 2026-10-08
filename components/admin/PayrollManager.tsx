@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import {
-  Banknote, Settings, Play, CheckCircle2, Loader2, FileText, Eye,
-  Sliders, XCircle, Printer, Users, CalendarDays, IndianRupee,
+  Banknote, Settings, Play, CheckCircle2, Loader2, FileText, Eye,Building2,
+  Sliders, XCircle, Printer, Users, CalendarDays, IndianRupee,BriefcaseBusiness,CircleCheck,
   TrendingDown, ShieldCheck, ChevronRight, Briefcase, CircleDollarSign,
   UserRound, User, Clock3, Info, Search, CreditCard, Pencil, Save
 } from "lucide-react";
@@ -16,6 +16,7 @@ interface PayrollManagerProps {
   initialComponents: SalaryComponent[];
   initialPayslips: Payslip[];
   employees: Employee[];
+  role: "ceo" | "hr" | "employee";
 }
 
 type ActiveTab = "runner" | "components" | "slips";
@@ -35,7 +36,8 @@ const formatNumber = (value: number | null | undefined) =>
 export default function PayrollManager({
   initialComponents,
   initialPayslips,
-  employees: initialEmployees
+  employees: initialEmployees,
+  role,
 }: PayrollManagerProps) {
   const now = new Date();
   const currentMonth = now.getMonth() + 1;
@@ -43,14 +45,12 @@ export default function PayrollManager({
 
   const [employees] = useState<Employee[]>(initialEmployees);
   const [components, setComponents] = useState<SalaryComponent[]>(initialComponents);
+  const [employeeComponents, setEmployeeComponents] = useState<SalaryComponent[]>([]);
+  const [employeeComponentsLoading, setEmployeeComponentsLoading] = useState(false);
   const [payslips, setPayslips] = useState<Payslip[]>(initialPayslips);
   const [activeTab, setActiveTab] = useState<ActiveTab>("runner");
-  const [selectedMonth, setSelectedMonth] = useState(
-    currentMonth === 1 ? 12 : currentMonth - 1
-  );
-  const [selectedYear, setSelectedYear] = useState(
-    currentMonth === 1 ? currentYear - 1 : currentYear
-  );
+  const [selectedMonth, setSelectedMonth] = useState(currentMonth === 1 ? 12 : currentMonth - 1);
+  const [selectedYear, setSelectedYear] = useState(currentMonth === 1 ? currentYear - 1 : currentYear);
   const [selectedEmployee, setSelectedEmployee] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [running, setRunning] = useState(false);
@@ -83,6 +83,36 @@ export default function PayrollManager({
     [employees, selectedEmployee]
   );
 
+  const loadEmployeeComponents = useCallback(async () => 
+  {
+    if (!selectedEmployee) {
+      setEmployeeComponents([]);
+      return;
+    }
+
+    setEmployeeComponentsLoading(true);
+    setMessage(null);
+
+    try {
+      const response = await fetch(`/api/payroll/employee-components?employeeId=${selectedEmployee}`);
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to load employee salary components");
+      }
+      setEmployeeComponents(data.components || []);
+    } catch (error: any) {
+      console.error("Failed to load employee salary components:", error);
+      setEmployeeComponents([]);
+      setMessage(error.message || "Failed to load salary components");
+    } finally {
+      setEmployeeComponentsLoading(false);
+    }
+  }, [selectedEmployee]);
+
+  useEffect(() => {
+    loadEmployeeComponents();
+  }, [loadEmployeeComponents]);
+
   const selectedPeriod = selectedYear * 12 + selectedMonth;
   const currentPeriod = currentYear * 12 + currentMonth;
   const isFuturePeriod = selectedPeriod >= currentPeriod;
@@ -100,8 +130,18 @@ export default function PayrollManager({
     return joiningYear * 12 + joiningMonth;
   }, [selectedEmployeeData]);
 
-  const isBeforeJoiningPeriod =
-    employeeJoiningPeriod !== null && selectedPeriod < employeeJoiningPeriod;
+  const formatAnnualCtc = (salaryInLakhs: number) => {
+    if (salaryInLakhs >= 100) {
+      return `${(salaryInLakhs / 100).toLocaleString("en-IN", {
+        maximumFractionDigits: 2,
+      })} Crore`;
+    }
+    return `${salaryInLakhs.toLocaleString("en-IN", {
+      maximumFractionDigits: 2,
+    })} Lakhs`;
+  };
+
+  const isBeforeJoiningPeriod = employeeJoiningPeriod !== null && selectedPeriod < employeeJoiningPeriod;
 
   const payrollPeriodValid = !isFuturePeriod && !isBeforeJoiningPeriod;
 
@@ -279,34 +319,52 @@ export default function PayrollManager({
     setComponentLoading(component.id);
 
     try {
-      const response = await fetch("/api/payroll/components", {
+      if (!component.employee_component_id) {
+        throw new Error("Employee salary component ID is missing.");
+      }
+
+      const response = await fetch("/api/payroll/employee-components", {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
-          id: component.id,
-          is_active: !component.is_active
-        })
+          id: component.employee_component_id,
+          is_active: !component.is_active,
+        }),
       });
+
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data?.error || "Failed to update salary component.");
+        throw new Error(
+          data?.error || "Failed to update employee salary component."
+        );
       }
 
-      setComponents(previous =>
-        previous.map(item =>
-          item.id === component.id ? { ...item, is_active: !item.is_active } : item
+      setEmployeeComponents((previous) =>
+        previous.map((item) =>
+          item.id === component.id
+            ? {
+                ...item,
+                is_active: !component.is_active,
+              }
+            : item
         )
       );
 
       setMessage({
         type: "success",
-        text: `${component.name} has been ${component.is_active ? "disabled" : "enabled"}.`
+        text: `${component.name} has been ${
+          component.is_active ? "disabled" : "enabled"
+        }.`,
       });
     } catch (error: any) {
       setMessage({
         type: "error",
-        text: error?.message || "Failed to update salary component."
+        text:
+          error?.message ||
+          "Failed to update employee salary component.",
       });
     } finally {
       setComponentLoading(null);
@@ -315,55 +373,62 @@ export default function PayrollManager({
 
   const handleSaveComponent = async () => {
     if (!editingComponent) return;
-
     setSavingComponent(true);
     setMessage(null);
-
-      try {
-        const response = await fetch("/api/payroll/components", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            id: editingComponent.id,
-            name: editingComponent.name,
-            code: editingComponent.code,
-            type: editingComponent.type,
-            calculation_type: editingComponent.calculation_type,
-            value: Number(editingComponent.value),
-            affects_lop: editingComponent.affects_lop,
-            description: editingComponent.description,
-          }) 
-        });
-
-        const data = await response.json();
-
-        if (!response.ok) {
-          throw new Error(data?.error || "Failed to save salary component.");
-        }
-
-        setComponents(previous =>
-          previous.map(item =>
-            item.id === editingComponent.id
-              ? data.component
-              : item
-          )
-        );
-
-        setEditingComponent(null);
-
-        setMessage({
-          type: "success",
-          text: `${editingComponent.name} updated successfully.`
-        });
-      } catch (error: any) {
-        setMessage({
-          type: "error",
-          text: error?.message || "Failed to save salary component."
-        });
-      } finally {
-        setSavingComponent(false);
+    try {
+      if (!editingComponent.employee_component_id) {
+        throw new Error("Employee salary component ID is missing.");
       }
-    };
+      const numericValue = Number(editingComponent.value);
+      if (!Number.isFinite(numericValue) || numericValue < 0) {
+        throw new Error("Value must be a valid non-negative number.");
+      }
+      const response = await fetch(
+        "/api/payroll/employee-components",
+        {
+          method: "PATCH",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({
+            id: editingComponent.employee_component_id,
+            calculation_type: editingComponent.calculation_type,
+            value: numericValue,
+            is_active: editingComponent.is_active,
+            affects_lop: editingComponent.affects_lop,
+          }),
+        }
+      );
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.error ||"Failed to update employee salary component.");
+      }
+
+      setEmployeeComponents((previous) =>
+        previous.map((item) => item.id === editingComponent.id ? 
+        {
+            ...item,
+            calculation_type:editingComponent.calculation_type,
+            value: numericValue,
+          }: item
+        )
+      );
+
+      setEditingComponent(null);
+
+      setMessage({
+        type: "success",
+        text: `${editingComponent.name} updated successfully.`,
+      });
+    } catch (error: any) {
+      setMessage({
+        type: "error",
+        text:
+          error?.message ||
+          "Failed to update employee salary component.",
+      });
+    } finally {
+      setSavingComponent(false);
+    }
+  };
 
   const handleViewPayslip = async (slip: Payslip) => {
   try {
@@ -442,7 +507,7 @@ export default function PayrollManager({
           <MetricCard icon={CircleDollarSign} label="Net Monthly Payout" value={formatCurrency(payrollMetrics.netPayout)} helper={`${payrollMetrics.employeeCount} payslip${payrollMetrics.employeeCount === 1 ? "" : "s"} generated`} />
           <MetricCard icon={TrendingDown} label="LOP Deductions" value={formatCurrency(payrollMetrics.lopDeduction)} helper="Loss of pay deduction" />
           <MetricCard icon={Users} label="Employees Processed" value={String(payrollMetrics.employeeCount)} helper={`of ${activeEmployees.length} active employees`} />
-          <MetricCard icon={Settings} label="Active Salary Heads" value={String(payrollMetrics.activeComponents)} helper={`of ${components.length} configured`} />
+          <MetricCard icon={Settings} label="Active Salary Heads" value={String(payrollMetrics.activeComponents)} helper={`of ${activeEmployees.length} configured`} />
         </div>
 
         <div className="mt-4 rounded-xl border border-slate-200 bg-white p-1.5 shadow-sm">
@@ -450,6 +515,9 @@ export default function PayrollManager({
             {tabs.map(tab => {
               const Icon = tab.icon;
               const active = activeTab === tab.id;
+              if (tab.id === "components" && role !== "hr") {
+                return null;
+              }
               return (
                 <button
                   key={tab.id}
@@ -707,93 +775,373 @@ export default function PayrollManager({
           </div>
         )}
 
-        {activeTab === "components" && (
-          <div className="mt-4 rounded-xl border border-slate-200 bg-white shadow-sm">
+        {activeTab === "components" && role === "hr" && (
+          <div className="mt-4 rounded-2xl border border-slate-200 bg-white shadow-sm">
+
+            {/* ========================================================= */}
+            {/* SALARY COMPONENTS HEADER */}
+            {/* ========================================================= */}
             <div className="flex flex-col gap-3 border-b border-slate-100 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
-              <div className="flex items-center gap-2">
-                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-50">
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-50">
                   <Sliders className="h-4 w-4 text-indigo-600" />
                 </div>
+
                 <div>
-                  <h2 className="text-sm font-bold text-slate-900">Salary Components</h2>
-                  <p className="text-xs text-slate-500">Configure salary heads used during payroll calculation.</p>
+                  <h2 className="text-sm font-bold text-slate-900">
+                    Salary Components
+                  </h2>
+
+                  <p className="text-xs text-slate-500">
+                    Configure salary heads used during payroll calculation.
+                  </p>
                 </div>
               </div>
-              <div className="rounded-lg bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700">
-                {components.filter(item => item.is_active).length} active
+
+              <div className="w-fit rounded-lg bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700">
+                {employeeComponents.filter((item) => item.is_active).length} active
               </div>
             </div>
 
-            {components.length === 0 ? (
-              <EmptyState icon={Sliders} title="No salary components" description="Salary components will appear here once configured." />
+            {/* ========================================================= */}
+            {/* SELECTED EMPLOYEE PROFILE */}
+            {/* ========================================================= */}
+            {selectedEmployee &&
+              (() => {
+                const employee = activeEmployees.find(
+                  (item) => item.id === selectedEmployee
+                );
+
+                if (!employee) return null;
+
+                const initials =
+                  `${employee.first_name?.charAt(0) || ""}${
+                    employee.last_name?.charAt(0) || ""
+                  }`.toUpperCase();
+
+                const department =
+                  (employee as any).department?.name ||
+                  (employee as any).department_name ||
+                  (employee as any).department ||
+                  "—";
+
+                const employmentType =
+                  (employee as any).employment_type ||
+                  (employee as any).employmentType ||
+                  "—";
+
+                return (
+                  <div className="border-b border-slate-100 bg-white px-5 py-4">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between rounded-lg border border-indigo-100 bg-indigo-50 px-4 py-3">
+
+                      {/* ================================================= */}
+                      {/* EMPLOYEE IDENTITY */}
+                      {/* ================================================= */}
+                      <div className="flex min-w-0 items-center gap-3">
+
+                        {/* Profile */}
+                        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-sm font-bold text-indigo-700">
+                          {initials || "E"}
+                        </div>
+
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-bold text-slate-900">
+                            {employee.first_name} {employee.last_name}
+                          </p>
+
+                          <div className="mt-1 flex flex-wrap items-center gap-2">
+                            <span className="rounded-md bg-indigo-50 px-2 py-1 text-[10px] font-bold text-indigo-700">
+                              {employee.employee_id}
+                            </span>
+
+                            {employee.designation && (
+                              <span className="text-[11px] text-slate-500">
+                                {employee.designation}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* ================================================= */}
+                      {/* EMPLOYEE DETAILS */}
+                      {/* ================================================= */}
+                      <div className="grid grid-cols-2 gap-x-8 gap-y-3 sm:grid-cols-3 lg:min-w-[600px] lg:grid-cols-3">
+
+                        {/* Department */}
+                        <div className="flex items-start gap-2">
+                          <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-slate-50">
+                            <Building2 className="h-3.5 w-3.5 text-slate-500" />
+                          </div>
+
+                          <div className="min-w-0">
+                            <p className="text-[10px] text-slate-400">
+                              Department
+                            </p>
+
+                            <p className="truncate text-[11px] font-semibold text-slate-700">
+                              {department}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Employment */}
+                        <div className="flex items-start gap-2">
+                          <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-slate-50">
+                            <BriefcaseBusiness className="h-3.5 w-3.5 text-slate-500" />
+                          </div>
+
+                          <div className="min-w-0">
+                            <p className="text-[10px] text-slate-400">
+                              Employment
+                            </p>
+
+                            <p className="truncate text-[11px] font-semibold capitalize text-slate-700">
+                              {employmentType}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Annual CTC */}
+                        <div className="flex items-start gap-2  bg-white rounded">
+                          <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-white">
+                            <IndianRupee className="h-3.5 w-3.5 text-indigo-600" />
+                          </div>
+
+                          <div className="min-w-0">
+                            <p className="text-[10px] text-slate-400">
+                              Annual CTC
+                            </p>
+
+                            <p className="truncate text-[11px] font-bold text-slate-800">
+                              {formatAnnualCtc(Number(activeEmployees.find((item) => item.id === selectedEmployee)?.salary || 0))}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+            {/* ========================================================= */}
+            {/* SALARY COMPONENT CONTENT */}
+            {/* ========================================================= */}
+            {!selectedEmployee ? (
+              <EmptyState
+                icon={Sliders}
+                title="Select an employee"
+                description="Select an employee from the Payroll Runner tab to view their salary components."
+              />
+            ) : employeeComponentsLoading ? (
+              <div className="px-5 py-10 text-center text-xs text-slate-500">
+                Loading salary components...
+              </div>
+            ) : employeeComponents.length === 0 ? (
+              <EmptyState
+                icon={Sliders}
+                title="No salary components"
+                description="Salary components will appear here once configured."
+              />
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[1050px]">
+
+                {/* ======================================================= */}
+                {/* SALARY COMPONENTS TABLE */}
+                {/* ======================================================= */}
+                <table className="w-full min-w-[1050px] table-fixed">
+
+                  <colgroup>
+                    <col className="w-[270px]" />
+                    <col className="w-[120px]" />
+                    <col className="w-[110px]" />
+                    <col className="w-[140px]" />
+                    <col className="w-[120px]" />
+                    <col className="w-[120px]" />
+                    <col className="w-[140px]" />
+                    <col className="w-[220px]" />
+                  </colgroup>
+
+                  {/* ===================================================== */}
+                  {/* TABLE HEADER */}
+                  {/* ===================================================== */}
                   <thead>
                     <tr className="border-b border-slate-100 bg-slate-50/70">
-                      {["Salary Head","Code","Type","Calculation","Value","LOP Impact","Status","Action"].map(head => (
-                        <th key={head} className="px-5 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">{head}</th>
+                      {[
+                        "Salary Head",
+                        "Code",
+                        "Type",
+                        "Calculation",
+                        "Value",
+                        "LOP Impact",
+                        "Annual CTC",
+                        "Action",
+                      ].map((head) => (
+                        <th
+                          key={head}
+                          className={`px-5 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500 ${
+                            head === "Value" ||
+                            head === "LOP Impact" ||
+                            head === "Annual CTC" ||
+                            head === "Action"
+                              ? "text-center"
+                              : ""
+                          }`}
+                        >
+                          {head}
+                        </th>
                       ))}
                     </tr>
                   </thead>
+
+                  {/* ===================================================== */}
+                  {/* TABLE BODY */}
+                  {/* ===================================================== */}
                   <tbody className="divide-y divide-slate-100">
-                    {components.map(component => (
-                      <tr key={component.id} className="hover:bg-slate-50/60">
+
+                    {employeeComponents.map((component) => (
+
+                      <tr
+                        key={component.id}
+                        className="transition-colors hover:bg-slate-50/60"
+                      >
+
+                        {/* ================================================= */}
+                        {/* SALARY HEAD */}
+                        {/* ================================================= */}
                         <td className="px-5 py-3">
-                          <div className="flex items-center gap-2">
-                            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100">
+                          <div className="flex items-center gap-2.5">
+
+                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100">
                               <Banknote className="h-4 w-4 text-slate-600" />
                             </div>
-                            <div>
-                              <p className="text-xs font-semibold text-slate-800">{component.name}</p>
-                              {component.description && <p className="max-w-[240px] truncate text-[10px] text-slate-400">{component.description}</p>}
+
+                            <div className="min-w-0">
+                              <p className="truncate text-xs font-semibold text-slate-800">
+                                {component.name}
+                              </p>
+
+                              {component.description && (
+                                <p className="max-w-[220px] truncate text-[10px] text-slate-400">
+                                  {component.description}
+                                </p>
+                              )}
                             </div>
+
                           </div>
                         </td>
-                        <td className="px-5 py-3"><span className="rounded bg-slate-100 px-2 py-1 font-mono text-[10px] text-slate-600">{component.code}</span></td>
-                        <td className="px-5 py-3 text-xs capitalize text-slate-600">
-                          {component.calculation_type === "percentage_of_basic" ? "% of Basic" : component.calculation_type === "percentage_of_gross" ? "% of Gross" : "Fixed"}
-                        </td>
-                        <td className="px-5 py-3 text-right">
-                          <span className="text-xs font-semibold text-slate-800">
-                            {component.calculation_type === "fixed" ? formatCurrency(component.value) : `${formatNumber(component.value)}%`}
+
+                        {/* ================================================= */}
+                        {/* CODE */}
+                        {/* ================================================= */}
+                        <td className="px-5 py-3">
+                          <span className="inline-flex max-w-[110px] truncate rounded bg-slate-100 px-2 py-1 font-mono text-[10px] text-slate-600">
+                            {component.code}
                           </span>
                         </td>
+
+                        {/* ================================================= */}
+                        {/* TYPE */}
+                        {/* ================================================= */}
                         <td className="px-5 py-3">
-                          <span className={`rounded-full px-2 py-1 text-[10px] font-semibold ${component.affects_lop ? "bg-amber-50 text-amber-700" : "bg-slate-100 text-slate-500"}`}>
+                          <span className="text-xs font-medium text-slate-600">
+                            {component.type.charAt(0).toUpperCase() +
+                              component.type.slice(1)}
+                          </span>
+                        </td>
+
+                        {/* ================================================= */}
+                        {/* CALCULATION */}
+                        {/* ================================================= */}
+                        <td className="px-5 py-3">
+                          <span className="whitespace-nowrap text-xs text-slate-600">
+                            {component.calculation_type ===
+                            "percentage_of_basic"
+                              ? "% of Basic"
+                              : component.calculation_type ===
+                                "percentage_of_gross"
+                                ? "% of Gross"
+                                : "Fixed"}
+                          </span>
+                        </td>
+
+                        {/* ================================================= */}
+                        {/* VALUE */}
+                        {/* ================================================= */}
+                        <td className="px-5 py-3 text-center">
+                          <span className="whitespace-nowrap text-xs font-bold text-slate-800">
+                            {component.calculation_type === "fixed"
+                              ? formatCurrency(component.value)
+                              : `${formatNumber(component.value)}%`}
+                          </span>
+                        </td>
+
+                        {/* ================================================= */}
+                        {/* LOP IMPACT */}
+                        {/* ================================================= */}
+                        <td className="px-5 py-3 text-center">
+                          <span
+                            className={`inline-flex min-w-[38px] justify-center rounded-full px-2 py-1 text-[10px] font-semibold ${
+                              component.affects_lop
+                                ? "bg-amber-50 text-amber-700"
+                                : "bg-slate-100 text-slate-500"
+                            }`}
+                          >
                             {component.affects_lop ? "Yes" : "No"}
                           </span>
                         </td>
-                        <td className="px-5 py-3">
-                          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold ${component.is_active ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
-                            <span className={`h-1.5 w-1.5 rounded-full ${component.is_active ? "bg-emerald-500" : "bg-slate-400"}`} />
-                            {component.is_active ? "Active" : "Disabled"}
+
+                        {/* ================================================= */}
+                        {/* ANNUAL CTC */}
+                        {/* ================================================= */}
+                        <td className="px-5 py-3 text-center">
+                          <span className="whitespace-nowrap text-xs font-bold text-slate-800">
+                            {formatCurrency(Number(activeEmployees.find((item) => item.id === selectedEmployee)?.salary || 0) * 100000)}
                           </span>
                         </td>
-                        <td className="px-5 py-3 text-right">
-                          <div className="flex items-center justify-end gap-2">
+
+                        {/* ================================================= */}
+                        {/* ACTION */}
+                        {/* ================================================= */}
+                        <td className="px-5 py-3">
+                          <div className="flex items-center justify-center gap-2">
+
+                            {/* Edit */}
                             <button
-                              onClick={() => setEditingComponent({ ...component })}
-                              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[10px] font-semibold text-slate-700 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700"
+                              type="button"
+                              onClick={() =>
+                                setEditingComponent({
+                                  ...component,
+                                })
+                              }
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-semibold text-slate-700 transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700"
                             >
                               <Pencil className="h-3 w-3" />
                               Edit
                             </button>
 
+                            {/* Enable / Disable */}
                             <button
-                              onClick={() => handleToggleComponent(component)}
-                              disabled={componentLoading === component.id}
-                              className={`rounded-lg px-3 py-1.5 text-[10px] font-semibold ${
+                              type="button"
+                              onClick={() =>
+                                handleToggleComponent(component)
+                              }
+                              disabled={
+                                componentLoading === component.id
+                              }
+                              className={`rounded-lg px-3 py-1.5 text-[10px] font-semibold transition ${
                                 component.is_active
                                   ? "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
                                   : "bg-indigo-600 text-white hover:bg-indigo-700"
-                              } disabled:opacity-50`}
+                              } disabled:cursor-not-allowed disabled:opacity-50`}
                             >
-                              {componentLoading === component.id
-                                ? <Loader2 className="inline h-3 w-3 animate-spin" />
-                                : component.is_active
-                                  ? "Disable"
-                                  : "Enable"}
+                              {componentLoading === component.id ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : component.is_active ? (
+                                "Disable"
+                              ) : (
+                                "Enable"
+                              )}
                             </button>
                           </div>
                         </td>
@@ -1115,143 +1463,93 @@ export default function PayrollManager({
               </div>
 
               <div className="space-y-4 p-5">
+
+                {/* Salary Head - Read Only */}
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Salary Head
+                  </p>
+
+                  <div className="mt-1 flex items-center justify-between gap-3">
+                    <p className="text-sm font-semibold text-slate-800">
+                      {editingComponent.name}
+                    </p>
+
+                    <span className="rounded bg-white px-2 py-1 font-mono text-[10px] text-slate-500">
+                      {editingComponent.code}
+                    </span>
+                  </div>
+                </div>
+
+                {/* LOP Applicable */}
                 <div>
                   <label className="mb-1.5 block text-xs font-semibold text-slate-700">
-                    Salary Head
+                    LOP Applicable
                   </label>
-                  <input
-                    type="text"
-                    value={editingComponent.name}
+
+                  <select
+                    value={editingComponent.affects_lop ? "yes" : "no"}
                     onChange={event =>
                       setEditingComponent({
                         ...editingComponent,
-                        name: event.target.value
+                        affects_lop: event.target.value === "yes"
+                      })
+                    }
+                    className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50"
+                  >
+                    <option value="yes">Yes</option>
+                    <option value="no">No</option>
+                  </select>
+                </div>
+
+                {/* Calculation Type */}
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold text-slate-700">
+                    Calculation Type
+                  </label>
+
+                  <select
+                    value={editingComponent.calculation_type}
+                    onChange={event =>
+                      setEditingComponent({
+                        ...editingComponent,
+                        calculation_type:
+                          event.target.value as SalaryComponent["calculation_type"]
+                      })
+                    }
+                    className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50"
+                  >
+                    <option value="fixed">Fixed Amount</option>
+                    <option value="percentage_of_basic">% of Basic</option>
+                    <option value="percentage_of_gross">% of Gross</option>
+                  </select>
+                </div>
+
+                {/* Value */}
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold text-slate-700">
+                    {editingComponent.calculation_type === "fixed" ? "Amount" : "Percentage"}
+                  </label>
+
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={editingComponent.value}
+                    onChange={event =>setEditingComponent(
+                      {
+                        ...editingComponent,
+                        value: Number(event.target.value)
                       })
                     }
                     className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50"
                   />
+
+                  <p className="mt-1 text-[10px] text-slate-400">
+                    {editingComponent.calculation_type === "fixed" ? "Enter the fixed salary amount.": "Enter the percentage value."}
+                  </p>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-slate-700">
-                      Code
-                    </label>
-                    <input
-                      type="text"
-                      value={editingComponent.code}
-                      onChange={event =>
-                        setEditingComponent({
-                          ...editingComponent,
-                          code: event.target.value.toUpperCase()
-                        })
-                      }
-                      className="h-10 w-full rounded-lg border border-slate-200 px-3 font-mono text-sm outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-slate-700">
-                      Type
-                    </label>
-                    <select
-                      value={editingComponent.type}
-                      onChange={event =>
-                        setEditingComponent({
-                          ...editingComponent,
-                          type: event.target.value as SalaryComponent["type"]
-                        })
-                      }
-                      className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50"
-                    >
-                      <option value="earning">Earning</option>
-                      <option value="deduction">Deduction</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-slate-700">
-                      Calculation Type
-                    </label>
-                    <select
-                      value={editingComponent.calculation_type}
-                      onChange={event =>
-                        setEditingComponent({
-                          ...editingComponent,
-                          calculation_type: event.target.value as SalaryComponent["calculation_type"]
-                        })
-                      }
-                      className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50"
-                    >
-                      <option value="fixed">Fixed Amount</option>
-                      <option value="percentage_of_basic">% of Basic</option>
-                      <option value="percentage_of_gross">% of Gross</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-slate-700">
-                      {editingComponent.calculation_type === "fixed"
-                        ? "Amount"
-                        : "Percentage"}
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={editingComponent.value}
-                      onChange={event =>
-                        setEditingComponent({
-                          ...editingComponent,
-                          value: Number(event.target.value)
-                        })
-                      }
-                      className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50"
-                    />
-                  </div>
-                </div>
-
-                <label className="flex cursor-pointer items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
-                  <div>
-                    <p className="text-xs font-semibold text-slate-700">
-                      Affects LOP
-                    </p>
-                    <p className="text-[10px] text-slate-400">
-                      Include this component when calculating Loss of Pay.
-                    </p>
-                  </div>
-
-                  <input
-                    type="checkbox"
-                    checked={Boolean(editingComponent.affects_lop)}
-                    onChange={event =>
-                      setEditingComponent({
-                        ...editingComponent,
-                        affects_lop: event.target.checked
-                      })
-                    }
-                    className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                  />
-                </label>
-
-                <div>
-                  <label className="mb-1.5 block text-xs font-semibold text-slate-700">
-                    Description
-                  </label>
-                  <textarea
-                    rows={3}
-                    value={editingComponent.description || ""}
-                    onChange={event =>
-                      setEditingComponent({
-                        ...editingComponent,
-                        description: event.target.value
-                      })
-                    }
-                    className="w-full resize-none rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50"
-                  />
-                </div>
               </div>
 
               <div className="flex items-center justify-end gap-2 border-t border-slate-100 px-5 py-3">

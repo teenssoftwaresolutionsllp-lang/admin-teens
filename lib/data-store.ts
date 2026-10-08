@@ -2243,6 +2243,7 @@ export class DataStore {
         calculation_type,
         value,
         is_active,
+        affects_lop,
         gratuity_5_year_taken,
         gratuity_5_year_taken_date,
         gratuity_5_year_amount,
@@ -2586,7 +2587,9 @@ export class DataStore {
   const salaryComponents = await this.getSalaryComponents();
 
   const activeComponents: SalaryComponent[] = employeeSalaryComponents.map((employeeComponent) => {
-    const masterComponent = salaryComponents.find((component) => component.id === employeeComponent.salary_component_id);
+      const masterComponent = salaryComponents.find(
+        (component) => component.id === employeeComponent.salary_component_id
+      );
       if (!masterComponent) {
         return null;
       }
@@ -2596,12 +2599,14 @@ export class DataStore {
         calculation_type: employeeComponent.calculation_type as SalaryComponent["calculation_type"],
         value: Number(employeeComponent.value),
         is_active: employeeComponent.is_active,
-        };
-      })
-      .filter(
-        (component): component is SalaryComponent =>
-          component !== null
-      );
+        // Employee-specific LOP configuration
+        affects_lop: employeeComponent.affects_lop ?? masterComponent.affects_lop,
+      };
+    })
+    .filter(
+      (component): component is SalaryComponent =>
+        component !== null
+    );
 
   const monthNames = [
     "January",
@@ -2981,22 +2986,13 @@ export class DataStore {
       // -----------------------------------------------------
 
       if (leave) {
-        const leaveUnit =
-          leave.is_half_day
-            ? 0.5
-            : 1;
-
-        const isPaid =
-          Boolean(
-            leave.leave_type?.is_paid
-          );
-
+        const leaveUnit = leave.is_half_day ? 0.5 : 1;
+        const isPaid = Boolean(leave.leave_type?.is_paid);
         if (isPaid) {
           paidLeaves += leaveUnit;
         } else {
           lopDays += leaveUnit;
         }
-
         continue;
       }
 
@@ -3050,27 +3046,13 @@ export class DataStore {
     // SAFETY
     // =======================================================
 
-    presentDays = Number(
-      Math.max(
-        0,
-        presentDays
-      ).toFixed(2)
-    );
+    presentDays = Number(Math.max(0, presentDays).toFixed(2));
+    paidLeaves = Number(Math.max(0, paidLeaves).toFixed(2));
+    const accountedDays = presentDays + paidLeaves + lopDays;
+    const remainingLopDays = Math.max(0,workingDays - accountedDays);
+    lopDays = Number((lopDays + remainingLopDays).toFixed(2));
 
-    paidLeaves = Number(
-      Math.max(
-        0,
-        paidLeaves
-      ).toFixed(2)
-    );
-
-    lopDays = Number(
-      Math.max(
-        0,
-        lopDays
-      ).toFixed(2)
-    );
-
+    
     // =======================================================
     // PREVENT ACCOUNTED DAYS FROM EXCEEDING WORKING DAYS
     // =======================================================
@@ -3080,20 +3062,10 @@ export class DataStore {
       paidLeaves +
       lopDays;
 
-    if (
-      totalAccountedDays >
-      workingDays
-    ) {
-      const excess =
-        totalAccountedDays -
-        workingDays;
-
-      lopDays = Number(
-        Math.max(
-          0,
-          lopDays - excess
-        ).toFixed(2)
-      );
+    if (totalAccountedDays >workingDays) 
+    {
+      const excess = totalAccountedDays - workingDays;
+      lopDays = Number(Math.max(0,lopDays - excess).toFixed(2));
     }
 
     // =======================================================
@@ -3105,13 +3077,12 @@ export class DataStore {
     const breakdown =
       calculateSalaryBreakdown({
         grossSalary: baseSalary,
-
-        totalDaysInMonth:
-          workingDays,
-
+        totalDaysInMonth:workingDays,
         lopDays,
-
         activeComponents,
+        pfEligible: emp.pf_eligible,
+        esiEligible: emp.esi_healthcare_eligible,
+        ptEligible: emp.pt_eligible,
       });
 
 
@@ -3175,6 +3146,7 @@ export class DataStore {
 
       payment_status: "processed",
     };
+
 
     // =======================================================
     // SAVE / UPDATE PAYSLIP

@@ -96,11 +96,17 @@ export function calculateSalaryBreakdown({
   totalDaysInMonth = 30,
   lopDays = 0,
   activeComponents,
+  pfEligible = false,
+  esiEligible = false,
+  ptEligible = false,
 }: {
   grossSalary: number;
   totalDaysInMonth?: number;
   lopDays?: number;
   activeComponents: SalaryComponent[];
+  pfEligible?: boolean;
+  esiEligible?: boolean;
+  ptEligible?: boolean;
 }): {
   grossSalary: number;
   lopDays: number;
@@ -113,18 +119,7 @@ export function calculateSalaryBreakdown({
   totalDeductions: number;
   netSalary: number;
 } {
-  const perDayRate = Number(
-    (grossSalary / Math.max(totalDaysInMonth, 1)).toFixed(2)
-  );
-
-  const lopDeduction = Number(
-    (lopDays * perDayRate).toFixed(2)
-  );
-
-  const adjustedGross = Math.max(
-    0,
-    Number((grossSalary - lopDeduction).toFixed(2))
-  );
+  const workingDays = Math.max(totalDaysInMonth, 1);
 
   // ---------------------------------------------------------
   // EMPLOYEE EARNINGS
@@ -144,11 +139,7 @@ export function calculateSalaryBreakdown({
   // ---------------------------------------------------------
 
   const deductionsComponents = activeComponents.filter(
-    (component) =>
-      component.type === "deduction" &&
-      component.is_active &&
-      component.code !== "EMPLOYER_PF" &&
-      component.code !== "GRATUITY"
+    (component) => component.type === "deduction" && component.is_active && component.code !== "EMPLOYER_PF" && component.code !== "GRATUITY"
   );
 
   // ---------------------------------------------------------
@@ -164,6 +155,82 @@ export function calculateSalaryBreakdown({
   const basicAmount = Number(
     ((grossSalary * basicPercent) / 100).toFixed(2)
   );
+
+  // ---------------------------------------------------------
+  // LOP BASE COMPONENTS
+  //
+  // LOP is calculated from:
+  //
+  // Gross Salary - PF - ESI - PT
+  //
+  // These deductions are calculated BEFORE LOP.
+  // ---------------------------------------------------------
+
+  const pfComponent = deductionsComponents.find((component) => component.code === "PF");
+  const esiComponent = deductionsComponents.find((component) => component.code === "ESI");
+  const ptComponent = deductionsComponents.find((component) => component.code === "PT");
+
+  // Pf
+
+  const pfAmount = pfComponent && pfEligible ? Number(((basicAmount * (pfComponent.value ?? 12)) /100).toFixed(2)): 0;
+
+  // Esi
+ 
+  const esiAmount = esiComponent && grossSalary <= 21000 && esiEligible ? Number(((grossSalary * esiComponent.value) /100).toFixed(2)): 0;
+
+  // PT
+
+  const ptAmount = ptComponent && ptEligible ? Number(ptComponent.value || 0) : 0;
+
+  // ---------------------------------------------------------
+  // LOP BASE
+  //
+  // Gross Salary
+  // - PF
+  // - ESI
+  // - PT
+  // = LOP Base
+  // ---------------------------------------------------------
+
+  const lopBaseComponents = deductionsComponents.filter((component) =>component.affects_lop &&["PF", "ESI", "PT"].includes(component.code));
+
+  const lopAdjustment = lopBaseComponents.reduce(
+    (total, component) => {
+      if (component.code === "PF") {
+        return total + pfAmount;
+      }
+
+      if (component.code === "ESI") {
+        return total + esiAmount;
+      }
+
+      if (component.code === "PT") {
+        return total + ptAmount;
+      }
+
+      return total;
+    },0
+  );
+
+  const lopBase = Math.max(0,Number((grossSalary - lopAdjustment).toFixed(2)));
+
+  // ---------------------------------------------------------
+  // LOP PER DAY
+  // ---------------------------------------------------------
+
+  const perDayRate = Number((lopBase / workingDays).toFixed(2));
+
+  // ---------------------------------------------------------
+  // LOP DEDUCTION
+  // ---------------------------------------------------------
+
+  const lopDeduction = Number((lopDays * perDayRate).toFixed(2));
+
+  // ---------------------------------------------------------
+  // ADJUSTED GROSS
+  // ---------------------------------------------------------
+
+  const adjustedGross = Math.max(0,Number((grossSalary - lopDeduction).toFixed(2)));
 
   // ---------------------------------------------------------
   // EARNINGS BREAKDOWN
@@ -272,21 +339,23 @@ export function calculateSalaryBreakdown({
     let amount = 0;
 
     if (component.code === "PF") {
-      const pfPercent = component.value ?? 12;
+      if (pfEligible) {
+        const pfPercent = component.value ?? 12;
 
-      amount = Number(
-        ((basicAmount * pfPercent) / 100).toFixed(2)
-      );
+        amount = Number(
+          ((basicAmount * pfPercent) / 100).toFixed(2)
+        );
+      }
     } else if (component.code === "ESI") {
-      // Employee ESI applies only when gross salary
-      // is within the ESI wage limit.
-      if (grossSalary <= 21000) {
+      if (esiEligible && grossSalary <= 21000) {
         amount = Number(
           ((grossSalary * component.value) / 100).toFixed(2)
         );
       }
     } else if (component.code === "PT") {
-      amount = Number(component.value || 0);
+      if (ptEligible) {
+        amount = Number(component.value || 0);
+      }
     } else if (
       component.calculation_type === "percentage_of_basic"
     ) {
