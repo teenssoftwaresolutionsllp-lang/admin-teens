@@ -128,7 +128,7 @@ export class DataStore {
   /**
    * Fetch all employees — in-memory cache first, then DB fallback
    */
-  static async getEmployees(): Promise<Employee[]> {
+  static async getEmployees(includeProject = true): Promise<Employee[]> {
     const cache = getCache();
 
     // Try DB first
@@ -140,10 +140,14 @@ export class DataStore {
         .order("created_at", { ascending: false });
 
       if (!error && data && data.length > 0) {
-        const projects = await this.getProjects();
+        let projects: Project[] = [];
+
+        if (includeProject) {
+         projects = await this.getProjects();
+        }
         const result = data.map((emp) => ({
           ...emp,
-          project: projects.find((p) => p.id === emp.project_id) || projects[0],
+          project: includeProject ? projects.find((p) => p.id === emp.project_id) || projects[0] : undefined,
         }));
         // Sync DB data into cache
         for (const emp of result) {
@@ -223,6 +227,35 @@ export class DataStore {
     }
 
     return null;
+  }
+
+ //fast way to get monthly payroll total without fetching all payslips
+  static async getMonthlyPayrollTotal(
+    month: number,
+    year: number
+  ): Promise<number> {
+    try {
+      const supabase = await createAdminClient();
+
+      const { data, error } = await supabase
+        .from("payslips")
+        .select("net_salary")
+        .eq("payroll_month", month)
+        .eq("payroll_year", year);
+
+      if (error) {
+        console.error("getMonthlyPayrollTotal error:", error);
+        return 0;
+      }
+
+      return (data || []).reduce(
+        (total, row) => total + Number(row.net_salary || 0),
+        0
+      );
+    } catch (error) {
+      console.error("getMonthlyPayrollTotal error:", error);
+      return 0;
+    }
   }
 
   static async getEmployeeByEmail(email: string): Promise<Employee | null> {
@@ -1749,7 +1782,7 @@ export class DataStore {
     const cache = getCache();
     const supabase = await createAdminClient();
 
-    // Update leave type in Supabase
+    // Update leave type
     const { data: updatedLeaveType, error } = await supabase
       .from("leave_types")
       .update(updates)
@@ -1766,7 +1799,7 @@ export class DataStore {
       return null;
     }
 
-    // Update local cache
+    // Update local leave type cache
     const idx = cache.leaveTypes.findIndex((lt) => lt.id === id);
 
     if (idx >= 0) {
@@ -1775,49 +1808,31 @@ export class DataStore {
       cache.leaveTypes.push(updatedLeaveType as LeaveType);
     }
 
-    // When annual quota changes, update employee balances
+    // When annual quota changes, update all employee balances
     if (updates.annual_quota !== undefined) {
       const year = new Date().getFullYear();
       const newQuota = Number(updates.annual_quota);
 
-      const { data: balances, error: balanceFetchError } = await supabase
-        .from("employee_leave_balances")
-        .select("id, employee_id, leave_type_id, year, allocated_days, used_days")
-        .eq("leave_type_id", id)
-        .eq("year", year);
-
-      if (balanceFetchError) {
-        console.error(
-          "Failed to fetch employee leave balances:",
-          balanceFetchError
-        );
-        throw new Error(balanceFetchError.message);
-      }
-
-      for (const balance of balances || []) {
-        const usedDays = Number(balance.used_days || 0);
-
-        // New remaining balance
-        const newBalanceDays = Math.max(newQuota - usedDays, 0);
-
-        const { error: balanceUpdateError } = await supabase
-          .from("employee_leave_balances")
-          .update({
-            allocated_days: newQuota,
-            balance_days: newBalanceDays,
-          })
-          .eq("id", balance.id);
-
-        if (balanceUpdateError) {
-          console.error(
-            "Failed to update employee leave balance:",
-            balanceUpdateError
-          );
-          throw new Error(balanceUpdateError.message);
+      // ONE database request instead of one UPDATE per employee
+      const { error: balanceUpdateError } = await supabase.rpc(
+        "update_leave_type_balances",
+        {
+          p_leave_type_id: id,
+          p_year: year,
+          p_new_quota: newQuota,
         }
+      );
+
+      if (balanceUpdateError) {
+        console.error(
+          "Failed to update employee leave balances:",
+          balanceUpdateError
+        );
+
+        throw new Error(balanceUpdateError.message);
       }
 
-      // Update cache balances too
+      // Update local cache
       cache.leaveBalances = cache.leaveBalances.map((balance) => {
         if (
           balance.leave_type_id === id &&

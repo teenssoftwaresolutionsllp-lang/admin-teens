@@ -332,41 +332,29 @@ export default function Sidebar({ role }: SidebarProps) {
 
         <div className="space-y-1">
           {visibleItems.map((item) => {
-            const isActive =
-              activeItem?.href === item.href;
+            const isActive = activeItem?.href === item.href;
 
             return (
               <Link
                 key={item.name}
                 href={item.href}
-                title={
-                  isCollapsed
-                    ? item.name
-                    : undefined
+                prefetch={false}
+                title={isCollapsed ? item.name : undefined
                 }
                 className={`flex w-full items-center rounded-lg py-2.5 text-left transition-all duration-200 ${
-                  isCollapsed
-                    ? "justify-center px-2"
-                    : "gap-3 px-3"
-                } ${
-                  isActive
-                    ? "bg-indigo-600 text-white font-medium shadow-sm"
-                    : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                  isCollapsed ? "justify-center px-2": "gap-3 px-3"
+                } ${ isActive ? "bg-indigo-600 text-white font-medium shadow-sm" : "text-slate-300 hover:bg-slate-800 hover:text-white"
                 }`}
               >
                 <item.icon
                   className={`h-4 w-4 shrink-0 ${
-                    isActive
-                      ? "text-white"
-                      : "text-slate-400"
+                    isActive ? "text-white" : "text-slate-400"
                   }`}
                 />
 
                 <span
                   className={
-                    isCollapsed
-                      ? "sr-only"
-                      : "text-sm"
+                    isCollapsed ? "sr-only" : "text-sm"
                   }
                 >
                   {item.name}
@@ -384,9 +372,7 @@ export default function Sidebar({ role }: SidebarProps) {
       <div className="p-3 border-t border-slate-800">
         <div
           className={`flex items-center ${
-            isCollapsed
-              ? "flex-col gap-2"
-              : "gap-2"
+            isCollapsed ? "flex-col gap-2" : "gap-2"
           }`}
         >
           {/* Collapse Button */}
@@ -395,19 +381,13 @@ export default function Sidebar({ role }: SidebarProps) {
             type="button"
             onClick={toggleSidebar}
             aria-label={
-              isCollapsed
-                ? "Expand sidebar"
-                : "Collapse sidebar"
+              isCollapsed ? "Expand sidebar" : "Collapse sidebar"
             }
             title={
-              isCollapsed
-                ? "Expand sidebar"
-                : "Collapse sidebar"
+              isCollapsed ? "Expand sidebar" : "Collapse sidebar"
             }
             className={`hidden md:inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white ${
-              isCollapsed
-                ? ""
-                : "shrink-0"
+              isCollapsed ? "" : "shrink-0"
             }`}
           >
             {isCollapsed ? (
@@ -423,23 +403,17 @@ export default function Sidebar({ role }: SidebarProps) {
             type="button"
             onClick={handleLogout}
             title={
-              isCollapsed
-                ? "Sign Out"
-                : undefined
+              isCollapsed ? "Sign Out" : undefined
             }
             className={`flex items-center rounded-lg py-2 text-left text-slate-300 transition-colors hover:bg-slate-800 hover:text-white ${
-              isCollapsed
-                ? "justify-center px-2"
-                : "flex-1 justify-start gap-3 px-3"
+              isCollapsed ? "justify-center px-2" : "flex-1 justify-start gap-3 px-3"
             }`}
           >
             <LogOut className="h-4 w-4 shrink-0 text-slate-400" />
 
             <span
               className={
-                isCollapsed
-                  ? "sr-only"
-                  : "text-sm font-medium leading-none"
+                isCollapsed ? "sr-only" : "text-sm font-medium leading-none"
               }
             >
               Sign Out

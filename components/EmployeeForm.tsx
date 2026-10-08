@@ -673,7 +673,7 @@ const handleSubmit = async (e: React.FormEvent) => {
               </div>
             <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Sur Name *
+                  SurName *
                 </label>
 
                 <input
@@ -761,8 +761,18 @@ const handleSubmit = async (e: React.FormEvent) => {
               )}
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Phone Number</label>
-              <input type="tel" name="phone" value={formData.phone || ""} onChange={handleChange} minLength={10} required className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none" />
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                Phone Number
+              </label>
+              <input type="tel" name="phone" value={formData.phone || ""}
+                onChange={(e) => {
+                  const value = e.target.value.replace(/\D/g, "").slice(0, 10);
+                  setFormData((prev) => ({
+                    ...prev,
+                    phone: value,
+                  }));
+                }} inputMode="numeric" maxLength={10} pattern="[0-9]{10}" required placeholder="Enter 10-digit phone number" className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
+              />
             </div>
 
             {mode === "add" && (
@@ -1087,65 +1097,66 @@ const handleSubmit = async (e: React.FormEvent) => {
               </select>
             </div>
 
-            {/* Client Name */}
-            <div ref={companyRef} className="relative">
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                Client Name
-              </label>
+            {/* Client Name - Only Outsource */}
+            {formData.client_type === "outsource" && (
+              <div ref={companyRef} className="relative">
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Client Name
+                </label>
 
-              <input
-                type="text"
-                name="company_name"
-                value={companySearch}
-                onChange={(e) => {
-                  const value = e.target.value;
+                <input
+                  type="text"
+                  name="company_name"
+                  value={companySearch}
+                  onChange={(e) => {const value = e.target.value;
 
-                  setCompanySearch(value);
+                    setCompanySearch(value);
 
-                  setFormData((prev) => ({
-                    ...prev,
-                    company_name: value,
-                  }));
+                    setFormData((prev) => ({
+                      ...prev,
+                      company_name: value,
+                    }));
 
-                  setShowCompanyDropdown(true);
-                }}
-                onFocus={() => setShowCompanyDropdown(true)}
-                placeholder="Search company"
-                autoComplete="off"
-                required
-                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
-              />
+                    setShowCompanyDropdown(true);
+                  }}
+                  onFocus={() => setShowCompanyDropdown(true)}
+                  placeholder="Search company"
+                  autoComplete="off"
+                  required={formData.client_type === "outsource"}
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
+                />
 
-              {showCompanyDropdown && companySearch && (
-                <div className="absolute z-50 mt-1 w-full max-h-60 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg">
-                  {filteredCompanies.length > 0 ? (
-                    filteredCompanies.map((company, index) => (
-                      <button
-                        key={`${company.company_name}-${index}`}
-                        type="button"
-                        onClick={() => {
-                          setCompanySearch(company.company_name);
+                {showCompanyDropdown && companySearch && (
+                  <div className="absolute z-50 mt-1 w-full max-h-60 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg">
+                    {filteredCompanies.length > 0 ? (
+                      filteredCompanies.map((company, index) => (
+                        <button
+                          key={`${company.company_name}-${index}`}
+                          type="button"
+                          onClick={() => {
+                            setCompanySearch(company.company_name);
 
-                          setFormData((prev) => ({
-                            ...prev,
-                            company_name: company.company_name,
-                          }));
+                            setFormData((prev) => ({
+                              ...prev,
+                              company_name: company.company_name,
+                            }));
 
-                          setShowCompanyDropdown(false);
-                        }}
-                        className="w-full px-4 py-2.5 text-left text-sm font-medium text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
-                      >
-                        {company.company_name}
-                      </button>
-                    ))
-                  ) : (
-                    <div className="px-4 py-3 text-sm text-slate-500">
-                      No companies found
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+                            setShowCompanyDropdown(false);
+                          }}
+                          className="w-full px-4 py-2.5 text-left text-sm font-medium text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
+                        >
+                          {company.company_name}
+                        </button>
+                      ))
+                    ) : (
+                      <div className="px-4 py-3 text-sm text-slate-500">
+                        No companies found
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Project - Only In-House */}
             {formData.client_type === "in-house" && (
@@ -2109,12 +2120,12 @@ const handleSubmit = async (e: React.FormEvent) => {
             >
               ← Back
             </button>
-
             <button
               type="button"
               onClick={() => {
                 const missingFields: string[] = [];
 
+                // TAB 1 - Employment
                 if (activeTab === 1) {
                   if (!formData.employee_id?.trim()) {
                     missingFields.push("Employee ID");
@@ -2152,10 +2163,15 @@ const handleSubmit = async (e: React.FormEvent) => {
                     missingFields.push("Client Type");
                   }
 
-                  if (!formData.company_name?.trim()) {
+                  // Client Name required ONLY for Outsource
+                  if (
+                    formData.client_type === "outsource" &&
+                    !formData.company_name?.trim()
+                  ) {
                     missingFields.push("Client Name");
                   }
 
+                  // Project required ONLY for In-House
                   if (
                     formData.client_type === "in-house" &&
                     !formData.project_id
@@ -2164,6 +2180,7 @@ const handleSubmit = async (e: React.FormEvent) => {
                   }
                 }
 
+                // TAB 5 - Statutory
                 if (activeTab === 5) {
                   if (esiEligible && !esiNumber?.trim()) {
                     missingFields.push("ESI Number");
@@ -2174,31 +2191,12 @@ const handleSubmit = async (e: React.FormEvent) => {
                   }
                 }
 
-                if (activeTab === 3) {
-                  if (!formData.bank_name?.trim()) {
-                    missingFields.push("Bank Name");
-                  }
-
-                  if (!formData.bank_account_number?.trim()) {
-                    missingFields.push("Bank Account Number");
-                  }
-
-                  if (!formData.ifsc_code?.trim()) {
-                    missingFields.push("IFSC Code");
-                  }
-
-                  if (!formData.pan_number?.trim()) {
-                    missingFields.push("PAN Number");
-                  }
-
-                  if (!formData.aadhar_number?.trim()) {
-                    missingFields.push("Aadhaar Number");
-                  }
-                }
-
-                if (activeTab === 4) {
-                  // Add your required Address / Emergency validation here
-                }
+                // No required validation for:
+                // TAB 2 - Personal
+                // TAB 3 - Bank & Identity
+                // TAB 4 - Address & Emergency
+                // Documents
+                // Accessories
 
                 if (missingFields.length > 0) {
                   setError(missingFields);

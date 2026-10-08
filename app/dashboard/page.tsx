@@ -35,18 +35,73 @@ export default async function DashboardPage() {
     redirect('/portal');
   }
 
-  // Fetch employees and calculate live stats
-  const allEmployees = await DataStore.getEmployees();
-  const totalEmployees = allEmployees.length;
-  const activeEmployees = allEmployees.filter(e => e.status === 'active').length;
-  const onNotice = allEmployees.filter(e => e.status === 'on_notice').length;
-  const recentEmployees = allEmployees.slice(0, 5);
+    // Current date/month
   const now = new Date();
   const currentMonth = now.getMonth();
   const currentYear = now.getFullYear();
+
+
+  // Fetch dashboard data in parallel
+  const allEmployeesPromise = DataStore.getEmployees(false); // Fetch employees without project details for performance
+
+  const profileRequestsPromise =
+    role === 'hr'
+      ? DataStore.getProfileChangeRequests()
+      : Promise.resolve([]);
+
+  const leaveRequestsPromise =
+    role === 'hr'
+      ? DataStore.getLeaveRequests()
+      : Promise.resolve([]);
+
+  const regularizationsPromise =
+    role === 'hr'
+      ? DataStore.getAttendanceRegularizations()
+      : Promise.resolve([]);
+
+  const projectsPromise =
+    role === 'ceo'
+      ? DataStore.getProjects()
+      : Promise.resolve([]);
+
+  const payslipsPromise =
+    role === 'ceo'
+      ? DataStore.getMonthlyPayrollTotal(currentMonth + 1, currentYear
+      ): Promise.resolve([]);
+
+  const [
+    allEmployees,
+    profileRequests,
+    leaveRequests,
+    regularizations,
+    projects,
+    monthlyPayrollTotal,
+  ] = await Promise.all([
+    allEmployeesPromise,
+    profileRequestsPromise,
+    leaveRequestsPromise,
+    regularizationsPromise,
+    projectsPromise,
+    payslipsPromise,
+  ]);
+
+  const totalEmployees = allEmployees.length;
+  const activeEmployees = allEmployees.filter(
+    (e) => e.status === 'active'
+  ).length;
+
+  const onNotice = allEmployees.filter(
+    (e) => e.status === 'on_notice'
+  ).length;
+
+  const recentEmployees = allEmployees.slice(0, 5);
+
+
   const newHires = allEmployees.filter((employee) => {
     if (!employee.joining_date) return false;
+
     const joiningDate = new Date(employee.joining_date);
+
     return (
       joiningDate.getMonth() === currentMonth &&
       joiningDate.getFullYear() === currentYear
@@ -62,21 +117,12 @@ export default async function DashboardPage() {
     recentEmployees: recentEmployees || [],
   };
 
-  // Fetch pending action items for HR and high-level figures for CEO
-  const profileRequests = await DataStore.getProfileChangeRequests();
-  const leaveRequests = await DataStore.getLeaveRequests();
-  const regularizations = await DataStore.getAttendanceRegularizations();
-  const projects = await DataStore.getProjects();
-  const payslips = await DataStore.getPayslips();
 
   const pendingProfileCount = profileRequests.filter(r => r.status === 'pending').length;
   const pendingLeaveCount = leaveRequests.filter(r => r.status === 'pending').length;
   const pendingRegCount = regularizations.filter(r => r.status === 'pending').length;
   const totalPendingActions = pendingProfileCount + pendingLeaveCount + pendingRegCount;
 
-  const monthlyPayrollTotal = payslips
-    .filter(p => p.payroll_month === currentMonth + 1 && p.payroll_year === currentYear)
-    .reduce((acc, c) => acc + c.net_salary, 0);
 
   return (
     <div className="flex-1 space-y-6 max-w-7xl mx-auto">
