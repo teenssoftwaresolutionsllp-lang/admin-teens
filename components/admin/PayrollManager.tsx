@@ -813,6 +813,8 @@ function PayslipBreakupRow({
             ...item,
             calculation_type:editingComponent.calculation_type,
             value: numericValue,
+            is_active: editingComponent.is_active,
+            affects_lop: editingComponent.affects_lop,
           }: item
         )
       );
@@ -913,7 +915,7 @@ function PayslipBreakupRow({
           <MetricCard icon={CircleDollarSign} label="Net Monthly Payout" value={formatCurrency(payrollMetrics.netPayout)} helper={`${payrollMetrics.employeeCount} payslip${payrollMetrics.employeeCount === 1 ? "" : "s"} generated`} />
           <MetricCard icon={TrendingDown} label="LOP Deductions" value={formatCurrency(payrollMetrics.lopDeduction)} helper="Loss of pay deduction" />
           <MetricCard icon={Users} label="Employees Processed" value={String(payrollMetrics.employeeCount)} helper={`of ${activeEmployees.length} active employees`} />
-          <MetricCard icon={Settings} label="Active Salary Heads" value={String(payrollMetrics.activeComponents)} helper={`of ${activeEmployees.length} configured`} />
+          <MetricCard icon={Settings} label="Active Salary Heads" value={String(payrollMetrics.activeComponents)} helper={`of ${components.length-2} configured`} />
         </div>
 
         <div className="mt-4 rounded-xl border border-slate-200 bg-white p-1.5 shadow-sm">
@@ -2278,13 +2280,13 @@ function PayslipBreakupRow({
 
                               {/* GROSS EARNINGS */}
 
-                              <div className="mt-2 flex min-h-[52px] items-center justify-between gap-4 rounded-md bg-red-50 px-4 py-3">
+                              <div className="mt-2 flex min-h-[52px] items-center justify-between gap-4 rounded-md bg-green-50 px-4 py-3">
 
-                                <span className="text-xs font-bold text-red-800">
+                                <span className="text-xs font-bold text-green-800">
                                   Gross Earnings
                                 </span>
 
-                                <span className="whitespace-nowrap text-sm font-bold text-red-900">
+                                <span className="whitespace-nowrap text-sm font-bold text-green-800">
                                   {formatPayslipCurrency(
                                     previewSlip.gross_salary || 0
                                   )}
@@ -2343,13 +2345,13 @@ function PayslipBreakupRow({
 
                               {/* TOTAL DEDUCTIONS */}
 
-                              <div className="mt-2 flex min-h-[52px] items-center justify-between gap-4 rounded-md bg-green-50 px-4 py-3">
+                              <div className="mt-2 flex min-h-[52px] items-center justify-between gap-4 rounded-md bg-red-50 px-4 py-3">
 
-                                <span className="text-xs font-bold text-green-800">
+                                <span className="text-xs font-bold text-red-800">
                                   Total Deductions
                                 </span>
 
-                                <span className="whitespace-nowrap text-sm font-bold text-green-900">
+                                <span className="whitespace-nowrap text-sm font-bold text-red-800">
                                   {formatPayslipCurrency(
                                     previewSlip.total_deductions || 0
                                   )}

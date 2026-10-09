@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 
 import {
   Employee,
@@ -39,10 +39,14 @@ export default function EmployeeLeavesView({
      STATE
   ============================================================ */
 
-  const [balances] =
+  const [balances, setBalances] =
     useState<EmployeeLeaveBalance[]>(
       initialBalances ?? []
     );
+
+  useEffect(() => {
+    setBalances(initialBalances ?? []);
+  }, [initialBalances]);
 
   const [requests, setRequests] =
     useState<LeaveRequest[]>(
@@ -74,14 +78,7 @@ export default function EmployeeLeavesView({
   const getLeaveTypeId = (
     ...names: string[]
   ) => {
-    const found = leaveTypes.find((type) =>
-      names.some(
-        (name) =>
-          type.name
-            ?.toLowerCase()
-            .trim() ===
-          name.toLowerCase().trim()
-      )
+    const found = leaveTypes.find((type) =>names.some((name) => type.name ?.toLowerCase().trim() === name.toLowerCase().trim())
     );
 
     return found?.id ?? "";
@@ -505,7 +502,7 @@ export default function EmployeeLeavesView({
               </span>
 
               <span className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider">
-                Year 2026
+                Year {b.year}
               </span>
 
             </div>

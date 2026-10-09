@@ -1775,6 +1775,7 @@ export class DataStore {
     }
   }
 
+
   static async updateLeaveType(
     id: string,
     updates: Partial<LeaveType>
@@ -1782,13 +1783,13 @@ export class DataStore {
     const cache = getCache();
     const supabase = await createAdminClient();
 
-    // Update leave type
+    // Update the leave type.
     const { data: updatedLeaveType, error } = await supabase
       .from("leave_types")
       .update(updates)
       .eq("id", id)
       .select("*")
-      .single();
+      .maybeSingle();
 
     if (error) {
       console.error("updateLeaveType error:", error);
@@ -1799,7 +1800,7 @@ export class DataStore {
       return null;
     }
 
-    // Update local leave type cache
+    // Update local leave-type cache.
     const idx = cache.leaveTypes.findIndex((lt) => lt.id === id);
 
     if (idx >= 0) {
@@ -1808,36 +1809,75 @@ export class DataStore {
       cache.leaveTypes.push(updatedLeaveType as LeaveType);
     }
 
-    // When annual quota changes, update all employee balances
+    // Update employee balances only when the annual quota changes.
     if (updates.annual_quota !== undefined) {
       const year = new Date().getFullYear();
       const newQuota = Number(updates.annual_quota);
 
-      // ONE database request instead of one UPDATE per employee
-      const { error: balanceUpdateError } = await supabase.rpc(
-        "update_leave_type_balances",
-        {
-          p_leave_type_id: id,
-          p_year: year,
-          p_new_quota: newQuota,
-        }
-      );
+      const { data: balances, error: balanceFetchError } = await supabase
+        .from("employee_leave_balances")
+        .select("id, employee_id, leave_type_id, year, allocated_days, used_days")
+        .eq("leave_type_id", id)
+        .eq("year", year);
 
-      if (balanceUpdateError) {
+      if (balanceFetchError) {
         console.error(
-          "Failed to update employee leave balances:",
-          balanceUpdateError
+          "Failed to fetch employee leave balances:",
+          balanceFetchError
         );
-
-        throw new Error(balanceUpdateError.message);
+        throw new Error(balanceFetchError.message);
       }
 
-      // Update local cache
+      // Update balances concurrently instead of sequentially.
+      const balanceUpdates = await Promise.all(
+        (balances || []).map(async (balance) => {
+          const usedDays = Number(balance.used_days || 0);
+          const newBalanceDays = Math.max(newQuota - usedDays, 0);
+
+          const { error } = await supabase
+            .from("employee_leave_balances")
+            .update({
+              allocated_days: newQuota,
+              balance_days: newBalanceDays,
+            })
+            .eq("id", balance.id);
+
+          if (error) {
+            throw new Error(
+              `Failed to update leave balance ${balance.id}: ${error.message}`
+            );
+          }
+
+          return {
+            ...balance,
+            allocated_days: newQuota,
+            balance_days: newBalanceDays,
+          };
+        })
+      );
+
+      // Refresh cached balances.
+      const updatedById = new Map(
+        balanceUpdates.map((balance) => [balance.id, balance])
+      );
+
       cache.leaveBalances = cache.leaveBalances.map((balance) => {
         if (
           balance.leave_type_id === id &&
           balance.year === year
         ) {
+          const updated = updatedById.get(balance.id);
+
+          if (updated) {
+            return {
+              ...balance,
+              allocated_days: updated.allocated_days,
+              balance_days: updated.balance_days,
+            };
+          }
+
+          // Keep cached balances consistent even if this row wasn't
+          // returned by the database fetch.
           const usedDays = Number(balance.used_days || 0);
 
           return {
@@ -1855,118 +1895,118 @@ export class DataStore {
   }
 
   static async getLeaveBalances(
-    employeeId: string,
-    year: number = new Date().getFullYear()
-  ): Promise<EmployeeLeaveBalance[]> {
-    const cache = getCache();
+      employeeId: string,
+      year: number = new Date().getFullYear()
+    ): Promise<EmployeeLeaveBalance[]> {
+      const cache = getCache();
 
-    const employee = await this.getEmployeeById(employeeId);
+      const employee = await this.getEmployeeById(employeeId);
 
-    if (!employee) {
-      return [];
-    }
+      if (!employee) {
+        return [];
+      }
 
-    const employeeUuid = employee.id;
+      const employeeUuid = employee.id;
 
-    const supabase = await createAdminClient();
+      const supabase = await createAdminClient();
 
-    // Get existing balances from Supabase
-    const { data: dbBalances, error } = await supabase
-      .from("employee_leave_balances")
-      .select("*,leave_type:leave_types(*)")
-      .eq("employee_id", employeeUuid)
-      .eq("year", year);
+      // Get existing balances from Supabase
+      const { data: dbBalances, error } = await supabase
+        .from("employee_leave_balances")
+        .select("*,leave_type:leave_types(*)")
+        .eq("employee_id", employeeUuid)
+        .eq("year", year);
 
-    if (error) {
-      throw new Error(error.message);
-    }
+      if (error) {
+        throw new Error(error.message);
+      }
 
-    let balances: EmployeeLeaveBalance[] = (dbBalances || [])
-      .filter(
-        (balance: any) =>
-          balance.leave_type?.is_active &&
-          (balance.leave_type?.code === "CL" ||
-            balance.leave_type?.code === "SL")
-      )
-      .map((balance: any) => ({
-        ...balance,
-        leave_type: balance.leave_type,
-      })) as EmployeeLeaveBalance[];
+      let balances: EmployeeLeaveBalance[] = (dbBalances || [])
+        .filter(
+          (balance: any) =>
+            balance.leave_type?.is_active &&
+            (balance.leave_type?.code === "CL" ||
+              balance.leave_type?.code === "SL")
+        )
+        .map((balance: any) => ({
+          ...balance,
+          leave_type: balance.leave_type,
+        })) as EmployeeLeaveBalance[];
 
-    const activeLeaveTypes = (await this.getLeaveTypes()).filter(
-      (lt) =>
-        lt.is_active &&
-        (lt.code === "CL" || lt.code === "SL")
-    );
+      const activeLeaveTypes = (await this.getLeaveTypes()).filter(
+        (lt) =>
+          lt.is_active &&
+          (lt.code === "CL" || lt.code === "SL")
+      );
 
-    const existingBalanceTypeIds = new Set(
-      balances.map((balance) => balance.leave_type_id)
-    );
+      const existingBalanceTypeIds = new Set(
+        balances.map((balance) => balance.leave_type_id)
+      );
 
-    const missingLeaveTypes = activeLeaveTypes.filter(
-      (lt) => !existingBalanceTypeIds.has(lt.id)
-    );
+      const missingLeaveTypes = activeLeaveTypes.filter(
+        (lt) => !existingBalanceTypeIds.has(lt.id)
+      );
 
-    const rows = missingLeaveTypes.map((lt) => ({
-      employee_id: employeeUuid,
-      leave_type_id: lt.id,
-      year,
-      allocated_days: lt.annual_quota,
-      used_days: 0,
-      balance_days: lt.annual_quota,
-    }));
+      const rows = missingLeaveTypes.map((lt) => ({
+        employee_id: employeeUuid,
+        leave_type_id: lt.id,
+        year,
+        allocated_days: lt.annual_quota,
+        used_days: 0,
+        balance_days: lt.annual_quota,
+      }));
 
-    if (rows.length > 0) {
-      const { data: createdBalances, error: insertError } = await supabase
-        .from("employee_leave_balances")
-        .upsert(rows, {
-          onConflict: "employee_id,leave_type_id,year",
-        })
-        .select();
+      if (rows.length > 0) {
+        const { data: createdBalances, error: insertError } = await supabase
+          .from("employee_leave_balances")
+          .upsert(rows, {
+            onConflict: "employee_id,leave_type_id,year",
+          })
+          .select();
 
-      if (insertError) {
-        throw new Error(insertError.message);
-      }
+        if (insertError) {
+          throw new Error(insertError.message);
+        }
 
-      const createdWithLeaveTypes = (createdBalances || []).map(
-        (balance: any) => ({
-          ...balance,
-          leave_type: activeLeaveTypes.find(
-            (lt) => lt.id === balance.leave_type_id
-          ),
-        })
-      );
+        const createdWithLeaveTypes = (createdBalances || []).map(
+          (balance: any) => ({
+            ...balance,
+            leave_type: activeLeaveTypes.find(
+              (lt) => lt.id === balance.leave_type_id
+            ),
+          })
+        );
 
-      balances = [
-        ...balances,
-        ...createdWithLeaveTypes,
-      ] as EmployeeLeaveBalance[];
-    }
+        balances = [
+          ...balances,
+          ...createdWithLeaveTypes,
+        ] as EmployeeLeaveBalance[];
+      }
 
-    // Add leave type information
-    balances = balances.map((balance: any) => ({
-      ...balance,
-      leave_type:
-        balance.leave_type ||
-        activeLeaveTypes.find(
-          (lt) => lt.id === balance.leave_type_id
-        ),
-    }));
+      // Add leave type information
+      balances = balances.map((balance: any) => ({
+        ...balance,
+        leave_type:
+          balance.leave_type ||
+          activeLeaveTypes.find(
+            (lt) => lt.id === balance.leave_type_id
+          ),
+      }));
 
-    // Keep cache synchronized
-    cache.leaveBalances = [
-      ...cache.leaveBalances.filter(
-        (b) =>
-          !(
-            b.employee_id === employeeUuid &&
-            b.year === year
-          )
-      ),
-      ...balances,
-    ];
+      // Keep cache synchronized
+      cache.leaveBalances = [
+        ...cache.leaveBalances.filter(
+          (b) =>
+            !(
+              b.employee_id === employeeUuid &&
+              b.year === year
+            )
+        ),
+        ...balances,
+      ];
 
-    return balances;
-  }
+      return balances;
+    }
 
   static async getLeaveRequests(employeeId?: string): Promise<LeaveRequest[]> {
     const cache = getCache();
@@ -1998,7 +2038,8 @@ export class DataStore {
             id,
             employee_id,
             first_name,
-            last_name
+            last_name,
+            profile_photo_url
         )`)
         .order("created_at", { ascending: false });
 
@@ -2452,18 +2493,22 @@ export class DataStore {
         throw error;
       }
 
-      const slips: Payslip[] = [];
 
-      for (const row of data || []) {
-        const employee = await this.getEmployeeById(
-          row.employee_id
-        );
+    const rows = data || [];
 
-        slips.push({
-          ...(row as Payslip),
-          employee: employee || undefined,
-        });
-      }
+    // Fetch employee records once instead of looking up each
+    // payslip's employee individually.
+    const employees = await this.getEmployees();
+
+    const employeesById = new Map(
+      employees.map((employee) => [employee.id, employee])
+    );
+
+    const slips: Payslip[] = rows.map((row) => ({
+      ...(row as Payslip),
+      employee: employeesById.get(row.employee_id) || undefined,
+    }));
+
 
       cache.payslips = slips;
 

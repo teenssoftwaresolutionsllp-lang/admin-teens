@@ -946,59 +946,27 @@ export default function EmployeeAttendanceView({
     [leaveRequests]
   );
 
-  const sickLeaveRemaining =
-    useMemo(() => {
-      const balance =
-        leaveBalances.find(
-          (item: any) =>
-            getLeaveTypeCode(
-              item
-            ) === "SL"
-        );
 
-      if (!balance) {
-        return 12;
-      }
-
-      return Math.max(
-        0,
-        getBalanceValue(
-          balance
-        )
-      );
-    }, [leaveBalances]);
-
-  const casualLeaveRemaining =
-    useMemo(() => {
-      const balance =
-        leaveBalances.find(
-          (item: any) =>
-            getLeaveTypeCode(
-              item
-            ) === "CL"
-        );
-
-      if (!balance) {
-        return 12;
-      }
-
-      return Math.max(
-        0,
-        getBalanceValue(
-          balance
-        )
-      );
-    }, [leaveBalances]);
-
-  const leaveBalance = useMemo(
-    () =>
-      sickLeaveRemaining +
-      casualLeaveRemaining,
-    [
-      sickLeaveRemaining,
-      casualLeaveRemaining,
-    ]
+const sickLeaveRemaining = useMemo(() => {
+  const balance = leaveBalances.find(
+    (item: any) => getLeaveTypeCode(item) === "SL"
   );
+
+  return balance ? Math.max(0, getBalanceValue(balance)) : 0;
+}, [leaveBalances]);
+
+const casualLeaveRemaining = useMemo(() => {
+  const balance = leaveBalances.find(
+    (item: any) => getLeaveTypeCode(item) === "CL"
+  );
+
+  return balance ? Math.max(0, getBalanceValue(balance)) : 0;
+}, [leaveBalances]);
+
+const leaveBalance = useMemo(
+  () => sickLeaveRemaining + casualLeaveRemaining,
+  [sickLeaveRemaining, casualLeaveRemaining]
+);
 
   const visibleLeaveTypes =
     useMemo(() => {

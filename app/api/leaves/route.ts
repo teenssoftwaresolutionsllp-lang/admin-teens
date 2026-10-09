@@ -2,21 +2,53 @@ import { NextResponse } from 'next/server';
 import { DataStore } from '@/lib/data-store';
 import { createClient } from '@/lib/supabase-server';
 
+
 export async function GET(request: Request) {
   try {
     const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const {data: { user }} = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json(
+        { error: "Unauthorized" },
+        { status: 401 }
+      );
+    }
 
     const { searchParams } = new URL(request.url);
-    const employeeId = searchParams.get('employeeId') || undefined;
+    const employeeId = searchParams.get("employeeId") || undefined;
 
+    // Fetch leave requests and leave types.
     const requests = await DataStore.getLeaveRequests(employeeId);
     const leaveTypes = await DataStore.getLeaveTypes();
 
-    return NextResponse.json({ requests, leaveTypes });
+    // Fetch employee leave balances.
+    const leaveBalances = employeeId
+      ? await DataStore.getLeaveBalances(employeeId)
+      : [];
+
+    return NextResponse.json(
+      {
+        success: true,
+        requests,
+        leaveRequests: requests,
+        leaveTypes,
+        leaveBalances,
+      },
+      {
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate",
+        },
+      }
+    );
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("GET /api/leaves error:", error);
+
+    return NextResponse.json(
+      {
+        error: error?.message || "Failed to load leave information",
+      },
+      { status: 500 }
+    );
   }
 }
 
