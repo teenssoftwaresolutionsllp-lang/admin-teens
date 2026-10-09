@@ -1540,6 +1540,7 @@ export default function EmployeeAttendanceView({
 
   const activeDate =
     selectedDate || todayString;
+    
 
   const selectedLog = useMemo(() => {
     const found = logs.find(

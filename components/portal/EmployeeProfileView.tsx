@@ -455,76 +455,77 @@ export default function EmployeeProfileView({
      PROFILE PHOTO SYNC
   ============================================================ */
 
-  useEffect(() => {
-    const databasePhoto =
-      employeeData.profile_photo_url || null;
+ useEffect(() => {
+  const syncProfilePhoto = () => {
+    try {
+      const savedPhoto =
+        window.localStorage.getItem("profile-avatar-url");
 
-    setProfilePhotoUrl(databasePhoto);
-
-    if (!databasePhoto) {
-      try {
-        const savedPhoto =
-          window.localStorage.getItem(
-            "profile-avatar-url"
-          );
-
-        if (savedPhoto) {
-          setProfilePhotoUrl(savedPhoto);
-        }
-      } catch (error) {
-        console.error(
-          "Unable to restore profile photo:",
-          error
-        );
-      }
-    }
-
-    const handlePhotoUpdate = (
-      event: Event
-    ) => {
-      const customEvent =
-        event as CustomEvent<{
-          avatarUrl?: string | null;
-        }>;
-
-      const newAvatarUrl =
-        customEvent.detail?.avatarUrl || null;
-
-      if (!newAvatarUrl) {
-        return;
-      }
-
+      // Prefer the latest uploaded photo.
+      // Fall back to the database photo only if no saved photo exists.
       setProfilePhotoUrl(
-        newAvatarUrl
+        savedPhoto || employeeData.profile_photo_url || null
+      );
+    } catch (error) {
+      console.error(
+        "Unable to restore profile photo:",
+        error
       );
 
-      try {
-        window.localStorage.setItem(
-          "profile-avatar-url",
-          newAvatarUrl
-        );
-      } catch (error) {
-        console.error(
-          "Unable to save profile photo:",
-          error
-        );
-      }
-    };
+      setProfilePhotoUrl(
+        employeeData.profile_photo_url || null
+      );
+    }
+  };
 
-    window.addEventListener(
+  const handlePhotoUpdate = (event: Event) => {
+    const customEvent = event as CustomEvent<{
+      avatarUrl?: string | null;
+    }>;
+
+    const newAvatarUrl = customEvent.detail?.avatarUrl;
+
+    if (!newAvatarUrl) return;
+
+    setProfilePhotoUrl(newAvatarUrl);
+
+    try {
+      window.localStorage.setItem(
+        "profile-avatar-url",
+        newAvatarUrl
+      );
+    } catch (error) {
+      console.error(
+        "Unable to save profile photo:",
+        error
+      );
+    }
+  };
+
+  syncProfilePhoto();
+
+  window.addEventListener(
+    "profile-photo-updated",
+    handlePhotoUpdate
+  );
+
+  window.addEventListener(
+    "employee-profile-photo-updated",
+    handlePhotoUpdate
+  );
+
+  return () => {
+    window.removeEventListener(
       "profile-photo-updated",
       handlePhotoUpdate
     );
 
-    return () => {
-      window.removeEventListener(
-        "profile-photo-updated",
-        handlePhotoUpdate
-      );
-    };
-  }, [
-    employeeData.profile_photo_url,
-  ]);
+    window.removeEventListener(
+      "employee-profile-photo-updated",
+      handlePhotoUpdate
+    );
+  };
+}, [employeeData.profile_photo_url]);
 
   /* ============================================================
      LOAD DOCUMENTS
@@ -2190,7 +2191,7 @@ export default function EmployeeProfileView({
 
                 </div>
 
-                <button
+                {/* <button
                   type="button"
                   onClick={() =>
                     openEditSection(
@@ -2204,7 +2205,7 @@ export default function EmployeeProfileView({
 
                   Edit
 
-                </button>
+                </button> */}
 
               </div>
 
@@ -2609,7 +2610,7 @@ export default function EmployeeProfileView({
 
                 </div>
 
-                <button
+                {/* <button
                   type="button"
                   onClick={() =>
                     openEditSection(
@@ -2623,7 +2624,7 @@ export default function EmployeeProfileView({
 
                   Edit
 
-                </button>
+                </button> */}
 
               </div>
 
@@ -2695,7 +2696,7 @@ export default function EmployeeProfileView({
 
                 </div>
 
-                <button
+                {/* <button
                   type="button"
                   onClick={() =>
                     openEditSection(
@@ -2709,7 +2710,7 @@ export default function EmployeeProfileView({
 
                   Edit
 
-                </button>
+                </button> */}
 
               </div>
 
@@ -2842,32 +2843,30 @@ export default function EmployeeProfileView({
           makes the modal exactly center of the viewport.
       ============================================================ */}
 
-      {isEditModalOpen && (
-        <div
-          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
-          onMouseDown={(event) => {
-            if (
-              event.target ===
-              event.currentTarget
-            ) {
-              closeEditModal();
-            }
-          }}
-        >
+    {isEditModalOpen && (
+  <div
+    className="fixed inset-0 z-[100] flex items-center justify-center bg-black/45 p-4"
+    onMouseDown={(event) => {
+      if (
+        event.target === event.currentTarget
+      ) {
+        closeEditModal();
+      }
+    }}
+  >
+<div
+  className="relative translate-y-6 w-full max-w-2xl max-h-[85vh] overflow-hidden rounded-2xl bg-white shadow-2xl flex flex-col"
+  onMouseDown={(event) => event.stopPropagation()
 
-          <div
-            className="relative w-full max-w-4xl max-h-[90vh] overflow-hidden rounded-2xl bg-white shadow-2xl flex flex-col"
-            onMouseDown={(event) =>
-              event.stopPropagation()
-            }
-          >
+  }
+>
+
 
             {/* ======================================================
                 MODAL HEADER
             ====================================================== */}
 
-            <div className="shrink-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
-
+            <div className="flex items-start justify-between border-b border-slate-200 px-6 py-5">
               <div>
 
                 <h2 className="text-lg font-bold text-slate-900">
@@ -3830,117 +3829,84 @@ export default function EmployeeProfileView({
                 {/* ==================================================
                     STATUTORY
                 ================================================== */}
-
-                {(editSection ===
-                  "all" ||
-                  editSection ===
-                    "statutory") && (
+                {(editSection === "all" ||
+                  editSection === "statutory") && (
                   <section>
-
                     <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-5">
                       Statutory Details
                     </h3>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-
+                      {/* PF — Employee and HR can edit */}
                       <div>
-
-                        <label
-                          htmlFor="pf"
-                          className={labelClass}
-                        >
+                        <label htmlFor="pf" className={labelClass}>
                           PF
                         </label>
 
                         <input
                           id="pf"
                           name="pf"
-                          value={
-                            editFormData.pf
-                          }
-                          onChange={
-                            handleInputChange
-                          }
+                          value={editFormData.pf}
+                          onChange={handleInputChange}
                           placeholder="Enter PF details"
                           className={inputClass}
                         />
-
                       </div>
 
+                      {/* ESI — HR only */}
                       <div>
-
-                        <label
-                          htmlFor="esi"
-                          className={labelClass}
-                        >
+                        <label htmlFor="esi" className={labelClass}>
                           ESI
                         </label>
 
                         <input
                           id="esi"
                           name="esi"
-                          value={
-                            editFormData.esi
-                          }
-                          onChange={
-                            handleInputChange
-                          }
+                          value={editFormData.esi}
+                          onChange={handleInputChange}
                           placeholder="Enter ESI details"
                           className={inputClass}
+                          readOnly={employeeData.role !== "hr" &&
+                                    employeeData.role !== "ceo"}
                         />
-
                       </div>
 
+                      {/* PT — HR only */}
                       <div>
-
-                        <label
-                          htmlFor="pt"
-                          className={labelClass}
-                        >
+                        <label htmlFor="pt" className={labelClass}>
                           Professional Tax (PT)
                         </label>
 
                         <input
                           id="pt"
                           name="pt"
-                          value={
-                            editFormData.pt
-                          }
-                          onChange={
-                            handleInputChange
-                          }
+                          value={editFormData.pt}
+                          onChange={handleInputChange}
                           placeholder="Enter PT details"
                           className={inputClass}
+                          readOnly={employeeData.role !== "hr" &&
+                                    employeeData.role !== "ceo"}
                         />
-
                       </div>
 
+                      {/* TDS — HR only */}
                       <div>
-
-                        <label
-                          htmlFor="tds"
-                          className={labelClass}
-                        >
+                        <label htmlFor="tds" className={labelClass}>
                           TDS
                         </label>
 
                         <input
                           id="tds"
                           name="tds"
-                          value={
-                            editFormData.tds
-                          }
-                          onChange={
-                            handleInputChange
-                          }
+                          value={editFormData.tds}
+                          onChange={handleInputChange}
                           placeholder="Enter TDS details"
                           className={inputClass}
+                          readOnly={employeeData.role !== "hr" &&
+                                    employeeData.role !== "ceo"}
                         />
-
                       </div>
-
                     </div>
-
                   </section>
                 )}
 
@@ -3948,7 +3914,7 @@ export default function EmployeeProfileView({
                     ACCESSORY MANAGEMENT
                 ================================================== */}
 
-                {(editSection ===
+                {/* {(editSection ===
                   "all" ||
                   editSection ===
                     "accessory") && (
@@ -3962,7 +3928,7 @@ export default function EmployeeProfileView({
 
                     </h3>
 
-                    {/* MAIN ACCESSORY */}
+                   
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
 
@@ -4016,7 +3982,7 @@ export default function EmployeeProfileView({
 
                     </div>
 
-                    {/* PERIPHERALS */}
+                    
 
                     <div className="mt-7">
 
@@ -4224,13 +4190,13 @@ export default function EmployeeProfileView({
                     </div>
 
                   </section>
-                )}
+                )} */}
 
                 {/* ==================================================
                     EMPLOYMENT
                 ================================================== */}
 
-                {(editSection ===
+                {/* {(editSection ===
                   "all" ||
                   editSection ===
                     "employment") && (
@@ -4413,7 +4379,7 @@ export default function EmployeeProfileView({
                     </div>
 
                   </section>
-                )}
+                )} */}
 
                 {/* ==================================================
                     ACTIONS

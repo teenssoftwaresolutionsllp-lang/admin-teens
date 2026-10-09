@@ -91,29 +91,23 @@ export default function Sidebar({
   // SYNC AVATAR FROM SERVER PROPS
   // ============================================================
 
-  useEffect(() => {
-    if (avatarUrl !== undefined) {
-      setProfileImage(avatarUrl || null);
+ useEffect(() => {
+  if (!avatarUrl) return;
 
-      try {
-        if (avatarUrl) {
-          window.localStorage.setItem(
-            "profile-avatar-url",
-            avatarUrl
-          );
-        } else {
-          window.localStorage.removeItem(
-            "profile-avatar-url"
-          );
-        }
-      } catch (error) {
-        console.error(
-          "Unable to synchronize profile photo:",
-          error
-        );
-      }
-    }
-  }, [avatarUrl]);
+  setProfileImage(avatarUrl);
+
+  try {
+    window.localStorage.setItem(
+      "profile-avatar-url",
+      avatarUrl
+    );
+  } catch (error) {
+    console.error(
+      "Unable to synchronize profile photo:",
+      error
+    );
+  }
+}, [avatarUrl]);
 
   // ============================================================
   // RESTORE AVATAR FROM LOCAL STORAGE
@@ -145,47 +139,55 @@ export default function Sidebar({
   // LISTEN FOR PROFILE PHOTO UPDATES
   // ============================================================
 
-  useEffect(() => {
-    const handlePhotoUpdate = (event: Event) => {
-      const customEvent =
-        event as CustomEvent<{
-          avatarUrl?: string | null;
-        }>;
+ useEffect(() => {
+  const handlePhotoUpdate = (event: Event) => {
+    const customEvent = event as CustomEvent<{
+      avatarUrl?: string | null;
+    }>;
 
-      const newAvatar =
-        customEvent.detail?.avatarUrl;
+    const newAvatar = customEvent.detail?.avatarUrl;
 
-      if (!newAvatar) {
-        return;
-      }
+    // Never erase the existing photo on an empty event.
+    if (!newAvatar) return;
 
-      setProfileImage(newAvatar);
+    setProfileImage(newAvatar);
 
-      try {
-        window.localStorage.setItem(
-          "profile-avatar-url",
-          newAvatar
-        );
-      } catch (error) {
-        console.error(
-          "Unable to save updated profile photo:",
-          error
-        );
-      }
-    };
+    try {
+      window.localStorage.setItem(
+        "profile-avatar-url",
+        newAvatar
+      );
+    } catch (error) {
+      console.error(
+        "Unable to save updated profile photo:",
+        error
+      );
+    }
+  };
 
-    window.addEventListener(
+  window.addEventListener(
+    "profile-photo-updated",
+    handlePhotoUpdate
+  );
+
+  // Support the event name used by the profile component too.
+  window.addEventListener(
+    "employee-profile-photo-updated",
+    handlePhotoUpdate
+  );
+
+  return () => {
+    window.removeEventListener(
       "profile-photo-updated",
       handlePhotoUpdate
     );
 
-    return () => {
-      window.removeEventListener(
-        "profile-photo-updated",
-        handlePhotoUpdate
-      );
-    };
-  }, []);
+    window.removeEventListener(
+      "employee-profile-photo-updated",
+      handlePhotoUpdate
+    );
+  };
+}, []);
 
   // ============================================================
   // LOGOUT
