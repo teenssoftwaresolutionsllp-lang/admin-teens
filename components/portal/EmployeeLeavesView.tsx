@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState } from "react";
 
 import {
   Employee,
@@ -39,22 +39,24 @@ export default function EmployeeLeavesView({
      STATE
   ============================================================ */
 
-  const [balances, setBalances] =
+  const [balances] =
     useState<EmployeeLeaveBalance[]>(
       initialBalances ?? []
     );
 
-  useEffect(() => {
-    setBalances(initialBalances ?? []);
-  }, [initialBalances]);
+  const [requests, setRequests] =
+    useState<LeaveRequest[]>(
+      initialRequests ?? []
+    );
 
-  const [requests, setRequests] = useState<LeaveRequest[]>(initialRequests ?? []);
+  const [isModalOpen, setIsModalOpen] =
+    useState(false);
 
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [submitting, setSubmitting] =
+    useState(false);
 
-  const [submitting, setSubmitting] = useState(false);
-
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] =
+    useState<string | null>(null);
 
   /* ============================================================
      TODAY
@@ -72,7 +74,14 @@ export default function EmployeeLeavesView({
   const getLeaveTypeId = (
     ...names: string[]
   ) => {
-    const found = leaveTypes.find((type) =>names.some((name) => type.name ?.toLowerCase().trim() === name.toLowerCase().trim())
+    const found = leaveTypes.find((type) =>
+      names.some(
+        (name) =>
+          type.name
+            ?.toLowerCase()
+            .trim() ===
+          name.toLowerCase().trim()
+      )
     );
 
     return found?.id ?? "";
@@ -496,7 +505,7 @@ export default function EmployeeLeavesView({
               </span>
 
               <span className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider">
-                Year {b.year}
+                Year 2026
               </span>
 
             </div>
