@@ -48,19 +48,13 @@ export default function EmployeeLeavesView({
     setBalances(initialBalances ?? []);
   }, [initialBalances]);
 
-  const [requests, setRequests] =
-    useState<LeaveRequest[]>(
-      initialRequests ?? []
-    );
+  const [requests, setRequests] = useState<LeaveRequest[]>(initialRequests ?? []);
 
-  const [isModalOpen, setIsModalOpen] =
-    useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
-  const [submitting, setSubmitting] =
-    useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
-  const [successMsg, setSuccessMsg] =
-    useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   /* ============================================================
      TODAY
