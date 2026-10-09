@@ -128,7 +128,7 @@ export class DataStore {
   /**
    * Fetch all employees — in-memory cache first, then DB fallback
    */
-  static async getEmployees(): Promise<Employee[]> {
+  static async getEmployees(includeProject = true): Promise<Employee[]> {
     const cache = getCache();
 
     // Try DB first
@@ -140,10 +140,14 @@ export class DataStore {
         .order("created_at", { ascending: false });
 
       if (!error && data && data.length > 0) {
-        const projects = await this.getProjects();
+        let projects: Project[] = [];
+
+        if (includeProject) {
+         projects = await this.getProjects();
+        }
         const result = data.map((emp) => ({
           ...emp,
-          project: projects.find((p) => p.id === emp.project_id) || projects[0],
+          project: includeProject ? projects.find((p) => p.id === emp.project_id) || projects[0] : undefined,
         }));
         // Sync DB data into cache
         for (const emp of result) {
@@ -223,6 +227,35 @@ export class DataStore {
     }
 
     return null;
+  }
+
+ //fast way to get monthly payroll total without fetching all payslips
+  static async getMonthlyPayrollTotal(
+    month: number,
+    year: number
+  ): Promise<number> {
+    try {
+      const supabase = await createAdminClient();
+
+      const { data, error } = await supabase
+        .from("payslips")
+        .select("net_salary")
+        .eq("payroll_month", month)
+        .eq("payroll_year", year);
+
+      if (error) {
+        console.error("getMonthlyPayrollTotal error:", error);
+        return 0;
+      }
+
+      return (data || []).reduce(
+        (total, row) => total + Number(row.net_salary || 0),
+        0
+      );
+    } catch (error) {
+      console.error("getMonthlyPayrollTotal error:", error);
+      return 0;
+    }
   }
 
   static async getEmployeeByEmail(email: string): Promise<Employee | null> {
@@ -1742,6 +1775,7 @@ export class DataStore {
     }
   }
 
+
   static async updateLeaveType(
     id: string,
     updates: Partial<LeaveType>
@@ -1749,13 +1783,13 @@ export class DataStore {
     const cache = getCache();
     const supabase = await createAdminClient();
 
-    // Update leave type in Supabase
+    // Update the leave type.
     const { data: updatedLeaveType, error } = await supabase
       .from("leave_types")
       .update(updates)
       .eq("id", id)
       .select("*")
-      .single();
+      .maybeSingle();
 
     if (error) {
       console.error("updateLeaveType error:", error);
@@ -1766,7 +1800,7 @@ export class DataStore {
       return null;
     }
 
-    // Update local cache
+    // Update local leave-type cache.
     const idx = cache.leaveTypes.findIndex((lt) => lt.id === id);
 
     if (idx >= 0) {
@@ -1775,7 +1809,7 @@ export class DataStore {
       cache.leaveTypes.push(updatedLeaveType as LeaveType);
     }
 
-    // When annual quota changes, update employee balances
+    // Update employee balances only when the annual quota changes.
     if (updates.annual_quota !== undefined) {
       const year = new Date().getFullYear();
       const newQuota = Number(updates.annual_quota);
@@ -1794,35 +1828,56 @@ export class DataStore {
         throw new Error(balanceFetchError.message);
       }
 
-      for (const balance of balances || []) {
-        const usedDays = Number(balance.used_days || 0);
+      // Update balances concurrently instead of sequentially.
+      const balanceUpdates = await Promise.all(
+        (balances || []).map(async (balance) => {
+          const usedDays = Number(balance.used_days || 0);
+          const newBalanceDays = Math.max(newQuota - usedDays, 0);
 
-        // New remaining balance
-        const newBalanceDays = Math.max(newQuota - usedDays, 0);
+          const { error } = await supabase
+            .from("employee_leave_balances")
+            .update({
+              allocated_days: newQuota,
+              balance_days: newBalanceDays,
+            })
+            .eq("id", balance.id);
 
-        const { error: balanceUpdateError } = await supabase
-          .from("employee_leave_balances")
-          .update({
+          if (error) {
+            throw new Error(
+              `Failed to update leave balance ${balance.id}: ${error.message}`
+            );
+          }
+
+          return {
+            ...balance,
             allocated_days: newQuota,
             balance_days: newBalanceDays,
-          })
-          .eq("id", balance.id);
+          };
+        })
+      );
 
-        if (balanceUpdateError) {
-          console.error(
-            "Failed to update employee leave balance:",
-            balanceUpdateError
-          );
-          throw new Error(balanceUpdateError.message);
-        }
-      }
+      // Refresh cached balances.
+      const updatedById = new Map(
+        balanceUpdates.map((balance) => [balance.id, balance])
+      );
 
-      // Update cache balances too
       cache.leaveBalances = cache.leaveBalances.map((balance) => {
         if (
           balance.leave_type_id === id &&
           balance.year === year
         ) {
+          const updated = updatedById.get(balance.id);
+
+          if (updated) {
+            return {
+              ...balance,
+              allocated_days: updated.allocated_days,
+              balance_days: updated.balance_days,
+            };
+          }
+
+          // Keep cached balances consistent even if this row wasn't
+          // returned by the database fetch.
           const usedDays = Number(balance.used_days || 0);
 
           return {
@@ -1840,118 +1895,118 @@ export class DataStore {
   }
 
   static async getLeaveBalances(
-    employeeId: string,
-    year: number = new Date().getFullYear()
-  ): Promise<EmployeeLeaveBalance[]> {
-    const cache = getCache();
+      employeeId: string,
+      year: number = new Date().getFullYear()
+    ): Promise<EmployeeLeaveBalance[]> {
+      const cache = getCache();
 
-    const employee = await this.getEmployeeById(employeeId);
+      const employee = await this.getEmployeeById(employeeId);
 
-    if (!employee) {
-      return [];
-    }
+      if (!employee) {
+        return [];
+      }
 
-    const employeeUuid = employee.id;
+      const employeeUuid = employee.id;
 
-    const supabase = await createAdminClient();
+      const supabase = await createAdminClient();
 
-    // Get existing balances from Supabase
-    const { data: dbBalances, error } = await supabase
-      .from("employee_leave_balances")
-      .select("*,leave_type:leave_types(*)")
-      .eq("employee_id", employeeUuid)
-      .eq("year", year);
+      // Get existing balances from Supabase
+      const { data: dbBalances, error } = await supabase
+        .from("employee_leave_balances")
+        .select("*,leave_type:leave_types(*)")
+        .eq("employee_id", employeeUuid)
+        .eq("year", year);
 
-    if (error) {
-      throw new Error(error.message);
-    }
+      if (error) {
+        throw new Error(error.message);
+      }
 
-    let balances: EmployeeLeaveBalance[] = (dbBalances || [])
-      .filter(
-        (balance: any) =>
-          balance.leave_type?.is_active &&
-          (balance.leave_type?.code === "CL" ||
-            balance.leave_type?.code === "SL")
-      )
-      .map((balance: any) => ({
-        ...balance,
-        leave_type: balance.leave_type,
-      })) as EmployeeLeaveBalance[];
+      let balances: EmployeeLeaveBalance[] = (dbBalances || [])
+        .filter(
+          (balance: any) =>
+            balance.leave_type?.is_active &&
+            (balance.leave_type?.code === "CL" ||
+              balance.leave_type?.code === "SL")
+        )
+        .map((balance: any) => ({
+          ...balance,
+          leave_type: balance.leave_type,
+        })) as EmployeeLeaveBalance[];
 
-    const activeLeaveTypes = (await this.getLeaveTypes()).filter(
-      (lt) =>
-        lt.is_active &&
-        (lt.code === "CL" || lt.code === "SL")
-    );
+      const activeLeaveTypes = (await this.getLeaveTypes()).filter(
+        (lt) =>
+          lt.is_active &&
+          (lt.code === "CL" || lt.code === "SL")
+      );
 
-    const existingBalanceTypeIds = new Set(
-      balances.map((balance) => balance.leave_type_id)
-    );
+      const existingBalanceTypeIds = new Set(
+        balances.map((balance) => balance.leave_type_id)
+      );
 
-    const missingLeaveTypes = activeLeaveTypes.filter(
-      (lt) => !existingBalanceTypeIds.has(lt.id)
-    );
+      const missingLeaveTypes = activeLeaveTypes.filter(
+        (lt) => !existingBalanceTypeIds.has(lt.id)
+      );
 
-    const rows = missingLeaveTypes.map((lt) => ({
-      employee_id: employeeUuid,
-      leave_type_id: lt.id,
-      year,
-      allocated_days: lt.annual_quota,
-      used_days: 0,
-      balance_days: lt.annual_quota,
-    }));
+      const rows = missingLeaveTypes.map((lt) => ({
+        employee_id: employeeUuid,
+        leave_type_id: lt.id,
+        year,
+        allocated_days: lt.annual_quota,
+        used_days: 0,
+        balance_days: lt.annual_quota,
+      }));
 
-    if (rows.length > 0) {
-      const { data: createdBalances, error: insertError } = await supabase
-        .from("employee_leave_balances")
-        .upsert(rows, {
-          onConflict: "employee_id,leave_type_id,year",
-        })
-        .select();
+      if (rows.length > 0) {
+        const { data: createdBalances, error: insertError } = await supabase
+          .from("employee_leave_balances")
+          .upsert(rows, {
+            onConflict: "employee_id,leave_type_id,year",
+          })
+          .select();
 
-      if (insertError) {
-        throw new Error(insertError.message);
-      }
+        if (insertError) {
+          throw new Error(insertError.message);
+        }
 
-      const createdWithLeaveTypes = (createdBalances || []).map(
-        (balance: any) => ({
-          ...balance,
-          leave_type: activeLeaveTypes.find(
-            (lt) => lt.id === balance.leave_type_id
-          ),
-        })
-      );
+        const createdWithLeaveTypes = (createdBalances || []).map(
+          (balance: any) => ({
+            ...balance,
+            leave_type: activeLeaveTypes.find(
+              (lt) => lt.id === balance.leave_type_id
+            ),
+          })
+        );
 
-      balances = [
-        ...balances,
-        ...createdWithLeaveTypes,
-      ] as EmployeeLeaveBalance[];
-    }
+        balances = [
+          ...balances,
+          ...createdWithLeaveTypes,
+        ] as EmployeeLeaveBalance[];
+      }
 
-    // Add leave type information
-    balances = balances.map((balance: any) => ({
-      ...balance,
-      leave_type:
-        balance.leave_type ||
-        activeLeaveTypes.find(
-          (lt) => lt.id === balance.leave_type_id
-        ),
-    }));
+      // Add leave type information
+      balances = balances.map((balance: any) => ({
+        ...balance,
+        leave_type:
+          balance.leave_type ||
+          activeLeaveTypes.find(
+            (lt) => lt.id === balance.leave_type_id
+          ),
+      }));
 
-    // Keep cache synchronized
-    cache.leaveBalances = [
-      ...cache.leaveBalances.filter(
-        (b) =>
-          !(
-            b.employee_id === employeeUuid &&
-            b.year === year
-          )
-      ),
-      ...balances,
-    ];
+      // Keep cache synchronized
+      cache.leaveBalances = [
+        ...cache.leaveBalances.filter(
+          (b) =>
+            !(
+              b.employee_id === employeeUuid &&
+              b.year === year
+            )
+        ),
+        ...balances,
+      ];
 
-    return balances;
-  }
+      return balances;
+    }
 
   static async getLeaveRequests(employeeId?: string): Promise<LeaveRequest[]> {
     const cache = getCache();
@@ -1983,7 +2038,8 @@ export class DataStore {
             id,
             employee_id,
             first_name,
-            last_name
+            last_name,
+            profile_photo_url
         )`)
         .order("created_at", { ascending: false });
 
@@ -2243,6 +2299,7 @@ export class DataStore {
         calculation_type,
         value,
         is_active,
+        affects_lop,
         gratuity_5_year_taken,
         gratuity_5_year_taken_date,
         gratuity_5_year_amount,
@@ -2436,18 +2493,22 @@ export class DataStore {
         throw error;
       }
 
-      const slips: Payslip[] = [];
 
-      for (const row of data || []) {
-        const employee = await this.getEmployeeById(
-          row.employee_id
-        );
+    const rows = data || [];
 
-        slips.push({
-          ...(row as Payslip),
-          employee: employee || undefined,
-        });
-      }
+    // Fetch employee records once instead of looking up each
+    // payslip's employee individually.
+    const employees = await this.getEmployees();
+
+    const employeesById = new Map(
+      employees.map((employee) => [employee.id, employee])
+    );
+
+    const slips: Payslip[] = rows.map((row) => ({
+      ...(row as Payslip),
+      employee: employeesById.get(row.employee_id) || undefined,
+    }));
+
 
       cache.payslips = slips;
 
@@ -2557,10 +2618,12 @@ export class DataStore {
   month,
   year,
   employeeId,
+  additionalEarnings = [],
 }: {
   month: number;
   year: number;
   employeeId: string;
+  additionalEarnings: { type: "Incentive" | "Bonus" | "Compensation"; amount: number }[];
 }): Promise<{ generatedCount: number; payslips: Payslip[] }> {
   const cache = getCache();
   const supabase = await createAdminClient();
@@ -2586,7 +2649,9 @@ export class DataStore {
   const salaryComponents = await this.getSalaryComponents();
 
   const activeComponents: SalaryComponent[] = employeeSalaryComponents.map((employeeComponent) => {
-    const masterComponent = salaryComponents.find((component) => component.id === employeeComponent.salary_component_id);
+      const masterComponent = salaryComponents.find(
+        (component) => component.id === employeeComponent.salary_component_id
+      );
       if (!masterComponent) {
         return null;
       }
@@ -2596,12 +2661,14 @@ export class DataStore {
         calculation_type: employeeComponent.calculation_type as SalaryComponent["calculation_type"],
         value: Number(employeeComponent.value),
         is_active: employeeComponent.is_active,
-        };
-      })
-      .filter(
-        (component): component is SalaryComponent =>
-          component !== null
-      );
+        // Employee-specific LOP configuration
+        affects_lop: employeeComponent.affects_lop ?? masterComponent.affects_lop,
+      };
+    })
+    .filter(
+      (component): component is SalaryComponent =>
+        component !== null
+    );
 
   const monthNames = [
     "January",
@@ -2981,22 +3048,13 @@ export class DataStore {
       // -----------------------------------------------------
 
       if (leave) {
-        const leaveUnit =
-          leave.is_half_day
-            ? 0.5
-            : 1;
-
-        const isPaid =
-          Boolean(
-            leave.leave_type?.is_paid
-          );
-
+        const leaveUnit = leave.is_half_day ? 0.5 : 1;
+        const isPaid = Boolean(leave.leave_type?.is_paid);
         if (isPaid) {
           paidLeaves += leaveUnit;
         } else {
           lopDays += leaveUnit;
         }
-
         continue;
       }
 
@@ -3050,27 +3108,13 @@ export class DataStore {
     // SAFETY
     // =======================================================
 
-    presentDays = Number(
-      Math.max(
-        0,
-        presentDays
-      ).toFixed(2)
-    );
+    presentDays = Number(Math.max(0, presentDays).toFixed(2));
+    paidLeaves = Number(Math.max(0, paidLeaves).toFixed(2));
+    const accountedDays = presentDays + paidLeaves + lopDays;
+    const remainingLopDays = Math.max(0,workingDays - accountedDays);
+    lopDays = Number((lopDays + remainingLopDays).toFixed(2));
 
-    paidLeaves = Number(
-      Math.max(
-        0,
-        paidLeaves
-      ).toFixed(2)
-    );
-
-    lopDays = Number(
-      Math.max(
-        0,
-        lopDays
-      ).toFixed(2)
-    );
-
+    
     // =======================================================
     // PREVENT ACCOUNTED DAYS FROM EXCEEDING WORKING DAYS
     // =======================================================
@@ -3080,20 +3124,10 @@ export class DataStore {
       paidLeaves +
       lopDays;
 
-    if (
-      totalAccountedDays >
-      workingDays
-    ) {
-      const excess =
-        totalAccountedDays -
-        workingDays;
-
-      lopDays = Number(
-        Math.max(
-          0,
-          lopDays - excess
-        ).toFixed(2)
-      );
+    if (totalAccountedDays >workingDays) 
+    {
+      const excess = totalAccountedDays - workingDays;
+      lopDays = Number(Math.max(0,lopDays - excess).toFixed(2));
     }
 
     // =======================================================
@@ -3105,13 +3139,12 @@ export class DataStore {
     const breakdown =
       calculateSalaryBreakdown({
         grossSalary: baseSalary,
-
-        totalDaysInMonth:
-          workingDays,
-
+        totalDaysInMonth:workingDays,
         lopDays,
-
         activeComponents,
+        pfEligible: emp.pf_eligible,
+        esiEligible: emp.esi_healthcare_eligible,
+        ptEligible: emp.pt_eligible,
       });
 
 
@@ -3119,10 +3152,7 @@ export class DataStore {
     // EMPLOYER CONTRIBUTIONS
     // =======================================================
 
-    const basicComponent = activeComponents.find(
-      (component) => component.code === "BASIC"
-    );
-
+    const basicComponent = activeComponents.find((component) => component.code === "BASIC");
     const basicSalary = basicComponent ? Number(((baseSalary * basicComponent.value) /100).toFixed(2)): 0;
     const employerPfComponent = activeComponents.find((component) => component.code === "EMPLOYER_PF");
     const employerPf = employerPfComponent? Number(((basicSalary * employerPfComponent.value) /100).toFixed(2)): 0;
@@ -3135,6 +3165,162 @@ export class DataStore {
     // =======================================================
     // PAYSLIP DATA
     // =======================================================
+
+    // -------------------------------------------------------
+    // GET EXISTING ADDITIONAL EARNINGS
+    //
+    // If this employee already has a payslip for this month,
+    // preserve Incentive / Bonus / Compensation.
+    // -------------------------------------------------------
+
+    const {
+      data: existingPayslip,
+      error: existingPayslipError,
+    } = await supabase
+      .from("payslips")
+      .select(`
+        incentive,
+        bonus,
+        compensation,
+        earnings_breakup
+      `)
+      .eq("employee_id", emp.id)
+      .eq("payroll_month", month)
+      .eq("payroll_year", year)
+      .maybeSingle();
+
+    if (existingPayslipError) {
+      throw new Error(
+        `Failed to load existing payslip for ${emp.employee_id}: ${existingPayslipError.message}`
+      );
+    }
+
+    // -------------------------------------------------------
+    // EXISTING AMOUNTS
+    // -------------------------------------------------------
+
+    const hasNewAdditionalEarnings = additionalEarnings.length > 0;
+
+    const existingIncentive = hasNewAdditionalEarnings ? Number(existingPayslip?.incentive || 0) : 0;
+
+    const existingBonus = hasNewAdditionalEarnings ? Number(existingPayslip?.bonus || 0) : 0;
+
+    const existingCompensation = hasNewAdditionalEarnings ? Number(existingPayslip?.compensation || 0) : 0;
+
+    // -------------------------------------------------------
+    // NEW AMOUNTS
+    //
+    // The API already prevents adding the same type twice.
+    // -------------------------------------------------------
+
+    const newIncentive = Number(
+      additionalEarnings.find(
+        (earning) => earning.type === "Incentive"
+      )?.amount || 0
+    );
+
+    const newBonus = Number(
+      additionalEarnings.find(
+        (earning) => earning.type === "Bonus"
+      )?.amount || 0
+    );
+
+    const newCompensation = Number(
+      additionalEarnings.find(
+        (earning) => earning.type === "Compensation"
+      )?.amount || 0
+    );
+
+    // -------------------------------------------------------
+    // FINAL AMOUNTS
+    // -------------------------------------------------------
+
+    const incentiveAmount =
+      existingIncentive + newIncentive;
+
+    const bonusAmount =
+      existingBonus + newBonus;
+
+    const compensationAmount =
+      existingCompensation + newCompensation;
+
+    const additionalEarningsTotal =
+      incentiveAmount +
+      bonusAmount +
+      compensationAmount;
+
+    // -------------------------------------------------------
+    // EXISTING ADDITIONAL EARNING BREAKUP
+    //
+    // Keep previously saved Incentive / Bonus / Compensation.
+    // -------------------------------------------------------
+
+    const existingEarningsBreakup = Array.isArray(
+      existingPayslip?.earnings_breakup
+    )
+      ? existingPayslip.earnings_breakup
+      : [];
+
+    const existingAdditionalEarningBreakup = hasNewAdditionalEarnings ?
+      existingEarningsBreakup.filter(
+        (earning: any) =>
+          earning?.code === "INCENTIVE" ||
+          earning?.code === "BONUS" ||
+          earning?.code === "COMPENSATION"
+      )
+    : [];
+
+    // -------------------------------------------------------
+    // NEW ADDITIONAL EARNING BREAKUP
+    // -------------------------------------------------------
+
+    const newAdditionalEarningBreakup = additionalEarnings.filter
+     (
+        (earning) => Number(earning.amount) > 0
+     )
+      .map((earning) => ({
+        component_id:`additional_${earning.type.toLowerCase()}`,
+        name: earning.type, 
+        code: earning.type.toUpperCase(),
+        type: "earning" as const,
+        amount: Number(earning.amount),
+        }));
+
+    // -------------------------------------------------------
+    // FINAL EARNINGS BREAKUP
+    //
+    // Normal salary earnings
+    // + previously saved additional earnings
+    // + newly added additional earnings
+    // -------------------------------------------------------
+
+    const finalEarningsBreakup = [
+      ...breakdown.earningsBreakdown,
+      ...existingAdditionalEarningBreakup,
+      ...newAdditionalEarningBreakup,
+    ];
+
+    // -------------------------------------------------------
+    // FINAL TOTALS
+    // -------------------------------------------------------
+
+    const finalTotalEarnings = Number(
+      (
+        breakdown.totalEarnings +
+        additionalEarningsTotal
+      ).toFixed(2)
+    );
+
+    const finalNetSalary = Number(
+      (
+        breakdown.netSalary +
+        additionalEarningsTotal
+      ).toFixed(2)
+    );
+
+    // -------------------------------------------------------
+    // PAYSLIP DATA
+    // -------------------------------------------------------
 
     const payslipData = {
       employee_id: emp.id,
@@ -3155,26 +3341,40 @@ export class DataStore {
       // Unpaid leave + absence
       lop_days: lopDays,
 
-      gross_salary: breakdown.grossSalary,
+      // Normal salary + all additional earnings
+      gross_salary: Number(
+        (
+          breakdown.grossSalary +
+          additionalEarningsTotal
+        ).toFixed(2)
+      ),
 
       lop_deduction: breakdown.lopDeduction,
 
-      total_earnings: breakdown.totalEarnings,
+      total_earnings: finalTotalEarnings,
 
       total_deductions: breakdown.totalDeductions,
 
-      net_salary: breakdown.netSalary,
+      net_salary: finalNetSalary,
 
       employer_pf: employerPf,
 
       gratuity_provision: gratuityProvision,
 
-      earnings_breakup: breakdown.earningsBreakdown,
+      earnings_breakup: finalEarningsBreakup,
 
       deductions_breakup: breakdown.deductionsBreakdown,
 
+      // Additional earnings
+      incentive: incentiveAmount,
+
+      bonus: bonusAmount,
+
+      compensation: compensationAmount,
+
       payment_status: "processed",
     };
+
 
     // =======================================================
     // SAVE / UPDATE PAYSLIP

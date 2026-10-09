@@ -1,596 +1,358 @@
-import { NextResponse } from "next/server";
-import { v2 as cloudinary } from "cloudinary";
-import { createAdminClient } from "@/lib/supabase-server";
-import { revalidatePath } from "next/cache";
-import { PDFParse } from "pdf-parse";
-import { createWorker } from "tesseract.js";
-import path from "path";
+import { NextResponse } from 'next/server';
+import { v2 as cloudinary } from 'cloudinary';
+import { createClient } from '@/lib/supabase-server';
+import { revalidatePath } from 'next/cache';
+import { getPath } from 'pdf-parse/worker';
+import { PDFParse } from 'pdf-parse';
+import { createWorker, PSM } from 'tesseract.js';
+import path from 'path';
 
-export const runtime = "nodejs";
+export const runtime = 'nodejs';
 export const maxDuration = 60;
 
-// ============================================================
+PDFParse.setWorker(getPath());
+
+// ======================================================
 // TESSERACT WORKER
-// ============================================================
+// ======================================================
 
 const TESSERACT_WORKER_PATH = path.join(
   process.cwd(),
-  "node_modules",
-  "tesseract.js",
-  "src",
-  "worker-script",
-  "node",
-  "index.js"
+  'node_modules',
+  'tesseract.js',
+  'src',
+  'worker-script',
+  'node',
+  'index.js'
 );
 
 console.log(
-  "Tesseract worker absolute path:",
+  'Tesseract worker absolute path:',
   TESSERACT_WORKER_PATH
 );
 
-// ============================================================
+// ======================================================
 // CLOUDINARY
-// ============================================================
+// ======================================================
 
 cloudinary.config({
-  cloud_name:
-    process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME,
-  api_key:
-    process.env.CLOUDINARY_API_KEY,
-  api_secret:
-    process.env.CLOUDINARY_API_SECRET,
+  cloud_name: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
 });
+
+// ======================================================
+// CONSTANTS
+// ======================================================
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
-// ============================================================
-// DOCUMENT CONFIGURATION
-// ============================================================
+const ALLOWED_FILE_TYPES = [
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  'image/jpg',
+];
 
+// These document types can have multiple files
 const MULTIPLE_DOCUMENT_TYPES = [
-  "Experience Letter",
-  "Other",
+  'Experience Letter',
+  'Other',
 ];
 
+// These documents require number extraction
 const ID_DOCUMENT_TYPES = [
-  "Aadhar Card",
-  "PAN Card",
-  "Passport",
+  'Aadhar Card',
+  'PAN Card',
+  'Passport',
 ];
 
-// ============================================================
-// ALLOWED FILE TYPES
-// ============================================================
+// ======================================================
+// EXTRACT AADHAAR NUMBER
+// ======================================================
 
-const ALLOWED_MIME_TYPES = [
-  "application/pdf",
-  "image/jpeg",
-  "image/jpg",
-  "image/png",
-  "image/webp",
-];
+function extractAadhaar(text: string): string | null {
+  const normalized = text
+    .replace(/\r/g, '\n')
+    .replace(/[^\S\r\n]+/g, ' ')
+    .trim();
 
-const ALLOWED_EXTENSIONS = [
-  "pdf",
-  "jpg",
-  "jpeg",
-  "png",
-  "webp",
-];
+  // --------------------------------------------------
+  // 1. Standard format
+  //
+  // 1234 5678 9012
+  // 1234-5678-9012
+  // 123456789012
+  // --------------------------------------------------
 
-// ============================================================
-// MASK SENSITIVE ID FOR LOGGING
-// ============================================================
-
-function maskIdentityNumber(
-  value: string | null
-): string {
-  if (!value) {
-    return "none";
-  }
-
-  if (value.length <= 4) {
-    return "****";
-  }
-
-  return `${"*".repeat(
-    Math.max(0, value.length - 4)
-  )}${value.slice(-4)}`;
-}
-
-// ============================================================
-// AADHAAR VERHOEFF VALIDATION
-// ============================================================
-//
-// Aadhaar numbers use the Verhoeff checksum.
-//
-// This prevents OCR from blindly saving any random
-// 12-digit number as Aadhaar.
-// ============================================================
-
-const VERHOEFF_D = [
-  [
-    0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
-  ],
-  [
-    1, 2, 3, 4, 0, 6, 7, 8, 9, 5,
-  ],
-  [
-    2, 3, 4, 0, 1, 7, 8, 9, 5, 6,
-  ],
-  [
-    3, 4, 0, 1, 2, 8, 9, 5, 6, 7,
-  ],
-  [
-    4, 0, 1, 2, 3, 9, 5, 6, 7, 8,
-  ],
-  [
-    5, 9, 8, 7, 6, 0, 4, 3, 2, 1,
-  ],
-  [
-    6, 5, 9, 8, 7, 1, 0, 4, 3, 2,
-  ],
-  [
-    7, 6, 5, 9, 8, 2, 1, 0, 4, 3,
-  ],
-  [
-    8, 7, 6, 5, 9, 3, 2, 1, 0, 4,
-  ],
-  [
-    9, 8, 7, 6, 5, 4, 3, 2, 1, 0,
-  ],
-];
-
-const VERHOEFF_P = [
-  [
-    0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
-  ],
-  [
-    1, 5, 7, 6, 2, 8, 3, 0, 9, 4,
-  ],
-  [
-    5, 8, 0, 3, 7, 9, 6, 1, 4, 2,
-  ],
-  [
-    8, 9, 1, 6, 0, 4, 3, 5, 2, 7,
-  ],
-  [
-    9, 4, 5, 3, 1, 2, 6, 8, 7, 0,
-  ],
-  [
-    4, 2, 8, 6, 5, 7, 3, 9, 0, 1,
-  ],
-  [
-    2, 7, 9, 3, 8, 0, 6, 4, 1, 5,
-  ],
-  [
-    7, 0, 4, 6, 9, 1, 3, 2, 5, 8,
-  ],
-];
-
-const VERHOEFF_INV = [
-  0, 4, 3, 2, 1, 5, 6, 7, 8, 9,
-];
-
-function isValidAadhaar(
-  aadhaar: string
-): boolean {
-  const digits = aadhaar.replace(
-    /\D/g,
-    ""
+  const standardMatches = normalized.match(
+    /\b\d{4}\s*[-]?\s*\d{4}\s*[-]?\s*\d{4}\b/g
   );
 
-  // Aadhaar must contain exactly 12 digits.
-  if (digits.length !== 12) {
-    return false;
+  if (standardMatches) {
+    for (const match of standardMatches) {
+      const digits = match.replace(/\D/g, '');
+
+      if (digits.length === 12) {
+        console.log(
+          'Aadhaar found - standard:',
+          digits
+        );
+
+        return digits;
+      }
+    }
   }
 
-  // Aadhaar cannot start with 0 or 1.
-  if (
-    digits.startsWith("0") ||
-    digits.startsWith("1")
-  ) {
-    return false;
+  // --------------------------------------------------
+  // 2. Aadhaar-related text nearby
+  // --------------------------------------------------
+
+  const lines = normalized.split('\n');
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    if (
+      /aadhaar|aadhar|uidai|unique identification/i.test(
+        line
+      )
+    ) {
+      const nearbyText = lines
+        .slice(
+          Math.max(0, i - 2),
+          Math.min(lines.length, i + 4)
+        )
+        .join(' ');
+
+      const nearbyMatch = nearbyText.match(
+        /\b\d{4}\s*[-]?\s*\d{4}\s*[-]?\s*\d{4}\b/
+      );
+
+      if (nearbyMatch) {
+        const digits =
+          nearbyMatch[0].replace(/\D/g, '');
+
+        if (digits.length === 12) {
+          console.log(
+            'Aadhaar found - nearby Aadhaar text:',
+            digits
+          );
+
+          return digits;
+        }
+      }
+    }
   }
 
-  // Reject obvious repeated values.
-  if (
-    /^(\d)\1{11}$/.test(digits)
-  ) {
-    return false;
-  }
+  // --------------------------------------------------
+  // 3. Three separate 4-digit groups
+  //
+  // We DO NOT automatically accept these.
+  // This prevents DOB and unrelated numbers from
+  // becoming Aadhaar numbers.
+  // --------------------------------------------------
 
-  // Verhoeff checksum.
-  let checksum = 0;
-
-  const reversed = digits
-    .split("")
-    .reverse();
+  const groups =
+    normalized.match(/\b\d{4}\b/g) || [];
 
   for (
     let i = 0;
-    i < reversed.length;
+    i < groups.length - 2;
     i++
   ) {
-    const digit = Number(
-      reversed[i]
-    );
+    const candidate =
+      groups[i] +
+      groups[i + 1] +
+      groups[i + 2];
 
-    checksum =
-      VERHOEFF_D[checksum][
-        VERHOEFF_P[i % 8][digit]
-      ];
-  }
-
-  return checksum === 0;
-}
-
-// ============================================================
-// EXTRACT AADHAAR NUMBER
-// ============================================================
-
-function extractAadhaar(
-  text: string
-): string | null {
-  if (!text) {
-    return null;
-  }
-
-  const normalized = text
-    .replace(/\r/g, "\n")
-    .replace(/[ \t]+/g, " ")
-    .trim();
-
-  const candidates: string[] = [];
-
-  // ----------------------------------------------------------
-  // 1. Aadhaar near Aadhaar-related words
-  // ----------------------------------------------------------
-
-  const contextMatches =
-    normalized.matchAll(
-      /(?:aadhaar|aadhar|uid|unique identification)[\s:#-]*(\d{4}[\s-]?\d{4}[\s-]?\d{4})/gi
-    );
-
-  for (
-    const match of contextMatches
-  ) {
-    if (match[1]) {
-      candidates.push(
-        match[1].replace(
-          /\D/g,
-          ""
-        )
-      );
-    }
-  }
-
-  // ----------------------------------------------------------
-  // 2. Standard Aadhaar format
-  // ----------------------------------------------------------
-
-  const formattedMatches =
-    normalized.match(
-      /\b\d{4}[\s-]?\d{4}[\s-]?\d{4}\b/g
-    );
-
-  if (formattedMatches) {
-    for (
-      const match of formattedMatches
-    ) {
-      candidates.push(
-        match.replace(
-          /\D/g,
-          ""
-        )
-      );
-    }
-  }
-
-  // ----------------------------------------------------------
-  // 3. Plain 12-digit OCR result
-  // ----------------------------------------------------------
-
-  const plainMatches =
-    normalized.match(
-      /\b\d{12}\b/g
-    );
-
-  if (plainMatches) {
-    candidates.push(
-      ...plainMatches
-    );
-  }
-
-  // ----------------------------------------------------------
-  // 4. OCR sometimes inserts spaces between digits.
-  //
-  // Try digit groups but do NOT blindly accept them.
-  // Every candidate must pass Verhoeff.
-  // ----------------------------------------------------------
-
-  const digitStream =
-    normalized.replace(
-      /[^0-9]/g,
-      ""
-    );
-
-  if (digitStream.length >= 12) {
-    for (
-      let i = 0;
-      i <= digitStream.length - 12;
-      i++
-    ) {
-      candidates.push(
-        digitStream.substring(
-          i,
-          i + 12
-        )
-      );
-    }
-  }
-
-  // ----------------------------------------------------------
-  // Validate every candidate.
-  // Only a valid Aadhaar is returned.
-  // ----------------------------------------------------------
-
-  const uniqueCandidates =
-    Array.from(
-      new Set(
-        candidates.filter(
-          (candidate) =>
-            candidate.length === 12
-        )
-      )
-    );
-
-  for (
-    const candidate of
-      uniqueCandidates
-  ) {
     if (
-      isValidAadhaar(
-        candidate
-      )
+      candidate.startsWith('0101') ||
+      candidate.startsWith('0102') ||
+      candidate.startsWith('0103') ||
+      candidate.startsWith('011')
     ) {
-      console.log(
-        "Valid Aadhaar detected:",
-        maskIdentityNumber(
-          candidate
-        )
-      );
+      continue;
+    }
 
-      return candidate;
+    if (candidate.length === 12) {
+      console.log(
+        'Possible Aadhaar candidate:',
+        candidate
+      );
     }
   }
 
-  console.warn(
-    "No valid Aadhaar number found by OCR."
+  console.log(
+    'NO RELIABLE AADHAAR NUMBER FOUND'
   );
 
   return null;
 }
 
-// ============================================================
+// ======================================================
 // EXTRACT PAN NUMBER
-// ============================================================
+// ======================================================
 
-function extractPAN(
-  text: string
-): string | null {
-  if (!text) {
-    return null;
-  }
-
+function extractPAN(text: string): string | null {
   const normalized = text
     .toUpperCase()
-    .replace(/\r/g, "\n");
+    .replace(/\r/g, '\n');
 
-  // ----------------------------------------------------------
+  // --------------------------------------------------
   // PAN near PAN label
-  // ----------------------------------------------------------
+  // --------------------------------------------------
 
-  const contextMatch =
-    normalized.match(
-      /(?:PAN|PERMANENT ACCOUNT NUMBER)[\s:#-]*([A-Z]{5}[\s-]?\d{4}[\s-]?[A-Z])/i
-    );
+  const contextMatch = normalized.match(
+    /(?:PAN|PERMANENT ACCOUNT NUMBER)[\s:#-]*([A-Z]{5}[\s-]?\d{4}[\s-]?[A-Z])/i
+  );
 
   if (contextMatch?.[1]) {
-    const pan =
-      contextMatch[1]
-        .replace(
-          /[^A-Z0-9]/gi,
-          ""
-        )
-        .toUpperCase();
+    const pan = contextMatch[1]
+      .replace(/[^A-Z0-9]/gi, '')
+      .toUpperCase();
 
-    if (
-      /^[A-Z]{5}\d{4}[A-Z]$/.test(
+    if (/^[A-Z]{5}\d{4}[A-Z]$/.test(pan)) {
+      console.log(
+        'PAN found - context:',
         pan
-      )
-    ) {
+      );
+
       return pan;
     }
   }
 
-  // ----------------------------------------------------------
-  // Normal PAN format
-  // ----------------------------------------------------------
+  // --------------------------------------------------
+  // Standard PAN format
+  // --------------------------------------------------
 
-  const matches =
-    normalized.match(
-      /\b[A-Z]{5}[\s-]?\d{4}[\s-]?[A-Z]\b/g
-    );
+  const matches = normalized.match(
+    /\b[A-Z]{5}[\s-]?\d{4}[\s-]?[A-Z]\b/g
+  );
 
   if (matches) {
-    for (
-      const value of matches
-    ) {
-      const pan =
-        value
-          .replace(
-            /[^A-Z0-9]/gi,
-            ""
-          )
-          .toUpperCase();
+    for (const value of matches) {
+      const pan = value
+        .replace(/[^A-Z0-9]/gi, '')
+        .toUpperCase();
 
-      if (
-        /^[A-Z]{5}\d{4}[A-Z]$/.test(
+      if (/^[A-Z]{5}\d{4}[A-Z]$/.test(pan)) {
+        console.log(
+          'PAN found - standard:',
           pan
-        )
-      ) {
+        );
+
         return pan;
       }
     }
   }
 
-  // ----------------------------------------------------------
-  // OCR may insert spaces
-  // ----------------------------------------------------------
-
-  const compact =
-    normalized.replace(
-      /[^A-Z0-9]/g,
-      ""
-    );
-
-  const compactMatch =
-    compact.match(
-      /[A-Z]{5}\d{4}[A-Z]/
-    );
-
-  if (compactMatch?.[0]) {
-    const pan =
-      compactMatch[0]
-        .toUpperCase();
-
-    if (
-      /^[A-Z]{5}\d{4}[A-Z]$/.test(
-        pan
-      )
-    ) {
-      return pan;
-    }
-  }
+  console.log(
+    'NO RELIABLE PAN NUMBER FOUND'
+  );
 
   return null;
 }
 
-// ============================================================
+// ======================================================
 // EXTRACT PASSPORT NUMBER
-// ============================================================
+// ======================================================
 
 function extractPassport(
   text: string
 ): string | null {
-  if (!text) {
-    return null;
-  }
-
   const normalized = text
-    .replace(/\r/g, "\n")
-    .replace(/[ \t]+/g, " ")
+    .replace(/\r/g, '\n')
+    .replace(/[ \t]+/g, ' ')
     .toUpperCase()
     .trim();
 
-  // ----------------------------------------------------------
-  // Indian passport format: A1234567
-  // ----------------------------------------------------------
+  // --------------------------------------------------
+  // Passport number near passport label
+  // Indian passport format generally:
+  //
+  // A1234567
+  // B1234567
+  // etc.
+  // --------------------------------------------------
 
-  const contextMatch =
-    normalized.match(
-      /(?:PASSPORT|PASSPORT NO|PASSPORT NUMBER|DOCUMENT NO)[\s:#-]*([A-Z]\d{7})/i
-    );
+  const contextMatch = normalized.match(
+    /(?:PASSPORT|PASSPORT NO|PASSPORT NUMBER|DOCUMENT NO)[\s:#-]*([A-Z]\d{7})/i
+  );
 
   if (contextMatch?.[1]) {
-    const passport =
-      contextMatch[1]
-        .replace(
-          /[\s-]/g,
-          ""
-        )
-        .toUpperCase();
+    const passport = contextMatch[1]
+      .replace(/[\s-]/g, '')
+      .toUpperCase();
 
-    if (
-      /^[A-Z]\d{7}$/.test(
+    if (/^[A-Z]\d{7}$/.test(passport)) {
+      console.log(
+        'Passport found - context:',
         passport
-      )
-    ) {
+      );
+
       return passport;
     }
   }
 
-  // ----------------------------------------------------------
-  // Fallback
-  // ----------------------------------------------------------
+  // --------------------------------------------------
+  // Standard passport number
+  // --------------------------------------------------
 
-  const matches =
-    normalized.match(
-      /\b[A-Z]\d{7}\b/g
-    );
+  const matches = normalized.match(
+    /\b[A-Z]\d{7}\b/g
+  );
 
   if (matches) {
-    for (
-      const match of matches
-    ) {
-      const passport =
-        match
-          .replace(
-            /[\s-]/g,
-            ""
-          )
-          .toUpperCase();
+    for (const match of matches) {
+      const passport = match
+        .replace(/[\s-]/g, '')
+        .toUpperCase();
 
-      if (
-        /^[A-Z]\d{7}$/.test(
+      if (/^[A-Z]\d{7}$/.test(passport)) {
+        console.log(
+          'Passport found - standard:',
           passport
-        )
-      ) {
+        );
+
         return passport;
       }
     }
   }
 
+  console.log(
+    'NO RELIABLE PASSPORT NUMBER FOUND'
+  );
+
   return null;
 }
 
-// ============================================================
-// EXTRACT DOCUMENT NUMBER
-// ============================================================
+// ======================================================
+// EXTRACT NUMBER BASED ON DOCUMENT TYPE
+// ======================================================
 
 function extractDocumentNumber(
   documentType: string,
   text: string
 ): string | null {
   switch (documentType) {
-    case "Aadhar Card":
-      return extractAadhaar(
-        text
-      );
+    case 'Aadhar Card':
+      return extractAadhaar(text);
 
-    case "PAN Card":
-      return extractPAN(
-        text
-      );
+    case 'PAN Card':
+      return extractPAN(text);
 
-    case "Passport":
-      return extractPassport(
-        text
-      );
+    case 'Passport':
+      return extractPassport(text);
 
     default:
       return null;
   }
 }
 
-// ============================================================
-// DOCUMENT TYPE DETECTION
-// ============================================================
-//
-// SOFT VALIDATION ONLY.
-// It NEVER blocks the upload.
-// ============================================================
+// ======================================================
+// DOCUMENT TYPE VALIDATION
+// ======================================================
 
 function validateDocumentType(
   documentType: string,
@@ -598,325 +360,947 @@ function validateDocumentType(
 ): boolean {
   const normalized = text
     .toUpperCase()
-    .replace(/\s+/g, " ")
+    .replace(/\r/g, '\n')
+    .replace(/[ \t]+/g, ' ')
     .trim();
 
   if (!normalized) {
+    console.log(
+      `Document validation failed: ${documentType} has no OCR text`
+    );
+
     return false;
   }
 
-  const hasMultipleKeywords = (
-    keywords: string[],
-    minimumMatches = 2
-  ) => {
-    const matches =
-      keywords.filter(
-        (keyword) =>
-          normalized.includes(
-            keyword
-          )
-      );
+  console.log(
+    `========== VALIDATING ${documentType.toUpperCase()} ==========`
+  );
 
-    console.log(
-      `${documentType} keyword matches:`,
-      matches
-    );
 
-    return (
-      matches.length >=
-      minimumMatches
+  // ==================================================
+  // HELPER
+  // ==================================================
+
+  const containsAny = (
+    keywords: string[]
+  ): boolean => {
+    return keywords.some((keyword) =>
+      normalized.includes(keyword)
     );
   };
 
+  const matchedKeywords = (
+    keywords: string[]
+  ): string[] => {
+    return keywords.filter((keyword) =>
+      normalized.includes(keyword)
+    );
+  };
+
+  const hasKeywordGroups = (
+    groups: string[][],
+    minimumGroups: number
+  ): boolean => {
+    let matchedGroups = 0;
+
+    for (const group of groups) {
+      if (containsAny(group)) {
+        matchedGroups++;
+      }
+    }
+
+    console.log(
+      `${documentType} matched keyword groups:`,
+      matchedGroups,
+      '/',
+      groups.length
+    );
+
+    return matchedGroups >= minimumGroups;
+  };
+
+  // ==================================================
+  // AADHAAR CARD
+  // ==================================================
+
   switch (documentType) {
-    case "Aadhar Card":
-      return !!extractAadhaar(
-        normalized
-      );
+    case 'Aadhar Card': {
+      const aadhaarNumber =
+        extractAadhaar(normalized);
 
-    case "PAN Card":
-      return !!extractPAN(
-        normalized
-      );
+      const aadhaarGroups = [
+        [
+          'AADHAAR',
+          'AADHAR',
+          'UIDAI',
+          'UNIQUE IDENTIFICATION',
+        ],
+        [
+          'GOVERNMENT OF INDIA',
+          'GOVERNMENT OF INDIA',
+        ],
+        [
+          'DATE OF BIRTH',
+          'DOB',
+          'YEAR OF BIRTH',
+        ],
+        [
+          'MALE',
+          'FEMALE',
+          'TRANSGENDER',
+        ],
+      ];
 
-    case "Passport": {
-      const passportNumber =
-        extractPassport(
-          normalized
+      const matched =
+        aadhaarGroups.filter((group) =>
+          containsAny(group)
         );
 
-      const hasPassportKeyword =
-        normalized.includes(
-          "PASSPORT"
-        ) ||
-        normalized.includes(
-          "REPUBLIC OF INDIA"
-        ) ||
-        normalized.includes(
-          "SURNAME"
-        ) ||
-        normalized.includes(
-          "GIVEN NAME"
-        ) ||
-        normalized.includes(
-          "NATIONALITY"
-        );
+      console.log(
+        'Aadhaar number found:',
+        !!aadhaarNumber
+      );
+
+      console.log(
+        'Aadhaar matched groups:',
+        matched.length
+      );
+
+      /*
+       * Strict requirement:
+       *
+       * 1. Valid Aadhaar number
+       * 2. At least 2 Aadhaar document indicators
+       */
 
       return (
-        !!passportNumber &&
-        hasPassportKeyword
+        !!aadhaarNumber &&
+        matched.length >= 2
       );
     }
 
-    case "Resume":
-      return hasMultipleKeywords(
+    // ==================================================
+    // PAN CARD
+    // ==================================================
+
+    case 'PAN Card': {
+      const panNumber =
+        extractPAN(normalized);
+
+      const panGroups = [
         [
-          "RESUME",
-          "CURRICULUM VITAE",
-          "WORK EXPERIENCE",
-          "PROFESSIONAL EXPERIENCE",
-          "EDUCATION",
-          "SKILLS",
+          'PERMANENT ACCOUNT NUMBER',
+          'PAN',
         ],
-        2
+        [
+          'INCOME TAX DEPARTMENT',
+          'INCOME TAX',
+        ],
+        [
+          'GOVERNMENT OF INDIA',
+          'GOVT OF INDIA',
+        ],
+        [
+          'NAME',
+          'FATHER',
+          "FATHER'S NAME",
+        ],
+        [
+          'DATE OF BIRTH',
+          'DOB',
+        ],
+      ];
+
+      const matched =
+        panGroups.filter((group) =>
+          containsAny(group)
+        );
+
+      console.log(
+        'PAN number found:',
+        !!panNumber
       );
 
-    case "10th Certificate":
-      return hasMultipleKeywords(
-        [
-          "SECONDARY SCHOOL",
-          "SECONDARY SCHOOL CERTIFICATE",
-          "SSC",
-          "10TH CLASS",
-          "10TH STANDARD",
-          "MATRICULATION",
-        ],
-        2
+      console.log(
+        'PAN matched groups:',
+        matched.length
       );
 
-    case "12th Certificate":
-      return hasMultipleKeywords(
+      /*
+       * Strict:
+       * Valid PAN number
+       * + at least 2 PAN-specific groups
+       */
+
+      return (
+        !!panNumber &&
+        matched.length >= 2
+      );
+    }
+
+    // ==================================================
+    // PASSPORT
+    // ==================================================
+
+    case 'Passport': {
+      const passportNumber =
+        extractPassport(normalized);
+
+      const passportGroups = [
         [
-          "HIGHER SECONDARY",
-          "HIGHER SECONDARY CERTIFICATE",
-          "HSC",
-          "12TH CLASS",
-          "12TH STANDARD",
-          "INTERMEDIATE",
+          'PASSPORT',
         ],
-        2
+        [
+          'REPUBLIC OF INDIA',
+          'REPUBLIC OF INDIA',
+        ],
+        [
+          'SURNAME',
+          'GIVEN NAME',
+        ],
+        [
+          'NATIONALITY',
+          'INDIAN',
+        ],
+        [
+          'DATE OF BIRTH',
+          'DATE OF ISSUE',
+          'DATE OF EXPIRY',
+        ],
+        [
+          'PLACE OF BIRTH',
+          'PLACE OF ISSUE',
+        ],
+      ];
+
+      const matched =
+        passportGroups.filter((group) =>
+          containsAny(group)
+        );
+
+      console.log(
+        'Passport number found:',
+        !!passportNumber
       );
 
-    case "Graduation Certificate":
-      return hasMultipleKeywords(
-        [
-          "BACHELOR",
-          "BACHELOR OF TECHNOLOGY",
-          "BACHELOR OF ENGINEERING",
-          "BACHELOR OF SCIENCE",
-          "BACHELOR OF COMMERCE",
-          "BACHELOR OF COMPUTER APPLICATIONS",
-          "DEGREE",
-          "GRADUATION",
-          "UNIVERSITY",
-        ],
-        2
+      console.log(
+        'Passport matched groups:',
+        matched.length
       );
 
-    case "Post-Graduation Certificate":
-      return hasMultipleKeywords(
+      /*
+       * Strict:
+       * Valid passport number
+       * + at least 3 passport groups
+       */
+
+      return (
+        !!passportNumber &&
+        matched.length >= 3
+      );
+    }
+
+    // ==================================================
+    // RESUME
+    // ==================================================
+
+    case 'Resume': {
+      const resumeGroups = [
         [
-          "MASTER",
-          "MASTER OF TECHNOLOGY",
-          "MASTER OF ENGINEERING",
-          "MASTER OF SCIENCE",
-          "MASTER OF COMPUTER APPLICATIONS",
-          "MASTER OF BUSINESS ADMINISTRATION",
-          "POST GRADUATION",
-          "POSTGRADUATION",
-          "POST-GRADUATE",
+          'RESUME',
+          'CURRICULUM VITAE',
+          'CV',
         ],
-        2
+        [
+          'CAREER OBJECTIVE',
+          'OBJECTIVE',
+          'PROFESSIONAL SUMMARY',
+          'SUMMARY',
+        ],
+        [
+          'WORK EXPERIENCE',
+          'PROFESSIONAL EXPERIENCE',
+          'EMPLOYMENT HISTORY',
+          'EXPERIENCE',
+        ],
+        [
+          'EDUCATION',
+          'EDUCATIONAL QUALIFICATION',
+          'ACADEMIC QUALIFICATION',
+        ],
+        [
+          'SKILLS',
+          'TECHNICAL SKILLS',
+          'CORE SKILLS',
+        ],
+        [
+          'PROJECTS',
+          'PROJECT EXPERIENCE',
+        ],
+        [
+          'CERTIFICATIONS',
+          'CERTIFICATION',
+        ],
+      ];
+
+      const result =
+        hasKeywordGroups(
+          resumeGroups,
+          4
+        );
+
+      console.log(
+        'Resume validation:',
+        result
       );
 
-    case "Experience Letter":
-      return hasMultipleKeywords(
+      return result;
+    }
+
+    // ==================================================
+    // 10TH CERTIFICATE
+    // ==================================================
+
+    case '10th Certificate': {
+      const tenthGroups = [
         [
-          "EXPERIENCE LETTER",
-          "WORK EXPERIENCE",
-          "EMPLOYMENT CERTIFICATE",
-          "TO WHOMSOEVER IT MAY CONCERN",
-          "EMPLOYED WITH",
+          'SECONDARY SCHOOL CERTIFICATE',
+          'SECONDARY SCHOOL',
+          'SECONDARY EDUCATION',
+          'SSC',
         ],
-        2
+        [
+          '10TH CLASS',
+          '10TH STANDARD',
+          'TENTH CLASS',
+          'TENTH STANDARD',
+          'CLASS X',
+          'STANDARD X',
+          'X STANDARD',
+        ],
+        [
+          'MATRICULATION',
+          'HIGH SCHOOL CERTIFICATE',
+        ],
+        [
+          'BOARD OF SECONDARY EDUCATION',
+          'BOARD OF EDUCATION',
+          'SECONDARY EDUCATION BOARD',
+        ],
+        [
+          'MARKS',
+          'MARKS OBTAINED',
+          'MARKSHEET',
+          'MARK SHEET',
+          'GRADE',
+          'PERCENTAGE',
+        ],
+        [
+          'CERTIFICATE',
+          'CERTIFIED',
+        ],
+      ];
+
+      const result =
+        hasKeywordGroups(
+          tenthGroups,
+          3
+        );
+
+      console.log(
+        '10th Certificate validation:',
+        result
       );
 
-    case "Relieving Letter":
-      return hasMultipleKeywords(
+      return result;
+    }
+
+    // ==================================================
+    // 12TH CERTIFICATE
+    // ==================================================
+
+    case '12th Certificate': {
+      const twelfthGroups = [
         [
-          "RELIEVING LETTER",
-          "RELIEVED FROM",
-          "RELIEVING DATE",
-          "RELIEVED OF HIS",
-          "RELIEVED OF HER",
+          'HIGHER SECONDARY CERTIFICATE',
+          'HIGHER SECONDARY',
+          'HIGHER SECONDARY EDUCATION',
+          'HSC',
         ],
-        2
+        [
+          '12TH CLASS',
+          '12TH STANDARD',
+          'TWELFTH CLASS',
+          'TWELFTH STANDARD',
+          'CLASS XII',
+          'STANDARD XII',
+          'XII STANDARD',
+        ],
+        [
+          'INTERMEDIATE',
+          'SENIOR SECONDARY',
+          'SENIOR SECONDARY CERTIFICATE',
+        ],
+        [
+          'BOARD OF INTERMEDIATE EDUCATION',
+          'BOARD OF SECONDARY EDUCATION',
+          'BOARD OF EDUCATION',
+        ],
+        [
+          'MARKS',
+          'MARKS OBTAINED',
+          'MARKSHEET',
+          'MARK SHEET',
+          'GRADE',
+          'PERCENTAGE',
+        ],
+        [
+          'CERTIFICATE',
+          'CERTIFIED',
+        ],
+      ];
+
+      const result =
+        hasKeywordGroups(
+          twelfthGroups,
+          3
+        );
+
+      console.log(
+        '12th Certificate validation:',
+        result
       );
 
-    case "Offer Letter":
-      return hasMultipleKeywords(
+      return result;
+    }
+
+    // ==================================================
+    // GRADUATION CERTIFICATE
+    // ==================================================
+
+    case 'Graduation Certificate': {
+      const graduationGroups = [
         [
-          "OFFER LETTER",
-          "LETTER OF OFFER",
-          "EMPLOYMENT OFFER",
-          "OFFER OF EMPLOYMENT",
-          "JOINING DATE",
-          "CTC",
-          "COMPENSATION",
+          'BACHELOR',
+          'BACHELOR OF TECHNOLOGY',
+          'BACHELOR OF ENGINEERING',
+          'BACHELOR OF SCIENCE',
+          'BACHELOR OF COMMERCE',
+          'BACHELOR OF ARTS',
+          'BACHELOR OF COMPUTER APPLICATIONS',
+          'BACHELOR OF BUSINESS ADMINISTRATION',
+          'B.TECH',
+          'B.E.',
+          'B.SC',
+          'B.COM',
+          'B.A.',
+          'BCA',
+          'BBA',
         ],
-        2
+        [
+          'DEGREE',
+          'GRADUATION',
+          'UNDERGRADUATE',
+        ],
+        [
+          'UNIVERSITY',
+          'COLLEGE',
+          'INSTITUTE',
+        ],
+        [
+          'DEGREE CERTIFICATE',
+          'PROVISIONAL CERTIFICATE',
+          'CONVOCATION',
+          'CERTIFICATE',
+        ],
+        [
+          'AWARDED',
+          'CONFERRED',
+          'SUCCESSFULLY COMPLETED',
+          'COMPLETED',
+        ],
+      ];
+
+      const result =
+        hasKeywordGroups(
+          graduationGroups,
+          3
+        );
+
+      console.log(
+        'Graduation Certificate validation:',
+        result
       );
 
-    case "Other":
-      return true;
+      return result;
+    }
+
+    // ==================================================
+    // POST-GRADUATION CERTIFICATE
+    // ==================================================
+
+    case 'Post-Graduation Certificate': {
+      const postGraduationGroups = [
+        [
+          'MASTER',
+          'MASTER OF TECHNOLOGY',
+          'MASTER OF ENGINEERING',
+          'MASTER OF SCIENCE',
+          'MASTER OF COMMERCE',
+          'MASTER OF ARTS',
+          'MASTER OF COMPUTER APPLICATIONS',
+          'MASTER OF BUSINESS ADMINISTRATION',
+          'M.TECH',
+          'M.E.',
+          'M.SC',
+          'M.COM',
+          'M.A.',
+          'MCA',
+          'MBA',
+        ],
+        [
+          'POST GRADUATION',
+          'POSTGRADUATION',
+          'POST-GRADUATE',
+          'POST GRADUATE',
+        ],
+        [
+          'DEGREE',
+          'MASTER DEGREE',
+          'POSTGRADUATE DEGREE',
+        ],
+        [
+          'UNIVERSITY',
+          'COLLEGE',
+          'INSTITUTE',
+        ],
+        [
+          'DEGREE CERTIFICATE',
+          'PROVISIONAL CERTIFICATE',
+          'CONVOCATION',
+          'CERTIFICATE',
+        ],
+        [
+          'AWARDED',
+          'CONFERRED',
+          'SUCCESSFULLY COMPLETED',
+          'COMPLETED',
+        ],
+      ];
+
+      const result =
+        hasKeywordGroups(
+          postGraduationGroups,
+          3
+        );
+
+      console.log(
+        'Post-Graduation Certificate validation:',
+        result
+      );
+
+      return result;
+    }
+
+    // ==================================================
+    // EXPERIENCE LETTER
+    // ==================================================
+
+    case 'Experience Letter': {
+      const experienceGroups = [
+        [
+          'EXPERIENCE LETTER',
+          'CERTIFICATE OF EXPERIENCE',
+          'EMPLOYMENT CERTIFICATE',
+          'EXPERIENCE CERTIFICATE',
+        ],
+        [
+          'WORK EXPERIENCE',
+          'EMPLOYED WITH',
+          'WORKED WITH',
+          'DURING HIS EMPLOYMENT',
+          'DURING HER EMPLOYMENT',
+          'DURING THE PERIOD OF EMPLOYMENT',
+        ],
+        [
+          'DESIGNATION',
+          'POSITION',
+          'ROLE',
+          'JOB TITLE',
+        ],
+        [
+          'DATE OF JOINING',
+          'JOINING DATE',
+          'DATE OF COMMENCEMENT',
+        ],
+        [
+          'DATE OF RELIEVING',
+          'RELIEVING DATE',
+          'LAST WORKING DAY',
+          'LAST WORKING DATE',
+        ],
+        [
+          'TENURE',
+          'PERIOD',
+          'YEARS',
+          'MONTHS',
+        ],
+        [
+          'TO WHOMSOEVER IT MAY CONCERN',
+          'TO WHOM IT MAY CONCERN',
+        ],
+      ];
+
+      const result =
+        hasKeywordGroups(
+          experienceGroups,
+          4
+        );
+
+      console.log(
+        'Experience Letter validation:',
+        result
+      );
+
+      return result;
+    }
+
+    // ==================================================
+    // RELIEVING LETTER
+    // ==================================================
+
+    case 'Relieving Letter': {
+      const relievingGroups = [
+        [
+          'RELIEVING LETTER',
+          'RELIEVING CERTIFICATE',
+        ],
+        [
+          'RELIEVED FROM',
+          'RELIEVED OF',
+          'RELIEVED FROM SERVICES',
+          'RELIEVED',
+        ],
+        [
+          'LAST WORKING DAY',
+          'LAST WORKING DATE',
+          'DATE OF RELIEVING',
+          'RELIEVING DATE',
+        ],
+        [
+          'EMPLOYMENT',
+          'EMPLOYED',
+          'SERVICES',
+          'TENURE',
+        ],
+        [
+          'FULL AND FINAL',
+          'NO DUES',
+          'HANDOVER',
+        ],
+        [
+          'DESIGNATION',
+          'POSITION',
+          'ROLE',
+        ],
+      ];
+
+      const result =
+        hasKeywordGroups(
+          relievingGroups,
+          4
+        );
+
+      console.log(
+        'Relieving Letter validation:',
+        result
+      );
+
+      return result;
+    }
+
+    // ==================================================
+    // OFFER LETTER
+    // ==================================================
+
+    case 'Offer Letter': {
+      const offerGroups = [
+        [
+          'OFFER LETTER',
+          'LETTER OF OFFER',
+          'OFFER OF EMPLOYMENT',
+          'EMPLOYMENT OFFER',
+        ],
+        [
+          'EMPLOYMENT',
+          'APPOINTMENT',
+          'EMPLOYMENT TERMS',
+          'TERMS OF EMPLOYMENT',
+        ],
+        [
+          'JOINING DATE',
+          'DATE OF JOINING',
+          'START DATE',
+        ],
+        [
+          'CTC',
+          'COMPENSATION',
+          'SALARY',
+          'REMUNERATION',
+        ],
+        [
+          'DESIGNATION',
+          'POSITION',
+          'JOB TITLE',
+          'ROLE',
+        ],
+        [
+          'TERMS AND CONDITIONS',
+          'TERMS & CONDITIONS',
+          'CONDITIONS OF EMPLOYMENT',
+        ],
+      ];
+
+      const result =
+        hasKeywordGroups(
+          offerGroups,
+          4
+        );
+
+      console.log(
+        'Offer Letter validation:',
+        result
+      );
+
+      return result;
+    }
+
+    // ==================================================
+    // OTHER
+    // ==================================================
+
+    case 'Other': {
+      /*
+       * "Other" is intentionally not tied to one
+       * document format.
+       *
+       * But it still cannot be completely empty.
+       *
+       * Require enough readable OCR text so that a
+       * random/blank image is rejected.
+       */
+
+      const meaningfulText =
+        normalized.replace(
+          /[^A-Z0-9]/g,
+          ''
+        );
+
+      console.log(
+        'Other document meaningful text length:',
+        meaningfulText.length
+      );
+
+      return meaningfulText.length >= 30;
+    }
+
+    // ==================================================
+    // UNKNOWN DOCUMENT TYPE
+    // ==================================================
 
     default:
+      console.log(
+        'Unknown document type:',
+        documentType
+      );
+
       return false;
   }
 }
 
-// ============================================================
+// ======================================================
 // OCR IMAGE
-// ============================================================
+// ======================================================
 
 async function runOCR(
   imageBuffer: Buffer
 ): Promise<string> {
   console.log(
-    "Starting Tesseract OCR..."
+    'Starting Tesseract OCR...'
   );
 
-  const worker =
-    await createWorker(
-      "eng",
-      1,
-      {
-        workerPath:
-          TESSERACT_WORKER_PATH,
-      }
-    );
+  console.log(
+    'Tesseract worker path:',
+    TESSERACT_WORKER_PATH
+  );
+
+  const worker = await createWorker(
+    'eng',
+    1,
+    {
+      workerPath:
+        TESSERACT_WORKER_PATH,
+    }
+  );
 
   try {
-    const result =
+    // ==================================================
+    // OCR PASS 1 - NORMAL
+    // ==================================================
+
+    await worker.setParameters({tessedit_pageseg_mode: PSM.AUTO,});
+
+    const normalResult = await worker.recognize(imageBuffer);
+
+    const normalText = normalResult.data.text || '';
+
+
+    console.log(
+      'Normal OCR confidence:',
+      normalResult.data.confidence
+    );
+
+    // ==================================================
+    // OCR PASS 2 - SPARSE
+    // ==================================================
+
+    await worker.setParameters({
+      tessedit_pageseg_mode:
+        PSM.SPARSE_TEXT,
+    });
+
+    const sparseResult =
       await worker.recognize(
         imageBuffer
       );
 
-    const text =
-      result.data.text || "";
+    const sparseText =
+      sparseResult.data.text || '';
 
     console.log(
-      "OCR text length:",
-      text.length
+      '========== SPARSE OCR =========='
     );
 
     console.log(
-      "OCR RESULT:",
-      JSON.stringify(
-        text.substring(
-          0,
-          2000
-        )
+      sparseText.substring(
+        0,
+        4000
       )
     );
 
-    return text;
+    console.log(
+      'Sparse OCR confidence:',
+      sparseResult.data.confidence
+    );
+
+    // ==================================================
+    // COMBINE OCR
+    // ==================================================
+
+    const combinedText = [
+      normalText,
+      sparseText,
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+    console.log(
+      '========== COMBINED OCR =========='
+    );
+
+    console.log(
+      combinedText.substring(
+        0,
+        6000
+      )
+    );
+
+    return combinedText;
+
   } catch (error) {
     console.error(
-      "OCR failed:",
+      'OCR failed:',
       error
     );
 
-    return "";
+    return '';
+
   } finally {
-    try {
-      await worker.terminate();
-    } catch (terminateError) {
-      console.error(
-        "Could not terminate Tesseract worker:",
-        terminateError
-      );
-    }
+    await worker.terminate();
   }
 }
 
-// ============================================================
+// ======================================================
 // EXTRACT PDF TEXT
-// ============================================================
+// ======================================================
 
 async function extractTextFromPDF(
   buffer: Buffer
 ): Promise<string> {
-  const parser =
-    new PDFParse({
-      data: buffer,
-    });
+  const parser = new PDFParse({
+    data: buffer,
+  });
 
   try {
-    // ========================================================
+    // ==================================================
     // 1. NORMAL PDF TEXT EXTRACTION
-    // ========================================================
+    // ==================================================
 
-    let extractedText = "";
+    const textResult =
+      await parser.getText();
 
-    try {
-      const textResult =
-        await parser.getText();
+    const extractedText =
+      (textResult.text || '')
+        .replace(
+          /--\s*\d+\s+of\s+\d+\s*--/gi,
+          ''
+        )
+        .trim();
 
-      extractedText =
-        (textResult.text || "")
-          .replace(
-            /--\s*\d+\s+of\s+\d+\s*--/gi,
-            ""
-          )
-          .trim();
-
-      const meaningfulText =
-        extractedText.replace(
-          /[^A-Za-z0-9]/g,
-          ""
-        );
-
-      console.log(
-        "Meaningful PDF text length:",
-        meaningfulText.length
+    const meaningfulText =
+      extractedText.replace(
+        /[^A-Za-z0-9]/g,
+        ''
       );
-
-      if (
-        meaningfulText.length > 10
-      ) {
-        console.log(
-          "PDF text extraction successful"
-        );
-
-        return extractedText;
-      }
-    } catch (textError) {
-      console.error(
-        "PDF text extraction failed:",
-        textError
-      );
-    }
-
-    // ========================================================
-    // 2. OCR EMBEDDED IMAGES
-    // ========================================================
 
     console.log(
-      "PDF contains no useful text. Starting OCR..."
+      'PDF raw text:',
+      JSON.stringify(
+        textResult.text || ''
+      )
     );
 
-    let ocrText = "";
+    console.log(
+      'PDF text after removing page markers:',
+      JSON.stringify(
+        extractedText
+      )
+    );
+
+    console.log(
+      'Meaningful PDF text length:',
+      meaningfulText.length
+    );
+
+    if (
+      meaningfulText.length > 10
+    ) {
+      console.log(
+        'PDF text extraction successful'
+      );
+
+      return extractedText;
+    }
+
+    console.log(
+      'PDF contains no real text. Starting OCR...'
+    );
+
+    // ==================================================
+    // 2. OCR EMBEDDED IMAGES
+    // ==================================================
+
+    let ocrText = '';
 
     try {
       const imageResult =
@@ -927,273 +1311,175 @@ async function extractTextFromPDF(
         });
 
       console.log(
-        "PDF image pages:",
+        'PDF image pages:',
         imageResult.pages?.length ||
           0
       );
 
       for (
         const page of
-          imageResult.pages || []
+        imageResult.pages || []
       ) {
         console.log(
-          `Page ${page.pageNumber}: images = ${
-            page.images?.length || 0
-          }`
+          `Page ${page.pageNumber}: images =`,
+          page.images?.length || 0
         );
 
         for (
           const image of
-            page.images || []
+          page.images || []
         ) {
           if (!image.data) {
             continue;
           }
 
-          try {
-            const pageText =
-              await runOCR(
-                Buffer.from(
-                  image.data
-                )
-              );
+          console.log(
+            `Running OCR on embedded image from page ${page.pageNumber}`
+          );
 
-            if (
-              pageText.trim()
-            ) {
-              ocrText +=
-                `\n${pageText}`;
-            }
-          } catch (ocrError) {
-            console.error(
-              "Embedded image OCR error:",
-              ocrError
+          const pageText =
+            await runOCR(
+              Buffer.from(
+                image.data
+              )
             );
+
+          if (
+            pageText.trim()
+          ) {
+            ocrText +=
+              `\n${pageText}`;
           }
         }
       }
+
     } catch (imageError) {
       console.error(
-        "Embedded image extraction failed:",
+        'Embedded image extraction failed:',
         imageError
       );
     }
 
-    // ========================================================
-    // 3. RENDER PDF PAGES AND OCR
-    // ========================================================
+    // ==================================================
+    // 3. RENDER PDF AND OCR
+    // ==================================================
 
     if (!ocrText.trim()) {
       console.log(
-        "Embedded image OCR returned no text."
+        'Embedded image OCR returned no text.'
       );
 
       console.log(
-        "Rendering PDF pages for OCR..."
+        'Rendering PDF pages for OCR...'
       );
 
       try {
         const screenshotResult =
           await parser.getScreenshot({
             first: 3,
-            desiredWidth: 2000,
+            desiredWidth: 3000,
             imageBuffer: true,
             imageDataUrl: false,
           });
 
         console.log(
-          "Screenshot pages:",
-          screenshotResult
-            .pages?.length || 0
+          'Screenshot pages:',
+          screenshotResult.pages
+            ?.length || 0
         );
 
         for (
           const page of
-            screenshotResult.pages ||
-            []
+          screenshotResult.pages || []
         ) {
           if (!page.data) {
             continue;
           }
 
-          try {
-            const pageText =
-              await runOCR(
-                Buffer.from(
-                  page.data
-                )
-              );
+          console.log(
+            `Running OCR on rendered page ${page.pageNumber}`
+          );
 
-            if (
-              pageText.trim()
-            ) {
-              ocrText +=
-                `\n${pageText}`;
-            }
-          } catch (ocrError) {
-            console.error(
-              "Rendered page OCR error:",
-              ocrError
+          const pageText =
+            await runOCR(
+              Buffer.from(
+                page.data
+              )
             );
+
+          if (
+            pageText.trim()
+          ) {
+            ocrText +=
+              `\n${pageText}`;
           }
         }
-      } catch (
-        screenshotError
-      ) {
+
+      } catch (screenshotError) {
         console.error(
-          "PDF screenshot OCR failed:",
+          'PDF screenshot OCR failed:',
           screenshotError
         );
       }
     }
 
+    console.log(
+      'Final OCR text:',
+      JSON.stringify(
+        ocrText.substring(
+          0,
+          2000
+        )
+      )
+    );
+
     return ocrText.trim();
+
   } finally {
     await parser.destroy();
   }
 }
 
-// ============================================================
-// CLOUDINARY DELETE HELPER
-// ============================================================
-
-async function deleteCloudinaryFile(
-  publicId: string,
-  resourceType?: string
-) {
-  if (!publicId) {
-    return;
-  }
-
-  try {
-    const actualResourceType =
-      resourceType || "image";
-
-    console.log(
-      "Deleting Cloudinary file:",
-      {
-        publicId,
-        resourceType:
-          actualResourceType,
-      }
-    );
-
-    const result =
-      await cloudinary.uploader.destroy(
-        publicId,
-        {
-          resource_type:
-            actualResourceType,
-          invalidate: true,
-        }
-      );
-
-    console.log(
-      "Cloudinary delete result:",
-      result
-    );
-
-    return result;
-  } catch (error) {
-    console.error(
-      "Cloudinary cleanup error:",
-      error
-    );
-
-    return null;
-  }
-}
-
-// ============================================================
-// GET EXISTING DOCUMENT
-// ============================================================
-
-async function getExistingDocument(
-  supabaseAdmin: any,
-  employeeId: string,
-  documentType: string
-) {
-  const {
-    data,
-    error,
-  } = await supabaseAdmin
-    .from(
-      "employee_documents"
-    )
-    .select("*")
-    .eq(
-      "employee_id",
-      employeeId
-    )
-    .eq(
-      "document_type",
-      documentType
-    )
-    .limit(1)
-    .maybeSingle();
-
-  if (error) {
-    throw new Error(
-      `Could not check existing document: ${error.message}`
-    );
-  }
-
-  return data;
-}
-
-// ============================================================
+// ======================================================
 // POST
-// ============================================================
+// ======================================================
 
 export async function POST(
   request: Request
 ) {
-  let uploadResult:
-    | {
-        public_id?: string;
-        secure_url?: string;
-        resource_type?: string;
-      }
-    | null = null;
+  let uploadResult: any = null;
 
   try {
-    // ========================================================
-    // SUPABASE ADMIN
-    // ========================================================
-
-    const supabaseAdmin =
-      await createAdminClient();
-
-    // ========================================================
+    // ==================================================
     // FORM DATA
-    // ========================================================
+    // ==================================================
 
     const formData =
       await request.formData();
 
     const file =
       formData.get(
-        "file"
-      ) as File | null;
+        'file'
+      ) as File;
 
     const employee_id =
       formData.get(
-        "employee_id"
-      ) as string | null;
+        'employee_id'
+      ) as string;
 
     const document_type =
       formData.get(
-        "document_type"
-      ) as string | null;
+        'document_type'
+      ) as string;
 
     const document_name =
       formData.get(
-        "document_name"
-      ) as string | null;
+        'document_name'
+      ) as string;
 
-    // ========================================================
+    // ==================================================
     // REQUIRED FIELDS
-    // ========================================================
+    // ==================================================
 
     if (
       !file ||
@@ -1204,7 +1490,7 @@ export async function POST(
       return NextResponse.json(
         {
           error:
-            "File, employee, document type, and document name are required",
+            'File, employee, document type, and document name are required',
         },
         {
           status: 400,
@@ -1212,9 +1498,9 @@ export async function POST(
       );
     }
 
-    // ========================================================
+    // ==================================================
     // FILE SIZE
-    // ========================================================
+    // ==================================================
 
     if (
       file.size >
@@ -1223,7 +1509,7 @@ export async function POST(
       return NextResponse.json(
         {
           error:
-            "File size exceeds 5MB limit",
+            'File size exceeds 5MB limit',
         },
         {
           status: 400,
@@ -1231,50 +1517,19 @@ export async function POST(
       );
     }
 
-    // ========================================================
-    // EMPTY FILE
-    // ========================================================
-
-    if (file.size === 0) {
-      return NextResponse.json(
-        {
-          error:
-            "The uploaded file is empty.",
-        },
-        {
-          status: 400,
-        }
-      );
-    }
-
-    // ========================================================
+    // ==================================================
     // FILE TYPE
-    // ========================================================
-
-    const extension =
-      file.name
-        .toLowerCase()
-        .split(".")
-        .pop();
-
-    const validMime =
-      ALLOWED_MIME_TYPES.includes(
-        file.type
-      );
-
-    const validExtension =
-      ALLOWED_EXTENSIONS.includes(
-        extension || ""
-      );
+    // ==================================================
 
     if (
-      !validMime &&
-      !validExtension
+      !ALLOWED_FILE_TYPES.includes(
+        file.type
+      )
     ) {
       return NextResponse.json(
         {
           error:
-            "Unsupported file type. Please upload a PDF, JPG, JPEG, PNG, or WEBP file.",
+            'Unsupported file type. Please upload a PDF, JPG, JPEG, or PNG file.',
         },
         {
           status: 400,
@@ -1282,9 +1537,14 @@ export async function POST(
       );
     }
 
-    // ========================================================
-    // FILE BUFFER
-    // ========================================================
+    // ==================================================
+    // EXTRACT TEXT + OCR
+    // ==================================================
+
+    let extractedText = '';
+
+    let identityNumber:
+      string | null = null;
 
     let fileBuffer: Buffer;
 
@@ -1293,43 +1553,31 @@ export async function POST(
         Buffer.from(
           await file.arrayBuffer()
         );
-    } catch (error) {
-      console.error(
-        "Could not read uploaded file:",
-        error
-      );
 
-      return NextResponse.json(
-        {
-          error:
-            "Could not read the uploaded file.",
-        },
-        {
-          status: 422,
-        }
-      );
-    }
-
-    // ========================================================
-    // OCR / PDF TEXT
-    // ========================================================
-
-    let extractedText = "";
-
-    try {
       const isPDF =
         file.type ===
-          "application/pdf" ||
+          'application/pdf' ||
         file.name
           .toLowerCase()
-          .endsWith(".pdf");
+          .endsWith('.pdf');
 
       if (isPDF) {
+        // PDF:
+        //
+        // 1. Normal PDF text
+        // 2. Embedded images
+        // 3. Rendered page OCR
+
         extractedText =
           await extractTextFromPDF(
             fileBuffer
           );
+
       } else {
+        // JPG / PNG
+        //
+        // Direct OCR
+
         extractedText =
           await runOCR(
             fileBuffer
@@ -1337,24 +1585,35 @@ export async function POST(
       }
 
       console.log(
-        `Extracted text length for ${document_type}:`,
-        extractedText.length
+        `Extracted text for ${document_type}:`,
+        extractedText.substring(
+          0,
+          3000
+        )
       );
+
     } catch (
       extractionError
     ) {
       console.error(
-        "Document text extraction error:",
+        'Document text extraction error:',
         extractionError
       );
 
-      // OCR failure must NOT stop upload.
-      extractedText = "";
+      return NextResponse.json(
+        {
+          error:
+            `Could not read the uploaded ${document_type}. Please upload a clear PDF or image.`,
+        },
+        {
+          status: 422,
+        }
+      );
     }
 
-    // ========================================================
-    // SOFT DOCUMENT VALIDATION
-    // ========================================================
+    // ==================================================
+    // DOCUMENT TYPE VALIDATION
+    // ==================================================
 
     const isDocumentMatching =
       validateDocumentType(
@@ -1363,22 +1622,26 @@ export async function POST(
       );
 
     console.log(
-      `Document OCR validation: ${document_type} = ${isDocumentMatching}`
+      `Document validation: ${document_type} = ${isDocumentMatching}`
     );
 
-    if (!isDocumentMatching) {
-      console.warn(
-        `OCR could not confidently identify ${document_type}. Upload will continue.`
+    if (
+      !isDocumentMatching
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            `Invalid document. The uploaded file does not appear to be a ${document_type}. Please upload the correct document.`,
+        },
+        {
+          status: 422,
+        }
       );
     }
 
-    // ========================================================
-    // EXTRACT ID NUMBER
-    // ========================================================
-
-    let identityNumber:
-      | string
-      | null = null;
+    // ==================================================
+    // ID DOCUMENT NUMBER
+    // ==================================================
 
     if (
       ID_DOCUMENT_TYPES.includes(
@@ -1391,77 +1654,112 @@ export async function POST(
           extractedText
         );
 
+      if (!identityNumber) {
+        return NextResponse.json(
+          {
+            error:
+              `Could not find a valid ${document_type} number in the uploaded document.`,
+          },
+          {
+            status: 422,
+          }
+        );
+      }
+
       console.log(
-        `${document_type} number detected:`,
-        maskIdentityNumber(
-          identityNumber
-        )
+        `${document_type} detected:`,
+        identityNumber
       );
     }
 
-    // ========================================================
-    // MULTIPLE DOCUMENT CHECK
-    // ========================================================
+    // ==================================================
+    // SUPABASE
+    // ==================================================
+
+    const supabase =
+      await createClient();
 
     const allowsMultiple =
       MULTIPLE_DOCUMENT_TYPES.includes(
         document_type
       );
 
-    // ========================================================
+    // ==================================================
     // FIND EXISTING DOCUMENT
-    //
-    // IMPORTANT:
-    // Use ADMIN client.
-    //
-    // The previous code used createClient().
-    // RLS could hide the existing row and then INSERT
-    // caused:
-    //
-    // duplicate key value violates unique constraint
-    // "employee_one_document_type"
-    // ========================================================
+    // ==================================================
 
     let existingDocument:
-      | Record<string, any>
-      | null = null;
+      any = null;
 
     if (!allowsMultiple) {
-      existingDocument =
-        await getExistingDocument(
-          supabaseAdmin,
-          employee_id,
+      const {
+        data,
+        error:
+          existingError,
+      } = await supabase
+        .from(
+          'employee_documents'
+        )
+        .select('*')
+        .eq(
+          'employee_id',
+          employee_id
+        )
+        .eq(
+          'document_type',
           document_type
+        )
+        .maybeSingle();
+
+      if (existingError) {
+        console.error(
+          'Error checking existing document:',
+          existingError
         );
 
-      console.log(
-        "Existing document found:",
-        !!existingDocument
-      );
+        return NextResponse.json(
+          {
+            error:
+              `Could not check existing document: ${existingError.message}`,
+          },
+          {
+            status: 500,
+          }
+        );
+      }
+
+      existingDocument =
+        data;
     }
 
-    // ========================================================
-    // CLOUDINARY UPLOAD
-    // ========================================================
+    // ==================================================
+    // CLOUDINARY RESOURCE TYPE
+    // ==================================================
+
+    const cloudinaryResourceType =
+      file.type ===
+      'application/pdf'
+        ? 'raw'
+        : 'image';
+
+    // ==================================================
+    // CLOUDINARY DATA URI
+    // ==================================================
 
     const base64Data =
       fileBuffer.toString(
-        "base64"
+        'base64'
       );
 
-    const mimeType =
-      file.type ||
-      "application/octet-stream";
-
     const dataURI =
-      `data:${mimeType};base64,${base64Data}`;
+      `data:${file.type};base64,${base64Data}`;
+
+    // ==================================================
+    // CLOUDINARY UPLOAD
+    // ==================================================
 
     uploadResult =
-      await new Promise<{
-        public_id: string;
-        secure_url: string;
-        resource_type: string;
-      }>(
+      await new Promise<any>(
         (
           resolve,
           reject
@@ -1470,16 +1768,10 @@ export async function POST(
             dataURI,
             {
               folder:
-                "teens-hr/documents",
+                'teens-hr/documents',
 
               resource_type:
-                "auto",
-
-              use_filename:
-                true,
-
-              unique_filename:
-                true,
+                cloudinaryResourceType,
             },
             (
               error,
@@ -1487,65 +1779,41 @@ export async function POST(
             ) => {
               if (error) {
                 reject(error);
-              } else if (
-                result
-              ) {
-                resolve(
-                  result as {
-                    public_id: string;
-                    secure_url: string;
-                    resource_type: string;
-                  }
-                );
               } else {
-                reject(
-                  new Error(
-                    "Cloudinary returned no result."
-                  )
-                );
+                resolve(result);
               }
             }
           );
         }
       );
 
-    console.log(
-      "Cloudinary upload successful:",
-      {
-        public_id:
-          uploadResult.public_id,
-        resource_type:
-          uploadResult.resource_type,
-      }
-    );
-
-    // ========================================================
+    // ==================================================
     // IDENTITY DATABASE FIELDS
-    // ========================================================
+    // ==================================================
 
     const identityFields = {
       aadhaar_number:
         document_type ===
-        "Aadhar Card"
+        'Aadhar Card'
           ? identityNumber
           : null,
 
       pan_number:
         document_type ===
-        "PAN Card"
+        'PAN Card'
           ? identityNumber
           : null,
 
       passport_number:
         document_type ===
-        "Passport"
+        'Passport'
           ? identityNumber
           : null,
     };
 
-    // ========================================================
-    // UPDATE EXISTING DOCUMENT
-    // ========================================================
+    // ==================================================
+    // REPLACE EXISTING DOCUMENT
+    // ==================================================
 
     if (
       existingDocument
@@ -1555,9 +1823,9 @@ export async function POST(
           updatedDocument,
         error:
           updateError,
-      } = await supabaseAdmin
+      } = await supabase
         .from(
-          "employee_documents"
+          'employee_documents'
         )
         .update({
           document_name:
@@ -1575,28 +1843,36 @@ export async function POST(
           ...identityFields,
         })
         .eq(
-          "id",
+          'id',
           existingDocument.id
         )
         .select()
         .single();
 
-      if (
-        updateError
-      ) {
+      // ==================================================
+      // UPDATE FAILED
+      // ==================================================
+
+      if (updateError) {
         console.error(
-          "Error updating document record:",
+          'Error updating document record:',
           updateError
         );
 
-        // Delete NEW Cloudinary file
-        // because DB update failed.
-        if (
-          uploadResult.public_id
-        ) {
-          await deleteCloudinaryFile(
+        try {
+          await cloudinary.uploader.destroy(
             uploadResult.public_id,
-            uploadResult.resource_type
+            {
+              resource_type:
+                uploadResult.resource_type,
+            }
+          );
+        } catch (
+          cleanupError
+        ) {
+          console.error(
+            'Cloudinary cleanup error:',
+            cleanupError
           );
         }
 
@@ -1611,26 +1887,35 @@ export async function POST(
         );
       }
 
-      // ======================================================
-      // DB UPDATE SUCCESS
-      //
-      // Now delete OLD Cloudinary file.
-      // ======================================================
+      // ==================================================
+      // DELETE OLD CLOUDINARY FILE
+      // ==================================================
 
       if (
-        existingDocument.cloudinary_public_id &&
-        existingDocument.cloudinary_public_id !==
-          uploadResult.public_id
+        existingDocument.cloudinary_public_id
       ) {
-        await deleteCloudinaryFile(
-          existingDocument.cloudinary_public_id,
-          existingDocument.cloudinary_resource_type
-        );
+        try {
+          await cloudinary.uploader.destroy(
+            existingDocument.cloudinary_public_id,
+            {
+              resource_type:
+                existingDocument.cloudinary_resource_type ||
+                'raw',
+            }
+          );
+        } catch (
+          cloudinaryError
+        ) {
+          console.error(
+            'Error deleting old Cloudinary file:',
+            cloudinaryError
+          );
+        }
       }
 
-      // ======================================================
+      // ==================================================
       // REVALIDATE
-      // ======================================================
+      // ==================================================
 
       revalidatePath(
         `/dashboard/employees/${employee_id}`
@@ -1649,28 +1934,23 @@ export async function POST(
         document:
           updatedDocument,
 
-        replaced: true,
-
-        ocrVerified:
-          isDocumentMatching,
-
-        identityNumberFound:
-          !!identityNumber,
+        replaced:
+          true,
       });
     }
 
-    // ========================================================
+    // ==================================================
     // INSERT NEW DOCUMENT
-    // ========================================================
+    // ==================================================
 
     const {
       data:
         documentRecord,
       error:
         insertError,
-    } = await supabaseAdmin
+    } = await supabase
       .from(
-        "employee_documents"
+        'employee_documents'
       )
       .insert({
         employee_id,
@@ -1694,158 +1974,30 @@ export async function POST(
       .select()
       .single();
 
-    // ========================================================
-    // INSERT ERROR
-    // ========================================================
+    // ==================================================
+    // INSERT FAILED
+    // ==================================================
 
-    if (
-      insertError
-    ) {
+    if (insertError) {
       console.error(
-        "Error saving document record:",
+        'Error saving document record:',
         insertError
       );
 
-      // ======================================================
-      // DUPLICATE KEY / RACE CONDITION
-      // ======================================================
-      //
-      // Another request may have inserted the same
-      // employee + document type between our SELECT
-      // and INSERT.
-      //
-      // Instead of returning an error, find that record
-      // and replace it.
-      // ======================================================
-
-      if (
-        insertError.code ===
-        "23505"
-      ) {
-        console.warn(
-          "Duplicate document detected. Re-fetching existing document..."
-        );
-
-        const duplicateDocument =
-          await getExistingDocument(
-            supabaseAdmin,
-            employee_id,
-            document_type
-          );
-
-        if (
-          duplicateDocument
-        ) {
-          const {
-            data:
-              replacedDocument,
-            error:
-              replaceError,
-          } = await supabaseAdmin
-            .from(
-              "employee_documents"
-            )
-            .update({
-              document_name:
-                document_name.trim(),
-
-              document_url:
-                uploadResult.secure_url,
-
-              cloudinary_public_id:
-                uploadResult.public_id,
-
-              cloudinary_resource_type:
-                uploadResult.resource_type,
-
-              ...identityFields,
-            })
-            .eq(
-              "id",
-              duplicateDocument.id
-            )
-            .select()
-            .single();
-
-          if (
-            replaceError
-          ) {
-            console.error(
-              "Duplicate recovery update failed:",
-              replaceError
-            );
-
-            if (
-              uploadResult.public_id
-            ) {
-              await deleteCloudinaryFile(
-                uploadResult.public_id,
-                uploadResult.resource_type
-              );
-            }
-
-            return NextResponse.json(
-              {
-                error:
-                  `File uploaded but document record could not be saved: ${replaceError.message}`,
-              },
-              {
-                status: 500,
-              }
-            );
-          }
-
-          // Delete the old Cloudinary file
-          // only after the replacement DB record succeeds.
-          if (
-            duplicateDocument.cloudinary_public_id &&
-            duplicateDocument.cloudinary_public_id !==
-              uploadResult.public_id
-          ) {
-            await deleteCloudinaryFile(
-              duplicateDocument.cloudinary_public_id,
-              duplicateDocument.cloudinary_resource_type
-            );
-          }
-
-          revalidatePath(
-            `/dashboard/employees/${employee_id}`
-          );
-
-          return NextResponse.json({
-            message:
-              `${document_type} replaced successfully`,
-
-            url:
-              uploadResult.secure_url,
-
-            public_id:
-              uploadResult.public_id,
-
-            document:
-              replacedDocument,
-
-            replaced: true,
-
-            ocrVerified:
-              isDocumentMatching,
-
-            identityNumberFound:
-              !!identityNumber,
-          });
-        }
-      }
-
-      // ======================================================
-      // NORMAL INSERT FAILURE
-      // ======================================================
-
-      if (
-        uploadResult.public_id
-      ) {
-        await deleteCloudinaryFile(
+      try {
+        await cloudinary.uploader.destroy(
           uploadResult.public_id,
-          uploadResult.resource_type
+          {
+            resource_type:
+              uploadResult.resource_type,
+          }
+        );
+      } catch (
+        cleanupError
+      ) {
+        console.error(
+          'Cloudinary cleanup error:',
+          cleanupError
         );
       }
 
@@ -1860,9 +2012,9 @@ export async function POST(
       );
     }
 
-    // ========================================================
+    // ==================================================
     // SUCCESS
-    // ========================================================
+    // ==================================================
 
     revalidatePath(
       `/dashboard/employees/${employee_id}`
@@ -1881,41 +2033,49 @@ export async function POST(
       document:
         documentRecord,
 
-      replaced: false,
-
-      ocrVerified:
-        isDocumentMatching,
-
-      identityNumberFound:
-        !!identityNumber,
+      replaced:
+        false,
     });
-  } catch (error: unknown) {
+
+  } catch (
+    error: any
+  ) {
     console.error(
-      "Upload error:",
+      'Upload error:',
       error
     );
 
-    // ========================================================
+    // ==================================================
     // FINAL CLOUDINARY CLEANUP
-    // ========================================================
+    // ==================================================
 
     if (
       uploadResult?.public_id
     ) {
-      await deleteCloudinaryFile(
-        uploadResult.public_id,
-        uploadResult.resource_type
-      );
+      try {
+        await cloudinary.uploader.destroy(
+          uploadResult.public_id,
+          {
+            resource_type:
+              uploadResult.resource_type ||
+              'raw',
+          }
+        );
+      } catch (
+        cleanupError
+      ) {
+        console.error(
+          'Final Cloudinary cleanup error:',
+          cleanupError
+        );
+      }
     }
-
-    const message =
-      error instanceof Error
-        ? error.message
-        : "An error occurred during file upload";
 
     return NextResponse.json(
       {
-        error: message,
+        error:
+          error?.message ||
+          'An error occurred during file upload',
       },
       {
         status: 500,

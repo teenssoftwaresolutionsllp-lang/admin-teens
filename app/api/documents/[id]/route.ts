@@ -1,76 +1,90 @@
-import { NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase-server";
+import { NextResponse } from 'next/server';
+import { v2 as cloudinary } from 'cloudinary';
+import { createClient } from '@/lib/supabase-server';
 
-export async function GET(request: Request) {
+cloudinary.config({
+  cloud_name: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+export async function DELETE(
+  request: Request,
+  props: { params: Promise<{ id: string }> }
+) {
   try {
-    const { searchParams } = new URL(request.url);
+    const { id } = await props.params;
 
-    const employeeId = searchParams.get("employee_id");
-
-    if (!employeeId) {
+    if (!id) {
       return NextResponse.json(
-        {
-          error: "employee_id is required",
-        },
+        { error: 'Document ID is required' },
         { status: 400 }
       );
     }
 
-    const supabaseAdmin = await createAdminClient();
+    const supabase = await createClient();
 
-    const { data, error } = await supabaseAdmin
-      .from("employee_documents")
-      .select(`
-        id,
-        employee_id,
-        document_name,
-        document_type,
-        document_url,
-        cloudinary_public_id,
-        cloudinary_resource_type,
-        created_at,
-        updated_at
-      `)
-      .eq("employee_id", employeeId)
-      .order("created_at", {
-        ascending: false,
-      });
+    // Get document
+    const { data: document, error: fetchError } = await supabase
+      .from('employee_documents')
+      .select('*')
+      .eq('id', id)
+      .single();
 
-    if (error) {
-      console.error(
-        "Error fetching employee documents:",
-        error
-      );
+    if (fetchError || !document) {
+      console.error('Document not found:', fetchError);
 
       return NextResponse.json(
-        {
-          error:
-            error.message ||
-            "Failed to fetch employee documents",
-        },
+        { error: 'Document not found' },
+        { status: 404 }
+      );
+    }
+
+    // Delete database record
+    const { error: deleteError } = await supabase
+      .from('employee_documents')
+      .delete()
+      .eq('id', id);
+
+    if (deleteError) {
+      console.error('Database delete error:', deleteError);
+
+      return NextResponse.json(
+        { error: deleteError.message },
         { status: 500 }
       );
     }
 
-    return NextResponse.json(
-      {
-        success: true,
-        documents: data || [],
-      },
-      { status: 200 }
-    );
-  } catch (error: unknown) {
+    // Delete Cloudinary file
+    if (document.cloudinary_public_id) {
+      try {
+        await cloudinary.uploader.destroy(
+          document.cloudinary_public_id,
+          {
+            resource_type:
+              document.cloudinary_resource_type || 'image',
+          }
+        );
+      } catch (cloudinaryError) {
+        console.error(
+          'Cloudinary delete error:',
+          cloudinaryError
+        );
+      }
+    }
+
+    return NextResponse.json({
+      message: 'Document deleted successfully',
+    });
+  } catch (error: any) {
     console.error(
-      "GET /api/documents error:",
+      'API Error in DELETE /api/documents/[id]:',
       error
     );
 
     return NextResponse.json(
       {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Internal server error",
+        error: error?.message || 'Internal server error',
       },
       { status: 500 }
     );

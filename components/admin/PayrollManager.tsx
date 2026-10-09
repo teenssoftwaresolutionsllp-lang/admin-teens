@@ -3,9 +3,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import {
-  Banknote, Settings, Play, CheckCircle2, Loader2, FileText, Eye,
-  Sliders, XCircle, Printer, Users, CalendarDays, IndianRupee,
-  TrendingDown, ShieldCheck, ChevronRight, Briefcase, CircleDollarSign,
+  Banknote, Settings, Play, CheckCircle2, Loader2, FileText, Eye,Building2,
+  Sliders, XCircle, Printer, Users, CalendarDays, IndianRupee,BriefcaseBusiness,CircleCheck,
+  TrendingDown, ShieldCheck, ChevronRight, Briefcase, CircleDollarSign,X,
   UserRound, User, Clock3, Info, Search, CreditCard, Pencil, Save
 } from "lucide-react";
 import Image from "next/image";
@@ -16,6 +16,7 @@ interface PayrollManagerProps {
   initialComponents: SalaryComponent[];
   initialPayslips: Payslip[];
   employees: Employee[];
+  role: "ceo" | "hr" | "employee";
 }
 
 type ActiveTab = "runner" | "components" | "slips";
@@ -35,7 +36,8 @@ const formatNumber = (value: number | null | undefined) =>
 export default function PayrollManager({
   initialComponents,
   initialPayslips,
-  employees: initialEmployees
+  employees: initialEmployees,
+  role,
 }: PayrollManagerProps) {
   const now = new Date();
   const currentMonth = now.getMonth() + 1;
@@ -43,14 +45,12 @@ export default function PayrollManager({
 
   const [employees] = useState<Employee[]>(initialEmployees);
   const [components, setComponents] = useState<SalaryComponent[]>(initialComponents);
+  const [employeeComponents, setEmployeeComponents] = useState<SalaryComponent[]>([]);
+  const [employeeComponentsLoading, setEmployeeComponentsLoading] = useState(false);
   const [payslips, setPayslips] = useState<Payslip[]>(initialPayslips);
   const [activeTab, setActiveTab] = useState<ActiveTab>("runner");
-  const [selectedMonth, setSelectedMonth] = useState(
-    currentMonth === 1 ? 12 : currentMonth - 1
-  );
-  const [selectedYear, setSelectedYear] = useState(
-    currentMonth === 1 ? currentYear - 1 : currentYear
-  );
+  const [selectedMonth, setSelectedMonth] = useState(currentMonth === 1 ? 12 : currentMonth - 1);
+  const [selectedYear, setSelectedYear] = useState(currentMonth === 1 ? currentYear - 1 : currentYear);
   const [selectedEmployee, setSelectedEmployee] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [running, setRunning] = useState(false);
@@ -68,6 +68,15 @@ export default function PayrollManager({
   const [calendarName, setCalendarName] = useState("Company Calendar");
   const [savingSaturday, setSavingSaturday] = useState<string | null>(null);
 
+  const [additionalEarnings, setAdditionalEarnings] = useState<
+    {
+      type: "Incentive" | "Bonus" | "Compensation";
+      amount: number;
+    }[]>([]);
+  type AdditionalEarningType = "" | "Incentive" | "Bonus" | "Compensation";
+  const [additionalEarningType, setAdditionalEarningType] =  useState<AdditionalEarningType>("");
+  const [additionalEarningAmount, setAdditionalEarningAmount] = useState("");
+
   const availableYears = useMemo(
     () => Array.from({ length: 6 }, (_, index) => currentYear - index),
     [currentYear]
@@ -82,6 +91,36 @@ export default function PayrollManager({
     () => employees.find(employee => employee.id === selectedEmployee),
     [employees, selectedEmployee]
   );
+
+  const loadEmployeeComponents = useCallback(async () => 
+  {
+    if (!selectedEmployee) {
+      setEmployeeComponents([]);
+      return;
+    }
+
+    setEmployeeComponentsLoading(true);
+    setMessage(null);
+
+    try {
+      const response = await fetch(`/api/payroll/employee-components?employeeId=${selectedEmployee}`);
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to load employee salary components");
+      }
+      setEmployeeComponents(data.components || []);
+    } catch (error: any) {
+      console.error("Failed to load employee salary components:", error);
+      setEmployeeComponents([]);
+      setMessage(error.message || "Failed to load salary components");
+    } finally {
+      setEmployeeComponentsLoading(false);
+    }
+  }, [selectedEmployee]);
+
+  useEffect(() => {
+    loadEmployeeComponents();
+  }, [loadEmployeeComponents]);
 
   const selectedPeriod = selectedYear * 12 + selectedMonth;
   const currentPeriod = currentYear * 12 + currentMonth;
@@ -100,8 +139,355 @@ export default function PayrollManager({
     return joiningYear * 12 + joiningMonth;
   }, [selectedEmployeeData]);
 
-  const isBeforeJoiningPeriod =
-    employeeJoiningPeriod !== null && selectedPeriod < employeeJoiningPeriod;
+  const formatAnnualCtc = (salaryInLakhs: number) => {
+    if (salaryInLakhs >= 100) {
+      return `${(salaryInLakhs / 100).toLocaleString("en-IN", {
+        maximumFractionDigits: 2,
+      })} Crore`;
+    }
+    return `${salaryInLakhs.toLocaleString("en-IN", {
+      maximumFractionDigits: 2,
+    })} Lakhs`;
+  };
+
+
+
+/* ========================================================= */
+/* PAYSLIP HELPERS */
+/* ========================================================= */
+
+const formatPayslipCurrency = (value: number | string | null | undefined) => {
+  const amount = Number(value || 0);
+
+  return `₹${amount.toLocaleString("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+};
+
+const getPayslipEmployeeName = (employee: any) => {
+  if (!employee) return "-";
+
+  if (employee.name) return employee.name;
+
+  return [employee.first_name, employee.middle_name, employee.last_name]
+    .filter(Boolean)
+    .join(" ") || "-";
+};
+
+const getPayslipEmployeeCode = (employee: any) => {
+  return employee?.employee_id || employee?.code || "-";
+};
+
+const getPayslipBankName = (employee: any) => {
+  return (
+    employee?.bank_name ||
+    employee?.bank ||
+    employee?.bank_details?.bank_name ||
+    "-"
+  );
+};
+
+const getPayslipAccountNumber = (employee: any) => {
+  return (
+    employee?.bank_account_number ||
+    employee?.account_number ||
+    employee?.bank_account_no ||
+    employee?.account_no ||
+    employee?.bank_details?.account_number ||
+    "-"
+  );
+};
+
+const getPayslipIFSC = (employee: any) => {
+  return (
+    employee?.ifsc_code ||
+    employee?.ifsc ||
+    employee?.bank_ifsc ||
+    employee?.bank_details?.ifsc_code ||
+    "-"
+  );
+};
+
+const getPayslipDate = (value: any) => {
+  if (!value) return "-";
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return String(value);
+  }
+
+  return date.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+};
+
+
+/* ========================================================= */
+/* AMOUNT TO WORDS */
+/* ========================================================= */
+
+const numberToWordsIndian = (num: number): string => {
+  const value = Math.floor(Math.abs(Number(num) || 0));
+
+  if (value === 0) return "Zero";
+
+  const ones = [
+    "",
+    "One",
+    "Two",
+    "Three",
+    "Four",
+    "Five",
+    "Six",
+    "Seven",
+    "Eight",
+    "Nine",
+    "Ten",
+    "Eleven",
+    "Twelve",
+    "Thirteen",
+    "Fourteen",
+    "Fifteen",
+    "Sixteen",
+    "Seventeen",
+    "Eighteen",
+    "Nineteen",
+  ];
+
+  const tens = [
+    "",
+    "",
+    "Twenty",
+    "Thirty",
+    "Forty",
+    "Fifty",
+    "Sixty",
+    "Seventy",
+    "Eighty",
+    "Ninety",
+  ];
+
+  const convertBelowThousand = (n: number): string => {
+    let result = "";
+
+    if (n >= 100) {
+      result += `${ones[Math.floor(n / 100)]} Hundred`;
+      n %= 100;
+
+      if (n > 0) {
+        result += " ";
+      }
+    }
+
+    if (n >= 20) {
+      result += tens[Math.floor(n / 10)];
+      n %= 10;
+
+      if (n > 0) {
+        result += ` ${ones[n]}`;
+      }
+    } else if (n > 0) {
+      result += ones[n];
+    }
+
+    return result;
+  };
+
+  let remaining = value;
+  const parts: string[] = [];
+
+  if (remaining >= 10000000) {
+    const crore = Math.floor(remaining / 10000000);
+    parts.push(`${convertBelowThousand(crore)} Crore`);
+    remaining %= 10000000;
+  }
+
+  if (remaining >= 100000) {
+    const lakh = Math.floor(remaining / 100000);
+    parts.push(`${convertBelowThousand(lakh)} Lakh`);
+    remaining %= 100000;
+  }
+
+  if (remaining >= 1000) {
+    const thousand = Math.floor(remaining / 1000);
+    parts.push(`${convertBelowThousand(thousand)} Thousand`);
+    remaining %= 1000;
+  }
+
+  if (remaining > 0) {
+    parts.push(convertBelowThousand(remaining));
+  }
+
+  return parts.join(" ");
+};
+
+const getAmountInWords = (amount: number) => {
+  const roundedAmount = Math.round(Number(amount || 0));
+
+  if (roundedAmount === 0) {
+    return "Zero Rupees Only";
+  }
+
+  return `${numberToWordsIndian(roundedAmount)} Rupees Only`;
+};
+
+
+/* ========================================================= */
+/* PAYSLIP INFO ROW */
+/* ========================================================= */
+
+function PayslipInfoRow({
+  label,
+  value,
+}: {
+  label: string;
+  value: string | number | null | undefined;
+}) {
+  return (
+    <div className="min-w-0">
+      <label className="mb-1.5 block text-[11px] font-medium text-slate-500">
+        {label}
+      </label>
+
+      <div className="flex min-h-[42px] w-full items-center rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-800">
+        <span className="truncate">
+          {value === null || value === undefined || value === ""
+            ? "-"
+            : String(value)}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/* ========================================================= */
+/* PAYSLIP SUMMARY ITEM */
+/* ========================================================= */
+
+function PayslipSummaryItem({
+  label,
+  value,
+}: {
+  label: string;
+  value: string | number | null | undefined;
+}) {
+  return (
+    <div className="min-w-0">
+      <label className="mb-1.5 block text-[11px] font-medium text-slate-500">
+        {label}
+      </label>
+
+      <div className="flex min-h-[42px] w-full items-center rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800">
+        {value === null || value === undefined || value === ""
+          ? "-"
+          : String(value)}
+      </div>
+    </div>
+  );
+}
+
+/* ========================================================= */
+/* NORMALIZE SALARY BREAKUP */
+/* ========================================================= */
+
+const normalizePayslipBreakup = (breakup: any): any[] => {
+  if (!breakup) return [];
+
+  if (Array.isArray(breakup)) {
+    return breakup;
+  }
+
+  if (typeof breakup === "object") {
+    return Object.entries(breakup).map(([key, value]: [string, any]) => {
+      if (value && typeof value === "object") {
+        return {
+          ...value,
+          code: value.code || key,
+          name:
+            value.name ||
+            value.component_name ||
+            value.component ||
+            key,
+        };
+      }
+
+      return {
+        code: key,
+        name: key,
+        amount: value,
+      };
+    });
+  }
+
+  return [];
+};
+
+
+/* ========================================================= */
+/* BREAKUP ROW */
+/* ========================================================= */
+
+function PayslipBreakupRow({
+  item,
+}: {
+  item: any;
+}) {
+  const name =
+    item?.name ||
+    item?.component_name ||
+    item?.component ||
+    item?.label ||
+    item?.code ||
+    "Salary Component";
+
+  const code =
+    item?.code ||
+    "";
+
+  const amount = Number(
+    item?.amount ??
+    item?.value ??
+    0
+  );
+
+  return (
+    <div className="flex min-h-[58px] items-center justify-between gap-5 border-b border-slate-100 py-3">
+
+      {/* COMPONENT NAME */}
+
+      <div className="min-w-0">
+
+        <p className="text-xs font-medium text-slate-700">
+          {name}
+        </p>
+
+        {code && (
+          <p className="mt-1 text-[9px] font-medium uppercase tracking-wide text-slate-400">
+            {code}
+          </p>
+        )}
+
+      </div>
+
+
+      {/* AMOUNT */}
+
+      <div className="shrink-0">
+
+        <span className="whitespace-nowrap text-sm font-semibold text-slate-800">
+          {formatPayslipCurrency(amount)}
+        </span>
+
+      </div>
+
+    </div>
+  );
+}
+  const isBeforeJoiningPeriod = employeeJoiningPeriod !== null && selectedPeriod < employeeJoiningPeriod;
 
   const payrollPeriodValid = !isFuturePeriod && !isBeforeJoiningPeriod;
 
@@ -205,6 +591,64 @@ export default function PayrollManager({
     }
   };
 
+
+  const handleAddAdditionalEarning = () => {
+    if (!additionalEarningType) {
+      setMessage({
+        type: "error",
+        text: "Please select an earning type.",
+      });
+
+      return;
+    }
+
+    const amount = Number(additionalEarningAmount);
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setMessage({
+        type: "error",
+        text: "Please enter a valid earning amount.",
+      });
+
+      return;
+    }
+
+    const alreadyAdded = additionalEarnings.some(
+      (earning) => earning.type === additionalEarningType
+    );
+
+    if (alreadyAdded) {
+      setMessage({
+        type: "error",
+        text: `${additionalEarningType} has already been added for this payroll.`,
+      });
+
+      return;
+    }
+
+    setAdditionalEarnings((previous) => [
+      ...previous,
+      {
+        type: additionalEarningType,
+        amount,
+      },
+    ]);
+
+    setAdditionalEarningAmount("");
+
+    setMessage({
+      type: "success",
+      text: `${additionalEarningType} added successfully.`,
+    });
+  };
+
+  const handleRemoveAdditionalEarning = (type: "Incentive" | "Bonus" | "Compensation") => 
+  {
+    setAdditionalEarnings((previous) =>
+      previous.filter((earning) => earning.type !== type)
+    );
+  };
+
   const handleRunPayroll = async () => {
     setMessage(null);
 
@@ -237,7 +681,8 @@ export default function PayrollManager({
         body: JSON.stringify({
           employeeId: selectedEmployee,
           month: selectedMonth,
-          year: selectedYear
+          year: selectedYear,
+          additionalEarnings,
         })
       });
       const data = await response.json();
@@ -279,34 +724,52 @@ export default function PayrollManager({
     setComponentLoading(component.id);
 
     try {
-      const response = await fetch("/api/payroll/components", {
+      if (!component.employee_component_id) {
+        throw new Error("Employee salary component ID is missing.");
+      }
+
+      const response = await fetch("/api/payroll/employee-components", {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
-          id: component.id,
-          is_active: !component.is_active
-        })
+          id: component.employee_component_id,
+          is_active: !component.is_active,
+        }),
       });
+
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data?.error || "Failed to update salary component.");
+        throw new Error(
+          data?.error || "Failed to update employee salary component."
+        );
       }
 
-      setComponents(previous =>
-        previous.map(item =>
-          item.id === component.id ? { ...item, is_active: !item.is_active } : item
+      setEmployeeComponents((previous) =>
+        previous.map((item) =>
+          item.id === component.id
+            ? {
+                ...item,
+                is_active: !component.is_active,
+              }
+            : item
         )
       );
 
       setMessage({
         type: "success",
-        text: `${component.name} has been ${component.is_active ? "disabled" : "enabled"}.`
+        text: `${component.name} has been ${
+          component.is_active ? "disabled" : "enabled"
+        }.`,
       });
     } catch (error: any) {
       setMessage({
         type: "error",
-        text: error?.message || "Failed to update salary component."
+        text:
+          error?.message ||
+          "Failed to update employee salary component.",
       });
     } finally {
       setComponentLoading(null);
@@ -315,55 +778,64 @@ export default function PayrollManager({
 
   const handleSaveComponent = async () => {
     if (!editingComponent) return;
-
     setSavingComponent(true);
     setMessage(null);
-
-      try {
-        const response = await fetch("/api/payroll/components", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            id: editingComponent.id,
-            name: editingComponent.name,
-            code: editingComponent.code,
-            type: editingComponent.type,
-            calculation_type: editingComponent.calculation_type,
-            value: Number(editingComponent.value),
-            affects_lop: editingComponent.affects_lop,
-            description: editingComponent.description,
-          }) 
-        });
-
-        const data = await response.json();
-
-        if (!response.ok) {
-          throw new Error(data?.error || "Failed to save salary component.");
-        }
-
-        setComponents(previous =>
-          previous.map(item =>
-            item.id === editingComponent.id
-              ? data.component
-              : item
-          )
-        );
-
-        setEditingComponent(null);
-
-        setMessage({
-          type: "success",
-          text: `${editingComponent.name} updated successfully.`
-        });
-      } catch (error: any) {
-        setMessage({
-          type: "error",
-          text: error?.message || "Failed to save salary component."
-        });
-      } finally {
-        setSavingComponent(false);
+    try {
+      if (!editingComponent.employee_component_id) {
+        throw new Error("Employee salary component ID is missing.");
       }
-    };
+      const numericValue = Number(editingComponent.value);
+      if (!Number.isFinite(numericValue) || numericValue < 0) {
+        throw new Error("Value must be a valid non-negative number.");
+      }
+      const response = await fetch(
+        "/api/payroll/employee-components",
+        {
+          method: "PATCH",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({
+            id: editingComponent.employee_component_id,
+            calculation_type: editingComponent.calculation_type,
+            value: numericValue,
+            is_active: editingComponent.is_active,
+            affects_lop: editingComponent.affects_lop,
+          }),
+        }
+      );
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.error ||"Failed to update employee salary component.");
+      }
+
+      setEmployeeComponents((previous) =>
+        previous.map((item) => item.id === editingComponent.id ? 
+        {
+            ...item,
+            calculation_type:editingComponent.calculation_type,
+            value: numericValue,
+            is_active: editingComponent.is_active,
+            affects_lop: editingComponent.affects_lop,
+          }: item
+        )
+      );
+
+      setEditingComponent(null);
+
+      setMessage({
+        type: "success",
+        text: `${editingComponent.name} updated successfully.`,
+      });
+    } catch (error: any) {
+      setMessage({
+        type: "error",
+        text:
+          error?.message ||
+          "Failed to update employee salary component.",
+      });
+    } finally {
+      setSavingComponent(false);
+    }
+  };
 
   const handleViewPayslip = async (slip: Payslip) => {
   try {
@@ -381,7 +853,8 @@ export default function PayrollManager({
 
     setPreviewSlip(slip);
   }
-};
+  };
+
 
   const handlePrintPayslip = () => window.print();
 
@@ -442,7 +915,7 @@ export default function PayrollManager({
           <MetricCard icon={CircleDollarSign} label="Net Monthly Payout" value={formatCurrency(payrollMetrics.netPayout)} helper={`${payrollMetrics.employeeCount} payslip${payrollMetrics.employeeCount === 1 ? "" : "s"} generated`} />
           <MetricCard icon={TrendingDown} label="LOP Deductions" value={formatCurrency(payrollMetrics.lopDeduction)} helper="Loss of pay deduction" />
           <MetricCard icon={Users} label="Employees Processed" value={String(payrollMetrics.employeeCount)} helper={`of ${activeEmployees.length} active employees`} />
-          <MetricCard icon={Settings} label="Active Salary Heads" value={String(payrollMetrics.activeComponents)} helper={`of ${components.length} configured`} />
+          <MetricCard icon={Settings} label="Active Salary Heads" value={String(payrollMetrics.activeComponents)} helper={`of ${components.length-2} configured`} />
         </div>
 
         <div className="mt-4 rounded-xl border border-slate-200 bg-white p-1.5 shadow-sm">
@@ -450,6 +923,9 @@ export default function PayrollManager({
             {tabs.map(tab => {
               const Icon = tab.icon;
               const active = activeTab === tab.id;
+              if (tab.id === "components" && role !== "hr") {
+                return null;
+              }
               return (
                 <button
                   key={tab.id}
@@ -581,14 +1057,28 @@ export default function PayrollManager({
                   <div className="mt-4 rounded-xl border border-indigo-100 bg-indigo-50/60 p-4">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <div className="flex items-center gap-3">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-600 text-xs font-bold text-white">
-                          {selectedEmployeeData.first_name?.charAt(0)}
-                          {selectedEmployeeData.last_name?.charAt(0)}
+
+                        {/* Employee Profile Photo */}
+                        <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full bg-indigo-100">
+                          {selectedEmployeeData.profile_photo_url ? (
+                            <img
+                              src={selectedEmployeeData.profile_photo_url}
+                              alt={`${selectedEmployeeData.first_name ?? ""} ${selectedEmployeeData.last_name ?? ""}`}
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center text-xs font-bold text-indigo-700">
+                              {selectedEmployeeData.first_name?.charAt(0)}
+                              {selectedEmployeeData.last_name?.charAt(0)}
+                            </div>
+                          )}
                         </div>
+
                         <div>
                           <p className="text-sm font-semibold text-slate-900">
                             {selectedEmployeeData.first_name} {selectedEmployeeData.last_name}
                           </p>
+
                           <div className="mt-0.5 flex flex-wrap gap-x-2 text-[10px] text-slate-500">
                             <span>{selectedEmployeeData.employee_id}</span>
                             <span>•</span>
@@ -596,11 +1086,16 @@ export default function PayrollManager({
                           </div>
                         </div>
                       </div>
+
                       <div className="flex items-center gap-2 rounded-lg bg-white px-3 py-2">
                         <IndianRupee className="h-4 w-4 text-indigo-600" />
                         <div>
-                          <p className="text-[9px] font-semibold uppercase tracking-wider text-slate-400">Annual CTC</p>
-                          <p className="text-xs font-bold text-slate-800">{formatNumber(Number(selectedEmployeeData.salary || 0))} Lakh</p>
+                          <p className="text-[9px] font-semibold uppercase tracking-wider text-slate-400">
+                            Annual CTC
+                          </p>
+                          <p className="text-xs font-bold text-slate-800">
+                            {formatNumber(Number(selectedEmployeeData.salary || 0))} Lakh
+                          </p>
                         </div>
                       </div>
                     </div>
@@ -659,6 +1154,150 @@ export default function PayrollManager({
                   </div>
                 )}
 
+                {/* ========================================================= */}
+                {/* ADDITIONAL EARNINGS */}
+                {/* ========================================================= */}
+
+                {selectedEmployeeData && (
+                  <div className="mt-4 rounded-xl border border-indigo-100 bg-indigo-50/60 p-4">
+
+                    <div className="flex items-center gap-2">
+
+                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-100">
+                        <IndianRupee className="h-4 w-4 text-indigo-600" />
+                      </div>
+
+                      <div>
+                        <p className="text-xs font-bold text-slate-900">
+                          Additional Earnings
+                        </p>
+
+                        <p className="text-[10px] text-slate-500">
+                          Add incentive, bonus or compensation to this month's payslip.
+                        </p>
+                      </div>
+
+                    </div>
+
+
+                    <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+
+                      {/* TYPE */}
+
+                      <div>
+                        <label className="mb-1.5 block text-xs font-semibold text-slate-700">
+                          Earning Type
+                        </label>
+
+                        <select
+                          value={additionalEarningType}
+                          onChange={(event) =>setAdditionalEarningType(event.target.value as AdditionalEarningType)}
+                          className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50"
+                        >
+                          <option value="">
+                            Select earning type
+                          </option>
+
+                          <option value="Incentive">
+                            Incentive
+                          </option>
+
+                          <option value="Bonus">
+                            Bonus
+                          </option>
+
+                          <option value="Compensation">
+                            Compensation
+                          </option>
+                        </select>
+                      </div>
+
+
+                      {/* AMOUNT */}
+
+                      <div>
+                        <label className="mb-1.5 block text-xs font-semibold text-slate-700">
+                          Amount
+                        </label>
+
+                        <div className="relative">
+
+                          <IndianRupee className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={additionalEarningAmount}
+                            onChange={(event) =>
+                              setAdditionalEarningAmount(event.target.value)
+                            }
+                            placeholder="Enter amount"
+                            disabled={!additionalEarningType}
+                            className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50 disabled:cursor-not-allowed disabled:bg-slate-50"
+                          />
+
+                        </div>
+
+                        {/* ADD BUTTON */}
+                        <div className="flex items-end">
+                          <button
+                            type="button"
+                            onClick={handleAddAdditionalEarning}
+                            className="h-10 w-full rounded-lg bg-indigo-600 px-4 text-sm font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+                            disabled={!additionalEarningType || !additionalEarningAmount}
+                          >
+                            Add
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+
+                    <p className="mt-2 text-[10px] text-slate-500">
+                      Each earning type can be added only once for the selected employee
+                      and payroll month.
+                    </p>
+
+                  </div>
+                )}
+
+                {additionalEarnings.length > 0 && (
+                  <div className="mt-3 space-y-2">
+                    {additionalEarnings.map((earning) => (
+                      <div
+                        key={earning.type}
+                        className="flex items-center justify-between rounded-lg border border-indigo-100 bg-white px-3 py-2"
+                      >
+                        <div>
+                          <p className="text-xs font-semibold text-slate-800">
+                            {earning.type}
+                          </p>
+                          <p className="text-[11px] text-slate-500">
+                            Additional earning
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-3">
+                          <span className="text-sm font-bold text-slate-900">
+                            ₹{Number(earning.amount).toLocaleString("en-IN")}
+                          </span>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleRemoveAdditionalEarning(earning.type)
+                            }
+                            className="text-xs font-semibold text-red-500 hover:text-red-700"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 <div className="mt-4 flex flex-col gap-2 border-t border-slate-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <p className="text-xs font-semibold text-slate-800">Ready to process?</p>
@@ -707,93 +1346,382 @@ export default function PayrollManager({
           </div>
         )}
 
-        {activeTab === "components" && (
-          <div className="mt-4 rounded-xl border border-slate-200 bg-white shadow-sm">
+        {activeTab === "components" && role === "hr" && (
+          <div className="mt-4 rounded-2xl border border-slate-200 bg-white shadow-sm">
+
+            {/* ========================================================= */}
+            {/* SALARY COMPONENTS HEADER */}
+            {/* ========================================================= */}
             <div className="flex flex-col gap-3 border-b border-slate-100 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
-              <div className="flex items-center gap-2">
-                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-50">
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-50">
                   <Sliders className="h-4 w-4 text-indigo-600" />
                 </div>
+
                 <div>
-                  <h2 className="text-sm font-bold text-slate-900">Salary Components</h2>
-                  <p className="text-xs text-slate-500">Configure salary heads used during payroll calculation.</p>
+                  <h2 className="text-sm font-bold text-slate-900">
+                    Salary Components
+                  </h2>
+
+                  <p className="text-xs text-slate-500">
+                    Configure salary heads used during payroll calculation.
+                  </p>
                 </div>
               </div>
-              <div className="rounded-lg bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700">
-                {components.filter(item => item.is_active).length} active
+
+              <div className="w-fit rounded-lg bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700">
+                {employeeComponents.filter((item) => item.is_active).length} active
               </div>
             </div>
 
-            {components.length === 0 ? (
-              <EmptyState icon={Sliders} title="No salary components" description="Salary components will appear here once configured." />
+            {/* ========================================================= */}
+            {/* SELECTED EMPLOYEE PROFILE */}
+            {/* ========================================================= */}
+            {selectedEmployee &&
+              (() => {
+                const employee = activeEmployees.find(
+                  (item) => item.id === selectedEmployee
+                );
+
+                if (!employee) return null;
+
+                const initials =
+                  `${employee.first_name?.charAt(0) || ""}${
+                    employee.last_name?.charAt(0) || ""
+                  }`.toUpperCase();
+
+                const department =
+                  (employee as any).department?.name ||
+                  (employee as any).department_name ||
+                  (employee as any).department ||
+                  "—";
+
+                const employmentType =
+                  (employee as any).employment_type ||
+                  (employee as any).employmentType ||
+                  "—";
+
+                return (
+                  <div className="border-b border-slate-100 bg-white px-5 py-4">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between rounded-lg border border-indigo-100 bg-indigo-50 px-4 py-3">
+
+                      {/* ================================================= */}
+                      {/* EMPLOYEE IDENTITY */}
+                      {/* ================================================= */}
+                      <div className="flex min-w-0 items-center gap-3">
+                          {/* Profile */}
+                          <div className="flex h-12 w-12 shrink-0 overflow-hidden rounded-full bg-indigo-100">
+                            {employee.profile_photo_url ? (
+                              <img
+                                src={employee.profile_photo_url}
+                                alt={`${employee.first_name} ${employee.last_name}`}
+                                className="h-full w-full object-cover"
+                              />
+                            ) : (
+                              <div className="flex h-full w-full items-center justify-center text-sm font-bold text-indigo-700">
+                                {initials || "E"}
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-bold text-slate-900">
+                              {employee.first_name} {employee.last_name}
+                            </p>
+
+                            <div className="mt-1 flex flex-wrap items-center gap-2">
+                              <span className="rounded-md bg-indigo-50 px-2 py-1 text-[10px] font-bold text-indigo-700">
+                                {employee.employee_id}
+                              </span>
+
+                              {employee.designation && (
+                                <span className="text-[11px] text-slate-500">
+                                  {employee.designation}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                      </div>
+
+                      {/* ================================================= */}
+                      {/* EMPLOYEE DETAILS */}
+                      {/* ================================================= */}
+                      <div className="grid grid-cols-2 gap-x-8 gap-y-3 sm:grid-cols-3 lg:min-w-[600px] lg:grid-cols-3">
+
+                        {/* Department */}
+                        <div className="flex items-start gap-2">
+                          <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-slate-50">
+                            <Building2 className="h-3.5 w-3.5 text-slate-500" />
+                          </div>
+
+                          <div className="min-w-0">
+                            <p className="text-[10px] text-slate-400">
+                              Department
+                            </p>
+
+                            <p className="truncate text-[11px] font-semibold text-slate-700">
+                              {department}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Employment */}
+                        <div className="flex items-start gap-2">
+                          <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-slate-50">
+                            <BriefcaseBusiness className="h-3.5 w-3.5 text-slate-500" />
+                          </div>
+
+                          <div className="min-w-0">
+                            <p className="text-[10px] text-slate-400">
+                              Employment
+                            </p>
+
+                            <p className="truncate text-[11px] font-semibold capitalize text-slate-700">
+                              {employmentType}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Annual CTC */}
+                        <div className="flex items-start gap-2  bg-white rounded">
+                          <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-white">
+                            <IndianRupee className="h-3.5 w-3.5 text-indigo-600" />
+                          </div>
+
+                          <div className="min-w-0">
+                            <p className="text-[10px] text-slate-400">
+                              Annual CTC
+                            </p>
+
+                            <p className="truncate text-[11px] font-bold text-slate-800">
+                              {formatAnnualCtc(Number(activeEmployees.find((item) => item.id === selectedEmployee)?.salary || 0))}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+            {/* ========================================================= */}
+            {/* SALARY COMPONENT CONTENT */}
+            {/* ========================================================= */}
+            {!selectedEmployee ? (
+              <EmptyState
+                icon={Sliders}
+                title="Select an employee"
+                description="Select an employee from the Payroll Runner tab to view their salary components."
+              />
+            ) : employeeComponentsLoading ? (
+              <div className="px-5 py-10 text-center text-xs text-slate-500">
+                Loading salary components...
+              </div>
+            ) : employeeComponents.length === 0 ? (
+              <EmptyState
+                icon={Sliders}
+                title="No salary components"
+                description="Salary components will appear here once configured."
+              />
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[1050px]">
+
+                {/* ======================================================= */}
+                {/* SALARY COMPONENTS TABLE */}
+                {/* ======================================================= */}
+                <table className="w-full min-w-[1050px] table-fixed">
+
+                  <colgroup>
+                    <col className="w-[270px]" />
+                    <col className="w-[120px]" />
+                    <col className="w-[110px]" />
+                    <col className="w-[140px]" />
+                    <col className="w-[120px]" />
+                    <col className="w-[120px]" />
+                    <col className="w-[140px]" />
+                    <col className="w-[220px]" />
+                  </colgroup>
+
+                  {/* ===================================================== */}
+                  {/* TABLE HEADER */}
+                  {/* ===================================================== */}
                   <thead>
                     <tr className="border-b border-slate-100 bg-slate-50/70">
-                      {["Salary Head","Code","Type","Calculation","Value","LOP Impact","Status","Action"].map(head => (
-                        <th key={head} className="px-5 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">{head}</th>
+                      {[
+                        "Salary Head",
+                        "Code",
+                        "Type",
+                        "Calculation",
+                        "Value",
+                        "LOP Impact",
+                        "Annual CTC",
+                        "Action",
+                      ].map((head) => (
+                        <th
+                          key={head}
+                          className={`px-5 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500 ${
+                            head === "Value" ||
+                            head === "LOP Impact" ||
+                            head === "Annual CTC" ||
+                            head === "Action"
+                              ? "text-center"
+                              : ""
+                          }`}
+                        >
+                          {head}
+                        </th>
                       ))}
                     </tr>
                   </thead>
+
+                  {/* ===================================================== */}
+                  {/* TABLE BODY */}
+                  {/* ===================================================== */}
                   <tbody className="divide-y divide-slate-100">
-                    {components.map(component => (
-                      <tr key={component.id} className="hover:bg-slate-50/60">
+
+                    {employeeComponents.map((component) => (
+
+                      <tr
+                        key={component.id}
+                        className="transition-colors hover:bg-slate-50/60"
+                      >
+
+                        {/* ================================================= */}
+                        {/* SALARY HEAD */}
+                        {/* ================================================= */}
                         <td className="px-5 py-3">
-                          <div className="flex items-center gap-2">
-                            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100">
+                          <div className="flex items-center gap-2.5">
+
+                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100">
                               <Banknote className="h-4 w-4 text-slate-600" />
                             </div>
-                            <div>
-                              <p className="text-xs font-semibold text-slate-800">{component.name}</p>
-                              {component.description && <p className="max-w-[240px] truncate text-[10px] text-slate-400">{component.description}</p>}
+
+                            <div className="min-w-0">
+                              <p className="truncate text-xs font-semibold text-slate-800">
+                                {component.name}
+                              </p>
+
+                              {component.description && (
+                                <p className="max-w-[220px] truncate text-[10px] text-slate-400">
+                                  {component.description}
+                                </p>
+                              )}
                             </div>
+
                           </div>
                         </td>
-                        <td className="px-5 py-3"><span className="rounded bg-slate-100 px-2 py-1 font-mono text-[10px] text-slate-600">{component.code}</span></td>
-                        <td className="px-5 py-3 text-xs capitalize text-slate-600">
-                          {component.calculation_type === "percentage_of_basic" ? "% of Basic" : component.calculation_type === "percentage_of_gross" ? "% of Gross" : "Fixed"}
-                        </td>
-                        <td className="px-5 py-3 text-right">
-                          <span className="text-xs font-semibold text-slate-800">
-                            {component.calculation_type === "fixed" ? formatCurrency(component.value) : `${formatNumber(component.value)}%`}
+
+                        {/* ================================================= */}
+                        {/* CODE */}
+                        {/* ================================================= */}
+                        <td className="px-5 py-3">
+                          <span className="inline-flex max-w-[110px] truncate rounded bg-slate-100 px-2 py-1 font-mono text-[10px] text-slate-600">
+                            {component.code}
                           </span>
                         </td>
+
+                        {/* ================================================= */}
+                        {/* TYPE */}
+                        {/* ================================================= */}
                         <td className="px-5 py-3">
-                          <span className={`rounded-full px-2 py-1 text-[10px] font-semibold ${component.affects_lop ? "bg-amber-50 text-amber-700" : "bg-slate-100 text-slate-500"}`}>
+                          <span className="text-xs font-medium text-slate-600">
+                            {component.type.charAt(0).toUpperCase() +
+                              component.type.slice(1)}
+                          </span>
+                        </td>
+
+                        {/* ================================================= */}
+                        {/* CALCULATION */}
+                        {/* ================================================= */}
+                        <td className="px-5 py-3">
+                          <span className="whitespace-nowrap text-xs text-slate-600">
+                            {component.calculation_type ===
+                            "percentage_of_basic"
+                              ? "% of Basic"
+                              : component.calculation_type ===
+                                "percentage_of_gross"
+                                ? "% of Gross"
+                                : "Fixed"}
+                          </span>
+                        </td>
+
+                        {/* ================================================= */}
+                        {/* VALUE */}
+                        {/* ================================================= */}
+                        <td className="px-5 py-3 text-center">
+                          <span className="whitespace-nowrap text-xs font-bold text-slate-800">
+                            {component.calculation_type === "fixed"
+                              ? formatCurrency(component.value)
+                              : `${formatNumber(component.value)}%`}
+                          </span>
+                        </td>
+
+                        {/* ================================================= */}
+                        {/* LOP IMPACT */}
+                        {/* ================================================= */}
+                        <td className="px-5 py-3 text-center">
+                          <span
+                            className={`inline-flex min-w-[38px] justify-center rounded-full px-2 py-1 text-[10px] font-semibold ${
+                              component.affects_lop
+                                ? "bg-amber-50 text-amber-700"
+                                : "bg-slate-100 text-slate-500"
+                            }`}
+                          >
                             {component.affects_lop ? "Yes" : "No"}
                           </span>
                         </td>
-                        <td className="px-5 py-3">
-                          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold ${component.is_active ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
-                            <span className={`h-1.5 w-1.5 rounded-full ${component.is_active ? "bg-emerald-500" : "bg-slate-400"}`} />
-                            {component.is_active ? "Active" : "Disabled"}
+
+                        {/* ================================================= */}
+                        {/* ANNUAL CTC */}
+                        {/* ================================================= */}
+                        <td className="px-5 py-3 text-center">
+                          <span className="whitespace-nowrap text-xs font-bold text-slate-800">
+                            {formatCurrency(Number(activeEmployees.find((item) => item.id === selectedEmployee)?.salary || 0) * 100000)}
                           </span>
                         </td>
-                        <td className="px-5 py-3 text-right">
-                          <div className="flex items-center justify-end gap-2">
+
+                        {/* ================================================= */}
+                        {/* ACTION */}
+                        {/* ================================================= */}
+                        <td className="px-5 py-3">
+                          <div className="flex items-center justify-center gap-2">
+
+                            {/* Edit */}
                             <button
-                              onClick={() => setEditingComponent({ ...component })}
-                              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[10px] font-semibold text-slate-700 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700"
+                              type="button"
+                              onClick={() =>
+                                setEditingComponent({
+                                  ...component,
+                                })
+                              }
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-semibold text-slate-700 transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700"
                             >
                               <Pencil className="h-3 w-3" />
                               Edit
                             </button>
 
+                            {/* Enable / Disable */}
                             <button
-                              onClick={() => handleToggleComponent(component)}
-                              disabled={componentLoading === component.id}
-                              className={`rounded-lg px-3 py-1.5 text-[10px] font-semibold ${
+                              type="button"
+                              onClick={() =>
+                                handleToggleComponent(component)
+                              }
+                              disabled={
+                                componentLoading === component.id
+                              }
+                              className={`rounded-lg px-3 py-1.5 text-[10px] font-semibold transition ${
                                 component.is_active
                                   ? "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
                                   : "bg-indigo-600 text-white hover:bg-indigo-700"
-                              } disabled:opacity-50`}
+                              } disabled:cursor-not-allowed disabled:opacity-50`}
                             >
-                              {componentLoading === component.id
-                                ? <Loader2 className="inline h-3 w-3 animate-spin" />
-                                : component.is_active
-                                  ? "Disable"
-                                  : "Enable"}
+                              {componentLoading === component.id ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : component.is_active ? (
+                                "Disable"
+                              ) : (
+                                "Enable"
+                              )}
                             </button>
                           </div>
                         </td>
@@ -900,8 +1828,19 @@ export default function PayrollManager({
                         <tr key={slip.id} className="hover:bg-slate-50/60">
                           <td className="px-5 py-3">
                             <div className="flex items-center gap-2">
-                              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-100 text-[10px] font-bold text-indigo-700">
-                                {employee?.first_name?.charAt(0)}{employee?.last_name?.charAt(0)}
+                              <div className="h-8 w-8 overflow-hidden rounded-full bg-indigo-100">
+                                {employee?.profile_photo_url ? (
+                                  <img
+                                    src={employee.profile_photo_url}
+                                    alt={`${employee?.first_name ?? ""} ${employee?.last_name ?? ""}`}
+                                    className="h-full w-full object-cover"
+                                  />
+                                ) : (
+                                  <div className="flex h-full w-full items-center justify-center text-[10px] font-bold text-indigo-700">
+                                    {employee?.first_name?.charAt(0)}
+                                    {employee?.last_name?.charAt(0)}
+                                  </div>
+                                )}
                               </div>
                               <div>
                                 <p className="text-xs font-semibold text-slate-800">{employee?.first_name} {employee?.last_name}</p>
@@ -940,148 +1879,584 @@ export default function PayrollManager({
 
       {isMounted && previewSlip && createPortal(
         <div className="fixed inset-0 z-[9999]">
-          <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-xl" onClick={() => setPreviewSlip(null)} />
-          <div className="relative z-10 flex h-[100dvh] items-center justify-center p-3">
-            <div className="flex h-[calc(100dvh-24px)] w-full max-w-5xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl">
-              <div className="flex shrink-0 items-center justify-between border-b border-slate-200 px-4 py-2.5">
+          {/* BACKDROP */}
+          <div
+            className="absolute inset-0 bg-slate-950/60 backdrop-blur-xl"
+            onClick={() => setPreviewSlip(null)}
+          />
+
+          {/* MODAL */}
+          <div className="relative z-10 flex h-[100dvh] items-center justify-center p-3 sm:p-5">
+            <div className="flex h-[calc(100dvh-24px)] w-full max-w-6xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl sm:h-[calc(100dvh-40px)]">
+              {/* ===================================================== */}
+              {/* MODAL HEADER */}
+              {/* ===================================================== */}
+              <div className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 py-3 sm:px-6">
+                <div>
+                  <h2 className="text-sm font-bold text-slate-900">
+                    Payslip
+                  </h2>
+                  <p className="mt-0.5 text-[11px] text-slate-500">
+                    {monthNames[selectedMonth - 1]} {selectedYear}
+                  </p>
+                </div>
                 <div className="flex items-center gap-2">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-50">
-                    <FileText className="h-4 w-4 text-indigo-600" />
-                  </div>
-                  <div>
-                    <h2 className="text-xs font-bold text-slate-900">Payslip</h2>
-                    <p className="text-[10px] text-slate-500">{previewSlip.month_name} {previewSlip.payroll_year}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <button onClick={handlePrintPayslip} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 text-[10px] font-semibold text-slate-700 hover:bg-indigo-50">
-                    <Printer className="h-3.5 w-3.5" />Print
+                  <button
+                    type="button"
+                    onClick={() => window.print()}
+                    className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+                  >
+                  <Printer className="h-4 w-4" />
+                    Print
                   </button>
-                  <button onClick={() => setPreviewSlip(null)} className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100">
-                    <XCircle className="h-4 w-4" />
+                  <button
+                    type="button"
+                    onClick={() => setPreviewSlip(null)}
+                    className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition hover:bg-slate-50 hover:text-slate-800"
+                  >
+                    <X className="h-4 w-4" />
                   </button>
-                </div>
+                  </div>
               </div>
 
-              <div id="payslip-print" className="min-h-0 flex-1 overflow-y-auto bg-slate-100 p-3 sm:p-5">
-                <div className="mx-auto w-full max-w-4xl overflow-hidden rounded-xl bg-white shadow-md">
-                  <div className="border-b border-slate-200 px-5 py-5 sm:px-7">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <Image src="/logo.png" alt="Teens Software Solutions" width={180} height={60} priority className="h-auto w-auto max-w-[180px] object-contain" />
-                      <div className="sm:text-right">
-                        <p className="text-[9px] font-semibold uppercase tracking-[0.2em] text-indigo-600">Salary Statement</p>
-                        <h1 className="mt-0.5 text-xl font-bold uppercase text-slate-900">Payslip</h1>
-                        <p className="text-[10px] font-medium text-slate-500">{previewSlip.month_name} {previewSlip.payroll_year}</p>
-                      </div>
-                    </div>
-                    <div className="mt-4 h-1 rounded-full bg-gradient-to-r from-indigo-600 via-indigo-500 to-violet-500" />
-                  </div>
 
-                  <div className="px-5 py-4 sm:px-7">
-                    <div className="overflow-hidden rounded-lg border border-slate-200">
-                      <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2.5">
-                        <User className="h-4 w-4 text-indigo-600" />
-                        <div>
-                          <h3 className="text-xs font-bold text-slate-900">Employee Information</h3>
-                          <p className="text-[9px] text-slate-500">Employee and payroll details</p>
+              {/* ===================================================== */}
+              {/* PAYSLIP CONTENT */}
+              {/* ===================================================== */}
+              <div className="min-h-0 flex-1 overflow-y-auto bg-slate-100">
+                <div
+                  id="payslip-print"
+                  className="mx-auto my-4 w-full max-w-5xl bg-white shadow-sm print:my-0 print:max-w-none print:shadow-none"
+                >
+                  {/* ================================================= */}
+                  {/* TOP HEADER */}
+                  {/* ================================================= */}
+
+                  <div className="grid grid-cols-1 border-b border-slate-200 md:grid-cols-2">
+                    {/* COMPANY */}
+                    <div className="border-b border-slate-200 px-7 py-6 md:border-b-0 md:border-r">
+                      <div className="flex items-center gap-4">
+                        <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-white">
+                          <img
+                            src="/logo.png"
+                            alt="Teens Software Solutions LLP"
+                            className="h-full w-full object-contain p-2"
+                          />
                         </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-                        <InfoGrid
-                          items={[
-                            ["Employee Code", previewSlip.employee?.employee_id || "-"],
-                            ["Employee Name", `${previewSlip.employee?.first_name || ""} ${previewSlip.employee?.last_name || ""}`.trim() || "-"],
-                            ["Date of Hire", previewSlip.employee?.joining_date ? new Date(previewSlip.employee.joining_date).toLocaleDateString("en-IN") : "-"],
-                            ["Designation", previewSlip.employee?.designation || "-"],
-                            ["Department", previewSlip.employee?.department?.name || "-"]
-                          ]}
-                        />
-                        <InfoGrid
-                          border
-                          items={[
-                            ["Payroll Month", `${previewSlip.month_name} ${previewSlip.payroll_year}`],
-                            ["PF Number", previewSlip.employee?.uan_number || "-"],
-                            ["ESI Number", previewSlip.employee?.esi_number || "-"],
-                            ["PT Number", previewSlip.employee?.pt_number || "-"]
-                          ]}
-                        />
-                        <InfoGrid
-                          items={[
-                            ["Standard Days", formatNumber(previewSlip.working_days)],
-                            ["Days Worked", formatNumber(previewSlip.present_days)],
-                            ["Paid Leave", formatNumber(previewSlip.paid_leaves)],
-                            ["LWOP / LOP Days", formatNumber(previewSlip.lop_days)],
-                            ["Payment Mode", String(previewSlip.employee?.payment_mode || "Online")]
-                          ]}
-                        />
-                      </div>
-
-                      <div className="grid grid-cols-2 border-t border-slate-200 bg-slate-50 sm:grid-cols-4">
-                        <SummaryCell label="Standard Days" value={formatNumber(previewSlip.working_days)} />
-                        <SummaryCell label="Days Worked" value={formatNumber(previewSlip.present_days)} />
-                        <SummaryCell label="Paid Leave" value={formatNumber(previewSlip.paid_leaves)} />
-                        <SummaryCell label="LWOP / LOP Days" value={formatNumber(previewSlip.lop_days)} />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-4 px-5 pb-4 sm:px-7 lg:grid-cols-2">
-                    <BreakupCard
-                      title="Earnings"
-                      totalLabel="Gross Earnings"
-                      total={previewSlip.total_earnings}
-                      data={previewSlip.earnings_breakup}
-                      tone="indigo"
-                    />
-                    <BreakupCard
-                      title="Deductions"
-                      totalLabel="Total Deductions"
-                      total={previewSlip.total_deductions}
-                      data={previewSlip.deductions_breakup}
-                      tone="rose"
-                    />
-                  </div>
-
-                  <div className="px-5 pb-4 sm:px-7">
-                    <div className="relative overflow-hidden rounded-xl bg-gradient-to-r from-slate-950 via-slate-900 to-indigo-950 px-5 py-5 text-white">
-                      <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="flex items-center gap-3">
-                          <CreditCard className="h-6 w-6" />
-                          <div>
-                            <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Net Pay</p>
-                            <p className="text-xl font-bold">{formatCurrency(previewSlip.net_salary)}</p>
-                          </div>
-                        </div>
-                        <div className="border-t border-white/10 pt-3 sm:max-w-sm sm:border-l sm:border-t-0 sm:pl-5 sm:pt-0">
-                          <p className="text-[9px] font-semibold uppercase text-slate-400">Amount in Words</p>
-                          <p className="mt-1 text-[10px] leading-relaxed text-slate-200">
-                            {numberToWordsIndian(Number(previewSlip.net_salary || 0))}
+                        <div className="min-w-0">
+                          <p className="text-xs text-slate-500">
+                            Company
+                          </p>
+                          <h1 className="mt-1 text-base font-bold text-slate-900">
+                            Teens Software Solutions LLP
+                          </h1>
+                          <p className="mt-1 text-[10px] text-slate-500">
+                            Professional Payroll System
                           </p>
                         </div>
                       </div>
                     </div>
+                    {/* PAYSLIP MONTH */}
+                      <div className="px-7 py-6">
+
+                        <div className="flex items-start justify-between gap-5">
+
+                          <div>
+
+                            <p className="text-xs text-slate-500">
+                              Payslip for Month
+                            </p>
+
+                            <div className="mt-3 flex min-h-[42px] items-center rounded-md border border-slate-300 bg-white px-3">
+
+                              <span className="text-sm font-semibold text-slate-800">
+                                {monthNames[selectedMonth - 1]} {selectedYear}
+                              </span>
+
+                            </div>
+
+                          </div>
+
+                          <div className="text-right">
+
+                            <p className="text-[9px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+                              Salary Statement
+                            </p>
+
+                            <p className="mt-1 text-xl font-bold text-slate-800">
+                              PAYSLIP
+                            </p>
+
+                            <p className="mt-1 text-xs font-semibold text-slate-500">
+                              {monthNames[selectedMonth - 1]} {selectedYear}
+                            </p>
+
+                          </div>
+
+                        </div>
+
+                      </div>
+
+                    </div>
+
+
+                    {/* ================================================= */}
+                    {/* COMPANY DETAILS */}
+                    {/* ================================================= */}
+
+                    <div className="border-b border-slate-200 px-7 py-6">
+
+                      <div className="mb-5">
+
+                        <h2 className="text-sm font-bold uppercase tracking-wide text-slate-800">
+                          Company Details
+                        </h2>
+
+                        <div className="mt-2 h-px bg-slate-200" />
+
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-x-8 gap-y-5 md:grid-cols-2">
+
+                        <PayslipInfoRow
+                          label="Company Name"
+                          value="Teens Software Solutions LLP"
+                        />
+
+                        <PayslipInfoRow
+                          label="Email"
+                          value="info@teenss.com"
+                        />
+
+                        <div className="md:col-span-2">
+
+                          <PayslipInfoRow
+                            label="Company Address"
+                            value="Plot No. 1, 2nd Floor, Road No. 12, Banjara Hills"
+                          />
+
+                        </div>
+
+                        <PayslipInfoRow
+                          label="City"
+                          value="Hyderabad, Telangana, India"
+                        />
+
+                        <PayslipInfoRow
+                          label="Pincode"
+                          value="500037"
+                        />
+
+                      </div>
+
+                    </div>
+
+
+                    {/* ================================================= */}
+                    {/* EMPLOYEE PAY SUMMARY */}
+                    {/* ================================================= */}
+
+                    <div className="border-b border-slate-200 px-7 py-6">
+
+                      <div className="mb-5">
+
+                        <h2 className="text-sm font-bold uppercase tracking-wide text-slate-800">
+                          Employee Pay Summary
+                        </h2>
+
+                        <div className="mt-2 h-px bg-slate-200" />
+
+                      </div>
+
+                      {/* EMPLOYEE INFORMATION */}
+
+                      <div className="grid grid-cols-1 gap-x-8 gap-y-5 md:grid-cols-3">
+
+                        <PayslipInfoRow
+                          label="Employee Name"
+                          value={getPayslipEmployeeName(
+                            previewSlip.employee
+                          )}
+                        />
+
+                        <PayslipInfoRow
+                          label="Employee ID"
+                          value={getPayslipEmployeeCode(
+                            previewSlip.employee
+                          )}
+                        />
+
+                        <PayslipInfoRow
+                          label="Date of Joining"
+                          value={getPayslipDate(
+                            previewSlip.employee?.joining_date
+                          )}
+                        />
+
+                        <PayslipInfoRow
+                          label="Designation"
+                          value={
+                            previewSlip.employee?.designation || "-"
+                          }
+                        />
+
+                        <PayslipInfoRow
+                          label="Department"
+                          value={
+                            typeof previewSlip.employee?.department === "object"
+                              ? previewSlip.employee.department?.name || "-"
+                              : previewSlip.employee?.department || "-"
+                          }
+                        />
+
+                        <PayslipInfoRow
+                          label="Pay Date"
+                          value={getPayslipDate(
+                            previewSlip.created_at
+                          )}
+                        />
+
+                      </div>
+
+
+                      {/* PAY SUMMARY */}
+
+                      <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
+
+                        <PayslipSummaryItem
+                          label="Paid Days"
+                          value={previewSlip.present_days ?? 0}
+                        />
+
+                        <PayslipSummaryItem
+                          label="Loss of Pay Days"
+                          value={previewSlip.lop_days ?? 0}
+                        />
+
+                        <PayslipSummaryItem
+                          label="Paid Leave"
+                          value={previewSlip.paid_leaves ?? 0}
+                        />
+
+                      </div>
+
+                    </div>
+
+
+                    {/* ================================================= */}
+                    {/* BANK + STATUTORY DETAILS */}
+                    {/* ================================================= */}
+
+                    <div className="border-b border-slate-200 px-7 py-6">
+
+                      <div className="mb-5">
+
+                        <h2 className="text-sm font-bold uppercase tracking-wide text-slate-800">
+                          Bank Details
+                        </h2>
+
+                        <div className="mt-2 h-px bg-slate-200" />
+
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-x-8 gap-y-5 md:grid-cols-3">
+
+                        <PayslipInfoRow
+                          label="Bank Name"
+                          value={getPayslipBankName(
+                            previewSlip.employee
+                          )}
+                        />
+
+                        <PayslipInfoRow
+                          label="Account Number"
+                          value={getPayslipAccountNumber(
+                            previewSlip.employee
+                          )}
+                        />
+
+                        <PayslipInfoRow
+                          label="IFSC Code"
+                          value={getPayslipIFSC(
+                            previewSlip.employee
+                          )}
+                        />
+
+                        <PayslipInfoRow
+                          label="PF Number"
+                          value={
+                            previewSlip.employee?.uan_number || "-"
+                          }
+                        />
+
+                        <PayslipInfoRow
+                          label="ESI Number"
+                          value={
+                            previewSlip.employee?.esi_number || "-"
+                          }
+                        />
+
+                        <PayslipInfoRow
+                          label="PAN NUMBER"
+                          value={
+                            previewSlip.employee?.pan_number || "-"
+                          }
+                        />
+
+                      </div>
+
+                    </div>
+
+
+                  {/* ================================================= */}
+                  {/* INCOME DETAILS */}
+                  {/* ================================================= */}
+
+                  <div className="border-b border-slate-200 px-7 py-6">
+
+                    <div className="mb-5">
+                      <h2 className="text-sm font-bold uppercase tracking-wide text-slate-800">
+                        Income Details
+                      </h2>
+
+                      <div className="mt-2 h-px bg-slate-200" />
+                    </div>
+
+                    {(() => {
+                      const earnings = normalizePayslipBreakup(
+                        previewSlip.earnings_breakup
+                      );
+
+                      const deductions = normalizePayslipBreakup(
+                        previewSlip.deductions_breakup
+                      );
+
+                      return (
+                        <div className="grid grid-cols-1 gap-10 lg:grid-cols-2">
+
+                          {/* ================================================= */}
+                          {/* EARNINGS */}
+                          {/* ================================================= */}
+
+                          <div>
+
+                            {/* HEADER */}
+
+                            <div className="mb-2 flex items-center justify-between border-b border-slate-300 pb-2">
+
+                              <h3 className="text-xs font-bold uppercase tracking-wide text-slate-800">
+                                Earnings
+                              </h3>
+
+                              <span className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">
+                                Amount
+                              </span>
+
+                            </div>
+
+
+                            {/* EARNING ROWS */}
+
+                            <div>
+
+                              {earnings.length > 0 ? (
+                                earnings.map(
+                                  (
+                                    item: any,
+                                    index: number
+                                  ) => (
+                                    <PayslipBreakupRow
+                                      key={`${item?.id || item?.code || "earning"}-${index}`}
+                                      item={item}
+                                    />
+                                  )
+                                )
+                              ) : (
+                                <div className="py-5 text-center text-xs text-slate-400">
+                                  No earnings available
+                                </div>
+                              )}
+
+
+                              {/* GROSS EARNINGS */}
+
+                              <div className="mt-2 flex min-h-[52px] items-center justify-between gap-4 rounded-md bg-green-50 px-4 py-3">
+
+                                <span className="text-xs font-bold text-green-800">
+                                  Gross Earnings
+                                </span>
+
+                                <span className="whitespace-nowrap text-sm font-bold text-green-800">
+                                  {formatPayslipCurrency(
+                                    previewSlip.gross_salary || 0
+                                  )}
+                                </span>
+
+                              </div>
+
+                            </div>
+
+                          </div>
+
+
+                          {/* ================================================= */}
+                          {/* DEDUCTIONS */}
+                          {/* ================================================= */}
+
+                          <div>
+
+                            {/* HEADER */}
+
+                            <div className="mb-2 flex items-center justify-between border-b border-slate-300 pb-2">
+
+                              <h3 className="text-xs font-bold uppercase tracking-wide text-slate-800">
+                                Deductions
+                              </h3>
+
+                              <span className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">
+                                Amount
+                              </span>
+
+                            </div>
+
+
+                            {/* DEDUCTION ROWS */}
+
+                            <div>
+
+                              {deductions.length > 0 ? (
+                                deductions.map(
+                                  (
+                                    item: any,
+                                    index: number
+                                  ) => (
+                                    <PayslipBreakupRow
+                                     key={`${item?.id || item?.code || "deduction"}-${index}`}
+                                     item={item}
+                                    />
+                                  )
+                                )
+                              ) : (
+                                <div className="py-5 text-center text-xs text-slate-400">
+                                  No deductions available
+                                </div>
+                              )}
+
+
+                              {/* TOTAL DEDUCTIONS */}
+
+                              <div className="mt-2 flex min-h-[52px] items-center justify-between gap-4 rounded-md bg-red-50 px-4 py-3">
+
+                                <span className="text-xs font-bold text-red-800">
+                                  Total Deductions
+                                </span>
+
+                                <span className="whitespace-nowrap text-sm font-bold text-red-800">
+                                  {formatPayslipCurrency(
+                                    previewSlip.total_deductions || 0
+                                  )}
+                                </span>
+
+                              </div>
+
+                            </div>
+
+                          </div>
+
+                        </div>
+                      );
+                    })()}
+
                   </div>
 
-                  <div className="px-5 pb-4 sm:px-7">
-                    <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
-                      <p className="text-[9px] font-semibold uppercase text-slate-400">Remarks</p>
-                      <p className="mt-0.5 text-[10px] text-slate-600">
-                        Salary processed for <span className="font-semibold">{previewSlip.month_name} {previewSlip.payroll_year}</span>.
+
+                  {/* ================================================= */}
+                  {/* NET PAY */}
+                  {/* ================================================= */}
+
+                  <div className="border-b border-slate-200 px-7 py-6">
+
+                    <div className="grid grid-cols-1 gap-5 rounded-xl border border-indigo-100 bg-indigo-50 px-6 py-5 md:grid-cols-2">
+
+                      {/* NET PAY */}
+
+                      <div>
+
+                        <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-indigo-600">
+                          Net Pay
+                        </p>
+
+                        <p className="mt-2 text-2xl font-bold text-slate-900">
+                          {formatPayslipCurrency(
+                            previewSlip.net_salary || 0
+                          )}
+                        </p>
+
+                      </div>
+
+
+                      {/* AMOUNT IN WORDS */}
+
+                      <div className="md:text-right">
+
+                        <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-black-200">
+                          Amount in Words
+                        </p>
+
+                        <p className="mt-2 text-xs font-medium leading-5 text-slate-700">
+                          {getAmountInWords(
+                            Number(
+                              previewSlip.net_salary || 0
+                            )
+                          )}
+                        </p>
+
+                      </div>
+
+                    </div>
+
+                  </div>
+
+
+                  {/* ================================================= */}
+                  {/* REMARKS */}
+                  {/* ================================================= */}
+
+                  <div className="border-b border-slate-200 px-7 py-5">
+
+                    <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                      Remarks
+                    </label>
+
+                    <p className="mt-2 text-xs text-slate-600">
+                      Salary processed for{" "}
+                      {monthNames[selectedMonth - 1]}{" "}
+                      {selectedYear}.
+                    </p>
+
+                  </div>
+
+
+                    {/* ================================================= */}
+                    {/* FOOTER */}
+                    {/* ================================================= */}
+
+                    <div className="px-7 py-4 text-center">
+
+                      <p className="text-[9px] text-slate-400">
+                        This is a system-generated payslip and does not
+                        require a physical signature.
                       </p>
+
                     </div>
+
                   </div>
 
-                  <div className="border-t border-slate-200 px-5 py-4 text-center sm:px-7">
-                    <div className="flex items-center justify-center gap-1.5 text-[9px] text-slate-400">
-                      <ShieldCheck className="h-3 w-3" />
-                      <span>This is a system-generated payslip and does not require a physical signature.</span>
-                    </div>
-                  </div>
                 </div>
+
               </div>
+
             </div>
-          </div>
         </div>,
         document.body
       )}
@@ -1115,143 +2490,93 @@ export default function PayrollManager({
               </div>
 
               <div className="space-y-4 p-5">
+
+                {/* Salary Head - Read Only */}
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Salary Head
+                  </p>
+
+                  <div className="mt-1 flex items-center justify-between gap-3">
+                    <p className="text-sm font-semibold text-slate-800">
+                      {editingComponent.name}
+                    </p>
+
+                    <span className="rounded bg-white px-2 py-1 font-mono text-[10px] text-slate-500">
+                      {editingComponent.code}
+                    </span>
+                  </div>
+                </div>
+
+                {/* LOP Applicable */}
                 <div>
                   <label className="mb-1.5 block text-xs font-semibold text-slate-700">
-                    Salary Head
+                    LOP Applicable
                   </label>
-                  <input
-                    type="text"
-                    value={editingComponent.name}
+
+                  <select
+                    value={editingComponent.affects_lop ? "yes" : "no"}
                     onChange={event =>
                       setEditingComponent({
                         ...editingComponent,
-                        name: event.target.value
+                        affects_lop: event.target.value === "yes"
+                      })
+                    }
+                    className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50"
+                  >
+                    <option value="yes">Yes</option>
+                    <option value="no">No</option>
+                  </select>
+                </div>
+
+                {/* Calculation Type */}
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold text-slate-700">
+                    Calculation Type
+                  </label>
+
+                  <select
+                    value={editingComponent.calculation_type}
+                    onChange={event =>
+                      setEditingComponent({
+                        ...editingComponent,
+                        calculation_type:
+                          event.target.value as SalaryComponent["calculation_type"]
+                      })
+                    }
+                    className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50"
+                  >
+                    <option value="fixed">Fixed Amount</option>
+                    <option value="percentage_of_basic">% of Basic</option>
+                    <option value="percentage_of_gross">% of Gross</option>
+                  </select>
+                </div>
+
+                {/* Value */}
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold text-slate-700">
+                    {editingComponent.calculation_type === "fixed" ? "Amount" : "Percentage"}
+                  </label>
+
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={editingComponent.value}
+                    onChange={event =>setEditingComponent(
+                      {
+                        ...editingComponent,
+                        value: Number(event.target.value)
                       })
                     }
                     className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50"
                   />
+
+                  <p className="mt-1 text-[10px] text-slate-400">
+                    {editingComponent.calculation_type === "fixed" ? "Enter the fixed salary amount.": "Enter the percentage value."}
+                  </p>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-slate-700">
-                      Code
-                    </label>
-                    <input
-                      type="text"
-                      value={editingComponent.code}
-                      onChange={event =>
-                        setEditingComponent({
-                          ...editingComponent,
-                          code: event.target.value.toUpperCase()
-                        })
-                      }
-                      className="h-10 w-full rounded-lg border border-slate-200 px-3 font-mono text-sm outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-slate-700">
-                      Type
-                    </label>
-                    <select
-                      value={editingComponent.type}
-                      onChange={event =>
-                        setEditingComponent({
-                          ...editingComponent,
-                          type: event.target.value as SalaryComponent["type"]
-                        })
-                      }
-                      className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50"
-                    >
-                      <option value="earning">Earning</option>
-                      <option value="deduction">Deduction</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-slate-700">
-                      Calculation Type
-                    </label>
-                    <select
-                      value={editingComponent.calculation_type}
-                      onChange={event =>
-                        setEditingComponent({
-                          ...editingComponent,
-                          calculation_type: event.target.value as SalaryComponent["calculation_type"]
-                        })
-                      }
-                      className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50"
-                    >
-                      <option value="fixed">Fixed Amount</option>
-                      <option value="percentage_of_basic">% of Basic</option>
-                      <option value="percentage_of_gross">% of Gross</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-slate-700">
-                      {editingComponent.calculation_type === "fixed"
-                        ? "Amount"
-                        : "Percentage"}
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={editingComponent.value}
-                      onChange={event =>
-                        setEditingComponent({
-                          ...editingComponent,
-                          value: Number(event.target.value)
-                        })
-                      }
-                      className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50"
-                    />
-                  </div>
-                </div>
-
-                <label className="flex cursor-pointer items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
-                  <div>
-                    <p className="text-xs font-semibold text-slate-700">
-                      Affects LOP
-                    </p>
-                    <p className="text-[10px] text-slate-400">
-                      Include this component when calculating Loss of Pay.
-                    </p>
-                  </div>
-
-                  <input
-                    type="checkbox"
-                    checked={Boolean(editingComponent.affects_lop)}
-                    onChange={event =>
-                      setEditingComponent({
-                        ...editingComponent,
-                        affects_lop: event.target.checked
-                      })
-                    }
-                    className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                  />
-                </label>
-
-                <div>
-                  <label className="mb-1.5 block text-xs font-semibold text-slate-700">
-                    Description
-                  </label>
-                  <textarea
-                    rows={3}
-                    value={editingComponent.description || ""}
-                    onChange={event =>
-                      setEditingComponent({
-                        ...editingComponent,
-                        description: event.target.value
-                      })
-                    }
-                    className="w-full resize-none rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50"
-                  />
-                </div>
               </div>
 
               <div className="flex items-center justify-end gap-2 border-t border-slate-100 px-5 py-3">

@@ -191,10 +191,33 @@ export default function AttendanceManager({
                 return (
                   <tr key={emp.id} className="hover:bg-slate-50/80 transition-colors">
                     <td className="py-3.5 px-4">
-                      <span className="font-bold text-slate-900 block">
-                        {emp.first_name} {emp.last_name}
-                      </span>
-                      <span className="text-[10px] text-slate-400 font-mono font-medium">{emp.employee_id}</span>
+                      <div className="flex items-center gap-3">
+                        {/* Employee Profile Photo */}
+                        <div className="h-9 w-9 shrink-0 overflow-hidden rounded-full bg-indigo-100 shadow-sm">
+                          {emp.profile_photo_url ? (
+                            <img
+                              src={emp.profile_photo_url}
+                              alt={`${emp.first_name ?? ""} ${emp.last_name ?? ""}`}
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center bg-gradient-to-tr from-indigo-500 to-indigo-600 text-xs font-bold text-white">
+                              {emp.first_name?.[0]}
+                              {emp.last_name?.[0]}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="min-w-0">
+                          <span className="font-bold text-slate-900 block truncate">
+                            {emp.first_name} {emp.last_name}
+                          </span>
+
+                          <span className="text-[10px] text-slate-400 font-mono font-medium">
+                            {emp.employee_id}
+                          </span>
+                        </div>
+                      </div>
                     </td>
                     <td className="py-3.5 px-4 font-medium text-slate-700">
                       {emp.department?.name || "Engineering"}

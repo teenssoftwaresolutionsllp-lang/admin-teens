@@ -319,6 +319,7 @@ export interface SalaryComponent {
   is_active: boolean;
   is_statutory: boolean;
   description: string;
+  employee_component_id?: string;
 }
 
 export interface EmployeeSalaryComponent {
@@ -328,6 +329,7 @@ export interface EmployeeSalaryComponent {
   calculation_type: string;
   value: number;
   is_active: boolean;
+  affects_lop: boolean;
   gratuity_5_year_taken: boolean;
   gratuity_5_year_taken_date?: string | null;
   gratuity_5_year_amount: number;

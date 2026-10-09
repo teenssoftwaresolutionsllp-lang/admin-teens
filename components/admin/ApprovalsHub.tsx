@@ -513,8 +513,35 @@ export default function ApprovalsHub({
 
                       return (
                         <tr key={r.id} className="hover:bg-slate-50/80 transition-colors">
-                          <td className="py-3.5 px-4 font-bold text-slate-900">
-                            {emp ? `${emp.first_name} ${emp.last_name}` : "Unknown Employee"}
+                          <td className="py-3.5 px-4">
+                            <div className="flex items-center gap-3">
+                              <div className="h-9 w-9 shrink-0 overflow-hidden rounded-full bg-gradient-to-tr from-indigo-500 to-indigo-600 text-white font-bold text-xs flex items-center justify-center">
+                                {emp?.profile_photo_url ? (
+                                  <img
+                                    src={emp.profile_photo_url}
+                                    alt={`${emp.first_name ?? ""} ${emp.last_name ?? ""}`}
+                                    className="h-full w-full object-cover"
+                                  />
+                                ) : (
+                                  <>
+                                    {emp?.first_name?.charAt(0)?.toUpperCase() || "U"}
+                                    {emp?.last_name?.charAt(0)?.toUpperCase() || ""}
+                                  </>
+                                )}
+                              </div>
+
+                              <div>
+                                <div className="font-bold text-slate-900">
+                                  {emp ? `${emp.first_name} ${emp.last_name}` : "Unknown Employee"}
+                                </div>
+
+                                {emp?.employee_id && (
+                                  <div className="text-[10px] text-slate-400 font-mono font-medium mt-0.5">
+                                    {emp.employee_id}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
                           </td>
                           <td className="py-3.5 px-4">
                             <span className="font-semibold text-indigo-700 bg-indigo-50 px-2.5 py-0.5 rounded-md">
@@ -606,8 +633,35 @@ export default function ApprovalsHub({
 
                       return (
                         <tr key={reg.id} className="hover:bg-slate-50/80 transition-colors">
-                          <td className="py-3.5 px-4 font-bold text-slate-900">
-                            {emp ? `${emp.first_name} ${emp.last_name}` : "Unknown Employee"}
+                          <td className="py-3.5 px-4">
+                            <div className="flex items-center gap-3">
+                              <div className="h-9 w-9 shrink-0 overflow-hidden rounded-full bg-gradient-to-tr from-indigo-500 to-indigo-600 text-white font-bold text-xs flex items-center justify-center">
+                                {emp?.profile_photo_url ? (
+                                  <img
+                                    src={emp.profile_photo_url}
+                                    alt={`${emp.first_name ?? ""} ${emp.last_name ?? ""}`}
+                                    className="h-full w-full object-cover"
+                                  />
+                                ) : (
+                                  <>
+                                    {emp?.first_name?.charAt(0)?.toUpperCase() || "U"}
+                                    {emp?.last_name?.charAt(0)?.toUpperCase() || ""}
+                                  </>
+                                )}
+                              </div>
+
+                              <div>
+                                <div className="font-bold text-slate-900">
+                                  {emp ? `${emp.first_name} ${emp.last_name}` : "Unknown Employee"}
+                                </div>
+
+                                {emp?.employee_id && (
+                                  <div className="text-[10px] text-slate-400 font-mono font-medium mt-0.5">
+                                    {emp.employee_id}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
                           </td>
                           <td className="py-3.5 px-4 font-semibold text-slate-800 font-mono">
                             {reg.attendance_date}

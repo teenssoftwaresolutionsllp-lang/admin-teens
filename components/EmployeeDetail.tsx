@@ -4,7 +4,7 @@ import { Employee, EmployeeDocument, UserRole } from "@/lib/types";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase-browser";
 import { toast } from "react-hot-toast";
-import { User, MapPin, Briefcase, CreditCard, FileText, Gift, Edit, DeleteIcon, LaptopMinimal, Phone, File } from "lucide-react";
+import { User, MapPin, Briefcase, CreditCard, FileText, Gift, Edit, DeleteIcon, LaptopMinimal, Phone, Eye, EyeOff, Copy, File } from "lucide-react";
 import Link from "next/link";
 import { useEffect,useState } from "react";
 import DocumentUpload from "./DocumentUpload";
@@ -19,6 +19,7 @@ export default function EmployeeDetail({ employee, documents, role }: EmployeeDe
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
+  const [revealedFields, setRevealedFields] = useState<Record<string, boolean>>({});
   const [gratuity, setGratuity] = useState<any>(null);
   const [gratuityLoading, setGratuityLoading] = useState(false);
   const [gratuityProcessing, setGratuityProcessing] = useState(false);
@@ -42,6 +43,67 @@ export default function EmployeeDetail({ employee, documents, role }: EmployeeDe
     if (str.length <= visibleCount) return str;
     return "*".repeat(str.length - visibleCount) + str.slice(-visibleCount);
   };
+
+  const renderSensitiveField = (label: string,value: string | null | undefined,fieldKey: string) => 
+    {
+      const canReveal = role === "hr" || role === "ceo";
+      const isRevealed = Boolean(revealedFields[fieldKey]);
+      const hasValue = Boolean(value?.trim());
+
+      return (
+        <div className="rounded-xl border border-slate-200 bg-white p-4">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            {label}
+          </p>
+
+          <div className="flex items-center justify-between gap-2">
+            <span className="min-w-0 break-all text-sm font-medium text-slate-900">
+              {hasValue ? canReveal && isRevealed ? value : maskString(value, 4) : "N/A"}
+            </span>
+
+            {canReveal && hasValue && (
+              <div className="flex shrink-0 items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setRevealedFields((previous) =>
+                    ({
+                      ...previous,
+                      [fieldKey]: !previous[fieldKey],
+                    }))
+                  }
+                  className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+                  title={isRevealed ? "Hide value" : "Reveal value"}
+                  aria-label={isRevealed ? `Hide ${label}` : `Reveal ${label}`}
+                >
+                  {isRevealed ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(value!);
+                      toast.success(`${label} copied`);
+                    } catch {
+                      toast.error("Could not copy. Check browser clipboard permissions.");
+                    }
+                  }}
+                  className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+                  title={`Copy ${label}`}
+                  aria-label={`Copy ${label}`}
+                >
+                  <Copy className="h-4 w-4" />
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    };
 
   const formatDate = (dateStr?: string | null) => {
     if (!dateStr) return "N/A";
@@ -259,34 +321,52 @@ const isExitStatus = [
 
   return (
     <div className="space-y-6">
-      {/* Profile Header */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200/90 p-6 sm:p-7 flex flex-col md:flex-row items-start md:items-center justify-between gap-5">
         <div className="flex items-center gap-5">
-          <div className="w-18 h-18 sm:w-20 sm:h-20 bg-gradient-to-tr from-indigo-500 to-indigo-600 text-white rounded-2xl flex items-center justify-center text-2xl font-bold shadow-md shadow-indigo-100">
-            {employee.first_name[0]}{employee.last_name[0]}
+
+          {/* Employee Profile Photo */}
+          <div className="w-18 h-18 sm:w-20 sm:h-20 overflow-hidden rounded-2xl bg-indigo-100 shadow-md shadow-indigo-100">
+            {employee.profile_photo_url ? (
+              <img
+                src={employee.profile_photo_url}
+                alt={`${employee.first_name} ${employee.last_name}`}
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center bg-gradient-to-tr from-indigo-500 to-indigo-600 text-2xl font-bold text-white">
+                {employee.first_name?.[0]}
+                {employee.last_name?.[0]}
+              </div>
+            )}
           </div>
           <div>
             <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
               {employee.first_name} {employee.last_name}
             </h1>
+
             <div className="text-slate-500 mt-1 flex flex-wrap items-center gap-2.5 text-xs sm:text-sm font-medium">
-              <span className="text-indigo-600 font-semibold">{employee.designation || "No Designation"}</span>
+              <span className="text-indigo-600 font-semibold">
+                {employee.designation || "No Designation"}
+              </span>
               <span>&bull;</span>
               <span>{employee.department?.name || "General"}</span>
               <span>&bull;</span>
               <span className="font-mono text-slate-400">{employee.email}</span>
             </div>
+
             <div className="mt-3 flex items-center gap-2.5">
-              <span className={`px-2.5 py-0.5 rounded-full font-bold text-[10px] uppercase tracking-wider border ${getStatusBadge(employee.status)}`}>
+              <span
+                className={`px-2.5 py-0.5 rounded-full font-bold text-[10px] uppercase tracking-wider border ${getStatusBadge(employee.status)}`}
+              >
                 {employee.status.replace("_", " ")}
               </span>
+
               <span className="font-mono text-xs font-semibold px-2.5 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200">
                 {employee.employee_id}
               </span>
             </div>
           </div>
         </div>
-        
         {role === "ceo" || role === "hr" &&  !["resigned", "laid_off", "terminated", "inactive"].includes(employee.status?.toLowerCase()) &&(
           <Link
             href={`/dashboard/employees/${employee.id}/edit`}
@@ -359,7 +439,7 @@ const isExitStatus = [
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   <DetailTile label="Annual CTC" value={employee.salary ? `₹${employee.salary.toLocaleString('en-IN')}` : "N/A"} />
                   <DetailTile label="Bank Name" value={employee.bank_name} />
-                  <DetailTile label="Bank Account Number" value={maskString(employee.bank_account_number, 4)} />
+                  {renderSensitiveField("Bank Account Number",employee.bank_account_number,"bank_account_number")}
                   <DetailTile label="IFSC Code" value={employee.ifsc_code} />
                 </div>
               </div>
@@ -367,9 +447,9 @@ const isExitStatus = [
               <div className="pt-2 border-t border-slate-100">
                 <h3 className="text-sm font-bold text-slate-900 mb-3 uppercase tracking-wider text-slate-400">Official Identification</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <DetailTile label="PAN Number" value={maskString(employee.pan_number, 4)} />
-                  <DetailTile label="Aadhaar Number" value={maskString(employee.aadhar_number, 4)} />
-                  <DetailTile label="Passport Number" value={maskString(employee.passport_number, 4)} />
+                  {renderSensitiveField("PAN Number",employee.pan_number,"pan_number")}
+                  {renderSensitiveField("Aadhaar Number",employee.aadhar_number,"aadhar_number")}
+                  {renderSensitiveField("Passport Number",employee.passport_number,"passport_number")}
                 </div>
               </div>
             </div>

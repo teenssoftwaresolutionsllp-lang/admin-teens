@@ -229,11 +229,34 @@ export default function LeaveManager({
             <tbody className="divide-y divide-slate-100">
               {employees.map((emp) => (
                 <tr key={emp.id} className="hover:bg-slate-50/80 transition-colors">
-                  <td className="py-4 px-5 font-bold text-slate-900">
-                    {emp.first_name} {emp.last_name}
-                    <span className="text-[10px] text-slate-400 font-mono font-medium block mt-0.5">
-                      {emp.employee_id}
-                    </span>
+                  <td className="py-4 px-5">
+                    <div className="flex items-center gap-3">
+                      {/* Employee Profile Photo */}
+                      <div className="h-9 w-9 shrink-0 overflow-hidden rounded-full bg-indigo-100 shadow-sm">
+                        {emp.profile_photo_url ? (
+                          <img
+                            src={emp.profile_photo_url}
+                            alt={`${emp.first_name ?? ""} ${emp.last_name ?? ""}`}
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center bg-gradient-to-tr from-indigo-500 to-indigo-600 text-xs font-bold text-white">
+                            {emp.first_name?.[0]}
+                            {emp.last_name?.[0]}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="min-w-0">
+                        <p className="font-bold text-slate-900 truncate">
+                          {emp.first_name} {emp.last_name}
+                        </p>
+
+                        <span className="text-[10px] text-slate-400 font-mono font-medium block mt-0.5">
+                          {emp.employee_id}
+                        </span>
+                      </div>
+                    </div>
                   </td>
                   {(() => {
                     const cl = getBalance(emp.id, "CL");

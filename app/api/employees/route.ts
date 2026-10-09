@@ -184,7 +184,16 @@ export async function POST(request: Request) {
   // =========================================================
 
   if (saved?.id) {
-    // Get all active salary components from master table
+    const defaultSalaryComponentCodes = [
+      "BASIC",
+      "HRA",
+      "SPECIAL_ALLOWANCE",
+      "PF",
+      "ESI",
+      "PT",
+      "TDS",
+    ];
+
     const {
       data: masterSalaryComponents,
       error: salaryComponentsError,
@@ -197,6 +206,7 @@ export async function POST(request: Request) {
         value,
         is_active
       `)
+      .in("code", defaultSalaryComponentCodes)
       .eq("is_active", true);
 
     if (salaryComponentsError) {
@@ -206,8 +216,8 @@ export async function POST(request: Request) {
     }
 
     if (masterSalaryComponents?.length) {
-      const employeeSalaryComponents =
-        masterSalaryComponents.map((component) => ({
+      const employeeSalaryComponents = masterSalaryComponents.map(
+        (component) => ({
           employee_id: saved.id,
           salary_component_id: component.id,
           calculation_type: component.calculation_type,
@@ -221,7 +231,8 @@ export async function POST(request: Request) {
           gratuity_10_year_taken: false,
           gratuity_10_year_taken_date: null,
           gratuity_10_year_amount: 0,
-        }));
+        })
+      );
 
       const {
         error: employeeSalaryComponentsError,

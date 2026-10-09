@@ -146,8 +146,19 @@ export default function DashboardStats({ stats, role }: DashboardStatsProps) {
                   <tr key={emp.id} className="hover:bg-slate-50/80 transition-colors">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <div className="h-9 w-9 rounded-full bg-gradient-to-tr from-indigo-500 to-indigo-600 text-white font-bold text-xs flex items-center justify-center shadow-sm">
-                          {emp.first_name[0]}{emp.last_name[0]}
+                        <div className="h-9 w-9 shrink-0 overflow-hidden rounded-full bg-indigo-100 shadow-sm">
+                          {emp.profile_photo_url ? (
+                            <img
+                              src={emp.profile_photo_url}
+                              alt={`${emp.first_name} ${emp.last_name}`}
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center bg-gradient-to-tr from-indigo-500 to-indigo-600 text-xs font-bold text-white">
+                              {emp.first_name?.[0]}
+                              {emp.last_name?.[0]}
+                            </div>
+                          )}
                         </div>
                         <div>
                           <Link href={`/dashboard/employees/${emp.id}`} className="font-bold text-slate-900 hover:text-indigo-600 transition-colors block">

@@ -12,7 +12,9 @@ export async function uploadToCloudinary(file: File, folder: string) {
 
   return new Promise<{ url: string; public_id: string }>((resolve, reject) => {
     cloudinary.uploader.upload_stream(
-      { folder },
+      { folder, 
+        resource_type: 'raw'
+      },
       (error, result) => {
         if (error) {
           reject(error);
