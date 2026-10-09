@@ -2660,15 +2660,13 @@ export class DataStore {
         ...masterComponent,
         calculation_type: employeeComponent.calculation_type as SalaryComponent["calculation_type"],
         value: Number(employeeComponent.value),
-        is_active: employeeComponent.is_active,
+        is_active: employeeComponent.is_active === true && employeeComponent.is_active === true,
         // Employee-specific LOP configuration
         affects_lop: employeeComponent.affects_lop ?? masterComponent.affects_lop,
       };
-    })
-    .filter(
-      (component): component is SalaryComponent =>
-        component !== null
-    );
+  })
+  .filter(
+(component): component is SalaryComponent => component !== null);
 
   const monthNames = [
     "January",
