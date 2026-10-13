@@ -5,23 +5,73 @@ import { redirect } from "next/navigation";
 
 export default async function EmployeeAttendancePage() {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
   if (!user) redirect("/login");
 
   let employee = await DataStore.getEmployeeByUserId(user.id);
+
   if (!employee) {
     const all = await DataStore.getEmployees();
-    employee = all.find(e => e.email === user.email) || all[0];
+    employee = all.find((e) => e.email === user.email) || null;
   }
 
-  if (!employee) return <div className="p-8 text-center text-slate-500">Employee not found.</div>;
+  if (!employee) {
+    return (
+      <div className="p-8 text-center text-slate-500">
+        Employee not found. Please contact HR to link your account.
+      </div>
+    );
+  }
 
-  const project = employee.project || (await DataStore.getProjects())[0];
-  const todayLog = await DataStore.getTodayAttendance(employee.id);
-  const historyLogs = await DataStore.getAttendanceLogs(employee.id);
-  const allRegs = await DataStore.getAttendanceRegularizations();
-  const regularizations = allRegs.filter(r => r.employee_id === employee.id);
+  const [projects, calendars] = await Promise.all([
+    DataStore.getProjects(),
+    DataStore.getHolidayCalendars(),
+  ]);
+
+  const baseProject =
+    employee.project ||
+    projects.find((p) => p.id === employee.project_id) ||
+    projects[0];
+
+  if (!baseProject) {
+    return (
+      <div className="p-8 text-center text-slate-500">
+        No project or holiday calendar is configured.
+      </div>
+    );
+  }
+
+  const calendar = calendars.find(
+    (c) => c.id === baseProject.calendar_id
+  );
+
+  const project = {
+    ...baseProject,
+    calendar: calendar || baseProject.calendar,
+  };
+
+  const [
+    todayLog,
+    historyLogs,
+    allRegs,
+    leaveRequests,
+    leaveBalances,
+    leaveTypes,
+  ] = await Promise.all([
+    DataStore.getTodayAttendance(employee.id),
+    DataStore.getAttendanceLogs(employee.id),
+    DataStore.getAttendanceRegularizations(),
+    DataStore.getLeaveRequests(employee.id),
+    DataStore.getLeaveBalances(employee.id),
+    DataStore.getLeaveTypes(),
+  ]);
+
+  const regularizations = allRegs.filter(
+    (r) => r.employee_id === employee.id
+  );
 
   return (
     <EmployeeAttendanceView
@@ -30,6 +80,9 @@ export default async function EmployeeAttendancePage() {
       todayLog={todayLog}
       historyLogs={historyLogs}
       regularizations={regularizations}
+      leaveRequests={leaveRequests}
+      leaveBalances={leaveBalances}
+      leaveTypes={leaveTypes}
     />
   );
 }

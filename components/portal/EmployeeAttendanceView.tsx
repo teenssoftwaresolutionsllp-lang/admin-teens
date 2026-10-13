@@ -46,6 +46,7 @@ interface EmployeeAttendanceViewProps {
   leaveBalances?: EmployeeLeaveBalance[];
   leaveRequests?: LeaveRequest[];
   leaveTypes?: LeaveType[];
+  
 }
 
 /* ============================================================
@@ -101,6 +102,7 @@ function getClockIn(
     null
   );
 }
+
 
 function getClockOut(
   log: AttendanceLog | null | undefined
@@ -622,6 +624,12 @@ export default function EmployeeAttendanceView({
       historyLogs ?? []
     );
 
+  const [selectedCalendarYear, setSelectedCalendarYear] =
+    useState(() => new Date().getFullYear());
+
+  const [selectedCalendarMonth, setSelectedCalendarMonth] =
+    useState(() => new Date().getMonth());
+
   const [
     currentTodayLog,
     setCurrentTodayLog,
@@ -810,6 +818,38 @@ export default function EmployeeAttendanceView({
           balances
         );
         setLeaveTypes(types);
+
+
+        console.log("[Leave Debug] Employee ID:", employee.id);
+
+        console.table(
+          balances.map((item: any) => ({
+            code:
+              item.leave_type?.code ??
+              item.leaveType?.code ??
+              item.leave_type_code ??
+              item.leaveTypeCode ??
+              item.code,
+            name:
+              item.leave_type?.name ??
+              item.leaveType?.name ??
+              item.name,
+            allocated: item.allocated_days,
+            used: item.used_days,
+            balance: item.balance_days,
+            year: item.year,
+          }))
+        );
+
+        console.table(
+          types.map((item: any) => ({
+            code: item.code,
+            name: item.name,
+            annualQuota: item.annual_quota,
+            active: item.is_active,
+          }))
+        );
+
       } catch (error) {
         console.error(
           "Failed to load leaves:",
@@ -873,47 +913,216 @@ export default function EmployeeAttendanceView({
      SUMMARY
   ============================================================ */
 
-  const presentCount = useMemo(
-    () => {
-      return logs.filter(
-        (log) => {
-          const status =
-            normalizeAttendanceStatus(
-              (log as any).status
-            );
 
-          return (
-            status === "present" ||
-            status === "half_day" ||
-            Boolean(
-              (log as any).is_late
-            )
+  const presentCount = useMemo(() => {
+    return logs.filter((log) => {
+      const rawLog = log as any;
+
+      const attendanceDate = String(
+        rawLog.attendance_date ??
+        rawLog.attendanceDate ??
+        ""
+      ).slice(0, 10);
+
+      if (!attendanceDate) return false;
+
+      const [year, month] = attendanceDate
+        .split("-")
+        .map(Number);
+
+      // Count only records from the selected calendar month.
+      if (
+        year !== selectedCalendarYear ||
+        month !== selectedCalendarMonth + 1
+      ) {
+        return false;
+      }
+
+      const status = normalizeAttendanceStatus(
+        rawLog.status
+      );
+
+      return (
+        status === "present" ||
+        status === "half_day" ||
+        Boolean(rawLog.is_late)
+      );
+    }).length;
+  }, [
+    logs,
+    selectedCalendarYear,
+    selectedCalendarMonth,
+  ]);
+
+
+
+
+  const absentCount = useMemo(() => {
+    const today = getTodayString();
+
+    const startDate = `${selectedCalendarYear}-${String(
+      selectedCalendarMonth + 1
+    ).padStart(2, "0")}-01`;
+
+    const monthEnd = new Date(
+      selectedCalendarYear,
+      selectedCalendarMonth + 1,
+      0
+    );
+
+    const lastDate = `${selectedCalendarYear}-${String(
+      selectedCalendarMonth + 1
+    ).padStart(2, "0")}-${String(
+      monthEnd.getDate()
+    ).padStart(2, "0")}`;
+
+    // Do not count future dates in the selected month.
+    const endDate = lastDate < today ? lastDate : today;
+
+    // Do not count dates before the employee joined.
+    const effectiveStartDate =
+      employee.joining_date &&
+      employee.joining_date.slice(0, 10) > startDate
+        ? employee.joining_date.slice(0, 10)
+        : startDate;
+
+    if (effectiveStartDate > endDate) return 0;
+
+    const logsByDate = new Map<string, AttendanceLog[]>();
+
+    for (const log of logs) {
+      const date = getLogDate(log);
+      if (!date) continue;
+
+      const existing = logsByDate.get(date) || [];
+      existing.push(log);
+      logsByDate.set(date, existing);
+    }
+
+    const holidays = (
+      project.calendar?.holidays || []
+    ) as Array<{
+      holiday_date: string;
+      is_optional?: boolean;
+      is_working_day?: boolean;
+    }>;
+
+    const holidaysByDate = new Map<string, typeof holidays>();
+
+    for (const holiday of holidays) {
+      const date = String(holiday.holiday_date || "").slice(0, 10);
+
+      if (!date) continue;
+
+      const existing = holidaysByDate.get(date) || [];
+      existing.push(holiday);
+      holidaysByDate.set(date, existing);
+    }
+
+    const approvedLeaveDates = new Set<string>();
+
+    for (const request of leaveRequests as any[]) {
+      if (getLeaveRequestStatus(request) !== "approved") {
+        continue;
+      }
+
+      const start = String(
+        request.start_date ?? request.startDate ?? ""
+      ).slice(0, 10);
+
+      const end = String(
+        request.end_date ?? request.endDate ?? start
+      ).slice(0, 10);
+
+      if (!start || !end || start > end) continue;
+
+      const leaveCursor = new Date(`${start}T00:00:00Z`);
+      const leaveLast = new Date(`${end}T00:00:00Z`);
+
+      while (leaveCursor <= leaveLast) {
+        approvedLeaveDates.add(
+          leaveCursor.toISOString().slice(0, 10)
+        );
+
+        leaveCursor.setUTCDate(leaveCursor.getUTCDate() + 1);
+      }
+    }
+
+    let count = 0;
+
+    const cursor = new Date(`${effectiveStartDate}T00:00:00Z`);
+    const last = new Date(`${endDate}T00:00:00Z`);
+
+    while (cursor <= last) {
+      const date = cursor.toISOString().slice(0, 10);
+      const dayOfWeek = cursor.getUTCDay();
+      const dateLogs = logsByDate.get(date) || [];
+      const dateHolidays = holidaysByDate.get(date) || [];
+
+      const isWorkingSaturday =
+        dayOfWeek === 6 &&
+        dateHolidays.some(
+          (holiday) => holiday.is_working_day === true
+        );
+
+      // Sundays and ordinary Saturdays are weekly offs.
+      if (
+        dayOfWeek === 0 ||
+        (dayOfWeek === 6 && !isWorkingSaturday)
+      ) {
+        cursor.setUTCDate(cursor.getUTCDate() + 1);
+        continue;
+      }
+
+      // Exclude non-optional holidays unless marked as working.
+      const isHoliday = dateHolidays.some(
+        (holiday) =>
+          holiday.is_working_day !== true &&
+          holiday.is_optional !== true
+      );
+
+      if (isHoliday) {
+        cursor.setUTCDate(cursor.getUTCDate() + 1);
+        continue;
+      }
+
+      // Approved leave dates are not counted as absent.
+      if (approvedLeaveDates.has(date)) {
+        cursor.setUTCDate(cursor.getUTCDate() + 1);
+        continue;
+      }
+
+      if (dateLogs.length > 0) {
+        const hasExplicitAbsence = dateLogs.some((log) => {
+          const status = normalizeAttendanceStatus(
+            (log as any).status
           );
-        }
-      ).length;
-    },
-    [logs]
-  );
-
-  const absentCount = useMemo(
-    () => {
-      return logs.filter(
-        (log) => {
-          const status =
-            normalizeAttendanceStatus(
-              (log as any).status
-            );
 
           return (
             status === "absent" ||
-            status ===
-              "not_present"
+            status === "not_present"
           );
-        }
-      ).length;
-    },
-    [logs]
-  );
+        });
+
+        if (hasExplicitAbsence) count++;
+      } else {
+        // No attendance record on an eligible working day.
+        count++;
+      }
+
+      cursor.setUTCDate(cursor.getUTCDate() + 1);
+    }
+
+    return count;
+  }, [
+    logs,
+    employee.joining_date,
+    project,
+    leaveRequests,
+    selectedCalendarYear,
+    selectedCalendarMonth,
+  ]);
+
 
   const leaveCount = useMemo(
     () => {
@@ -946,59 +1155,51 @@ export default function EmployeeAttendanceView({
     [leaveRequests]
   );
 
-  const sickLeaveRemaining =
-    useMemo(() => {
-      const balance =
-        leaveBalances.find(
-          (item: any) =>
-            getLeaveTypeCode(
-              item
-            ) === "SL"
-        );
 
-      if (!balance) {
-        return 12;
-      }
 
-      return Math.max(
-        0,
-        getBalanceValue(
-          balance
-        )
-      );
-    }, [leaveBalances]);
-
-  const casualLeaveRemaining =
-    useMemo(() => {
-      const balance =
-        leaveBalances.find(
-          (item: any) =>
-            getLeaveTypeCode(
-              item
-            ) === "CL"
-        );
-
-      if (!balance) {
-        return 12;
-      }
-
-      return Math.max(
-        0,
-        getBalanceValue(
-          balance
-        )
-      );
-    }, [leaveBalances]);
-
-  const leaveBalance = useMemo(
-    () =>
-      sickLeaveRemaining +
-      casualLeaveRemaining,
-    [
-      sickLeaveRemaining,
-      casualLeaveRemaining,
-    ]
+const getRemainingLeave = (code: "CL" | "SL"): number => {
+  const balance = leaveBalances.find(
+    (item: any) =>
+      String(
+        item.leave_type?.code ??
+        item.leaveType?.code ??
+        item.leave_type_code ??
+        item.code ??
+        ""
+      )
+        .trim()
+        .toUpperCase() === code
   );
+
+  if (balance) {
+    const remaining = Number(balance.balance_days ?? 0);
+    return Number.isFinite(remaining) ? Math.max(0, remaining) : 0;
+  }
+
+  const leaveType = leaveTypes.find(
+    (type: any) =>
+      String(type.code ?? "").trim().toUpperCase() === code
+  );
+
+  const quota = Number(leaveType?.annual_quota ?? 0);
+  return Number.isFinite(quota) ? Math.max(0, quota) : 0;
+};
+
+const sickLeaveRemaining = useMemo(
+  () => getRemainingLeave("SL"),
+  [leaveBalances, leaveTypes]
+);
+
+const casualLeaveRemaining = useMemo(
+  () => getRemainingLeave("CL"),
+  [leaveBalances, leaveTypes]
+);
+
+const leaveBalance = useMemo(
+  () => sickLeaveRemaining + casualLeaveRemaining,
+  [sickLeaveRemaining, casualLeaveRemaining]
+);
+
 
   const visibleLeaveTypes =
     useMemo(() => {
@@ -1860,24 +2061,22 @@ export default function EmployeeAttendanceView({
 
           <AttendanceCalendar
             logs={logs}
-            leaveRequests={
-              leaveRequests
-            }
-            onDateSelect={
-              handleCalendarDateSelect
-            }
-            onSelectedDateChange={(
-              date
-            ) => {
+            leaveRequests={leaveRequests}
+            employeeJoiningDate={employee.joining_date}
+            onDateSelect={handleCalendarDateSelect}
+            onSelectedDateChange={(date) => {
               setSelectedDate(date);
 
               if (!date) {
-                setSelectedAttendance(
-                  null
-                );
+                setSelectedAttendance(null);
               }
             }}
+            onMonthChange={(year, month) => {
+              setSelectedCalendarYear(year);
+              setSelectedCalendarMonth(month);
+            }}
           />
+
         </div>
 
         <div>

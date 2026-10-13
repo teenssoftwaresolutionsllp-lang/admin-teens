@@ -26,6 +26,7 @@ export interface SelectedAttendance {
   worked?: string;
 }
 
+
 /*
  * IMPORTANT
  * Parent can receive both:
@@ -37,6 +38,9 @@ interface AttendanceCalendarProps {
   leaveRequests: LeaveRequest[];
   year?: number;
   month?: number;
+  employeeJoiningDate?: string | null;
+
+  onMonthChange?: (year: number, month: number) => void;
 
   onDateSelect?: (
     attendance: SelectedAttendance
@@ -46,6 +50,8 @@ interface AttendanceCalendarProps {
     date: string
   ) => void;
 }
+
+
 
 /* =========================================================
    DUMMY DATA
@@ -109,6 +115,9 @@ function formatDate(date: Date): string {
   ).padStart(2, "0")}`;
 }
 
+
+
+
 function formatTime(
   value?: string | null
 ): string | undefined {
@@ -162,8 +171,10 @@ export default function AttendanceCalendar({
   leaveRequests,
   year: initialYear,
   month: initialMonth,
+  employeeJoiningDate,
   onDateSelect,
   onSelectedDateChange,
+  onMonthChange,
 }: AttendanceCalendarProps) {
   const today = new Date();
 
@@ -453,28 +464,32 @@ export default function AttendanceCalendar({
     onDateSelect?.(attendance);
   };
 
+
   /* =======================================================
      PREVIOUS MONTH
   ======================================================= */
 
+
   const goToPreviousMonth = () => {
-    setSelectedDate("");
+    const newDate = new Date(year, month - 1, 1);
 
-    if (month === 0) {
-      const newYear = year - 1;
-      const newMonth = 11;
+    if (employeeJoiningDate) {
+      const joiningDate = employeeJoiningDate.slice(0, 10);
+      const joiningMonth = joiningDate.slice(0, 7);
+      const targetMonth = formatDate(newDate).slice(0, 7);
 
-      setYear(newYear);
-      setMonth(newMonth);
-
-      onSelectedDateChange?.("");
-    } else {
-      const newMonth = month - 1;
-
-      setMonth(newMonth);
-
-      onSelectedDateChange?.("");
+      if (targetMonth < joiningMonth) return;
     }
+
+    setSelectedDate("");
+    onSelectedDateChange?.("");
+
+    const newYear = newDate.getFullYear();
+    const newMonth = newDate.getMonth();
+
+    setYear(newYear);
+    setMonth(newMonth);
+    onMonthChange?.(newYear, newMonth);
   };
 
   /* =======================================================
@@ -483,23 +498,20 @@ export default function AttendanceCalendar({
 
   const goToNextMonth = () => {
     setSelectedDate("");
+    onSelectedDateChange?.("");
 
-    if (month === 11) {
-      const newYear = year + 1;
-      const newMonth = 0;
+    const newDate = new Date(year, month + 1, 1);
+    const newYear = newDate.getFullYear();
+    const newMonth = newDate.getMonth();
 
-      setYear(newYear);
-      setMonth(newMonth);
+    setYear(newYear);
+    setMonth(newMonth);
 
-      onSelectedDateChange?.("");
-    } else {
-      const newMonth = month + 1;
-
-      setMonth(newMonth);
-
-      onSelectedDateChange?.("");
-    }
+    onMonthChange?.(newYear, newMonth);
   };
+
+
+
 
   /* =======================================================
      MONTH LABEL
@@ -644,20 +656,20 @@ export default function AttendanceCalendar({
             day
           ).padStart(2, "0")}`;
 
-          const isSelected =
-            selectedDate === date;
+          const isSelected = selectedDate === date;
+
+          const isBeforeJoiningDate = !!employeeJoiningDate && date < employeeJoiningDate.slice(0, 10);
 
           return (
             <button
               key={day}
               type="button"
-              onClick={() =>
-                handleDateClick(day)
-              }
-              className={getDayClass(
-                state,
-                isSelected
-              )}
+              onClick={() => handleDateClick(day)}
+              className={`${getDayClass(state, isSelected)} ${
+                isBeforeJoiningDate
+                  ? "opacity-30 cursor-not-allowed"
+                  : ""
+              }`}
             >
               <span className="text-sm font-extrabold">
                 {day}
