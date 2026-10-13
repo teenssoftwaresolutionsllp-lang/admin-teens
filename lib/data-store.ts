@@ -694,23 +694,64 @@ export class DataStore {
   // ==========================================
   // PROFILE CHANGE REQUESTS (MAKER-CHECKER)
   // ==========================================
+
   static async getProfileChangeRequests(): Promise<ProfileChangeRequest[]> {
     const cache = getCache();
+
     try {
       const supabase = await createAdminClient();
+
       const { data, error } = await supabase
         .from("profile_change_requests")
         .select("*, employee:employees(*)")
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-      return data || [];
-    } catch {
+
+      const requests = data ?? [];
+
+      if (requests.length === 0) return [];
+
+      const requestIds = requests
+        .map((request: any) => request.id)
+        .filter(Boolean);
+
+      const { data: documents, error: documentsError } = await supabase
+        .from("employee_documents")
+        .select(
+          "id, employee_id, profile_change_request_id, document_type, document_name, document_url, verification_status, previous_document_id, uploaded_at, profile_change_approved"
+        )
+        .in("profile_change_request_id", requestIds);
+
+      if (documentsError) throw documentsError;
+
+      const documentsByRequest = new Map<string, any[]>();
+
+      for (const document of documents ?? []) {
+        const requestId = document.profile_change_request_id;
+
+        if (!requestId) continue;
+
+        const current = documentsByRequest.get(requestId) ?? [];
+        current.push(document);
+        documentsByRequest.set(requestId, current);
+      }
+
+      return requests.map((request: any) => ({
+        ...request,
+        supporting_documents: documentsByRequest.get(request.id) ?? [],
+      })) as ProfileChangeRequest[];
+    } catch (error) {
+      console.error("Failed to load profile change requests:", error);
+
       return [...cache.changeRequests].sort(
-        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        (a, b) =>
+          new Date(b.created_at).getTime() -
+          new Date(a.created_at).getTime()
       );
     }
   }
+
 
   static async createProfileChangeRequest({
     employeeId,
@@ -746,6 +787,7 @@ export class DataStore {
         .insert({
           employee_id: employeeUuid,
           requested_changes: requestedChanges,
+          previous_values: previousValues ?? {},
           status: "pending",
         })
         .select()
@@ -762,86 +804,258 @@ export class DataStore {
     return newRequest;
   }
 
-  static async reviewProfileChangeRequest({
-    requestId,
-    status,
-    reviewerId,
-    rejectionReason,
-  }: {
-    requestId: string;
-    status: "approved" | "rejected";
-    reviewerId: string;
-    rejectionReason?: string;
-  }): Promise<boolean> {
-    const cache = getCache();
-    try {
-      const supabase = await createAdminClient();
-      const { data: dbReq, error: requestError } = await supabase
-        .from("profile_change_requests")
-        .select("*")
-        .eq("id", requestId)
-        .single();
 
-      if (requestError) throw requestError;
+  static readonly SENSITIVE_PROFILE_FIELDS = [
+    "bank_name",
+    "bank_account_number",
+    "ifsc_code",
+    "aadhar_number",
+    "aadhaar_number",
+    "pan_number",
+    "passport_number",
+  ] as const;
 
-      if (dbReq) {
-        const reviewedAt = new Date().toISOString();
-        const { error: reviewError } = await supabase
-          .from("profile_change_requests")
-          .update({
-            status,
-            reviewed_by: reviewerId,
-            reviewed_at: reviewedAt,
-            rejection_reason: rejectionReason || null,
-          })
-          .eq("id", requestId);
 
-        if (reviewError) throw reviewError;
 
-        if (status === "approved") {
-          const { error: employeeError } = await supabase
-            .from("employees")
-            .update(dbReq.requested_changes)
-            .eq("id", dbReq.employee_id);
+static async reviewProfileChangeRequest({
+  requestId,
+  status,
+  reviewerId,
+  rejectionReason,
+}: {
+  requestId: string;
+  status: "approved" | "rejected";
+  reviewerId: string;
+  rejectionReason?: string;
+}): Promise<boolean> {
+  const cache = getCache();
 
-          if (employeeError) throw employeeError;
+  const sensitiveFields = [...DataStore.SENSITIVE_PROFILE_FIELDS];
+
+  const finalizeVerifiedDocuments = async (
+    supabase: Awaited<ReturnType<typeof createAdminClient>>,
+    employeeId: string,
+    profileRequestId: string,
+    approved: boolean
+  ) => {
+    const { data: linkedDocuments, error: documentsError } = await supabase
+      .from("employee_documents")
+      .select("*")
+      .eq("employee_id", employeeId)
+      .eq("profile_change_request_id", profileRequestId);
+
+    if (documentsError) throw documentsError;
+
+    for (const document of linkedDocuments ?? []) {
+      const documentType = String(document.document_type ?? "")
+        .trim()
+        .toLowerCase();
+
+      const isSensitiveDocument = [
+        "aadhaar card",
+        "aadhar card",
+        "aadhaar",
+        "aadhar",
+        "pan card",
+        "passport",
+        "bank passbook",
+      ].includes(documentType);
+
+      if (!isSensitiveDocument) continue;
+
+      const currentStatus = String(document.verification_status ?? "")
+        .trim()
+        .toLowerCase();
+
+      if (!approved) {
+        if (currentStatus === "pending" || currentStatus === "verified") {
+          const { error } = await supabase
+            .from("employee_documents")
+            .update({
+              verification_status: "rejected",
+              profile_change_approved: false,
+              review_notes:
+                rejectionReason?.trim() ||
+                "Linked profile change request was rejected.",
+            })
+            .eq("id", document.id)
+            .in("verification_status", ["pending", "verified"]);
+
+          if (error) throw error;
         }
 
-        const cachedRequest = cache.changeRequests.find((r) => r.id === requestId);
-        if (cachedRequest) {
-          cachedRequest.status = status;
-          cachedRequest.reviewed_by = reviewerId;
-          cachedRequest.reviewed_at = reviewedAt;
-          cachedRequest.rejection_reason = rejectionReason || null;
-        }
-
-        return true;
+        continue;
       }
-    } catch (e) {
-      if (!cache.changeRequests.some((r) => r.id === requestId)) {
-        console.error("reviewProfileChangeRequest database update failed:", e);
-        throw e;
+
+      // Profile approval alone cannot finalize an unverified document.
+      if (currentStatus !== "verified") continue;
+
+      const { data: previousDocuments, error: previousError } =
+        await supabase
+          .from("employee_documents")
+          .select("id")
+          .eq("employee_id", employeeId)
+          .eq("document_type", document.document_type)
+          .eq("verification_status", "approved")
+          .neq("id", document.id);
+
+      if (previousError) throw previousError;
+
+      // Supersede existing approved documents before approving the new one.
+      if (previousDocuments?.length) {
+        const previousIds = previousDocuments.map((item) => item.id);
+
+        const { error: supersedeError } = await supabase
+          .from("employee_documents")
+          .update({ verification_status: "superseded" })
+          .in("id", previousIds)
+          .eq("verification_status", "approved");
+
+        if (supersedeError) throw supersedeError;
+      }
+
+      const { error: approveError } = await supabase
+        .from("employee_documents")
+        .update({
+          verification_status: "approved",
+          profile_change_approved: true,
+        })
+        .eq("id", document.id)
+        .eq("verification_status", "verified");
+
+      if (approveError) throw approveError;
+
+      // Update only the sensitive fields supported by this document type.
+      const employeeChanges: Record<string, string> = {};
+
+      if (
+        ["aadhaar card", "aadhar card", "aadhaar", "aadhar"].includes(
+          documentType
+        ) &&
+        document.aadhaar_number
+      ) {
+        employeeChanges.aadhar_number = document.aadhaar_number;
+      }
+
+      if (documentType === "pan card" && document.pan_number) {
+        employeeChanges.pan_number = document.pan_number;
+      }
+
+      if (documentType === "passport" && document.passport_number) {
+        employeeChanges.passport_number = document.passport_number;
+      }
+
+      if (documentType === "bank passbook") {
+        if (document.bank_name) {
+          employeeChanges.bank_name = document.bank_name;
+        }
+
+        if (document.bank_account_number) {
+          employeeChanges.bank_account_number =
+            document.bank_account_number;
+        }
+
+        if (document.ifsc_code) {
+          employeeChanges.ifsc_code = document.ifsc_code;
+        }
+      }
+
+      if (Object.keys(employeeChanges).length > 0) {
+        const { error: employeeError } = await supabase
+          .from("employees")
+          .update({
+            ...employeeChanges,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", employeeId);
+
+        if (employeeError) throw employeeError;
+      }
+    }
+  };
+
+  try {
+    const supabase = await createAdminClient();
+
+    const { data: dbReq, error: requestError } = await supabase
+      .from("profile_change_requests")
+      .select("*")
+      .eq("id", requestId)
+      .single();
+
+    if (requestError) throw requestError;
+
+    if (!dbReq) return false;
+
+    if (!["pending", "under_review"].includes(
+      String(dbReq.status ?? "").toLowerCase()
+    )) {
+      throw new Error("This profile-change request has already been reviewed.");
+    }
+
+    const reviewedAt = new Date().toISOString();
+
+    // Apply ordinary fields only when the profile request is approved.
+    if (status === "approved") {
+      const requestedChanges = dbReq.requested_changes ?? {};
+
+      const ordinaryChanges = Object.fromEntries(
+        Object.entries(requestedChanges).filter(
+          ([key]) =>
+            !sensitiveFields.includes(
+              key as (typeof DataStore.SENSITIVE_PROFILE_FIELDS)[number]
+            )
+        )
+      );
+
+      if (Object.keys(ordinaryChanges).length > 0) {
+        const { error: employeeError } = await supabase
+          .from("employees")
+          .update(ordinaryChanges)
+          .eq("id", dbReq.employee_id);
+
+        if (employeeError) throw employeeError;
       }
     }
 
-    const req = cache.changeRequests.find((r) => r.id === requestId);
-    if (!req) return false;
+    // Finalize verified sensitive documents only after profile approval.
+    await finalizeVerifiedDocuments(
+      supabase,
+      dbReq.employee_id,
+      requestId,
+      status === "approved"
+    );
 
-    req.status = status;
-    req.reviewed_by = reviewerId;
-    req.reviewed_at = new Date().toISOString();
-    req.rejection_reason = rejectionReason || null;
+    const { error: reviewError } = await supabase
+      .from("profile_change_requests")
+      .update({
+        status,
+        reviewed_by: reviewerId,
+        reviewed_at: reviewedAt,
+        rejection_reason: rejectionReason || null,
+      })
+      .eq("id", requestId)
+      .in("status", ["pending", "under_review"]);
 
-    if (status === "approved" && req.employee_id) {
-      const emp = cache.employees.find((e) => e.id === req.employee_id || e.employee_id === req.employee_id);
-      if (emp) {
-        Object.assign(emp, req.requested_changes);
-        emp.updated_at = new Date().toISOString();
-      }
+    if (reviewError) throw reviewError;
+
+    const cachedRequest = cache.changeRequests.find(
+      (item) => item.id === requestId
+    );
+
+    if (cachedRequest) {
+      cachedRequest.status = status;
+      cachedRequest.reviewed_by = reviewerId;
+      cachedRequest.reviewed_at = reviewedAt;
+      cachedRequest.rejection_reason = rejectionReason || null;
     }
 
     return true;
+  } catch (error) {
+    console.error("reviewProfileChangeRequest failed:", error);
+    throw error;
   }
+}
 
   // ==========================================
   // PROJECTS & HOLIDAY CALENDARS
