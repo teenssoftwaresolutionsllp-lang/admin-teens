@@ -612,49 +612,81 @@ export default function EmployeeProfileView({
 
         if (cancelled) return;
 
-        const loadedDocuments: EmployeeDocument[] =
-          Array.isArray(data)
-            ? data
-            : Array.isArray(data?.documents)
-              ? data.documents
-              : [];
+        const loadedDocuments: EmployeeDocument[] = Array.isArray(data) ? data : Array.isArray(data?.documents) ? data.documents : [];
 
-        setDocuments(loadedDocuments);
+        
+        const latestByType = new Map<string, EmployeeDocument>();
 
-        const passbook = loadedDocuments.find(
-          (doc) =>
-            String(doc.document_type ?? "")
-              .trim()
-              .toLowerCase() === "bank passbook"
-        ) as (EmployeeDocument & {
-          bank_name?: string | null;
-          bank_account_number?: string | null;
-          ifsc_code?: string | null;
-        }) | undefined;
+        for (const doc of loadedDocuments) {
+          const status = String(doc.verification_status ?? "")
+            .trim()
+            .toLowerCase();
 
-        if (passbook) {
-          setSavedBankDetails({
-            bank_name:
-              passbook.bank_name ??
-              employeeData.bank_name ??
-              "",
-            bank_account_number:
-              passbook.bank_account_number ??
-              employeeData.bank_account_number ??
-              "",
-            ifsc_code:
-              passbook.ifsc_code ??
-              employeeData.ifsc_code ??
-              "",
-          });
-        } else {
-          setSavedBankDetails({
-            bank_name: employeeData.bank_name ?? "",
-            bank_account_number:
-              employeeData.bank_account_number ?? "",
-            ifsc_code: employeeData.ifsc_code ?? "",
-          });
+          // Never display documents that have been superseded.
+          if (["rejected", "superseded"].includes(status)) continue;
+
+          const type = String(doc.document_type ?? "")
+            .trim()
+            .toLowerCase();
+
+          if (!type) continue;
+
+          // These categories can legitimately contain multiple documents.
+          const allowsMultiple = [
+            "experience letter",
+            "other",
+          ].includes(type);
+
+          if (allowsMultiple) {
+            latestByType.set(`${type}-${doc.id}`, doc);
+            continue;
+          }
+
+          const existing = latestByType.get(type);
+
+          if (
+            !existing ||
+            new Date(doc.uploaded_at ?? 0).getTime() >
+              new Date(existing.uploaded_at ?? 0).getTime()
+          ) {
+            latestByType.set(type, doc);
+          }
         }
+
+        setDocuments(Array.from(latestByType.values()).sort((a, b) => new Date(b.uploaded_at ?? 0).getTime() - new Date(a.uploaded_at ?? 0).getTime()));
+
+
+        
+
+      const approvedPassbook = loadedDocuments
+        .filter(
+          (doc) =>
+            String(doc.document_type ?? "").trim().toLowerCase() ===
+              "bank passbook" &&
+            String(doc.verification_status ?? "").trim().toLowerCase() ===
+              "approved"
+        )
+        .sort(
+          (a, b) =>
+            new Date(b.uploaded_at ?? 0).getTime() -
+            new Date(a.uploaded_at ?? 0).getTime()
+        )[0];
+
+      setSavedBankDetails({
+        bank_name:
+          approvedPassbook?.bank_name ??
+          employeeData.bank_name ??
+          "",
+        bank_account_number:
+          approvedPassbook?.bank_account_number ??
+          employeeData.bank_account_number ??
+          "",
+        ifsc_code:
+          approvedPassbook?.ifsc_code ??
+          employeeData.ifsc_code ??
+          "",
+      });
+
       } catch (error) {
         console.error("Failed to load employee documents:", error);
       }
@@ -931,26 +963,48 @@ export default function EmployeeProfileView({
             return Array.from(latestByType.values());
           });
 
-          const passbook = refreshedDocuments.find(
-            (doc) =>
-              String(doc.document_type ?? "")
-                .trim()
-                .toLowerCase() === "bank passbook"
-          ) as (EmployeeDocument & {
-            bank_name?: string | null;
-            bank_account_number?: string | null;
-            ifsc_code?: string | null;
-          }) | undefined;
+          
+          const approvedPassbook = refreshedDocuments
+            .filter(
+              (doc) =>
+                String(doc.document_type ?? "").trim().toLowerCase() === "bank passbook" &&
+                String(doc.verification_status ?? "").trim().toLowerCase() === "approved"
+              )
+            .sort(
+              (a, b) =>
+                new Date(b.uploaded_at ?? 0).getTime() -
+                new Date(a.uploaded_at ?? 0).getTime()
+            )[0] ;
 
-          if (passbook) {
             setSavedBankDetails({
-              bank_name: passbook.bank_name ?? "",
+              bank_name: approvedPassbook?.bank_name ?? employeeData.bank_name ?? "",
               bank_account_number:
-                passbook.bank_account_number ?? "",
-              ifsc_code: passbook.ifsc_code ?? "",
+                approvedPassbook?.bank_account_number ??
+                employeeData.bank_account_number ??
+                "",
+              ifsc_code: approvedPassbook?.ifsc_code ?? employeeData.ifsc_code ?? "",
             });
-          }
+            
+
+          setSavedBankDetails({
+            bank_name:
+              approvedPassbook?.bank_name ??
+              employeeData.bank_name ??
+              "",
+            bank_account_number:
+              approvedPassbook?.bank_account_number ??
+              employeeData.bank_account_number ??
+              "",
+            ifsc_code:
+              approvedPassbook?.ifsc_code ??
+              employeeData.ifsc_code ??
+              "",
+          });
+
         }
+
+        
+        
       }
 
       setDocumentName("");
@@ -1180,128 +1234,47 @@ export default function EmployeeProfileView({
         string,
         unknown
       > = {
-        phone:
-          editFormData.phone,
-
-        date_of_birth:
-          editFormData.date_of_birth,
-
-        gender:
-          editFormData.gender,
-
-        blood_group:
-          editFormData.blood_group,
-
-        marital_status:
-          editFormData.marital_status,
-
-        permanent_address:
-          editFormData.address,
-
-        permanent_city:
-          editFormData.city,
-
-        permanent_state:
-          editFormData.state,
-
-        permanent_pincode:
-          editFormData.pincode,
-
-        communication_address:
-          editFormData.communication_address,
-
-        communication_city:
-          editFormData.communication_city,
-
-        communication_state:
-          editFormData.communication_state,
-
-        communication_pincode:
-          editFormData.communication_pincode,
-
-        emergency_contact_name:
-          editFormData.emergency_contact_name,
-
-        emergency_contact_phone:
-          editFormData.emergency_contact_phone,
-
-        emergency_contact_relation:
-          editFormData.emergency_contact_relation,
-
-        emergency_contact_2_name:
-          editFormData.emergency_contact_2_name,
-
-        emergency_contact_2_phone:
-          editFormData.emergency_contact_2_phone,
-
-        emergency_contact_2_relation:
-          editFormData.emergency_contact_2_relation,
-
-        emergency_contact_3_name:
-          editFormData.emergency_contact_3_name,
-
-        emergency_contact_3_phone:
-          editFormData.emergency_contact_3_phone,
-
-        emergency_contact_3_relation:
-          editFormData.emergency_contact_3_relation,
-
-        department_id:
-          editFormData.department_id,
-
-        designation:
-          editFormData.designation,
-
-        probation_end_date:
-          editFormData.probation_end_date,
-
-        confirmation_date:
-          editFormData.confirmation_date,
-
-        reporting_manager:
-          editFormData.reporting_manager,
-
-        work_location:
-          editFormData.work_location,
-
-        bank_name:
-          editFormData.bank_name,
-
-        bank_account_number:
-          editFormData.bank_account_number,
-
-        ifsc_code:
-          editFormData.ifsc_code,
-
-        pan_number:
-          editFormData.pan_number,
-
-        aadhar_number:
-          editFormData.aadhar_number,
-
-        passport_number:
-          editFormData.passport_number,
-
-        pf:
-          editFormData.pf,
-
-        esi:
-          editFormData.esi,
-
-        pt:
-          editFormData.pt,
-
-        tds:
-          editFormData.tds,
-
-        accessory_type:
-          editFormData.accessory_type,
-
-        accessory_serial:
-          editFormData.accessory_serial,
-
-        peripherals:
-          editFormData.peripherals,
+        phone: editFormData.phone,
+        date_of_birth: editFormData.date_of_birth,
+        gender: editFormData.gender,
+        blood_group: editFormData.blood_group,
+        marital_status: editFormData.marital_status,
+        permanent_address: editFormData.address,
+        permanent_city: editFormData.city,
+        permanent_state: editFormData.state,
+        permanent_pincode: editFormData.pincode,
+        communication_address: editFormData.communication_address,
+        communication_city: editFormData.communication_city,
+        communication_state: editFormData.communication_state,
+        communication_pincode: editFormData.communication_pincode,
+        emergency_contact_name: editFormData.emergency_contact_name,
+        emergency_contact_phone: editFormData.emergency_contact_phone,
+        emergency_contact_relation: editFormData.emergency_contact_relation,
+        emergency_contact_2_name: editFormData.emergency_contact_2_name,
+        emergency_contact_2_phone: editFormData.emergency_contact_2_phone,
+        emergency_contact_2_relation: editFormData.emergency_contact_2_relation,
+        emergency_contact_3_name: editFormData.emergency_contact_3_name,
+        emergency_contact_3_phone: editFormData.emergency_contact_3_phone,
+        emergency_contact_3_relation: editFormData.emergency_contact_3_relation,
+        department_id: editFormData.department_id,
+        designation: editFormData.designation,
+        probation_end_date: editFormData.probation_end_date,
+        confirmation_date: editFormData.confirmation_date,
+        reporting_manager: editFormData.reporting_manager,
+        work_location: editFormData.work_location,
+        bank_name: editFormData.bank_name,
+        bank_account_number: editFormData.bank_account_number,
+        ifsc_code: editFormData.ifsc_code,
+        pan_number: editFormData.pan_number,
+        aadhar_number: editFormData.aadhar_number,
+        passport_number: editFormData.passport_number,
+        pf: editFormData.pf,
+        esi: editFormData.esi,
+        pt: editFormData.pt,
+        tds: editFormData.tds,
+        accessory_type: editFormData.accessory_type,
+        accessory_serial: editFormData.accessory_serial,
+        peripherals: editFormData.peripherals,
       };
 
       const fieldMap: Record<
@@ -1313,107 +1286,42 @@ export default function EmployeeProfileView({
         gender: "gender",
         blood_group: "blood_group",
         marital_status: "marital_status",
-
-        permanent_address:
-          "permanent_address",
-
-        permanent_city:
-          "permanent_city",
-
-        permanent_state:
-          "permanent_state",
-
-        permanent_pincode:
-          "permanent_pincode",
-
-        communication_address:
-          "communication_address",
-
-        communication_city:
-          "communication_city",
-
-        communication_state:
-          "communication_state",
-
-        communication_pincode:
-          "communication_pincode",
-
-        emergency_contact_name:
-          "emergency_contact_name",
-
-        emergency_contact_phone:
-          "emergency_contact_phone",
-
-        emergency_contact_relation:
-          "emergency_contact_relation",
-
-        emergency_contact_2_name:
-          "emergency_contact_2_name",
-
-        emergency_contact_2_phone:
-          "emergency_contact_2_phone",
-
-        emergency_contact_2_relation:
-          "emergency_contact_2_relation",
-
-        emergency_contact_3_name:
-          "emergency_contact_3_name",
-
-        emergency_contact_3_phone:
-          "emergency_contact_3_phone",
-
-        emergency_contact_3_relation:
-          "emergency_contact_3_relation",
-
-        department_id:
-          "department_id",
-
-        designation:
-          "designation",
-
-        probation_end_date:
-          "probation_end_date",
-
-        confirmation_date:
-          "confirmation_date",
-
-        reporting_manager:
-          "reporting_manager",
-
-        work_location:
-          "work_location",
-
-        bank_name:
-          "bank_name",
-
-        bank_account_number:
-          "bank_account_number",
-
-        ifsc_code:
-          "ifsc_code",
-
-        pan_number:
-          "pan_number",
-
-        aadhar_number:
-          "aadhar_number",
-
-        passport_number:
-          "passport_number",
-
+        permanent_address: "permanent_address",
+        permanent_city: "permanent_city",
+        permanent_state: "permanent_state",
+        permanent_pincode: "permanent_pincode",
+        communication_address: "communication_address",
+        communication_city: "communication_city",
+        communication_state: "communication_state",
+        communication_pincode: "communication_pincode",
+        emergency_contact_name: "emergency_contact_name",
+        emergency_contact_phone: "emergency_contact_phone",
+        emergency_contact_relation: "emergency_contact_relation",
+        emergency_contact_2_name: "emergency_contact_2_name",
+        emergency_contact_2_phone: "emergency_contact_2_phone",
+        emergency_contact_2_relation: "emergency_contact_2_relation",
+        emergency_contact_3_name: "emergency_contact_3_name",
+        emergency_contact_3_phone: "emergency_contact_3_phone",
+        emergency_contact_3_relation: "emergency_contact_3_relation",
+        department_id: "department_id",
+        designation: "designation",
+        probation_end_date: "probation_end_date",
+        confirmation_date: "confirmation_date",
+        reporting_manager: "reporting_manager",
+        work_location: "work_location",
+        bank_name: "bank_name",
+        bank_account_number: "bank_account_number",
+        ifsc_code: "ifsc_code",
+        pan_number: "pan_number",
+        aadhar_number: "aadhar_number",
+        passport_number: "passport_number",
         pf: "pf",
         esi: "esi",
         pt: "pt",
         tds: "tds",
-
-        accessory_type:
-          "accessory_type",
-
-        accessory_serial:
-          "accessory_serial",
-
-        peripherals:
-          "peripherals",
+        accessory_type: "accessory_type",
+        accessory_serial: "accessory_serial",
+        peripherals: "peripherals",
       };
 
       const sectionFields: Record<

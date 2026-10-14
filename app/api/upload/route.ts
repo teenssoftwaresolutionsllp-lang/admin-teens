@@ -1848,6 +1848,113 @@ export async function POST(
     }
 
 
+    // ======================================================
+    // FIND AN EXISTING REQUEST FOR A REJECTED DOCUMENT
+    // ======================================================
+
+    const normalizedUploadType = document_type.trim().toLowerCase();
+
+    const isSensitiveUpload = [
+      "aadhar card",
+      "aadhaar card",
+      "pan card",
+      "passport",
+      "bank passbook",
+    ].includes(normalizedUploadType);
+
+    let replacementProfileRequest: {
+      id: string;
+      employee_id: string;
+      requested_changes: Record<string, unknown>;
+      status: string;
+    } | null = null;
+
+    if (isSensitiveUpload && identityNumber) {
+      const admin = await createAdminClient();
+
+      const identityField =
+        ["aadhar card", "aadhaar card"].includes(normalizedUploadType)
+          ? "aadhar_number"
+          : normalizedUploadType === "pan card"
+            ? "pan_number"
+            : normalizedUploadType === "passport"
+              ? "passport_number"
+              : null;
+
+      if (identityField) {
+        const { data: requests, error: requestLookupError } = await admin
+          .from("profile_change_requests")
+          .select("id, employee_id, requested_changes, status")
+          .eq("employee_id", employee_id)
+          .eq("status", "pending");
+
+        if (requestLookupError) {
+          console.error(
+            "Failed to look up existing profile-change requests:",
+            requestLookupError
+          );
+
+          return NextResponse.json(
+            { error: "Could not check the existing profile-change request." },
+            { status: 500 }
+          );
+        }
+
+        const matchingRequests = (requests ?? []).filter((item: any) => {
+          const changes = item.requested_changes;
+
+          return (
+            changes &&
+            typeof changes === "object" &&
+            String(changes[identityField] ?? "").trim().toUpperCase() ===
+              identityNumber!.trim().toUpperCase()
+          );
+        });
+
+        // Reuse only an unambiguous pending request that already has a
+        // rejected document of this type linked to it.
+        for (const candidate of matchingRequests as any[]) {
+          const { data: rejectedDocs, error: rejectedLookupError } =
+            await admin
+              .from("employee_documents")
+              .select("id")
+              .eq("employee_id", employee_id)
+              .eq("profile_change_request_id", candidate.id)
+              .eq("verification_status", "rejected")
+              .ilike("document_type", document_type)
+              .limit(2);
+
+          if (rejectedLookupError) {
+            console.error(
+              "Failed to inspect rejected replacement documents:",
+              rejectedLookupError
+            );
+
+            return NextResponse.json(
+              { error: "Could not validate the rejected document." },
+              { status: 500 }
+            );
+          }
+
+          if (rejectedDocs && rejectedDocs.length > 0) {
+            if (replacementProfileRequest) {
+              return NextResponse.json(
+                {
+                  error:
+                    "Multiple pending requests match this document. Ask HR to resolve them before uploading a replacement.",
+                },
+                { status: 409 }
+              );
+            }
+
+            replacementProfileRequest = candidate;
+          }
+        }
+      }
+    }
+
+
+
     // ==================================================
     // CLOUDINARY RESOURCE TYPE
     // ==================================================
@@ -1997,9 +2104,8 @@ export async function POST(
         );
       }
 
-
-      // Automatically create and link a database-backed profile request
-      // for sensitive documents. The request remains pending.
+      // Automatically create and link a database-backed profile request.
+      // Reuse the existing pending request when replacing a rejected ID document.
       const normalizedDocumentType = String(document_type)
         .trim()
         .toLowerCase();
@@ -2012,19 +2118,20 @@ export async function POST(
         'bank passbook',
       ].includes(normalizedDocumentType);
 
-      let linkedProfileChangeRequest = null;
+      let linkedProfileChangeRequest: {
+        id: string;
+        employee_id: string;
+        requested_changes: Record<string, unknown>;
+        status: string;
+      } | null = null;
 
       if (isSensitiveDocument) {
         const admin = await createAdminClient();
 
-        // Only include values actually extracted from this document.
-        // Never copy unrelated or existing employee fields into the request.
         const requestedChanges: Record<string, string> = {};
 
         if (
-          ['aadhar card', 'aadhaar card'].includes(
-            normalizedDocumentType
-          ) &&
+          ['aadhar card', 'aadhaar card'].includes(normalizedDocumentType) &&
           identityNumber
         ) {
           requestedChanges.aadhar_number = identityNumber;
@@ -2052,57 +2159,61 @@ export async function POST(
           if (bankIFSC) requestedChanges.ifsc_code = bankIFSC;
         }
 
-        // Insert a real database row, even when extraction yielded no values.
-        // An empty request must not authorize changes to employee data.
-        const { data: profileRequest, error: requestInsertError } =
-          await admin
-            .from('profile_change_requests')
-            .insert({
-              employee_id,
-              requested_changes: requestedChanges,
-              previous_values: {},
-              status: 'pending',
-            })
-            .select('id, employee_id, requested_changes, status')
-            .single();
+        // Reuse the existing request for a replacement document.
+        // Otherwise, create a new request for the first upload.
+        let profileRequest = replacementProfileRequest;
+        let createdNewProfileRequest = false;
 
-        if (requestInsertError || !profileRequest) {
-          console.error(
-            'Failed to create automatic profile-change request:',
-            requestInsertError
-          );
+        if (!profileRequest) {
+          const { data: newProfileRequest, error: requestInsertError } =
+            await admin
+              .from('profile_change_requests')
+              .insert({
+                employee_id,
+                requested_changes: requestedChanges,
+                previous_values: {},
+                status: 'pending',
+              })
+              .select('id, employee_id, requested_changes, status')
+              .single();
 
-          // Avoid leaving an uploaded sensitive document without its request.
-          await admin
-            .from('employee_documents')
-            .delete()
-            .eq('id', pendingDocument.id)
-            .eq('employee_id', employee_id);
-
-          try {
-            await cloudinary.uploader.destroy(
-              uploadResult.public_id,
-              { resource_type: uploadResult.resource_type }
-            );
-          } catch (cleanupError) {
+          if (requestInsertError || !newProfileRequest) {
             console.error(
-              'Cloudinary cleanup failed:',
-              cleanupError
+              'Failed to create automatic profile-change request:',
+              requestInsertError
+            );
+
+            await admin
+              .from('employee_documents')
+              .delete()
+              .eq('id', pendingDocument.id)
+              .eq('employee_id', employee_id);
+
+            try {
+              await cloudinary.uploader.destroy(
+                uploadResult.public_id,
+                { resource_type: uploadResult.resource_type }
+              );
+            } catch (cleanupError) {
+              console.error('Cloudinary cleanup failed:', cleanupError);
+            }
+
+            uploadResult = null;
+
+            return NextResponse.json(
+              {
+                error:
+                  'The document was uploaded, but its profile-change request could not be created. Please retry.',
+              },
+              { status: 500 }
             );
           }
 
-          uploadResult = null;
-
-          return NextResponse.json(
-            {
-              error:
-                'The document was uploaded, but its profile-change request could not be created. Please retry.',
-            },
-            { status: 500 }
-          );
+          profileRequest = newProfileRequest;
+          createdNewProfileRequest = true;
         }
 
-        // Link only the exact newly inserted document and request.
+        // Link only the newly uploaded pending document.
         const { data: linkedDocument, error: linkError } = await admin
           .from('employee_documents')
           .update({
@@ -2118,18 +2229,20 @@ export async function POST(
 
         if (linkError || !linkedDocument) {
           console.error(
-            'Failed to link automatic profile-change request:',
+            'Failed to link profile-change request:',
             linkError
           );
 
-          // Remove the orphan request and document rather than leaving
-          // an inconsistent workflow.
-          await admin
-            .from('profile_change_requests')
-            .delete()
-            .eq('id', profileRequest.id)
-            .eq('employee_id', employee_id)
-            .eq('status', 'pending');
+          // Delete a request only if this upload created it.
+          // Never delete a pre-existing request being reused.
+          if (createdNewProfileRequest) {
+            await admin
+              .from('profile_change_requests')
+              .delete()
+              .eq('id', profileRequest.id)
+              .eq('employee_id', employee_id)
+              .eq('status', 'pending');
+          }
 
           await admin
             .from('employee_documents')
@@ -2143,10 +2256,7 @@ export async function POST(
               { resource_type: uploadResult.resource_type }
             );
           } catch (cleanupError) {
-            console.error(
-              'Cloudinary cleanup failed:',
-              cleanupError
-            );
+            console.error('Cloudinary cleanup failed:', cleanupError);
           }
 
           uploadResult = null;
@@ -2154,7 +2264,7 @@ export async function POST(
           return NextResponse.json(
             {
               error:
-                'The profile-change request was created but could not be linked to the document. Please retry.',
+                'The profile-change request could not be linked to the document. Please retry.',
             },
             { status: 500 }
           );
@@ -2162,6 +2272,7 @@ export async function POST(
 
         linkedProfileChangeRequest = profileRequest;
       }
+
 
 
       revalidatePath(`/dashboard/employees/${employee_id}`);

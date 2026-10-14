@@ -817,245 +817,73 @@ export class DataStore {
 
 
 
-static async reviewProfileChangeRequest({
-  requestId,
-  status,
-  reviewerId,
-  rejectionReason,
-}: {
-  requestId: string;
-  status: "approved" | "rejected";
-  reviewerId: string;
-  rejectionReason?: string;
-}): Promise<boolean> {
-  const cache = getCache();
 
-  const sensitiveFields = [...DataStore.SENSITIVE_PROFILE_FIELDS];
+  static async reviewProfileChangeRequest({
+    requestId,
+    status,
+    reviewerId,
+    rejectionReason,
+  }: {
+    requestId: string;
+    status: "approved" | "rejected";
+    reviewerId: string;
+    rejectionReason?: string;
+  }): Promise<boolean> {
+    const cache = getCache();
 
-  const finalizeVerifiedDocuments = async (
-    supabase: Awaited<ReturnType<typeof createAdminClient>>,
-    employeeId: string,
-    profileRequestId: string,
-    approved: boolean
-  ) => {
-    const { data: linkedDocuments, error: documentsError } = await supabase
-      .from("employee_documents")
-      .select("*")
-      .eq("employee_id", employeeId)
-      .eq("profile_change_request_id", profileRequestId);
+    try {
+      // Use the authenticated Supabase client so auth.uid() is available
+      // to the database function for its HR/CEO role check.
+      const { createClient } = await import("./supabase-server");
+      const supabase = await createClient();
 
-    if (documentsError) throw documentsError;
+      const { data: { user }, error: authError } =
+        await supabase.auth.getUser();
 
-    for (const document of linkedDocuments ?? []) {
-      const documentType = String(document.document_type ?? "")
-        .trim()
-        .toLowerCase();
+      if (authError || !user) {
+        throw new Error("You must be logged in to review this request.");
+      }
 
-      const isSensitiveDocument = [
-        "aadhaar card",
-        "aadhar card",
-        "aadhaar",
-        "aadhar",
-        "pan card",
-        "passport",
-        "bank passbook",
-      ].includes(documentType);
-
-      if (!isSensitiveDocument) continue;
-
-      const currentStatus = String(document.verification_status ?? "")
-        .trim()
-        .toLowerCase();
-
-      if (!approved) {
-        if (currentStatus === "pending" || currentStatus === "verified") {
-          const { error } = await supabase
-            .from("employee_documents")
-            .update({
-              verification_status: "rejected",
-              profile_change_approved: false,
-              review_notes:
-                rejectionReason?.trim() ||
-                "Linked profile change request was rejected.",
-            })
-            .eq("id", document.id)
-            .in("verification_status", ["pending", "verified"]);
-
-          if (error) throw error;
+      // The database function independently verifies the reviewer role.
+      const { data, error } = await supabase.rpc(
+        "review_profile_change_request_atomic",
+        {
+          p_request_id: requestId,
+          p_decision: status,
+          p_review_notes: rejectionReason?.trim() || null,
         }
-
-        continue;
-      }
-
-      // Profile approval alone cannot finalize an unverified document.
-      if (currentStatus !== "verified") continue;
-
-      const { data: previousDocuments, error: previousError } =
-        await supabase
-          .from("employee_documents")
-          .select("id")
-          .eq("employee_id", employeeId)
-          .eq("document_type", document.document_type)
-          .eq("verification_status", "approved")
-          .neq("id", document.id);
-
-      if (previousError) throw previousError;
-
-      // Supersede existing approved documents before approving the new one.
-      if (previousDocuments?.length) {
-        const previousIds = previousDocuments.map((item) => item.id);
-
-        const { error: supersedeError } = await supabase
-          .from("employee_documents")
-          .update({ verification_status: "superseded" })
-          .in("id", previousIds)
-          .eq("verification_status", "approved");
-
-        if (supersedeError) throw supersedeError;
-      }
-
-      const { error: approveError } = await supabase
-        .from("employee_documents")
-        .update({
-          verification_status: "approved",
-          profile_change_approved: true,
-        })
-        .eq("id", document.id)
-        .eq("verification_status", "verified");
-
-      if (approveError) throw approveError;
-
-      // Update only the sensitive fields supported by this document type.
-      const employeeChanges: Record<string, string> = {};
-
-      if (
-        ["aadhaar card", "aadhar card", "aadhaar", "aadhar"].includes(
-          documentType
-        ) &&
-        document.aadhaar_number
-      ) {
-        employeeChanges.aadhar_number = document.aadhaar_number;
-      }
-
-      if (documentType === "pan card" && document.pan_number) {
-        employeeChanges.pan_number = document.pan_number;
-      }
-
-      if (documentType === "passport" && document.passport_number) {
-        employeeChanges.passport_number = document.passport_number;
-      }
-
-      if (documentType === "bank passbook") {
-        if (document.bank_name) {
-          employeeChanges.bank_name = document.bank_name;
-        }
-
-        if (document.bank_account_number) {
-          employeeChanges.bank_account_number =
-            document.bank_account_number;
-        }
-
-        if (document.ifsc_code) {
-          employeeChanges.ifsc_code = document.ifsc_code;
-        }
-      }
-
-      if (Object.keys(employeeChanges).length > 0) {
-        const { error: employeeError } = await supabase
-          .from("employees")
-          .update({
-            ...employeeChanges,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", employeeId);
-
-        if (employeeError) throw employeeError;
-      }
-    }
-  };
-
-  try {
-    const supabase = await createAdminClient();
-
-    const { data: dbReq, error: requestError } = await supabase
-      .from("profile_change_requests")
-      .select("*")
-      .eq("id", requestId)
-      .single();
-
-    if (requestError) throw requestError;
-
-    if (!dbReq) return false;
-
-    if (!["pending", "under_review"].includes(
-      String(dbReq.status ?? "").toLowerCase()
-    )) {
-      throw new Error("This profile-change request has already been reviewed.");
-    }
-
-    const reviewedAt = new Date().toISOString();
-
-    // Apply ordinary fields only when the profile request is approved.
-    if (status === "approved") {
-      const requestedChanges = dbReq.requested_changes ?? {};
-
-      const ordinaryChanges = Object.fromEntries(
-        Object.entries(requestedChanges).filter(
-          ([key]) =>
-            !sensitiveFields.includes(
-              key as (typeof DataStore.SENSITIVE_PROFILE_FIELDS)[number]
-            )
-        )
       );
 
-      if (Object.keys(ordinaryChanges).length > 0) {
-        const { error: employeeError } = await supabase
-          .from("employees")
-          .update(ordinaryChanges)
-          .eq("id", dbReq.employee_id);
-
-        if (employeeError) throw employeeError;
+      if (error) {
+        console.error("Profile-change review RPC failed:", error);
+        throw new Error(error.message || "Could not review profile-change request.");
       }
+
+      if (!data || data.success !== true) {
+        throw new Error("The database did not confirm the profile-change review.");
+      }
+
+      const reviewedAt = new Date().toISOString();
+
+      const cachedRequest = cache.changeRequests.find(
+        (item) => item.id === requestId
+      );
+
+      if (cachedRequest) {
+        cachedRequest.status = status;
+        cachedRequest.reviewed_by = user.id;
+        cachedRequest.reviewed_at = reviewedAt;
+        cachedRequest.rejection_reason =
+          status === "rejected" ? rejectionReason?.trim() || null : null;
+      }
+
+      return true;
+    } catch (error) {
+      console.error("reviewProfileChangeRequest failed:", error);
+      throw error;
     }
-
-    // Finalize verified sensitive documents only after profile approval.
-    await finalizeVerifiedDocuments(
-      supabase,
-      dbReq.employee_id,
-      requestId,
-      status === "approved"
-    );
-
-    const { error: reviewError } = await supabase
-      .from("profile_change_requests")
-      .update({
-        status,
-        reviewed_by: reviewerId,
-        reviewed_at: reviewedAt,
-        rejection_reason: rejectionReason || null,
-      })
-      .eq("id", requestId)
-      .in("status", ["pending", "under_review"]);
-
-    if (reviewError) throw reviewError;
-
-    const cachedRequest = cache.changeRequests.find(
-      (item) => item.id === requestId
-    );
-
-    if (cachedRequest) {
-      cachedRequest.status = status;
-      cachedRequest.reviewed_by = reviewerId;
-      cachedRequest.reviewed_at = reviewedAt;
-      cachedRequest.rejection_reason = rejectionReason || null;
-    }
-
-    return true;
-  } catch (error) {
-    console.error("reviewProfileChangeRequest failed:", error);
-    throw error;
   }
-}
+
 
   // ==========================================
   // PROJECTS & HOLIDAY CALENDARS
