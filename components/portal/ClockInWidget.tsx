@@ -44,19 +44,14 @@ export interface SelectedAttendance {
 
 interface ClockInWidgetProps {
   employeeId: string;
-
+  isApprovedLeave?: boolean;
   initialLog: AttendanceLog | null;
-
   project?: Project;
-
   compact?: boolean;
-
   selectedDate?: string;
-
   selectedAttendance?:
     | SelectedAttendance
     | null;
-
   onRequestRegularization?: () => void;
 
   /*
@@ -78,6 +73,7 @@ export default function ClockInWidget({
   project,
   compact = false,
   selectedDate,
+  isApprovedLeave = false,
   selectedAttendance,
   onRequestRegularization,
   onAttendanceUpdate,
@@ -827,7 +823,8 @@ export default function ClockInWidget({
               disabled={
                 loading ||
                 isCheckedIn ||
-                isCheckedOut
+                isCheckedOut ||
+                isApprovedLeave
               }
               className={`
                 w-full
@@ -844,7 +841,8 @@ export default function ClockInWidget({
                 border
                 ${
                   !isCheckedIn &&
-                  !isCheckedOut
+                  !isCheckedOut &&
+                  !isApprovedLeave
                     ? "bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700 shadow-sm"
                     : "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
                 }
@@ -918,14 +916,18 @@ export default function ClockInWidget({
               BEFORE LOGIN MESSAGE
           ================================================== */}
 
-          {!isCheckedIn &&
-            !isCheckedOut && (
-
+          {isApprovedLeave &&
+            !isCheckedIn &&
+            !isCheckedOut ? (
+              <p className="text-center text-[11px] font-medium text-rose-600">
+                You have approved leave for today. Login is disabled.
+              </p>
+            ) : !isCheckedIn &&
+              !isCheckedOut ? (
               <p className="text-center text-[11px] font-medium text-slate-500">
                 Click Login to start your attendance.
               </p>
-
-            )}
+            ) : null}
 
           {/* ==================================================
               ACTIVE SESSION MESSAGE

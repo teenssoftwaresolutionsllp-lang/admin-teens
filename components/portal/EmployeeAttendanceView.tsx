@@ -915,47 +915,74 @@ export default function EmployeeAttendanceView({
 
 
   const presentCount = useMemo(() => {
-    return logs.filter((log) => {
+    const approvedLeaveDates = new Set<string>();
+
+    for (const request of leaveRequests as any[]) {
+      if (getLeaveRequestStatus(request) !== "approved") {
+        continue;
+      }
+
+      const start = String(
+        request.start_date ?? request.startDate ?? ""
+      ).slice(0, 10);
+
+      const end = String(
+        request.end_date ?? request.endDate ?? start
+      ).slice(0, 10);
+
+      if (!start || !end || start > end) continue;
+
+      const cursor = new Date(`${start}T00:00:00Z`);
+      const last = new Date(`${end}T00:00:00Z`);
+
+      while (cursor <= last) {
+        approvedLeaveDates.add(cursor.toISOString().slice(0, 10));
+        cursor.setUTCDate(cursor.getUTCDate() + 1);
+      }
+    }
+
+    return logs.reduce((total, log) => {
       const rawLog = log as any;
 
       const attendanceDate = String(
         rawLog.attendance_date ??
         rawLog.attendanceDate ??
+        rawLog.date ??
         ""
       ).slice(0, 10);
 
-      if (!attendanceDate) return false;
+      if (!attendanceDate) return total;
 
-      const [year, month] = attendanceDate
-        .split("-")
-        .map(Number);
+      const [year, month] = attendanceDate.split("-").map(Number);
 
-      // Count only records from the selected calendar month.
       if (
         year !== selectedCalendarYear ||
         month !== selectedCalendarMonth + 1
       ) {
-        return false;
+        return total;
       }
 
-      const status = normalizeAttendanceStatus(
-        rawLog.status
-      );
+      // Approved leave takes precedence over attendance.
+      if (approvedLeaveDates.has(attendanceDate)) {
+        return total;
+      }
 
-      return (
-        status === "present" ||
-        status === "half_day" ||
-        Boolean(rawLog.is_late)
-      );
-    }).length;
+      const status = normalizeAttendanceStatus(rawLog.status);
+
+      if (status === "half_day") return total + 0.5;
+
+      if (status === "present" || Boolean(rawLog.is_late)) {
+        return total + 1;
+      }
+
+      return total;
+    }, 0);
   }, [
     logs,
+    leaveRequests,
     selectedCalendarYear,
     selectedCalendarMonth,
   ]);
-
-
-
 
   const absentCount = useMemo(() => {
     const today = getTodayString();
@@ -2089,6 +2116,31 @@ const leaveBalance = useMemo(
             }
             project={project}
             selectedDate={activeDate}
+
+            isApprovedLeave={leaveRequests.some((request) => {
+              if (getLeaveRequestStatus(request) !== "approved") {
+                return false;
+              }
+
+              const start = String(
+                (request as any).start_date ??
+                (request as any).startDate ??
+                ""
+              ).slice(0, 10);
+
+              const end = String(
+                (request as any).end_date ??
+                (request as any).endDate ??
+                start
+              ).slice(0, 10);
+
+              return (
+                Boolean(start) &&
+                activeDate >= start &&
+                activeDate <= end
+              );
+            })}
+
             selectedAttendance={
               selectedAttendance
             }

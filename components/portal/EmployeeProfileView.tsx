@@ -2355,17 +2355,17 @@ export default function EmployeeProfileView({
                 {[
                   {
                     label: "Bank Name",
-                    value: employeeData.bank_name,
+                    value: savedBankDetails.bank_name,
                     sensitive: false,
                   },
                   {
                     label: "Account Number",
-                    value: employeeData.bank_account_number,
+                     value: savedBankDetails.bank_account_number,
                     sensitive: true,
                   },
                   {
                     label: "IFSC Code",
-                    value: employeeData.ifsc_code,
+                     value: savedBankDetails.ifsc_code,
                     sensitive: true,
                   },
                   {
