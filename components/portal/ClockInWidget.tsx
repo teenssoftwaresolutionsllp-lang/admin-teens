@@ -27,11 +27,7 @@ import {
 export interface SelectedAttendance {
   date: string;
 
-  status:
-    | "present"
-    | "half_day"
-    | "leave"
-    | "empty";
+  status: "present" | "half_day" | "leave" | "empty" | "absent";
 
   clockIn?: string;
   clockOut?: string;

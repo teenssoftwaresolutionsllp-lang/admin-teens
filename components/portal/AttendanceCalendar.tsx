@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useMemo, useState } from "react";
@@ -16,6 +17,7 @@ export type DayState =
   | "present"
   | "half_day"
   | "leave"
+  | "absent"
   | "empty";
 
 export interface SelectedAttendance {
@@ -26,51 +28,30 @@ export interface SelectedAttendance {
   worked?: string;
 }
 
-
-/*
- * IMPORTANT
- * Parent can receive both:
- * 1. selected attendance details
- * 2. selected date
- */
 interface AttendanceCalendarProps {
   logs: AttendanceLog[];
   leaveRequests: LeaveRequest[];
   year?: number;
   month?: number;
   employeeJoiningDate?: string | null;
-
   onMonthChange?: (year: number, month: number) => void;
-
-  onDateSelect?: (
-    attendance: SelectedAttendance
-  ) => void;
-
-  onSelectedDateChange?: (
-    date: string
-  ) => void;
+  onDateSelect?: (attendance: SelectedAttendance) => void;
+  onSelectedDateChange?: (date: string) => void;
 }
 
-
-
 /* =========================================================
-   DUMMY DATA
-========================================================= */
+   EXISTING DUMMY DATA
+   ========================================================= */
 
-const dummyAttendance: Record<
-  string,
-  SelectedAttendance
-> = {
+const dummyAttendance: Record<string, SelectedAttendance> = {
   "2026-09-10": {
     date: "2026-09-10",
     status: "leave",
   },
-
   "2026-09-11": {
     date: "2026-09-11",
     status: "leave",
   },
-
   "2026-09-22": {
     date: "2026-09-22",
     status: "half_day",
@@ -78,7 +59,6 @@ const dummyAttendance: Record<
     clockOut: "01:15 PM",
     worked: "3h 55m",
   },
-
   "2026-09-23": {
     date: "2026-09-23",
     status: "present",
@@ -86,7 +66,6 @@ const dummyAttendance: Record<
     clockOut: "06:12 PM",
     worked: "8h 54m",
   },
-
   "2026-09-24": {
     date: "2026-09-24",
     status: "present",
@@ -94,7 +73,6 @@ const dummyAttendance: Record<
     clockOut: "06:05 PM",
     worked: "8h 23m",
   },
-
   "2026-09-25": {
     date: "2026-09-25",
     status: "present",
@@ -105,18 +83,13 @@ const dummyAttendance: Record<
 
 /* =========================================================
    HELPERS
-========================================================= */
+   ========================================================= */
 
 function formatDate(date: Date): string {
   return `${date.getFullYear()}-${String(
     date.getMonth() + 1
-  ).padStart(2, "0")}-${String(
-    date.getDate()
-  ).padStart(2, "0")}`;
+  ).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
-
-
-
 
 function formatTime(
   value?: string | null
@@ -146,25 +119,30 @@ function formatWorkedHours(
     return undefined;
   }
 
-  const totalMinutes = Math.round(
-    Number(totalHours) * 60
-  );
-
-  const hours = Math.floor(
-    totalMinutes / 60
-  );
-
+  const totalMinutes = Math.round(Number(totalHours) * 60);
+  const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
 
-  return `${hours}h ${String(minutes).padStart(
-    2,
-    "0"
-  )}m`;
+  return `${hours}h ${String(minutes).padStart(2, "0")}m`;
+}
+
+function isWeekend(date: string): boolean {
+  const day = new Date(`${date}T00:00:00`).getDay();
+  return day === 0 || day === 6;
+}
+
+function isPastWorkingDay(date: string): boolean {
+  const selected = new Date(`${date}T00:00:00`);
+  const today = new Date();
+
+  today.setHours(0, 0, 0, 0);
+
+  return selected < today && !isWeekend(date);
 }
 
 /* =========================================================
    COMPONENT
-========================================================= */
+   ========================================================= */
 
 export default function AttendanceCalendar({
   logs,
@@ -186,52 +164,27 @@ export default function AttendanceCalendar({
     initialMonth ?? today.getMonth()
   );
 
-  /*
-   * Store actual date string.
-   *
-   * Earlier you were storing only:
-   * selectedDate = 25
-   *
-   * Now we store:
-   * selectedDate = "2026-09-25"
-   *
-   * This is important because ClockInWidget
-   * needs to know whether selected date is today.
-   */
-  const [selectedDate, setSelectedDate] =
-    useState<string>(() => {
-      const currentYear =
-        initialYear ?? today.getFullYear();
+  const [selectedDate, setSelectedDate] = useState<string>(() => {
+    const currentYear = initialYear ?? today.getFullYear();
+    const currentMonth = initialMonth ?? today.getMonth();
 
-      const currentMonth =
-        initialMonth ?? today.getMonth();
+    if (
+      today.getFullYear() === currentYear &&
+      today.getMonth() === currentMonth
+    ) {
+      return formatDate(today);
+    }
 
-      if (
-        today.getFullYear() === currentYear &&
-        today.getMonth() === currentMonth
-      ) {
-        return formatDate(today);
-      }
-
-      return "";
-    });
+    return "";
+  });
 
   /* =======================================================
      CALENDAR DAYS
-  ======================================================= */
+     ======================================================= */
 
   const { days, firstDay } = useMemo(() => {
-    const totalDays = new Date(
-      year,
-      month + 1,
-      0
-    ).getDate();
-
-    const firstDayOfMonth = new Date(
-      year,
-      month,
-      1
-    ).getDay();
+    const totalDays = new Date(year, month + 1, 0).getDate();
+    const firstDayOfMonth = new Date(year, month, 1).getDay();
 
     return {
       days: Array.from(
@@ -243,35 +196,37 @@ export default function AttendanceCalendar({
   }, [year, month]);
 
   /* =======================================================
-     LEAVE DATES
-  ======================================================= */
+     APPROVED LEAVE DATES
+     ======================================================= */
 
   const leaveDates = useMemo(() => {
     const dates = new Set<string>();
 
     leaveRequests
       .filter(
-        (request) =>
-          String(request.status) ===
-          "approved"
+        (request) => String(request.status) === "approved"
       )
       .forEach((request) => {
         const start = new Date(
-          `${request.start_date}T00:00:00`
+          `${request.start_date.slice(0, 10)}T00:00:00`
         );
 
         const end = new Date(
-          `${request.end_date}T00:00:00`
+          `${request.end_date.slice(0, 10)}T00:00:00`
         );
+
+        if (
+          Number.isNaN(start.getTime()) ||
+          Number.isNaN(end.getTime())
+        ) {
+          return;
+        }
 
         const current = new Date(start);
 
         while (current <= end) {
           dates.add(formatDate(current));
-
-          current.setDate(
-            current.getDate() + 1
-          );
+          current.setDate(current.getDate() + 1);
         }
       });
 
@@ -279,21 +234,15 @@ export default function AttendanceCalendar({
   }, [leaveRequests]);
 
   /* =======================================================
-     REAL ATTENDANCE LOGS
-  ======================================================= */
+     ATTENDANCE LOGS BY DATE
+     ======================================================= */
 
   const logByDate = useMemo(() => {
-    const map = new Map<
-      string,
-      AttendanceLog
-    >();
+    const map = new Map<string, AttendanceLog>();
 
     logs.forEach((log) => {
       if (log.attendance_date) {
-        map.set(
-          log.attendance_date.slice(0, 10),
-          log
-        );
+        map.set(log.attendance_date.slice(0, 10), log);
       }
     });
 
@@ -302,46 +251,58 @@ export default function AttendanceCalendar({
 
   /* =======================================================
      GET DAY STATE
-  ======================================================= */
+     ======================================================= */
 
-  const getDayState = (
-    day: number
-  ): DayState => {
-    const date = `${year}-${String(
-      month + 1
-    ).padStart(2, "0")}-${String(
-      day
-    ).padStart(2, "0")}`;
+  const getDayState = (day: number): DayState => {
+    const date = `${year}-${String(month + 1).padStart(
+      2,
+      "0"
+    )}-${String(day).padStart(2, "0")}`;
 
-    /*
-     * Dummy data first.
-     */
+    // Preserve the existing demo data.
     if (dummyAttendance[date]) {
       return dummyAttendance[date].status;
     }
 
+    // Approved leave takes priority over missing attendance.
     if (leaveDates.has(date)) {
       return "leave";
     }
 
     const log = logByDate.get(date);
 
-    if (!log) {
+    if (log) {
+      const status = String(log.status);
+
+      if (status === "on_leave" || status === "leave") {
+        return "leave";
+      }
+
+      if (status === "half_day") {
+        return "half_day";
+      }
+
+      if (status === "present") {
+        return "present";
+      }
+
+      if (status === "absent") {
+        return "absent";
+      }
+    }
+
+    // Do not mark dates before the employee joined as absent.
+    if (
+      employeeJoiningDate &&
+      date < employeeJoiningDate.slice(0, 10)
+    ) {
       return "empty";
     }
 
-    const status = String(log.status);
-
-    if (status === "on_leave") {
-      return "leave";
-    }
-
-    if (status === "half_day") {
-      return "half_day";
-    }
-
-    if (status === "present") {
-      return "present";
+    // Past weekdays without a log are absent.
+    // Today, future dates and weekends remain unchanged.
+    if (isPastWorkingDay(date)) {
+      return "absent";
     }
 
     return "empty";
@@ -349,133 +310,84 @@ export default function AttendanceCalendar({
 
   /* =======================================================
      GET ATTENDANCE DETAILS
-  ======================================================= */
+     ======================================================= */
 
   const getAttendanceDetails = (
     day: number
   ): SelectedAttendance => {
-    const date = `${year}-${String(
-      month + 1
-    ).padStart(2, "0")}-${String(
-      day
-    ).padStart(2, "0")}`;
+    const date = `${year}-${String(month + 1).padStart(
+      2,
+      "0"
+    )}-${String(day).padStart(2, "0")}`;
 
-    /*
-     * Dummy data.
-     */
     if (dummyAttendance[date]) {
       return dummyAttendance[date];
     }
 
-    /*
-     * Leave.
-     */
-    if (leaveDates.has(date)) {
+    const state = getDayState(day);
+
+    if (
+      state === "leave" ||
+      state === "absent" ||
+      state === "empty"
+    ) {
       return {
         date,
-        status: "leave",
+        status: state,
       };
     }
 
-    /*
-     * Real attendance.
-     */
     const log = logByDate.get(date);
 
     if (!log) {
       return {
         date,
-        status: "empty",
+        status: state,
       };
     }
 
-    const extendedLog =
-      log as AttendanceLog & {
-        check_in_time?: string | null;
-        check_out_time?: string | null;
-        total_hours?: number | null;
-      };
-
-    const status = String(log.status);
-
-    let dayStatus: DayState = "empty";
-
-    if (status === "on_leave") {
-      dayStatus = "leave";
-    } else if (status === "half_day") {
-      dayStatus = "half_day";
-    } else if (status === "present") {
-      dayStatus = "present";
-    }
+    const extendedLog = log as AttendanceLog & {
+      check_in_time?: string | null;
+      check_out_time?: string | null;
+      total_hours?: number | null;
+    };
 
     return {
       date,
-      status: dayStatus,
-
-      clockIn: formatTime(
-        extendedLog.check_in_time
-      ),
-
-      clockOut: formatTime(
-        extendedLog.check_out_time
-      ),
-
-      worked: formatWorkedHours(
-        extendedLog.total_hours
-      ),
+      status: state,
+      clockIn: formatTime(extendedLog.check_in_time),
+      clockOut: formatTime(extendedLog.check_out_time),
+      worked: formatWorkedHours(extendedLog.total_hours),
     };
   };
 
   /* =======================================================
      DATE CLICK
-  ======================================================= */
+     ======================================================= */
 
-  const handleDateClick = (
-    day: number
-  ) => {
-    /*
-     * Create complete date.
-     */
-    const date = `${year}-${String(
-      month + 1
-    ).padStart(2, "0")}-${String(
-      day
-    ).padStart(2, "0")}`;
+  const handleDateClick = (day: number) => {
+    const date = `${year}-${String(month + 1).padStart(
+      2,
+      "0"
+    )}-${String(day).padStart(2, "0")}`;
 
-    /*
-     * Save selected date.
-     */
     setSelectedDate(date);
-
-    /*
-     * Send selected date to parent.
-     */
     onSelectedDateChange?.(date);
-
-    /*
-     * Get attendance information.
-     */
-    const attendance =
-      getAttendanceDetails(day);
-
-    /*
-     * Send attendance to parent.
-     */
-    onDateSelect?.(attendance);
+    onDateSelect?.(getAttendanceDetails(day));
   };
-
 
   /* =======================================================
      PREVIOUS MONTH
-  ======================================================= */
-
+     ======================================================= */
 
   const goToPreviousMonth = () => {
     const newDate = new Date(year, month - 1, 1);
 
     if (employeeJoiningDate) {
-      const joiningDate = employeeJoiningDate.slice(0, 10);
-      const joiningMonth = joiningDate.slice(0, 7);
+      const joiningMonth = employeeJoiningDate
+        .slice(0, 10)
+        .slice(0, 7);
+
       const targetMonth = formatDate(newDate).slice(0, 7);
 
       if (targetMonth < joiningMonth) return;
@@ -494,7 +406,7 @@ export default function AttendanceCalendar({
 
   /* =======================================================
      NEXT MONTH
-  ======================================================= */
+     ======================================================= */
 
   const goToNextMonth = () => {
     setSelectedDate("");
@@ -506,29 +418,24 @@ export default function AttendanceCalendar({
 
     setYear(newYear);
     setMonth(newMonth);
-
     onMonthChange?.(newYear, newMonth);
   };
 
-
-
-
   /* =======================================================
      MONTH LABEL
-  ======================================================= */
+     ======================================================= */
 
-  const monthLabel = new Date(
-    year,
-    month,
-    1
-  ).toLocaleDateString("en-US", {
-    month: "long",
-    year: "numeric",
-  });
+  const monthLabel = new Date(year, month, 1).toLocaleDateString(
+    "en-US",
+    {
+      month: "long",
+      year: "numeric",
+    }
+  );
 
   /* =======================================================
      DAY STYLE
-  ======================================================= */
+     ======================================================= */
 
   const getDayClass = (
     state: DayState,
@@ -551,6 +458,9 @@ export default function AttendanceCalendar({
       case "leave":
         return `${base} bg-rose-100 border-rose-300 text-rose-900 hover:bg-rose-200${selected}`;
 
+      case "absent":
+        return `${base} bg-red-500 border-red-600 text-white hover:bg-red-600${selected}`;
+
       default:
         return `${base} bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100${selected}`;
     }
@@ -558,12 +468,11 @@ export default function AttendanceCalendar({
 
   /* =======================================================
      UI
-  ======================================================= */
+     ======================================================= */
 
   return (
     <section className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
       {/* HEADER */}
-
       <div className="flex items-center justify-between mb-5">
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 rounded-xl bg-indigo-50 flex items-center justify-center">
@@ -585,11 +494,11 @@ export default function AttendanceCalendar({
         </div>
 
         {/* MONTH NAVIGATION */}
-
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={goToPreviousMonth}
+            aria-label="Previous month"
             className="h-9 w-9 rounded-lg border border-slate-200 flex items-center justify-center hover:bg-slate-50"
           >
             <ChevronLeft size={18} />
@@ -602,6 +511,7 @@ export default function AttendanceCalendar({
           <button
             type="button"
             onClick={goToNextMonth}
+            aria-label="Next month"
             className="h-9 w-9 rounded-lg border border-slate-200 flex items-center justify-center hover:bg-slate-50"
           >
             <ChevronRight size={18} />
@@ -610,61 +520,49 @@ export default function AttendanceCalendar({
       </div>
 
       {/* WEEK DAYS */}
-
       <div className="grid grid-cols-7 gap-2 mb-2">
-        {[
-          "Sun",
-          "Mon",
-          "Tue",
-          "Wed",
-          "Thu",
-          "Fri",
-          "Sat",
-        ].map((day) => (
-          <div
-            key={day}
-            className="text-center text-xs font-bold text-slate-500 py-2"
-          >
-            {day}
-          </div>
-        ))}
+        {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(
+          (day) => (
+            <div
+              key={day}
+              className="text-center text-xs font-bold text-slate-500 py-2"
+            >
+              {day}
+            </div>
+          )
+        )}
       </div>
 
       {/* CALENDAR */}
-
       <div className="grid grid-cols-7 gap-2">
-        {/* EMPTY DAYS */}
-
-        {Array.from({
-          length: firstDay,
-        }).map((_, index) => (
+        {Array.from({ length: firstDay }).map((_, index) => (
           <div
             key={`empty-${index}`}
             className="h-11 sm:h-12"
           />
         ))}
 
-        {/* DATES */}
-
         {days.map((day) => {
-          const state =
-            getDayState(day);
+          const state = getDayState(day);
 
-          const date = `${year}-${String(
-            month + 1
-          ).padStart(2, "0")}-${String(
-            day
-          ).padStart(2, "0")}`;
+          const date = `${year}-${String(month + 1).padStart(
+            2,
+            "0"
+          )}-${String(day).padStart(2, "0")}`;
 
           const isSelected = selectedDate === date;
 
-          const isBeforeJoiningDate = !!employeeJoiningDate && date < employeeJoiningDate.slice(0, 10);
+          const isBeforeJoiningDate =
+            !!employeeJoiningDate &&
+            date < employeeJoiningDate.slice(0, 10);
 
           return (
             <button
               key={day}
               type="button"
               onClick={() => handleDateClick(day)}
+              aria-label={`${date}: ${state.replace("_", " ")}`}
+              aria-pressed={isSelected}
               className={`${getDayClass(state, isSelected)} ${
                 isBeforeJoiningDate
                   ? "opacity-30 cursor-not-allowed"
@@ -680,22 +578,11 @@ export default function AttendanceCalendar({
       </div>
 
       {/* LEGEND */}
-
       <div className="flex flex-wrap gap-4 mt-5 pt-4 border-t border-slate-100">
-        <Legend
-          color="bg-emerald-400"
-          label="Present"
-        />
-
-        <Legend
-          color="bg-yellow-400"
-          label="Half Day"
-        />
-
-        <Legend
-          color="bg-rose-400"
-          label="Leave"
-        />
+        <Legend color="bg-emerald-400" label="Present" />
+        <Legend color="bg-yellow-400" label="Half Day" />
+        <Legend color="bg-rose-400" label="Leave" />
+        <Legend color="bg-red-500" label="Absent" />
       </div>
     </section>
   );
@@ -703,7 +590,7 @@ export default function AttendanceCalendar({
 
 /* =========================================================
    LEGEND
-========================================================= */
+   ========================================================= */
 
 function Legend({
   color,
@@ -714,10 +601,7 @@ function Legend({
 }) {
   return (
     <div className="flex items-center gap-2 text-xs text-slate-600">
-      <span
-        className={`h-3 w-3 rounded-full ${color}`}
-      />
-
+      <span className={`h-3 w-3 rounded-full ${color}`} />
       <span>{label}</span>
     </div>
   );
