@@ -1351,23 +1351,17 @@ export class DataStore {
   return data as AttendanceLog | null;
 }
 
+
   static async clockIn(employeeId: string): Promise<AttendanceLog> {
-   const supabase = await createAdminClient();
+    const supabase = await createAdminClient();
     const now = new Date();
     const todayStr = now.toISOString().split("T")[0];
 
     const employee = await this.getEmployeeById(employeeId);
+    if (!employee) throw new Error("Employee not found");
 
-    if (!employee) {
-      throw new Error("Employee not found");
-    }
-
-    const employeeUuid = employee.id;
-    const project = employee?.project;
-
-    if(!project){
-      throw new Error("Employee project not found");
-    }
+    const project = employee.project;
+    if (!project) throw new Error("Employee project not found");
 
     const evaluation = evaluateAttendancePunch(
       now,
@@ -1376,59 +1370,65 @@ export class DataStore {
       project.half_day_cutoff_minutes
     );
 
-
     const { data: existingLog, error: findError } = await supabase
-    .from("attendance_logs")
-    .select("*")
-    .eq("employee_id", employeeUuid)
-    .eq("attendance_date", todayStr)
-    .maybeSingle();
-
-    if (findError) {
-      throw new Error(findError.message);
-    }
-    let log;
-
-    if(existingLog){
-      const { data, error } = await supabase
       .from("attendance_logs")
-      .update({
-        check_in_time: now.toISOString(),
-        status: evaluation.status,
-        is_late: evaluation.isLate,
-      })
-      .eq("id", existingLog.id)
-      .select()
-      .single();
-    
+      .select("*")
+      .eq("employee_id", employee.id)
+      .eq("attendance_date", todayStr)
+      .maybeSingle();
 
-    if (error) {
-      throw new Error(error.message);
+    if (findError) throw new Error(findError.message);
+
+    if (existingLog) {
+      // Prevent a second clock-in while a session is still active.
+      if (
+        existingLog.check_out_time == null &&
+        existingLog.check_in_time != null
+      ) {
+        throw new Error("You are already checked in. Please check out first.");
+      }
+
+      const { data, error } = await supabase
+        .from("attendance_logs")
+        .update({
+          // Keep the original first clock-in for the day.
+          check_in_time: existingLog.check_in_time ?? now.toISOString(),
+
+          // Start tracking the new session independently.
+          session_check_in_time: now.toISOString(),
+          check_out_time: null,
+
+          // Preserve previously accumulated hours and attendance status.
+          total_hours: Number(existingLog.total_hours ?? 0),
+          status: existingLog.status,
+          is_late: existingLog.is_late || evaluation.isLate,
+        })
+        .eq("id", existingLog.id)
+        .select()
+        .single();
+
+      if (error) throw new Error(error.message);
+      return data as AttendanceLog;
     }
-     log = data;
-  }
 
-  else{
-     const { data, error } = await supabase
+    const { data, error } = await supabase
       .from("attendance_logs")
       .insert({
-        employee_id: employeeUuid,
+        employee_id: employee.id,
         attendance_date: todayStr,
         check_in_time: now.toISOString(),
+        session_check_in_time: now.toISOString(),
         check_out_time: null,
-        total_hours: null,
+        total_hours: 0,
         status: evaluation.status,
         is_late: evaluation.isLate,
         is_regularized: false,
       })
       .select()
       .single();
-      if (error) {
-        throw new Error(error.message);
-      }
-      log = data;
-  }
-    return log as AttendanceLog;
+
+    if (error) throw new Error(error.message);
+    return data as AttendanceLog;
   }
 
   static async clockOut(employeeId: string): Promise<AttendanceLog> {
@@ -1437,77 +1437,74 @@ export class DataStore {
     const todayStr = now.toISOString().split("T")[0];
 
     const employee = await this.getEmployeeById(employeeId);
+    if (!employee) throw new Error("Employee not found");
 
-    if (!employee) {
-      throw new Error("Employee not found");
-    }
+    const { data: log, error: findError } = await supabase
+      .from("attendance_logs")
+      .select("*")
+      .eq("employee_id", employee.id)
+      .eq("attendance_date", todayStr)
+      .maybeSingle();
 
-    const employeeUuid = employee.id;
-
-   const { data: log, error: findError } = await supabase
-    .from("attendance_logs")
-    .select("*")
-    .eq("employee_id", employeeUuid)
-    .eq("attendance_date", todayStr)
-    .maybeSingle();
-
-  if (findError) {
-    throw new Error(findError.message);
-  }
+    if (findError) throw new Error(findError.message);
 
     if (!log) {
-      
-      const newLog = await this.clockIn(employeeId);
-      const checkOut = now;
-      const checkIn = new Date(newLog.check_in_time!);
-      const hours = Number(((checkOut.getTime() - checkIn.getTime()) /(1000 * 60 * 60)).toFixed(2))
+      throw new Error("You are not checked in.");
+    }
 
-      const status = hours < 4.5 && newLog.status === "present" ? "half_day" : newLog.status;
-      const { data: updatedLog, error: updateError } = await supabase
+    // A non-null session start with no checkout indicates an active session.
+    // Fall back to check_in_time for legacy records created before this column.
+    if (log.check_out_time != null) {
+      throw new Error("You are not currently checked in.");
+    }
+
+    const sessionStartValue =
+      log.session_check_in_time ?? log.check_in_time;
+
+    if (!sessionStartValue) {
+      throw new Error("Check-in time is missing.");
+    }
+
+    const sessionStart = new Date(sessionStartValue);
+    const sessionHours = Math.max(
+      0,
+      (now.getTime() - sessionStart.getTime()) / (1000 * 60 * 60)
+    );
+
+    const previousHours = Number(log.total_hours ?? 0);
+    const hours = Number((previousHours + sessionHours).toFixed(2));
+
+    // Keep the existing half-day rule for short attendance.
+    // If a later session brings total hours to 4.5 or more,
+    // restore "present" unless HR has regularized the record.
+    let status = log.status;
+
+    if (!log.is_regularized) {
+      if (hours < 4.5 && status === "present") {
+        status = "half_day";
+      } else if (hours >= 4.5 && status === "half_day") {
+        status = "present";
+      }
+    }
+
+    const { data: updatedLog, error: updateError } = await supabase
       .from("attendance_logs")
       .update({
-        check_out_time: checkOut.toISOString(),
+        // Preserve the first clock-in and record the latest clock-out.
+        check_out_time: now.toISOString(),
+        session_check_in_time: null,
         total_hours: hours,
         status,
       })
-      .eq("id", newLog.id)
+      .eq("id", log.id)
       .select()
       .single();
 
-    if (updateError) {
-      throw new Error(updateError.message);
-    }
+    if (updateError) throw new Error(updateError.message);
 
     return updatedLog as AttendanceLog;
   }
-    if (!log.check_in_time) {
-      throw new Error("Check-in time is missing");
-    }
 
-    const checkOut = now;
-    const checkIn = new Date(log.check_in_time);
-
-    const hours = Number(((checkOut.getTime() - checkIn.getTime()) /(1000 * 60 * 60)).toFixed(2))
-
-    const status = hours < 4.5 && log.status === "present" ? "half_day" :log.status
-
-    const { data: updatedLog, error: updateError } = await supabase
-    .from("attendance_logs")
-    .update({
-      check_out_time: checkOut.toISOString(),
-      total_hours: hours,
-      status,
-    })
-    .eq("id", log.id)
-    .select()
-    .single();
-
-    if (updateError) {
-      throw new Error(updateError.message);
-    }
-
-    return updatedLog as AttendanceLog;
-  }
 
   // ==========================================
   // ATTENDANCE REGULARIZATION
@@ -1652,20 +1649,20 @@ export class DataStore {
       let attendanceLog: AttendanceLog;
 
       if (existingLog) {
-        // Update existing attendance log
-        const { data: updatedLog, error: attendanceUpdateError } = await supabase
-          .from("attendance_logs")
-          .update({
-            check_in_time: checkInDate.toISOString(),
-            check_out_time: checkOutDate.toISOString(),
-            total_hours: totalHours,
-            status: "present",
-            is_late: false,
-            is_regularized: true,
-          })
-          .eq("id", existingLog.id)
-          .select()
-          .single();
+        const { data: updatedLog, error: attendanceUpdateError } =
+          await supabase
+            .from("attendance_logs")
+            .update({
+              check_in_time: checkInDate.toISOString(),
+              check_out_time: checkOutDate.toISOString(),
+              total_hours: totalHours,
+              status: "present",
+              is_late: false,
+              is_regularized: true,
+            })
+            .eq("id", existingLog.id)
+            .select()
+            .single();
 
         if (attendanceUpdateError) {
           throw new Error(attendanceUpdateError.message);
@@ -1673,21 +1670,21 @@ export class DataStore {
 
         attendanceLog = updatedLog as AttendanceLog;
       } else {
-        // Create new attendance log
-        const { data: newLog, error: attendanceInsertError } = await supabase
-          .from("attendance_logs")
-          .insert({
-            employee_id: reg.employee_id,
-            attendance_date: reg.attendance_date,
-            check_in_time: checkInDate.toISOString(),
-            check_out_time: checkOutDate.toISOString(),
-            total_hours: totalHours,
-            status: "present",
-            is_late: false,
-            is_regularized: true,
-          })
-          .select()
-          .single();
+        const { data: newLog, error: attendanceInsertError } =
+          await supabase
+            .from("attendance_logs")
+            .insert({
+              employee_id: reg.employee_id,
+              attendance_date: reg.attendance_date,
+              check_in_time: checkInDate.toISOString(),
+              check_out_time: checkOutDate.toISOString(),
+              total_hours: totalHours,
+              status: "present",
+              is_late: false,
+              is_regularized: true,
+            })
+            .select()
+            .single();
 
         if (attendanceInsertError) {
           throw new Error(attendanceInsertError.message);

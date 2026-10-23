@@ -291,14 +291,33 @@ export default function Header({ profile }: HeaderProps) {
   };
 
   // Update read status in the current UI only.
-  const markAllAsRead = () => {
-    setNotifications((previous) =>
-      previous.map((notification) => ({
-        ...notification,
-        read: true,
-      }))
-    );
+
+  const markAllAsRead = async () => {
+    try {
+      const response = await fetch("/api/notifications", {
+        method: "PATCH",
+        cache: "no-store",
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(
+          result.error || "Failed to mark notifications as read."
+        );
+      }
+
+      setNotifications((previous) =>
+        previous.map((notification) => ({
+          ...notification,
+          read: true,
+        }))
+      );
+    } catch (error) {
+      console.error("Mark all notifications as read failed:", error);
+    }
   };
+
 
   const formatNotificationTime = (notification: NotificationItem) => {
     const value = notification.time || notification.created_at;

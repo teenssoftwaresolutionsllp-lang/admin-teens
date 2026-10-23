@@ -5,19 +5,32 @@ import { redirect } from "next/navigation";
 
 export default async function EmployeeAttendancePage() {
   const supabase = await createClient();
+
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) redirect("/login");
-
-  let employee = await DataStore.getEmployeeByUserId(user.id);
-
-  if (!employee) {
-    const all = await DataStore.getEmployees();
-    employee = all.find((e) => e.email === user.email) || null;
+  if (!user) {
+    redirect("/login");
   }
 
+  // First, find the employee using the logged-in Supabase user ID.
+  let employee = await DataStore.getEmployeeByUserId(user.id);
+
+  // Fallback: match the employee email without case or whitespace differences.
+  if (!employee && user.email) {
+    const allEmployees = await DataStore.getEmployees();
+
+    const loginEmail = user.email.trim().toLowerCase();
+
+    employee =
+      allEmployees.find(
+        (item) =>
+          item.email?.trim().toLowerCase() === loginEmail
+      ) || null;
+  }
+
+  // Show an error only if both lookups fail.
   if (!employee) {
     return (
       <div className="p-8 text-center text-slate-500">
@@ -33,7 +46,7 @@ export default async function EmployeeAttendancePage() {
 
   const baseProject =
     employee.project ||
-    projects.find((p) => p.id === employee.project_id) ||
+    projects.find((project) => project.id === employee.project_id) ||
     projects[0];
 
   if (!baseProject) {
@@ -45,7 +58,7 @@ export default async function EmployeeAttendancePage() {
   }
 
   const calendar = calendars.find(
-    (c) => c.id === baseProject.calendar_id
+    (item) => item.id === baseProject.calendar_id
   );
 
   const project = {
@@ -70,7 +83,7 @@ export default async function EmployeeAttendancePage() {
   ]);
 
   const regularizations = allRegs.filter(
-    (r) => r.employee_id === employee.id
+    (request) => request.employee_id === employee.id
   );
 
   return (
