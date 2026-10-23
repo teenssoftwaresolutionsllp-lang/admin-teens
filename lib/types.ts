@@ -266,6 +266,8 @@ export interface AttendanceRegularization {
   employee?: Employee;
 }
 
+
+
 export interface LeaveType {
   id: string;
   name: string;

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { DataStore } from '@/lib/data-store';
 import { createClient } from '@/lib/supabase-server';
+import { createAdminClient } from "@/lib/supabase-server";
 
 const monthNames = [
   "January",
@@ -263,18 +264,53 @@ export async function POST(request: Request) {
     // GENERATE PAYROLL
     // =========================================================
 
-    const result = await DataStore.generateMonthlyPayroll({
-      employeeId,
-      month: payrollMonth,
-      year: payrollYear,
-      additionalEarnings:requestedAdditionalEarnings,
-    });
 
-    return NextResponse.json({
-      success: true,
-      generatedCount: result.generatedCount,
-      payslips: result.payslips,
-    });
+  const result = await DataStore.generateMonthlyPayroll({
+    employeeId,
+    month: payrollMonth,
+    year: payrollYear,
+    additionalEarnings: requestedAdditionalEarnings,
+  });
+
+  // Notify employees after payroll generation succeeds.
+  if (Array.isArray(result.payslips) && result.payslips.length > 0) {
+    const adminSupabase = await createAdminClient();
+
+    const notificationRows = result.payslips
+      .filter((payslip: { employee_id?: string }) => Boolean(payslip.employee_id))
+      .map((payslip: { employee_id: string }) => ({
+        employee_id: payslip.employee_id,
+        title: "Payslip Generated",
+        message: `Your payslip for ${monthNames[payrollMonth - 1]} ${payrollYear} has been generated.`,
+        type: "payslip",
+        is_read: false,
+      }));
+
+    if (notificationRows.length > 0) {
+      const { data, error } = await adminSupabase
+        .from("notifications")
+        .insert(notificationRows)
+        .select("id");
+
+      if (error) {
+        console.error(
+          "Payslips generated, but notification insertion failed:",
+          error.message
+        );
+      } else {
+        console.log(
+          `Created ${data?.length ?? 0} payslip notification(s).`
+        );
+      }
+    }
+  }
+
+  return NextResponse.json({
+    success: true,
+    generatedCount: result.generatedCount,
+    payslips: result.payslips,
+  });
+
 
   } catch (error: any) {
     console.error("Payroll generation error:", error);

@@ -43,11 +43,9 @@ export default function ApprovalsHub({
 
   const [profileStatusFilter, setProfileStatusFilter] = useState("all");
   const [profileEmployeeSearch, setProfileEmployeeSearch] = useState("");
-  const [profileRequestTypeFilter, setProfileRequestTypeFilter] =
-    useState("all");
+  const [profileRequestTypeFilter, setProfileRequestTypeFilter] = useState("all");
   const [profileFromDate, setProfileFromDate] = useState("");
   const [profileToDate, setProfileToDate] = useState("");
-
   const [leaveRequests, setLeaveRequests] =
     useState<LeaveRequest[]>(initialLeaveRequests);
 
@@ -56,14 +54,24 @@ export default function ApprovalsHub({
 
   const [reviewNotes, setReviewNotes] = useState<Record<string, string>>({});
 
-  // Profile-change rejection dialog state.
+  // Rejection dialog state
   const [profileRejectionReason, setProfileRejectionReason] = useState("");
-  const [rejectingProfileRequestId, setRejectingProfileRequestId] = useState<
-    string | null
-  >(null);
+
+  const [rejectingRequest, setRejectingRequest] = useState<{
+    id: string;
+    type: "profile" | "attendance" | "leave";
+  } | null>(null);
 
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
+
+  // Open rejection dialogs
+  const openLeaveRejectionDialog = (id: string) => {
+    setFeedback(null);
+    setProfileRejectionReason("");
+    setRejectingRequest({ id, type: "leave" });
+  };
+
 
   // Profile Request Approval/Rejection.
   const handleProfileReview = async (
@@ -118,7 +126,7 @@ export default function ApprovalsHub({
         type: "success",
       });
 
-      setRejectingProfileRequestId(null);
+      setRejectingRequest(null);
       setProfileRejectionReason("");
     } catch (error) {
       setFeedback({
@@ -137,29 +145,56 @@ export default function ApprovalsHub({
   const openProfileRejectionDialog = (id: string) => {
     setFeedback(null);
     setProfileRejectionReason("");
-    setRejectingProfileRequestId(id);
+    setRejectingRequest({ id, type: "profile" });
   };
 
-  const closeProfileRejectionDialog = () => {
-    if (actionLoading === rejectingProfileRequestId) return;
+  const openAttendanceRejectionDialog = (id: string) => {
+    setFeedback(null);
+    setProfileRejectionReason("");
+    setRejectingRequest({ id, type: "attendance" });
+  };
 
-    setRejectingProfileRequestId(null);
+
+  const closeProfileRejectionDialog = () => {
+    if (rejectingRequest && actionLoading === rejectingRequest.id) {
+      return;
+    }
+
+    setRejectingRequest(null);
     setProfileRejectionReason("");
   };
 
   // Leave Request Approval/Rejection.
+
   const handleLeaveReview = async (
     id: string,
-    status: "approved" | "rejected"
+    status: "approved" | "rejected",
+    rejectionReason?: string
   ) => {
+    const reason = rejectionReason?.trim() ?? "";
+
+    if (status === "rejected" && !reason) {
+      setFeedback({
+        msg: "Please provide a reason for rejecting this leave request.",
+        type: "error",
+      });
+      return;
+    }
+
     setActionLoading(id);
     setFeedback(null);
 
     try {
       const res = await fetch(`/api/leaves/${id}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status }),
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          status,
+          rejectionReason: status === "rejected" ? reason : null,
+        }),
       });
 
       const data = await res.json().catch(() => null);
@@ -170,14 +205,28 @@ export default function ApprovalsHub({
 
       setLeaveRequests((previous) =>
         previous.map((leave) =>
-          leave.id === id ? { ...leave, status } : leave
+          leave.id === id
+            ? {
+                ...leave,
+                status,
+                ...(status === "rejected"
+                  ? { rejection_reason: reason }
+                  : {}),
+              }
+            : leave
         )
       );
 
       setFeedback({
-        msg: `Leave request ${status}. Leave balances updated.`,
+        msg:
+          status === "approved"
+            ? "Leave request approved. Leave balances updated."
+            : "Leave request rejected successfully.",
         type: "success",
       });
+
+      setRejectingRequest(null);
+      setProfileRejectionReason("");
     } catch (error) {
       setFeedback({
         msg:
@@ -189,19 +238,38 @@ export default function ApprovalsHub({
     }
   };
 
+
   // Attendance Regularization Approval/Rejection.
+
   const handleRegularizationReview = async (
     id: string,
-    status: "approved" | "rejected"
+    status: "approved" | "rejected",
+    rejectionReason?: string
   ) => {
+    const reason = rejectionReason?.trim() ?? "";
+
+    if (status === "rejected" && !reason) {
+      setFeedback({
+        msg: "Please provide a reason for rejecting this attendance regularization.",
+        type: "error",
+      });
+      return;
+    }
+
     setActionLoading(id);
     setFeedback(null);
 
     try {
       const res = await fetch(`/api/attendance/regularization/${id}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status }),
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          status,
+          rejectionReason: status === "rejected" ? reason : null,
+        }),
       });
 
       const data = await res.json().catch(() => null);
@@ -213,10 +281,16 @@ export default function ApprovalsHub({
       }
 
       setRegularizations((previous) =>
-        previous.map((regularization) =>
-          regularization.id === id
-            ? { ...regularization, status }
-            : regularization
+        previous.map((item) =>
+          item.id === id
+            ? {
+                ...item,
+                status,
+                ...(status === "rejected"
+                  ? { rejection_reason: reason }
+                  : {}),
+              }
+            : item
         )
       );
 
@@ -224,9 +298,12 @@ export default function ApprovalsHub({
         msg:
           status === "approved"
             ? "Attendance regularization approved."
-            : "Attendance regularization rejected.",
+            : "Attendance regularization rejected successfully.",
         type: "success",
       });
+
+      setRejectingRequest(null);
+      setProfileRejectionReason("");
     } catch (error) {
       setFeedback({
         msg:
@@ -239,6 +316,7 @@ export default function ApprovalsHub({
       setActionLoading(null);
     }
   };
+
 
   const filteredProfileRequests = profileRequests.filter((request) => {
     const statusMatches =
@@ -339,9 +417,6 @@ export default function ApprovalsHub({
   const totalPending =
     pendingProfileCount + pendingLeaveCount + pendingRegCount;
 
-  const rejectingRequest = profileRequests.find(
-    (request) => request.id === rejectingProfileRequestId
-  );
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -972,8 +1047,20 @@ export default function ApprovalsHub({
                           <td className="px-4 py-3.5 font-mono text-[11px] font-medium">
                             {leave.start_date} to {leave.end_date}
                           </td>
-                          <td className="max-w-xs truncate px-4 py-3.5 text-slate-600">
-                            {leave.reason}
+                          <td className="max-w-xs px-4 py-3.5 text-slate-600">
+                            <div className="max-w-xs space-y-1">
+                              <p className="break-words">
+                                <span className="font-semibold">Application: </span>
+                                {leave.reason || "No application reason provided"}
+                              </p>
+
+                              {leave.status === "rejected" && (
+                                <p className="whitespace-pre-wrap break-words text-rose-700">
+                                  <span className="font-semibold">Rejection reason: </span>
+                                  {leave.rejection_reason || "No rejection reason recorded"}
+                                </p>
+                              )}
+                            </div>
                           </td>
                           <td className="px-4 py-3.5">
                             <span
@@ -993,9 +1080,7 @@ export default function ApprovalsHub({
                               <div className="flex items-center justify-end gap-2">
                                 <button
                                   type="button"
-                                  onClick={() =>
-                                    void handleLeaveReview(leave.id, "rejected")
-                                  }
+                                  onClick={() => openLeaveRejectionDialog(leave.id)}
                                   disabled={actionLoading === leave.id}
                                   title="Reject"
                                   className="rounded-lg border border-rose-200 p-1.5 text-rose-600 hover:bg-rose-50 disabled:opacity-50"
@@ -1124,18 +1209,14 @@ export default function ApprovalsHub({
                               <div className="flex items-center justify-end gap-2">
                                 <button
                                   type="button"
-                                  onClick={() =>
-                                    void handleRegularizationReview(
-                                      regularization.id,
-                                      "rejected"
-                                    )
-                                  }
+                                  onClick={() => openAttendanceRejectionDialog(regularization.id)}
                                   disabled={actionLoading === regularization.id}
                                   title="Reject"
                                   className="rounded-lg border border-rose-200 p-1.5 text-rose-600 hover:bg-rose-50 disabled:opacity-50"
                                 >
                                   <XCircle className="h-4 w-4" />
                                 </button>
+                                 
                                 <button
                                   type="button"
                                   onClick={() =>
@@ -1172,9 +1253,9 @@ export default function ApprovalsHub({
         )}
 
       </div>
-
-      {/* Profile-change rejection dialog */}
-      {rejectingProfileRequestId && (
+      {/* Shared rejection dialog: Profile Change + Attendance Regularization */}
+    
+      {rejectingRequest && (
         <div
           className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm"
           onMouseDown={(event) => {
@@ -1186,7 +1267,7 @@ export default function ApprovalsHub({
           <section
             role="dialog"
             aria-modal="true"
-            aria-labelledby="profile-rejection-title"
+            aria-labelledby="rejection-dialog-title"
             className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl"
           >
             <div className="flex items-start gap-3">
@@ -1196,24 +1277,68 @@ export default function ApprovalsHub({
 
               <div className="min-w-0">
                 <h3
-                  id="profile-rejection-title"
+                  id="rejection-dialog-title"
                   className="text-base font-bold text-slate-900"
                 >
-                  Reject profile-change request
+                  {rejectingRequest.type === "profile"
+                    ? "Reject profile-change request"
+                    : rejectingRequest.type === "attendance"
+                      ? "Reject attendance regularization"
+                      : "Reject leave request"}
                 </h3>
+
                 <p className="mt-1 text-xs leading-relaxed text-slate-500">
                   Enter a reason for rejecting this request. The reason will be
                   submitted with the review.
                 </p>
 
-                {rejectingRequest && (
-                  <p className="mt-2 text-xs font-semibold text-slate-700">
-                    Employee:{" "}
-                    {rejectingRequest.employee
-                      ? `${rejectingRequest.employee.first_name} ${rejectingRequest.employee.last_name}`
-                      : rejectingRequest.employee_id}
-                  </p>
-                )}
+                {rejectingRequest.type === "profile" &&
+                  (() => {
+                    const request = profileRequests.find(
+                      (item) => item.id === rejectingRequest.id
+                    );
+
+                    return (
+                      <p className="mt-2 text-xs font-semibold text-slate-700">
+                        Employee:{" "}
+                        {request?.employee
+                          ? `${request.employee.first_name} ${request.employee.last_name}`
+                          : request?.employee_id ?? "Unknown Employee"}
+                      </p>
+                    );
+                  })()}
+
+                {rejectingRequest.type === "attendance" &&
+                  (() => {
+                    const request = regularizations.find(
+                      (item) => item.id === rejectingRequest.id
+                    );
+
+                    return (
+                      <p className="mt-2 text-xs font-semibold text-slate-700">
+                        Employee:{" "}
+                        {request?.employee
+                          ? `${request.employee.first_name} ${request.employee.last_name}`
+                          : "Unknown Employee"}
+                      </p>
+                    );
+                  })()}
+
+                {rejectingRequest.type === "leave" &&
+                  (() => {
+                    const request = leaveRequests.find(
+                      (item) => item.id === rejectingRequest.id
+                    );
+
+                    return (
+                      <p className="mt-2 text-xs font-semibold text-slate-700">
+                        Employee:{" "}
+                        {request?.employee
+                          ? `${request.employee.first_name} ${request.employee.last_name}`
+                          : "Unknown Employee"}
+                      </p>
+                    );
+                  })()}
               </div>
             </div>
 
@@ -1224,35 +1349,56 @@ export default function ApprovalsHub({
 
                 const reason = profileRejectionReason.trim();
 
-                if (!reason || !rejectingProfileRequestId) return;
+                if (!reason || !rejectingRequest) {
+                  return;
+                }
 
-                void handleProfileReview(
-                  rejectingProfileRequestId,
-                  "rejected",
-                  reason
-                );
+                if (rejectingRequest.type === "profile") {
+                  void handleProfileReview(
+                    rejectingRequest.id,
+                    "rejected",
+                    reason
+                  );
+                } else if (rejectingRequest.type === "attendance") {
+                  void handleRegularizationReview(
+                    rejectingRequest.id,
+                    "rejected",
+                    reason
+                  );
+                } else {
+                  void handleLeaveReview(
+                    rejectingRequest.id,
+                    "rejected",
+                    reason
+                  );
+                }
               }}
             >
               <div>
                 <label
-                  htmlFor="profile-rejection-reason"
+                  htmlFor="rejection-reason"
                   className="mb-2 block text-xs font-semibold text-slate-700"
                 >
                   Rejection reason <span className="text-rose-600">*</span>
                 </label>
 
                 <textarea
-                  id="profile-rejection-reason"
+                  id="rejection-reason"
                   autoFocus
                   required
-                  minLength={1}
                   maxLength={2000}
                   rows={5}
                   value={profileRejectionReason}
                   onChange={(event) =>
                     setProfileRejectionReason(event.target.value)
                   }
-                  placeholder="Explain why this profile-change request is being rejected..."
+                  placeholder={
+                    rejectingRequest.type === "profile"
+                      ? "Explain why this profile-change request is being rejected..."
+                      : rejectingRequest.type === "attendance"
+                        ? "Explain why this attendance regularization is being rejected..."
+                        : "Explain why this leave request is being rejected..."
+                  }
                   className="w-full resize-y rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-700 outline-none focus:border-rose-400 focus:ring-2 focus:ring-rose-100"
                 />
 
@@ -1265,7 +1411,7 @@ export default function ApprovalsHub({
                 <button
                   type="button"
                   onClick={closeProfileRejectionDialog}
-                  disabled={actionLoading === rejectingProfileRequestId}
+                  disabled={actionLoading === rejectingRequest.id}
                   className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
                 >
                   Cancel
@@ -1275,11 +1421,11 @@ export default function ApprovalsHub({
                   type="submit"
                   disabled={
                     !profileRejectionReason.trim() ||
-                    actionLoading === rejectingProfileRequestId
+                    actionLoading === rejectingRequest.id
                   }
                   className="inline-flex items-center justify-center gap-2 rounded-xl bg-rose-600 px-4 py-2.5 text-xs font-semibold text-white hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {actionLoading === rejectingProfileRequestId ? (
+                  {actionLoading === rejectingRequest.id ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
                     <XCircle className="h-4 w-4" />
@@ -1291,6 +1437,7 @@ export default function ApprovalsHub({
           </section>
         </div>
       )}
+
     </div>
   );
 }
