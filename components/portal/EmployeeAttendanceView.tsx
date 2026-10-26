@@ -2653,22 +2653,11 @@ export default function EmployeeAttendanceView({
                       <Clock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
 
                       <input
-                        type="time"
-                        value={
-                          regularizationForm.proposedCheckIn
-                        }
-                        onChange={(e) =>
-                          setRegularizationForm(
-                            (prev) => ({
-                              ...prev,
-                              proposedCheckIn:
-                                e.target
-                                  .value,
-                            })
-                          )
-                        }
+                        type="text"
+                        value={regularizationForm.proposedCheckIn}
+                        readOnly
                         required
-                        className="h-11 w-full rounded-lg border border-slate-300 bg-white pl-10 pr-3 text-sm text-slate-800 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-100"
+                        className="h-11 w-full rounded-lg border border-slate-300 bg-slate-100 pl-10 pr-3 text-sm text-slate-800 outline-none cursor-not-allowed"
                       />
 
                     </div>
@@ -2687,19 +2676,8 @@ export default function EmployeeAttendanceView({
 
                       <input
                         type="time"
-                        value={
-                          regularizationForm.proposedCheckOut
-                        }
-                        onChange={(e) =>
-                          setRegularizationForm(
-                            (prev) => ({
-                              ...prev,
-                              proposedCheckOut:
-                                e.target
-                                  .value,
-                            })
-                          )
-                        }
+                        value={regularizationForm.proposedCheckOut}
+                        readOnly
                         required
                         className="h-11 w-full rounded-lg border border-slate-300 bg-white pl-10 pr-3 text-sm text-slate-800 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-100"
                       />

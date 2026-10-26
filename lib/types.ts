@@ -242,6 +242,7 @@ export interface AttendanceLog {
   employee_id: string;
   attendance_date: string;
   check_in_time: string | null;
+  session_check_in_time?: string | null;
   check_out_time: string | null;
   total_hours: number | null;
   status: AttendanceStatus;
@@ -265,6 +266,8 @@ export interface AttendanceRegularization {
   created_at: string;
   employee?: Employee;
 }
+
+
 
 export interface LeaveType {
   id: string;

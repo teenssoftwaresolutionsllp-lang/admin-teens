@@ -589,6 +589,8 @@ CREATE TABLE IF NOT EXISTS public.attendance_logs (
 
     check_in_time timestamptz,
 
+    session_check_in_time timestamptz,
+
     check_out_time timestamptz,
 
     total_hours numeric(4,2),
@@ -612,6 +614,9 @@ CREATE TABLE IF NOT EXISTS public.attendance_logs (
 
     UNIQUE(employee_id, attendance_date)
 );
+
+ALTER TABLE public.attendance_logs
+    ADD COLUMN IF NOT EXISTS session_check_in_time timestamptz;
 
 
 -- ==========================================================

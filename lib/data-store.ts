@@ -694,73 +694,144 @@ export class DataStore {
   // ==========================================
   // PROFILE CHANGE REQUESTS (MAKER-CHECKER)
   // ==========================================
-  static async getProfileChangeRequests(): Promise<ProfileChangeRequest[]> {
-    const cache = getCache();
-    try {
-      const supabase = await createAdminClient();
-      const { data, error } = await supabase
-        .from("profile_change_requests")
-        .select("*, employee:employees(*)")
-        .order("created_at", { ascending: false });
 
-      if (error) throw error;
-      return data || [];
-    } catch {
-      return [...cache.changeRequests].sort(
-        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      );
+ static async getProfileChangeRequests(): Promise<ProfileChangeRequest[]> {
+  const cache = getCache();
+
+  try {
+    const supabase = await createAdminClient();
+
+    // 1. Load saved profile change requests
+    const { data: requests, error: requestsError } = await supabase
+      .from("profile_change_requests")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (requestsError) {
+      throw requestsError;
     }
+
+    if (!requests || requests.length === 0) {
+      return [];
+    }
+
+    // 2. Collect employee IDs
+    const employeeIds = [
+      ...new Set(
+        requests
+          .map((request) => request.employee_id)
+          .filter(Boolean)
+      ),
+    ];
+
+    // 3. Load employee details separately
+    const { data: employees, error: employeesError } = await supabase
+      .from("employees")
+      .select("*")
+      .in("id", employeeIds);
+
+    if (employeesError) {
+      throw employeesError;
+    }
+
+    // 4. Attach employee details to each request
+    const employeeMap = new Map(
+      (employees ?? []).map((employee) => [
+        String(employee.id),
+        employee,
+      ])
+    );
+
+    return requests.map((request) => ({
+      ...request,
+      employee:
+        employeeMap.get(String(request.employee_id)) ??
+        undefined,
+    })) as ProfileChangeRequest[];
+  } catch (error) {
+    console.error(
+      "Failed to load profile change requests from Supabase:",
+      error
+    );
+
+    // Keep the existing fallback behavior
+    return [...cache.changeRequests].sort(
+      (a, b) =>
+        new Date(b.created_at).getTime() -
+        new Date(a.created_at).getTime()
+    );
   }
+}
+
 
   static async createProfileChangeRequest({
-    employeeId,
-    requestedChanges,
-    previousValues,
-  }: {
-    employeeId: string;
-    requestedChanges: Record<string, any>;
-    previousValues?: Record<string, any>;
-  }): Promise<ProfileChangeRequest> {
-    const cache = getCache();
-    const employee = await this.getEmployeeById(employeeId);
-    if (!employee) {
-      throw new Error("Employee not found");
-    }
+  employeeId,
+  requestedChanges,
+  previousValues,
+}: {
+  employeeId: string;
+  requestedChanges: Record<string, any>;
+  previousValues?: Record<string, any>;
+}): Promise<ProfileChangeRequest> {
+  const employee = await this.getEmployeeById(employeeId);
 
-    const employeeUuid = employee.id;
-
-    const newRequest: ProfileChangeRequest = {
-      id: "pcr-" + Date.now(),
-      employee_id: employeeUuid,
-      requested_changes: requestedChanges,
-      previous_values: previousValues,
-      status: "pending",
-      created_at: new Date().toISOString(),
-      employee: employee || undefined,
-    };
-
-    try {
-      const supabase = await createAdminClient();
-      const { data, error } = await supabase
-        .from("profile_change_requests")
-        .insert({
-          employee_id: employeeUuid,
-          requested_changes: requestedChanges,
-          status: "pending",
-        })
-        .select()
-        .single();
-
-      if (!error && data) {
-        return { ...data, employee: employee || undefined };
-      }
-    } catch (err) {
-      console.warn("createProfileChangeRequest using cache fallback:", err);
-    }
-
-    cache.changeRequests.unshift(newRequest);
-    return newRequest;
+  if (!employee) {
+    throw new Error(
+      `Employee not found for profile change request: ${employeeId}`
+    );
   }
+
+  const supabase = await createAdminClient();
+
+  const { data, error } = await supabase
+    .from("profile_change_requests")
+    .insert({
+      employee_id: employee.id,
+      requested_changes: requestedChanges,
+      previous_values: previousValues ?? {},
+      status: "pending",
+    })
+    .select("*")
+    .single();
+
+  if (error) {
+    console.error("Supabase profile request insert failed:", {
+      code: error.code,
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+    });
+
+    throw new Error(
+      `Failed to save profile change request: ${error.message}`
+    );
+  }
+
+  if (!data?.id) {
+    throw new Error(
+      "Profile change request was not saved. No request ID returned."
+    );
+  }
+
+  return {
+    ...data,
+    employee,
+  } as ProfileChangeRequest;
+}
+
+
+  static readonly SENSITIVE_PROFILE_FIELDS = [
+    "bank_name",
+    "bank_account_number",
+    "ifsc_code",
+    "aadhar_number",
+    "aadhaar_number",
+    "pan_number",
+    "passport_number",
+  ] as const;
+
+
+
 
   static async reviewProfileChangeRequest({
     requestId,
@@ -774,74 +845,60 @@ export class DataStore {
     rejectionReason?: string;
   }): Promise<boolean> {
     const cache = getCache();
+
     try {
-      const supabase = await createAdminClient();
-      const { data: dbReq, error: requestError } = await supabase
-        .from("profile_change_requests")
-        .select("*")
-        .eq("id", requestId)
-        .single();
+      // Use the authenticated Supabase client so auth.uid() is available
+      // to the database function for its HR/CEO role check.
+      const { createClient } = await import("./supabase-server");
+      const supabase = await createClient();
 
-      if (requestError) throw requestError;
+      const { data: { user }, error: authError } =
+        await supabase.auth.getUser();
 
-      if (dbReq) {
-        const reviewedAt = new Date().toISOString();
-        const { error: reviewError } = await supabase
-          .from("profile_change_requests")
-          .update({
-            status,
-            reviewed_by: reviewerId,
-            reviewed_at: reviewedAt,
-            rejection_reason: rejectionReason || null,
-          })
-          .eq("id", requestId);
+      if (authError || !user) {
+        throw new Error("You must be logged in to review this request.");
+      }
 
-        if (reviewError) throw reviewError;
-
-        if (status === "approved") {
-          const { error: employeeError } = await supabase
-            .from("employees")
-            .update(dbReq.requested_changes)
-            .eq("id", dbReq.employee_id);
-
-          if (employeeError) throw employeeError;
+      // The database function independently verifies the reviewer role.
+      const { data, error } = await supabase.rpc(
+        "review_profile_change_request_atomic",
+        {
+          p_request_id: requestId,
+          p_decision: status,
+          p_review_notes: rejectionReason?.trim() || null,
         }
+      );
 
-        const cachedRequest = cache.changeRequests.find((r) => r.id === requestId);
-        if (cachedRequest) {
-          cachedRequest.status = status;
-          cachedRequest.reviewed_by = reviewerId;
-          cachedRequest.reviewed_at = reviewedAt;
-          cachedRequest.rejection_reason = rejectionReason || null;
-        }
+      if (error) {
+        console.error("Profile-change review RPC failed:", error);
+        throw new Error(error.message || "Could not review profile-change request.");
+      }
 
-        return true;
+      if (!data || data.success !== true) {
+        throw new Error("The database did not confirm the profile-change review.");
       }
-    } catch (e) {
-      if (!cache.changeRequests.some((r) => r.id === requestId)) {
-        console.error("reviewProfileChangeRequest database update failed:", e);
-        throw e;
+
+      const reviewedAt = new Date().toISOString();
+
+      const cachedRequest = cache.changeRequests.find(
+        (item) => item.id === requestId
+      );
+
+      if (cachedRequest) {
+        cachedRequest.status = status;
+        cachedRequest.reviewed_by = user.id;
+        cachedRequest.reviewed_at = reviewedAt;
+        cachedRequest.rejection_reason =
+          status === "rejected" ? rejectionReason?.trim() || null : null;
       }
+
+      return true;
+    } catch (error) {
+      console.error("reviewProfileChangeRequest failed:", error);
+      throw error;
     }
-
-    const req = cache.changeRequests.find((r) => r.id === requestId);
-    if (!req) return false;
-
-    req.status = status;
-    req.reviewed_by = reviewerId;
-    req.reviewed_at = new Date().toISOString();
-    req.rejection_reason = rejectionReason || null;
-
-    if (status === "approved" && req.employee_id) {
-      const emp = cache.employees.find((e) => e.id === req.employee_id || e.employee_id === req.employee_id);
-      if (emp) {
-        Object.assign(emp, req.requested_changes);
-        emp.updated_at = new Date().toISOString();
-      }
-    }
-
-    return true;
   }
+
 
   // ==========================================
   // PROJECTS & HOLIDAY CALENDARS
@@ -1310,20 +1367,17 @@ export class DataStore {
 }
 
   static async clockIn(employeeId: string): Promise<AttendanceLog> {
-   const supabase = await createAdminClient();
+    const supabase = await createAdminClient();
     const now = new Date();
     const todayStr = now.toISOString().split("T")[0];
 
     const employee = await this.getEmployeeById(employeeId);
-
     if (!employee) {
       throw new Error("Employee not found");
     }
 
-    const employeeUuid = employee.id;
-    const project = employee?.project;
-
-    if(!project){
+    const project = employee.project;
+    if (!project) {
       throw new Error("Employee project not found");
     }
 
@@ -1334,60 +1388,69 @@ export class DataStore {
       project.half_day_cutoff_minutes
     );
 
-
     const { data: existingLog, error: findError } = await supabase
-    .from("attendance_logs")
-    .select("*")
-    .eq("employee_id", employeeUuid)
-    .eq("attendance_date", todayStr)
-    .maybeSingle();
+      .from("attendance_logs")
+      .select("*")
+      .eq("employee_id", employee.id)
+      .eq("attendance_date", todayStr)
+      .maybeSingle();
 
     if (findError) {
       throw new Error(findError.message);
     }
-    let log;
 
-    if(existingLog){
+    if (existingLog) {
+      if (
+        existingLog.check_out_time == null &&
+        existingLog.check_in_time != null
+      ) {
+        throw new Error("You are already checked in. Please check out first.");
+      }
+
       const { data, error } = await supabase
-      .from("attendance_logs")
-      .update({
-        check_in_time: now.toISOString(),
-        status: evaluation.status,
-        is_late: evaluation.isLate,
-      })
-      .eq("id", existingLog.id)
-      .select()
-      .single();
-    
+        .from("attendance_logs")
+        .update({
+          check_in_time: existingLog.check_in_time ?? now.toISOString(),
+          session_check_in_time: now.toISOString(),
+          check_out_time: null,
+          total_hours: Number(existingLog.total_hours ?? 0),
+          status: existingLog.status,
+          is_late: existingLog.is_late || evaluation.isLate,
+        })
+        .eq("id", existingLog.id)
+        .select()
+        .single();
 
-    if (error) {
-      throw new Error(error.message);
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      return data as AttendanceLog;
     }
-     log = data;
-  }
 
-  else{
-     const { data, error } = await supabase
+    const { data, error } = await supabase
       .from("attendance_logs")
       .insert({
-        employee_id: employeeUuid,
+        employee_id: employee.id,
         attendance_date: todayStr,
         check_in_time: now.toISOString(),
+        session_check_in_time: now.toISOString(),
         check_out_time: null,
-        total_hours: null,
+        total_hours: 0,
         status: evaluation.status,
         is_late: evaluation.isLate,
         is_regularized: false,
       })
       .select()
       .single();
-      if (error) {
-        throw new Error(error.message);
-      }
-      log = data;
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    return data as AttendanceLog;
   }
-    return log as AttendanceLog;
-  }
+
 
   static async clockOut(employeeId: string): Promise<AttendanceLog> {
     const supabase = await createAdminClient();
@@ -1395,77 +1458,74 @@ export class DataStore {
     const todayStr = now.toISOString().split("T")[0];
 
     const employee = await this.getEmployeeById(employeeId);
+    if (!employee) throw new Error("Employee not found");
 
-    if (!employee) {
-      throw new Error("Employee not found");
-    }
+    const { data: log, error: findError } = await supabase
+      .from("attendance_logs")
+      .select("*")
+      .eq("employee_id", employee.id)
+      .eq("attendance_date", todayStr)
+      .maybeSingle();
 
-    const employeeUuid = employee.id;
-
-   const { data: log, error: findError } = await supabase
-    .from("attendance_logs")
-    .select("*")
-    .eq("employee_id", employeeUuid)
-    .eq("attendance_date", todayStr)
-    .maybeSingle();
-
-  if (findError) {
-    throw new Error(findError.message);
-  }
+    if (findError) throw new Error(findError.message);
 
     if (!log) {
-      
-      const newLog = await this.clockIn(employeeId);
-      const checkOut = now;
-      const checkIn = new Date(newLog.check_in_time!);
-      const hours = Number(((checkOut.getTime() - checkIn.getTime()) /(1000 * 60 * 60)).toFixed(2))
+      throw new Error("You are not checked in.");
+    }
 
-      const status = hours < 4.5 && newLog.status === "present" ? "half_day" : newLog.status;
-      const { data: updatedLog, error: updateError } = await supabase
+    // A non-null session start with no checkout indicates an active session.
+    // Fall back to check_in_time for legacy records created before this column.
+    if (log.check_out_time != null) {
+      throw new Error("You are not currently checked in.");
+    }
+
+    const sessionStartValue =
+      log.session_check_in_time ?? log.check_in_time;
+
+    if (!sessionStartValue) {
+      throw new Error("Check-in time is missing.");
+    }
+
+    const sessionStart = new Date(sessionStartValue);
+    const sessionHours = Math.max(
+      0,
+      (now.getTime() - sessionStart.getTime()) / (1000 * 60 * 60)
+    );
+
+    const previousHours = Number(log.total_hours ?? 0);
+    const hours = Number((previousHours + sessionHours).toFixed(2));
+
+    // Keep the existing half-day rule for short attendance.
+    // If a later session brings total hours to 4.5 or more,
+    // restore "present" unless HR has regularized the record.
+    let status = log.status;
+
+    if (!log.is_regularized) {
+      if (hours < 4.5 && status === "present") {
+        status = "half_day";
+      } else if (hours >= 4.5 && status === "half_day") {
+        status = "present";
+      }
+    }
+
+    const { data: updatedLog, error: updateError } = await supabase
       .from("attendance_logs")
       .update({
-        check_out_time: checkOut.toISOString(),
+        // Preserve the first clock-in and record the latest clock-out.
+        check_out_time: now.toISOString(),
+        session_check_in_time: null,
         total_hours: hours,
         status,
       })
-      .eq("id", newLog.id)
+      .eq("id", log.id)
       .select()
       .single();
 
-    if (updateError) {
-      throw new Error(updateError.message);
-    }
+    if (updateError) throw new Error(updateError.message);
 
     return updatedLog as AttendanceLog;
   }
-    if (!log.check_in_time) {
-      throw new Error("Check-in time is missing");
-    }
 
-    const checkOut = now;
-    const checkIn = new Date(log.check_in_time);
-
-    const hours = Number(((checkOut.getTime() - checkIn.getTime()) /(1000 * 60 * 60)).toFixed(2))
-
-    const status = hours < 4.5 && log.status === "present" ? "half_day" :log.status
-
-    const { data: updatedLog, error: updateError } = await supabase
-    .from("attendance_logs")
-    .update({
-      check_out_time: checkOut.toISOString(),
-      total_hours: hours,
-      status,
-    })
-    .eq("id", log.id)
-    .select()
-    .single();
-
-    if (updateError) {
-      throw new Error(updateError.message);
-    }
-
-    return updatedLog as AttendanceLog;
-  }
 
   // ==========================================
   // ATTENDANCE REGULARIZATION
@@ -1610,20 +1670,20 @@ export class DataStore {
       let attendanceLog: AttendanceLog;
 
       if (existingLog) {
-        // Update existing attendance log
-        const { data: updatedLog, error: attendanceUpdateError } = await supabase
-          .from("attendance_logs")
-          .update({
-            check_in_time: checkInDate.toISOString(),
-            check_out_time: checkOutDate.toISOString(),
-            total_hours: totalHours,
-            status: "present",
-            is_late: false,
-            is_regularized: true,
-          })
-          .eq("id", existingLog.id)
-          .select()
-          .single();
+        const { data: updatedLog, error: attendanceUpdateError } =
+          await supabase
+            .from("attendance_logs")
+            .update({
+              check_in_time: checkInDate.toISOString(),
+              check_out_time: checkOutDate.toISOString(),
+              total_hours: totalHours,
+              status: "present",
+              is_late: false,
+              is_regularized: true,
+            })
+            .eq("id", existingLog.id)
+            .select()
+            .single();
 
         if (attendanceUpdateError) {
           throw new Error(attendanceUpdateError.message);
@@ -1631,21 +1691,21 @@ export class DataStore {
 
         attendanceLog = updatedLog as AttendanceLog;
       } else {
-        // Create new attendance log
-        const { data: newLog, error: attendanceInsertError } = await supabase
-          .from("attendance_logs")
-          .insert({
-            employee_id: reg.employee_id,
-            attendance_date: reg.attendance_date,
-            check_in_time: checkInDate.toISOString(),
-            check_out_time: checkOutDate.toISOString(),
-            total_hours: totalHours,
-            status: "present",
-            is_late: false,
-            is_regularized: true,
-          })
-          .select()
-          .single();
+        const { data: newLog, error: attendanceInsertError } =
+          await supabase
+            .from("attendance_logs")
+            .insert({
+              employee_id: reg.employee_id,
+              attendance_date: reg.attendance_date,
+              check_in_time: checkInDate.toISOString(),
+              check_out_time: checkOutDate.toISOString(),
+              total_hours: totalHours,
+              status: "present",
+              is_late: false,
+              is_regularized: true,
+            })
+            .select()
+            .single();
 
         if (attendanceInsertError) {
           throw new Error(attendanceInsertError.message);
@@ -2660,15 +2720,13 @@ export class DataStore {
         ...masterComponent,
         calculation_type: employeeComponent.calculation_type as SalaryComponent["calculation_type"],
         value: Number(employeeComponent.value),
-        is_active: employeeComponent.is_active,
+        is_active: employeeComponent.is_active === true && employeeComponent.is_active === true,
         // Employee-specific LOP configuration
         affects_lop: employeeComponent.affects_lop ?? masterComponent.affects_lop,
       };
-    })
-    .filter(
-      (component): component is SalaryComponent =>
-        component !== null
-    );
+  })
+  .filter(
+(component): component is SalaryComponent => component !== null);
 
   const monthNames = [
     "January",
