@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import Image from "next/image";
 
 import {
   LayoutDashboard,
@@ -24,13 +25,19 @@ import {
   ShieldCheck,
 } from "lucide-react";
 
-import Image from "next/image";
 import { UserRole } from "@/lib/types";
 
 interface SidebarProps {
   role: UserRole;
   currentPath?: string;
   avatarUrl?: string | null;
+}
+
+interface PhotoApiResponse {
+  success?: boolean;
+  avatarUrl?: string | null;
+  error?: string;
+  message?: string;
 }
 
 export default function Sidebar({
@@ -41,29 +48,18 @@ export default function Sidebar({
   const router = useRouter();
 
   const [isCollapsed, setIsCollapsed] = useState(false);
-
   const [profileImage, setProfileImage] = useState<string | null>(
     avatarUrl || null
   );
-
   const [uploading, setUploading] = useState(false);
 
-  // ============================================================
   // SIDEBAR COLLAPSE STATE
-  // ============================================================
-
   useEffect(() => {
     try {
-      const saved = window.localStorage.getItem(
-        "sidebar-collapsed"
-      );
-
+      const saved = window.localStorage.getItem("sidebar-collapsed");
       setIsCollapsed(saved === "true");
     } catch (error) {
-      console.error(
-        "Unable to read sidebar state:",
-        error
-      );
+      console.error("Unable to read sidebar state:", error);
     }
   }, []);
 
@@ -72,92 +68,103 @@ export default function Sidebar({
       const next = !previous;
 
       try {
-        window.localStorage.setItem(
-          "sidebar-collapsed",
-          String(next)
-        );
+        window.localStorage.setItem("sidebar-collapsed", String(next));
       } catch (error) {
-        console.error(
-          "Unable to save sidebar state:",
-          error
-        );
+        console.error("Unable to save sidebar state:", error);
       }
 
       return next;
     });
   };
 
-  // ============================================================
-  // SYNC AVATAR FROM SERVER PROPS
-  // ============================================================
-
+  // Keep the client avatar synchronized with server-provided profile data.
   useEffect(() => {
-    if (avatarUrl !== undefined) {
-      setProfileImage(avatarUrl || null);
+    if (avatarUrl === undefined) return;
 
-      try {
-        if (avatarUrl) {
-          window.localStorage.setItem(
-            "profile-avatar-url",
-            avatarUrl
-          );
-        } else {
-          window.localStorage.removeItem(
-            "profile-avatar-url"
-          );
-        }
-      } catch (error) {
-        console.error(
-          "Unable to synchronize profile photo:",
-          error
-        );
-      }
-    }
-  }, [avatarUrl]);
-
-  // ============================================================
-  // RESTORE AVATAR FROM LOCAL STORAGE
-  // ============================================================
-
-  useEffect(() => {
-    if (avatarUrl) {
-      return;
-    }
+    setProfileImage(avatarUrl || null);
 
     try {
-      const savedAvatar =
-        window.localStorage.getItem(
-          "profile-avatar-url"
-        );
-
-      if (savedAvatar) {
-        setProfileImage(savedAvatar);
+      if (avatarUrl) {
+        window.localStorage.setItem("profile-avatar-url", avatarUrl);
+      } else {
+        window.localStorage.removeItem("profile-avatar-url");
       }
     } catch (error) {
-      console.error(
-        "Unable to restore profile photo:",
-        error
-      );
+      console.error("Unable to synchronize profile photo:", error);
     }
   }, [avatarUrl]);
 
-  // ============================================================
-  // LISTEN FOR PROFILE PHOTO UPDATES
-  // ============================================================
+  // Fetch the persisted photo so cleared or updated photos stay in sync.
+  useEffect(() => {
+    if (role !== "employee") return;
 
+    let cancelled = false;
+
+    const loadProfilePhoto = async () => {
+      try {
+        const response = await fetch("/api/profile/photo", {
+          method: "GET",
+          credentials: "include",
+          cache: "no-store",
+          headers: {
+            Accept: "application/json",
+          },
+        });
+
+        if (!response.ok) {
+          console.error(
+            "Unable to load profile photo:",
+            response.status
+          );
+          return;
+        }
+
+        const data: PhotoApiResponse = await response.json();
+
+        if (cancelled) return;
+
+        if (data.avatarUrl) {
+          setProfileImage(data.avatarUrl);
+
+          try {
+            window.localStorage.setItem(
+              "profile-avatar-url",
+              data.avatarUrl
+            );
+          } catch (error) {
+            console.error("Unable to save profile photo locally:", error);
+          }
+        } else {
+          setProfileImage(null);
+
+          try {
+            window.localStorage.removeItem("profile-avatar-url");
+          } catch (error) {
+            console.error("Unable to clear old profile photo:", error);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to load profile photo:", error);
+      }
+    };
+
+    void loadProfilePhoto();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [role]);
+
+  // Listen to both events used by the profile-photo upload surfaces.
   useEffect(() => {
     const handlePhotoUpdate = (event: Event) => {
-      const customEvent =
-        event as CustomEvent<{
-          avatarUrl?: string | null;
-        }>;
+      const customEvent = event as CustomEvent<{
+        avatarUrl?: string | null;
+      }>;
 
-      const newAvatar =
-        customEvent.detail?.avatarUrl;
+      const newAvatar = customEvent.detail?.avatarUrl;
 
-      if (!newAvatar) {
-        return;
-      }
+      if (!newAvatar) return;
 
       setProfileImage(newAvatar);
 
@@ -167,17 +174,11 @@ export default function Sidebar({
           newAvatar
         );
       } catch (error) {
-        console.error(
-          "Unable to save updated profile photo:",
-          error
-        );
+        console.error("Unable to save updated profile photo:", error);
       }
     };
-    window.addEventListener(
-      "profile-photo-updated",
-      handlePhotoUpdate
-    );
 
+    window.addEventListener("profile-photo-updated", handlePhotoUpdate);
     window.addEventListener(
       "employee-profile-photo-updated",
       handlePhotoUpdate
@@ -195,237 +196,107 @@ export default function Sidebar({
     };
   }, []);
 
-  // ============================================================
   // LOGOUT
-  // ============================================================
-
   const handleLogout = async () => {
     try {
       await fetch("/api/auth/logout", {
         method: "POST",
+        credentials: "include",
       });
 
       try {
-        window.localStorage.removeItem(
-          "profile-avatar-url"
-        );
-      } catch {
-        // Ignore localStorage errors
+        window.localStorage.removeItem("profile-avatar-url");
+      } catch (error) {
+        console.error("Unable to clear local profile photo:", error);
       }
 
+      setProfileImage(null);
       router.push("/login");
       router.refresh();
     } catch (error) {
-      console.error(
-        "Logout failed:",
-        error
-      );
+      console.error("Logout failed:", error);
     }
   };
 
-  // ============================================================
-  // SAFE RESPONSE PARSER
-  // ============================================================
-
+  // PARSE UPLOAD RESPONSE SAFELY
   const parseUploadResponse = async (
     response: Response
-  ): Promise<{
-    success?: boolean;
-    avatarUrl?: string;
-    error?: string;
-    message?: string;
-    [key: string]: unknown;
-  }> => {
-    const contentType =
-      response.headers.get("content-type") || "";
+  ): Promise<PhotoApiResponse> => {
+    const responseText = await response.text();
 
-    const responseText =
-      await response.text();
-
-    if (!responseText) {
-      return {};
-    }
-
-    if (
-      contentType.includes(
-        "application/json"
-      )
-    ) {
-      try {
-        return JSON.parse(
-          responseText
-        );
-      } catch (error) {
-        console.error(
-          "Invalid JSON response from photo upload API:",
-          error
-        );
-
-        throw new Error(
-          "The photo upload server returned invalid JSON."
-        );
-      }
-    }
+    if (!responseText) return {};
 
     try {
-      return JSON.parse(
-        responseText
-      );
+      return JSON.parse(responseText) as PhotoApiResponse;
     } catch {
       return {
-        error: responseText,
-        message: responseText,
+        error: responseText || "Invalid server response.",
       };
     }
   };
 
-  // ============================================================
-  // PHOTO UPLOAD
-  // ============================================================
-
+  // PROFILE PHOTO UPLOAD
   const handlePhotoUpload = async (
     event: React.ChangeEvent<HTMLInputElement>
   ) => {
-    const file =
-      event.target.files?.[0];
+    const file = event.target.files?.[0];
 
-    if (!file) {
-      return;
-    }
+    if (!file) return;
 
-    // ----------------------------------------------------------
-    // FILE TYPE VALIDATION
-    // ----------------------------------------------------------
-
-    if (
-      !file.type.startsWith("image/")
-    ) {
-      alert(
-        "Please select an image file."
-      );
-
+    if (!file.type.startsWith("image/")) {
+      alert("Please select an image file.");
       event.target.value = "";
       return;
     }
 
-    // ----------------------------------------------------------
-    // FILE SIZE VALIDATION
-    // ----------------------------------------------------------
-
-    const maxSize =
-      5 * 1024 * 1024;
+    const maxSize = 5 * 1024 * 1024;
 
     if (file.size > maxSize) {
-      alert(
-        "Image size must be less than 5 MB."
-      );
-
+      alert("Image size must be less than 5 MB.");
       event.target.value = "";
       return;
     }
 
-    let localPreview:
-      | string
-      | null = null;
-
-    const previousImage =
-      profileImage;
+    let localPreview: string | null = null;
+    const previousImage = profileImage;
 
     try {
       setUploading(true);
 
-      // --------------------------------------------------------
-      // IMMEDIATE PREVIEW
-      // --------------------------------------------------------
+      // SHOW PREVIEW WHILE UPLOADING
+      localPreview = URL.createObjectURL(file);
+      setProfileImage(localPreview);
 
-      localPreview =
-        URL.createObjectURL(file);
+      const formData = new FormData();
+      formData.append("file", file);
 
-      setProfileImage(
-        localPreview
-      );
+      const response = await fetch("/api/profile/photo", {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
 
-      // --------------------------------------------------------
-      // FORM DATA
-      // --------------------------------------------------------
-
-      const formData =
-        new FormData();
-
-      formData.append(
-        "file",
-        file
-      );
-
-      // --------------------------------------------------------
-      // UPLOAD
-      // --------------------------------------------------------
-
-      const response =
-        await fetch(
-          "/api/profile/photo",
-          {
-            method: "POST",
-            body: formData,
-            credentials: "include",
-          }
-        );
-
-      // --------------------------------------------------------
-      // PARSE RESPONSE
-      // --------------------------------------------------------
-
-      const data =
-        await parseUploadResponse(
-          response
-        );
-
-      // --------------------------------------------------------
-      // SERVER ERROR
-      // --------------------------------------------------------
+      const data = await parseUploadResponse(response);
 
       if (!response.ok) {
-        const serverMessage =
-          typeof data?.error ===
-          "string"
-            ? data.error
-            : typeof data?.message ===
-              "string"
-            ? data.message
-            : `Photo upload failed (${response.status})`;
-
         throw new Error(
-          serverMessage
+          data.error ||
+            data.message ||
+            `Photo upload failed (${response.status}).`
         );
       }
 
-      // --------------------------------------------------------
-      // CLOUDINARY URL
-      // --------------------------------------------------------
-
       const newAvatarUrl =
-        typeof data?.avatarUrl ===
-        "string"
-          ? data.avatarUrl
-          : null;
+        typeof data.avatarUrl === "string" ? data.avatarUrl : null;
 
       if (!newAvatarUrl) {
         throw new Error(
-          "Photo uploaded, but the server did not return an avatar URL."
+          "Photo uploaded, but the server did not return a photo URL."
         );
       }
 
-      // --------------------------------------------------------
-      // UPDATE SIDEBAR
-      // --------------------------------------------------------
-
-      setProfileImage(
-        newAvatarUrl
-      );
-
-      // --------------------------------------------------------
-      // SAVE URL
-      // --------------------------------------------------------
+      // UPDATE SIDEBAR WITH SAVED CLOUDINARY URL
+      setProfileImage(newAvatarUrl);
 
       try {
         window.localStorage.setItem(
@@ -433,42 +304,27 @@ export default function Sidebar({
           newAvatarUrl
         );
       } catch (error) {
-        console.error(
-          "Unable to save profile photo locally:",
-          error
-        );
+        console.error("Unable to save photo locally:", error);
       }
 
-      // --------------------------------------------------------
       // NOTIFY OTHER COMPONENTS
-      // --------------------------------------------------------
-
       window.dispatchEvent(
-        new CustomEvent(
-          "profile-photo-updated",
-          {
-            detail: {
-              avatarUrl:
-                newAvatarUrl,
-            },
-          }
-        )
+        new CustomEvent("profile-photo-updated", {
+          detail: { avatarUrl: newAvatarUrl },
+        })
       );
 
-      // --------------------------------------------------------
-      // REFRESH
-      // --------------------------------------------------------
+      window.dispatchEvent(
+        new CustomEvent("employee-profile-photo-updated", {
+          detail: { avatarUrl: newAvatarUrl },
+        })
+      );
 
       router.refresh();
     } catch (error) {
-      console.error(
-        "Photo upload failed:",
-        error
-      );
+      console.error("Photo upload failed:", error);
 
-      setProfileImage(
-        previousImage || null
-      );
+      setProfileImage(previousImage || null);
 
       alert(
         error instanceof Error
@@ -477,21 +333,15 @@ export default function Sidebar({
       );
     } finally {
       if (localPreview) {
-        URL.revokeObjectURL(
-          localPreview
-        );
+        URL.revokeObjectURL(localPreview);
       }
 
       setUploading(false);
-
       event.target.value = "";
     }
   };
 
-  // ============================================================
   // ADMIN NAVIGATION
-  // ============================================================
-
   const adminNavItems = [
     {
       name: "Overview",
@@ -549,10 +399,7 @@ export default function Sidebar({
     },
   ];
 
-  // ============================================================
   // EMPLOYEE NAVIGATION
-  // ============================================================
-
   const employeeNavItems = [
     {
       name: "My Profile",
@@ -592,58 +439,34 @@ export default function Sidebar({
     },
   ];
 
-  // ============================================================
   // SELECT NAVIGATION
-  // ============================================================
-
   const items =
-    role === "employee"
-      ? employeeNavItems
-      : adminNavItems;
+    role === "employee" ? employeeNavItems : adminNavItems;
 
-  const visibleItems =
-    items.filter((item) =>
-      item.roles.includes(role)
-    );
+  const visibleItems = items.filter((item) =>
+    item.roles.includes(role)
+  );
 
-  // ============================================================
   // ACTIVE NAVIGATION
-  // ============================================================
+  const activeItem = visibleItems
+    .filter(
+      (item) =>
+        pathname === item.href ||
+        pathname.startsWith(`${item.href}/`)
+    )
+    .sort((a, b) => b.href.length - a.href.length)[0];
 
-  const activeItem =
-    visibleItems
-      .filter(
-        (item) =>
-          pathname === item.href ||
-          pathname.startsWith(
-            `${item.href}/`
-          )
-      )
-      .sort(
-        (a, b) =>
-          b.href.length -
-          a.href.length
-      )[0];
-
-  // ============================================================
-  // SIDEBAR
-  // ============================================================
-
+  // SIDEBAR UI
   return (
     <aside
       className={`relative flex flex-col w-full bg-slate-900 text-white flex-shrink-0 shadow-lg z-20 md:h-screen transition-[width] duration-200 ${
-        isCollapsed
-          ? "md:w-[72px]"
-          : "md:w-64"
+        isCollapsed ? "md:w-[72px]" : "md:w-64"
       }`}
     >
       {/* HEADER */}
-
       <div
         className={`p-4 sm:p-5 flex items-center border-b border-slate-800 ${
-          isCollapsed
-            ? "justify-center"
-            : "gap-3"
+          isCollapsed ? "justify-center" : "gap-3"
         }`}
       >
         <div className="bg-white rounded-lg p-1 shrink-0">
@@ -653,20 +476,11 @@ export default function Sidebar({
             width={50}
             height={32}
             className="object-contain"
-            style={{
-              width: "30px",
-              height: "auto",
-            }}
+            style={{ width: "30px", height: "auto" }}
           />
         </div>
 
-        <div
-          className={
-            isCollapsed
-              ? "hidden"
-              : ""
-          }
-        >
+        <div className={isCollapsed ? "hidden" : ""}>
           <span className="font-semibold text-sm sm:text-base leading-tight block">
             Teens Software
           </span>
@@ -674,19 +488,14 @@ export default function Sidebar({
           <span className="text-[10px] text-slate-400 font-medium tracking-wide uppercase">
             {role === "employee"
               ? "Employee Portal"
-              : `${
-                  role?.toUpperCase() ||
-                  "USER"
-                } Workspace`}
+              : `${role?.toUpperCase() || "USER"} Workspace`}
           </span>
         </div>
       </div>
 
       {/* CONTENT */}
-
       <div className="flex-1 px-3 py-4 overflow-y-auto">
         {/* PHOTO UPLOAD */}
-
         {role === "employee" && (
           <div className="mb-5">
             <input
@@ -694,28 +503,18 @@ export default function Sidebar({
               type="file"
               accept="image/jpeg,image/jpg,image/png,image/webp"
               className="hidden"
-              onChange={
-                handlePhotoUpload
-              }
+              onChange={handlePhotoUpload}
               disabled={uploading}
             />
 
             <label
               htmlFor="sidebar-photo-upload"
-              title={
-                isCollapsed
-                  ? "Upload Photo"
-                  : undefined
-              }
+              title={isCollapsed ? "Upload Photo" : undefined}
               className={`group relative flex items-center justify-center overflow-hidden rounded-xl border border-indigo-500/70 bg-slate-800/80 hover:bg-slate-800 hover:border-indigo-400 cursor-pointer transition-all duration-200 ${
                 isCollapsed
                   ? "mx-auto h-12 w-12"
                   : "mx-auto h-[88px] w-[88px]"
-              } ${
-                uploading
-                  ? "pointer-events-none opacity-80"
-                  : ""
-              }`}
+              } ${uploading ? "pointer-events-none opacity-80" : ""}`}
             >
               {profileImage ? (
                 <Image
@@ -733,26 +532,22 @@ export default function Sidebar({
                   ) : (
                     <UploadCloud
                       className={`text-indigo-300 group-hover:text-white transition-colors ${
-                        isCollapsed
-                          ? "h-5 w-5"
-                          : "h-7 w-7"
+                        isCollapsed ? "h-5 w-5" : "h-7 w-7"
                       }`}
                     />
                   )}
 
-                  {!isCollapsed &&
-                    !uploading && (
-                      <span className="text-[10px] font-semibold text-slate-200 group-hover:text-white">
-                        Upload Photo
-                      </span>
-                    )}
+                  {!isCollapsed && !uploading && (
+                    <span className="text-[10px] font-semibold text-slate-200 group-hover:text-white">
+                      Upload Photo
+                    </span>
+                  )}
 
-                  {uploading &&
-                    !isCollapsed && (
-                      <span className="text-[10px] font-semibold text-slate-200">
-                        Uploading...
-                      </span>
-                    )}
+                  {uploading && !isCollapsed && (
+                    <span className="text-[10px] font-semibold text-slate-200">
+                      Uploading...
+                    </span>
+                  )}
                 </div>
               )}
 
@@ -770,82 +565,50 @@ export default function Sidebar({
         )}
 
         {/* NAVIGATION */}
-
         <div className="space-y-1">
-          {visibleItems.map(
-            (item) => {
-              const isActive =
-                activeItem?.href ===
-                item.href;
+          {visibleItems.map((item) => {
+            const isActive = activeItem?.href === item.href;
 
-              return (
-                <Link
-                  key={item.name}
-                  href={item.href}
-                  title={
-                    isCollapsed
-                      ? item.name
-                      : undefined
-                  }
-                  className={`flex w-full items-center rounded-lg py-2.5 text-left transition-all duration-200 ${
-                    isCollapsed
-                      ? "justify-center px-2"
-                      : "gap-3 px-3"
-                  } ${
-                    isActive
-                      ? "bg-indigo-600 text-white font-medium shadow-sm"
-                      : "text-slate-300 hover:bg-slate-800 hover:text-white"
+            return (
+              <Link
+                key={item.name}
+                href={item.href}
+                title={isCollapsed ? item.name : undefined}
+                className={`flex w-full items-center rounded-lg py-2.5 text-left transition-all duration-200 ${
+                  isCollapsed ? "justify-center px-2" : "gap-3 px-3"
+                } ${
+                  isActive
+                    ? "bg-indigo-600 text-white font-medium shadow-sm"
+                    : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                }`}
+              >
+                <item.icon
+                  className={`h-4 w-4 shrink-0 ${
+                    isActive ? "text-white" : "text-slate-400"
                   }`}
-                >
-                  <item.icon
-                    className={`h-4 w-4 shrink-0 ${
-                      isActive
-                        ? "text-white"
-                        : "text-slate-400"
-                    }`}
-                  />
+                />
 
-                  <span
-                    className={
-                      isCollapsed
-                        ? "sr-only"
-                        : "text-sm"
-                    }
-                  >
-                    {item.name}
-                  </span>
-                </Link>
-              );
-            }
-          )}
+                <span className={isCollapsed ? "sr-only" : "text-sm"}>
+                  {item.name}
+                </span>
+              </Link>
+            );
+          })}
         </div>
       </div>
 
       {/* FOOTER */}
-
       <div className="p-3 border-t border-slate-800">
         <div
           className={`flex items-center ${
-            isCollapsed
-              ? "flex-col gap-2"
-              : "gap-2"
+            isCollapsed ? "flex-col gap-2" : "gap-2"
           }`}
         >
           <button
             type="button"
-            onClick={
-              toggleSidebar
-            }
-            aria-label={
-              isCollapsed
-                ? "Expand sidebar"
-                : "Collapse sidebar"
-            }
-            title={
-              isCollapsed
-                ? "Expand sidebar"
-                : "Collapse sidebar"
-            }
+            onClick={toggleSidebar}
+            aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
             className="hidden md:inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white"
           >
             {isCollapsed ? (
@@ -857,14 +620,8 @@ export default function Sidebar({
 
           <button
             type="button"
-            onClick={
-              handleLogout
-            }
-            title={
-              isCollapsed
-                ? "Sign Out"
-                : undefined
-            }
+            onClick={handleLogout}
+            title={isCollapsed ? "Sign Out" : undefined}
             className={`flex items-center rounded-lg py-2 text-left text-slate-300 transition-colors hover:bg-slate-800 hover:text-white ${
               isCollapsed
                 ? "justify-center px-2"

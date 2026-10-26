@@ -43,43 +43,43 @@ interface AttendanceCalendarProps {
    EXISTING DUMMY DATA
    ========================================================= */
 
-const dummyAttendance: Record<string, SelectedAttendance> = {
-  "2026-09-10": {
-    date: "2026-09-10",
-    status: "leave",
-  },
-  "2026-09-11": {
-    date: "2026-09-11",
-    status: "leave",
-  },
-  "2026-09-22": {
-    date: "2026-09-22",
-    status: "half_day",
-    clockIn: "09:20 AM",
-    clockOut: "01:15 PM",
-    worked: "3h 55m",
-  },
-  "2026-09-23": {
-    date: "2026-09-23",
-    status: "present",
-    clockIn: "09:18 AM",
-    clockOut: "06:12 PM",
-    worked: "8h 54m",
-  },
-  "2026-09-24": {
-    date: "2026-09-24",
-    status: "present",
-    clockIn: "09:42 AM",
-    clockOut: "06:05 PM",
-    worked: "8h 23m",
-  },
-  "2026-09-25": {
-    date: "2026-09-25",
-    status: "present",
-    clockIn: "02:35 PM",
-    worked: "1h 07m",
-  },
-};
+// const dummyAttendance: Record<string, SelectedAttendance> = {
+//   "2026-09-10": {
+//     date: "2026-09-10",
+//     status: "leave",
+//   },
+//   "2026-09-11": {
+//     date: "2026-09-11",
+//     status: "leave",
+//   },
+//   "2026-09-22": {
+//     date: "2026-09-22",
+//     status: "half_day",
+//     clockIn: "09:20 AM",
+//     clockOut: "01:15 PM",
+//     worked: "3h 55m",
+//   },
+//   "2026-09-23": {
+//     date: "2026-09-23",
+//     status: "present",
+//     clockIn: "09:18 AM",
+//     clockOut: "06:12 PM",
+//     worked: "8h 54m",
+//   },
+//   "2026-09-24": {
+//     date: "2026-09-24",
+//     status: "present",
+//     clockIn: "09:42 AM",
+//     clockOut: "06:05 PM",
+//     worked: "8h 23m",
+//   },
+//   "2026-09-25": {
+//     date: "2026-09-25",
+//     status: "present",
+//     clockIn: "02:35 PM",
+//     worked: "1h 07m",
+//   },
+// };
 
 /* =========================================================
    HELPERS
@@ -91,9 +91,7 @@ function formatDate(date: Date): string {
   ).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
-function formatTime(
-  value?: string | null
-): string | undefined {
+function formatTime(value?: string | null): string | undefined {
   if (!value) return undefined;
 
   const date = new Date(value);
@@ -140,6 +138,16 @@ function isPastWorkingDay(date: string): boolean {
   return selected < today && !isWeekend(date);
 }
 
+function getJoiningDateOnly(
+  joiningDate?: string | null
+): string | null {
+  if (!joiningDate) return null;
+
+  const date = joiningDate.slice(0, 10);
+
+  return /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null;
+}
+
 /* =========================================================
    COMPONENT
    ========================================================= */
@@ -156,21 +164,39 @@ export default function AttendanceCalendar({
 }: AttendanceCalendarProps) {
   const today = new Date();
 
-  const [year, setYear] = useState(
-    initialYear ?? today.getFullYear()
+  const joiningDate = getJoiningDateOnly(employeeJoiningDate);
+  const joiningMonth = joiningDate
+    ? joiningDate.slice(0, 7)
+    : undefined;
+
+  const initialCalendarYear = initialYear ?? today.getFullYear();
+  const initialCalendarMonth = initialMonth ?? today.getMonth();
+
+  const initialMonthValue = `${initialCalendarYear}-${String(
+    initialCalendarMonth + 1
+  ).padStart(2, "0")}`;
+
+  const startingMonth =
+    joiningMonth && initialMonthValue < joiningMonth
+      ? joiningMonth
+      : initialMonthValue;
+
+  const [year, setYear] = useState(() =>
+    Number(startingMonth.slice(0, 4))
   );
 
   const [month, setMonth] = useState(
-    initialMonth ?? today.getMonth()
+    () => Number(startingMonth.slice(5, 7)) - 1
   );
 
   const [selectedDate, setSelectedDate] = useState<string>(() => {
-    const currentYear = initialYear ?? today.getFullYear();
-    const currentMonth = initialMonth ?? today.getMonth();
+    const currentMonthValue = `${today.getFullYear()}-${String(
+      today.getMonth() + 1
+    ).padStart(2, "0")}`;
 
     if (
-      today.getFullYear() === currentYear &&
-      today.getMonth() === currentMonth
+      currentMonthValue === startingMonth &&
+      (!joiningDate || formatDate(today) >= joiningDate)
     ) {
       return formatDate(today);
     }
@@ -204,20 +230,21 @@ export default function AttendanceCalendar({
 
     leaveRequests
       .filter(
-        (request) => String(request.status) === "approved"
+        (request) => String(request.status).toLowerCase() === "approved"
       )
       .forEach((request) => {
-        const start = new Date(
-          `${request.start_date.slice(0, 10)}T00:00:00`
-        );
+        if (!request.start_date || !request.end_date) return;
 
-        const end = new Date(
-          `${request.end_date.slice(0, 10)}T00:00:00`
-        );
+        const startValue = request.start_date.slice(0, 10);
+        const endValue = request.end_date.slice(0, 10);
+
+        const start = new Date(`${startValue}T00:00:00`);
+        const end = new Date(`${endValue}T00:00:00`);
 
         if (
           Number.isNaN(start.getTime()) ||
-          Number.isNaN(end.getTime())
+          Number.isNaN(end.getTime()) ||
+          start > end
         ) {
           return;
         }
@@ -225,13 +252,19 @@ export default function AttendanceCalendar({
         const current = new Date(start);
 
         while (current <= end) {
-          dates.add(formatDate(current));
+          const date = formatDate(current);
+
+          // Do not show leave before the employee joined.
+          if (!joiningDate || date >= joiningDate) {
+            dates.add(date);
+          }
+
           current.setDate(current.getDate() + 1);
         }
       });
 
     return dates;
-  }, [leaveRequests]);
+  }, [leaveRequests, joiningDate]);
 
   /* =======================================================
      ATTENDANCE LOGS BY DATE
@@ -241,13 +274,18 @@ export default function AttendanceCalendar({
     const map = new Map<string, AttendanceLog>();
 
     logs.forEach((log) => {
-      if (log.attendance_date) {
-        map.set(log.attendance_date.slice(0, 10), log);
-      }
+      if (!log.attendance_date) return;
+
+      const date = log.attendance_date.slice(0, 10);
+
+      // Ignore any stored attendance before joining.
+      if (joiningDate && date < joiningDate) return;
+
+      map.set(date, log);
     });
 
     return map;
-  }, [logs]);
+  }, [logs, joiningDate]);
 
   /* =======================================================
      GET DAY STATE
@@ -259,10 +297,15 @@ export default function AttendanceCalendar({
       "0"
     )}-${String(day).padStart(2, "0")}`;
 
-    // Preserve the existing demo data.
-    if (dummyAttendance[date]) {
-      return dummyAttendance[date].status;
+    // Dates before the employee joined never show attendance or demo data.
+    if (joiningDate && date < joiningDate) {
+      return "empty";
     }
+
+    // Preserve the existing demo data.
+    // if (dummyAttendance[date]) {
+    //   return dummyAttendance[date].status;
+    // }
 
     // Approved leave takes priority over missing attendance.
     if (leaveDates.has(date)) {
@@ -272,7 +315,7 @@ export default function AttendanceCalendar({
     const log = logByDate.get(date);
 
     if (log) {
-      const status = String(log.status);
+      const status = String(log.status).toLowerCase();
 
       if (status === "on_leave" || status === "leave") {
         return "leave";
@@ -286,21 +329,13 @@ export default function AttendanceCalendar({
         return "present";
       }
 
-      if (status === "absent") {
+      if (status === "absent" || status === "not_present") {
         return "absent";
       }
     }
 
-    // Do not mark dates before the employee joined as absent.
-    if (
-      employeeJoiningDate &&
-      date < employeeJoiningDate.slice(0, 10)
-    ) {
-      return "empty";
-    }
-
-    // Past weekdays without a log are absent.
-    // Today, future dates and weekends remain unchanged.
+    // Past working days without attendance are absent.
+    // Today, future dates, and weekends are not automatically absent.
     if (isPastWorkingDay(date)) {
       return "absent";
     }
@@ -320,9 +355,16 @@ export default function AttendanceCalendar({
       "0"
     )}-${String(day).padStart(2, "0")}`;
 
-    if (dummyAttendance[date]) {
-      return dummyAttendance[date];
+    if (joiningDate && date < joiningDate) {
+      return {
+        date,
+        status: "empty",
+      };
     }
+
+    // if (dummyAttendance[date]) {
+    //   return dummyAttendance[date];
+    // }
 
     const state = getDayState(day);
 
@@ -346,19 +388,34 @@ export default function AttendanceCalendar({
       };
     }
 
-    const extendedLog = log as AttendanceLog & {
-      check_in_time?: string | null;
-      check_out_time?: string | null;
-      total_hours?: number | null;
-    };
-
     return {
       date,
       status: state,
-      clockIn: formatTime(extendedLog.check_in_time),
-      clockOut: formatTime(extendedLog.check_out_time),
-      worked: formatWorkedHours(extendedLog.total_hours),
+      clockIn: formatTime(log.check_in_time),
+      clockOut: formatTime(log.check_out_time),
+      worked: formatWorkedHours(log.total_hours),
     };
+  };
+
+  /* =======================================================
+     CHANGE MONTH
+     ======================================================= */
+
+  const changeMonth = (newYear: number, newMonth: number) => {
+    const newMonthValue = `${newYear}-${String(
+      newMonth + 1
+    ).padStart(2, "0")}`;
+
+    // Do not allow a month before the joining month.
+    if (joiningMonth && newMonthValue < joiningMonth) {
+      return;
+    }
+
+    setYear(newYear);
+    setMonth(newMonth);
+    setSelectedDate("");
+    onSelectedDateChange?.("");
+    onMonthChange?.(newYear, newMonth);
   };
 
   /* =======================================================
@@ -371,54 +428,28 @@ export default function AttendanceCalendar({
       "0"
     )}-${String(day).padStart(2, "0")}`;
 
+    // Ignore clicks on dates before joining.
+    if (joiningDate && date < joiningDate) {
+      return;
+    }
+
     setSelectedDate(date);
     onSelectedDateChange?.(date);
     onDateSelect?.(getAttendanceDetails(day));
   };
 
   /* =======================================================
-     PREVIOUS MONTH
+     PREVIOUS / NEXT MONTH
      ======================================================= */
 
   const goToPreviousMonth = () => {
     const newDate = new Date(year, month - 1, 1);
-
-    if (employeeJoiningDate) {
-      const joiningMonth = employeeJoiningDate
-        .slice(0, 10)
-        .slice(0, 7);
-
-      const targetMonth = formatDate(newDate).slice(0, 7);
-
-      if (targetMonth < joiningMonth) return;
-    }
-
-    setSelectedDate("");
-    onSelectedDateChange?.("");
-
-    const newYear = newDate.getFullYear();
-    const newMonth = newDate.getMonth();
-
-    setYear(newYear);
-    setMonth(newMonth);
-    onMonthChange?.(newYear, newMonth);
+    changeMonth(newDate.getFullYear(), newDate.getMonth());
   };
 
-  /* =======================================================
-     NEXT MONTH
-     ======================================================= */
-
   const goToNextMonth = () => {
-    setSelectedDate("");
-    onSelectedDateChange?.("");
-
     const newDate = new Date(year, month + 1, 1);
-    const newYear = newDate.getFullYear();
-    const newMonth = newDate.getMonth();
-
-    setYear(newYear);
-    setMonth(newMonth);
-    onMonthChange?.(newYear, newMonth);
+    changeMonth(newDate.getFullYear(), newDate.getMonth());
   };
 
   /* =======================================================
@@ -433,13 +464,19 @@ export default function AttendanceCalendar({
     }
   );
 
+  const selectedMonth = `${year}-${String(month + 1).padStart(
+    2,
+    "0"
+  )}`;
+
   /* =======================================================
      DAY STYLE
      ======================================================= */
 
   const getDayClass = (
     state: DayState,
-    isSelected: boolean
+    isSelected: boolean,
+    isBeforeJoiningDate: boolean
   ) => {
     const base =
       "h-11 sm:h-12 rounded-xl border flex items-center justify-center transition-all duration-150";
@@ -447,6 +484,10 @@ export default function AttendanceCalendar({
     const selected = isSelected
       ? " ring-2 ring-indigo-500 ring-offset-1"
       : "";
+
+    if (isBeforeJoiningDate) {
+      return `${base} bg-slate-50 border-slate-200 text-slate-300 opacity-40 cursor-not-allowed`;
+    }
 
     switch (state) {
       case "present":
@@ -473,7 +514,7 @@ export default function AttendanceCalendar({
   return (
     <section className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
       {/* HEADER */}
-      <div className="flex items-center justify-between mb-5">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-5">
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 rounded-xl bg-indigo-50 flex items-center justify-center">
             <CalendarDays
@@ -493,20 +534,36 @@ export default function AttendanceCalendar({
           </div>
         </div>
 
-        {/* MONTH NAVIGATION */}
+        {/* MONTH AND YEAR SELECTOR */}
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={goToPreviousMonth}
             aria-label="Previous month"
-            className="h-9 w-9 rounded-lg border border-slate-200 flex items-center justify-center hover:bg-slate-50"
+            disabled={
+              !!joiningMonth && selectedMonth <= joiningMonth
+            }
+            className="h-9 w-9 rounded-lg border border-slate-200 flex items-center justify-center hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <ChevronLeft size={18} />
           </button>
 
-          <div className="min-w-[145px] text-center text-sm font-bold text-slate-800">
-            {monthLabel}
-          </div>
+          <input
+            type="month"
+            aria-label="Select attendance month and year"
+            value={selectedMonth}
+            min={joiningMonth}
+            onChange={(event) => {
+              if (!event.target.value) return;
+
+              const [newYear, newMonth] = event.target.value
+                .split("-")
+                .map(Number);
+
+              changeMonth(newYear, newMonth - 1);
+            }}
+            className="w-40 rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500"
+          />
 
           <button
             type="button"
@@ -518,6 +575,11 @@ export default function AttendanceCalendar({
           </button>
         </div>
       </div>
+
+      {/* CURRENT MONTH LABEL */}
+      <p className="text-sm font-semibold text-slate-700 mb-4">
+        {monthLabel}
+      </p>
 
       {/* WEEK DAYS */}
       <div className="grid grid-cols-7 gap-2 mb-2">
@@ -543,31 +605,34 @@ export default function AttendanceCalendar({
         ))}
 
         {days.map((day) => {
-          const state = getDayState(day);
-
           const date = `${year}-${String(month + 1).padStart(
             2,
             "0"
           )}-${String(day).padStart(2, "0")}`;
 
+          const state = getDayState(day);
           const isSelected = selectedDate === date;
 
           const isBeforeJoiningDate =
-            !!employeeJoiningDate &&
-            date < employeeJoiningDate.slice(0, 10);
+            !!joiningDate && date < joiningDate;
 
           return (
             <button
               key={day}
               type="button"
               onClick={() => handleDateClick(day)}
-              aria-label={`${date}: ${state.replace("_", " ")}`}
-              aria-pressed={isSelected}
-              className={`${getDayClass(state, isSelected)} ${
+              disabled={isBeforeJoiningDate}
+              aria-label={`${date}: ${
                 isBeforeJoiningDate
-                  ? "opacity-30 cursor-not-allowed"
-                  : ""
+                  ? "before joining date"
+                  : state.replace("_", " ")
               }`}
+              aria-pressed={isSelected}
+              className={getDayClass(
+                state,
+                isSelected,
+                isBeforeJoiningDate
+              )}
             >
               <span className="text-sm font-extrabold">
                 {day}

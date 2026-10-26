@@ -248,7 +248,6 @@ export default function EmployeeProfileView({
     useState(false);
   
 
-
   const [revealedNumbers, setRevealedNumbers] = useState<Record<string, boolean>>({});
 
   const toggleRevealedNumber = (field: string) => {
@@ -839,6 +838,7 @@ export default function EmployeeProfileView({
           "Document was uploaded but not saved"
         );
       }
+      closeEditModal();
 
       const newDocument = data.document as EmployeeDocument;
       const extracted = data?.extractedDetails;
@@ -1009,6 +1009,7 @@ export default function EmployeeProfileView({
 
       setDocumentName("");
       setDocumentError(null);
+      // setIsEditModalOpen(false);
     } catch (error: any) {
       console.error(
         "Document upload error:",

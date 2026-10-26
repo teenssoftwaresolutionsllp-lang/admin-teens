@@ -62,9 +62,16 @@ export default function EmployeeLeavesView({
      TODAY
   ============================================================ */
 
-  const today = new Date()
-    .toISOString()
-    .split("T")[0];
+ const today = new Date()
+  .toISOString()
+  .split("T")[0];
+
+const joiningDate = employee.joining_date
+  ? String(employee.joining_date).split("T")[0]
+  : "";
+
+const hasValidJoiningDate =
+  /^\d{4}-\d{2}-\d{2}$/.test(joiningDate);
 
   /* ============================================================
      GET REAL LEAVE TYPE ID
@@ -276,6 +283,23 @@ export default function EmployeeLeavesView({
       );
       return;
     }
+    /* ----------------------------------------------------------
+   VALIDATE EMPLOYEE JOINING DATE
+---------------------------------------------------------- */
+
+if (!hasValidJoiningDate) {
+  alert(
+    "Your joining date is not available. Please contact HR."
+  );
+  return;
+}
+
+if (formData.startDate < joiningDate) {
+  alert(
+    `You cannot apply for leave before your joining date (${joiningDate}).`
+  );
+  return;
+}
 
     /* ----------------------------------------------------------
        VALIDATE REASON

@@ -204,13 +204,14 @@ export default function Header({ profile }: HeaderProps) {
     setNotificationError("");
 
     try {
-      const response = await fetch("/api/notifications", {
-        method: "GET",
-        cache: "no-store",
-        headers: {
-          Accept: "application/json",
-        },
-      });
+     const response = await fetch("/api/notifications", {
+  method: "GET",
+  cache: "no-store",
+  credentials: "same-origin",
+  headers: {
+    Accept: "application/json",
+  },
+});
 
       const contentType = response.headers.get("content-type") || "";
 

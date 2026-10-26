@@ -1447,6 +1447,7 @@ const leaveBalance = useMemo(
               data?.message ||
               "Failed to submit leave request."
           );
+         
         }
 
         const newRequest =
@@ -1482,19 +1483,15 @@ const leaveBalance = useMemo(
           setLeaveSuccess(null);
         }, 900);
       } catch (error) {
-        console.error(
-          "Leave submit error:",
-          error
-        );
+  const errorMessage =
+    error instanceof Error
+      ? error.message
+      : "Failed to submit leave request.";
 
-        setLeaveError(
-          error instanceof Error
-            ? error.message
-            : "Failed to submit leave request."
-        );
-      } finally {
-        setSubmittingLeave(false);
-      }
+  setLeaveError(errorMessage);
+} finally {
+  setSubmittingLeave(false);
+}
     };
 
   /* ============================================================
@@ -2904,11 +2901,22 @@ const leaveBalance = useMemo(
                       <Clock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
 
                       <input
-                        type="text"
-                        value={regularizationForm.proposedCheckIn}
-                        readOnly
+                        type="time"
+                        value={
+                          regularizationForm.proposedCheckIn
+                        }
+                        onChange={(e) =>
+                          setRegularizationForm(
+                            (prev) => ({
+                              ...prev,
+                              proposedCheckIn:
+                                e.target
+                                  .value,
+                            })
+                          )
+                        }
                         required
-                        className="h-11 w-full rounded-lg border border-slate-300 bg-slate-100 pl-10 pr-3 text-sm text-slate-800 outline-none cursor-not-allowed"
+                        className="h-11 w-full rounded-lg border border-slate-300 bg-white pl-10 pr-3 text-sm text-slate-800 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-100"
                       />
 
                     </div>
@@ -2927,8 +2935,19 @@ const leaveBalance = useMemo(
 
                       <input
                         type="time"
-                        value={regularizationForm.proposedCheckOut}
-                        readOnly
+                        value={
+                          regularizationForm.proposedCheckOut
+                        }
+                        onChange={(e) =>
+                          setRegularizationForm(
+                            (prev) => ({
+                              ...prev,
+                              proposedCheckOut:
+                                e.target
+                                  .value,
+                            })
+                          )
+                        }
                         required
                         className="h-11 w-full rounded-lg border border-slate-300 bg-white pl-10 pr-3 text-sm text-slate-800 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-100"
                       />
