@@ -293,23 +293,24 @@ export function calculateSalaryBreakdown({
     (component) => component.code === "SPECIAL_ALLOWANCE"
   );
 
-  if (specialComp) {
+  if (specialComp?.is_active === true) {
     const specialAllowance = Math.max(
       0,
       Number((grossSalary - accountedEarnings).toFixed(2))
     );
 
-    earningsBreakdown.push({
-      component_id: specialComp.id,
-      name: specialComp.name,
-      code: specialComp.code,
-      type: "earning",
-      amount: specialAllowance,
-    });
+    if (specialAllowance > 0) {
+      earningsBreakdown.push({
+        component_id: specialComp.id,
+        name: specialComp.name,
+        code: specialComp.code,
+        type: "earning",
+        amount: specialAllowance,
+      });
 
-    accountedEarnings += specialAllowance;
+      accountedEarnings += specialAllowance;
+    }
   }
-
   const totalEarnings = Number(
     accountedEarnings.toFixed(2)
   );

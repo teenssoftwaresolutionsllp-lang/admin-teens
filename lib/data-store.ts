@@ -695,129 +695,114 @@ export class DataStore {
   // PROFILE CHANGE REQUESTS (MAKER-CHECKER)
   // ==========================================
 
- static async getProfileChangeRequests(): Promise<ProfileChangeRequest[]> {
-  const cache = getCache();
+  static async getProfileChangeRequests(): Promise<ProfileChangeRequest[]> {
+    const cache = getCache();
 
-  try {
-    const supabase = await createAdminClient();
+    try {
+      const supabase = await createAdminClient();
 
-    // 1. Load saved profile change requests
-    const { data: requests, error: requestsError } = await supabase
-      .from("profile_change_requests")
-      .select("*")
-      .order("created_at", { ascending: false });
+      const { data, error } = await supabase
+        .from("profile_change_requests")
+        .select("*, employee:employees(*)")
+        .order("created_at", { ascending: false });
 
-    if (requestsError) {
-      throw requestsError;
+      if (error) throw error;
+
+      const requests = data ?? [];
+
+      if (requests.length === 0) return [];
+
+      const requestIds = requests
+        .map((request: any) => request.id)
+        .filter(Boolean);
+
+      const { data: documents, error: documentsError } = await supabase
+        .from("employee_documents")
+        .select(
+          "id, employee_id, profile_change_request_id, document_type, document_name, document_url, verification_status, previous_document_id, uploaded_at, profile_change_approved"
+        )
+        .in("profile_change_request_id", requestIds);
+
+      if (documentsError) throw documentsError;
+
+      const documentsByRequest = new Map<string, any[]>();
+
+      for (const document of documents ?? []) {
+        const requestId = document.profile_change_request_id;
+
+        if (!requestId) continue;
+
+        const current = documentsByRequest.get(requestId) ?? [];
+        current.push(document);
+        documentsByRequest.set(requestId, current);
+      }
+
+      return requests.map((request: any) => ({
+        ...request,
+        supporting_documents: documentsByRequest.get(request.id) ?? [],
+      })) as ProfileChangeRequest[];
+    } catch (error) {
+      console.error("Failed to load profile change requests:", error);
+
+      return [...cache.changeRequests].sort(
+        (a, b) =>
+          new Date(b.created_at).getTime() -
+          new Date(a.created_at).getTime()
+      );
     }
-
-    if (!requests || requests.length === 0) {
-      return [];
-    }
-
-    // 2. Collect employee IDs
-    const employeeIds = [
-      ...new Set(
-        requests
-          .map((request) => request.employee_id)
-          .filter(Boolean)
-      ),
-    ];
-
-    // 3. Load employee details separately
-    const { data: employees, error: employeesError } = await supabase
-      .from("employees")
-      .select("*")
-      .in("id", employeeIds);
-
-    if (employeesError) {
-      throw employeesError;
-    }
-
-    // 4. Attach employee details to each request
-    const employeeMap = new Map(
-      (employees ?? []).map((employee) => [
-        String(employee.id),
-        employee,
-      ])
-    );
-
-    return requests.map((request) => ({
-      ...request,
-      employee:
-        employeeMap.get(String(request.employee_id)) ??
-        undefined,
-    })) as ProfileChangeRequest[];
-  } catch (error) {
-    console.error(
-      "Failed to load profile change requests from Supabase:",
-      error
-    );
-
-    // Keep the existing fallback behavior
-    return [...cache.changeRequests].sort(
-      (a, b) =>
-        new Date(b.created_at).getTime() -
-        new Date(a.created_at).getTime()
-    );
   }
-}
 
 
   static async createProfileChangeRequest({
-  employeeId,
-  requestedChanges,
-  previousValues,
-}: {
-  employeeId: string;
-  requestedChanges: Record<string, any>;
-  previousValues?: Record<string, any>;
-}): Promise<ProfileChangeRequest> {
-  const employee = await this.getEmployeeById(employeeId);
+    employeeId,
+    requestedChanges,
+    previousValues,
+  }: {
+    employeeId: string;
+    requestedChanges: Record<string, any>;
+    previousValues?: Record<string, any>;
+  }): Promise<ProfileChangeRequest> {
+    const cache = getCache();
+    const employee = await this.getEmployeeById(employeeId);
+    if (!employee) {
+      throw new Error("Employee not found");
+    }
 
-  if (!employee) {
-    throw new Error(
-      `Employee not found for profile change request: ${employeeId}`
-    );
-  }
+    const employeeUuid = employee.id;
 
-  const supabase = await createAdminClient();
-
-  const { data, error } = await supabase
-    .from("profile_change_requests")
-    .insert({
-      employee_id: employee.id,
+    const newRequest: ProfileChangeRequest = {
+      id: "pcr-" + Date.now(),
+      employee_id: employeeUuid,
       requested_changes: requestedChanges,
-      previous_values: previousValues ?? {},
+      previous_values: previousValues,
       status: "pending",
-    })
-    .select("*")
-    .single();
+      created_at: new Date().toISOString(),
+      employee: employee || undefined,
+    };
 
-  if (error) {
-    console.error("Supabase profile request insert failed:", {
-      code: error.code,
-      message: error.message,
-      details: error.details,
-      hint: error.hint,
-    });
+    try {
+      const supabase = await createAdminClient();
+      const { data, error } = await supabase
+        .from("profile_change_requests")
+        .insert({
+          employee_id: employeeUuid,
+          requested_changes: requestedChanges,
+          previous_values: previousValues ?? {},
+          status: "pending",
+        })
+        .select()
+        .single();
 
-    throw new Error(
-      `Failed to save profile change request: ${error.message}`
-    );
+      if (!error && data) {
+        return { ...data, employee: employee || undefined };
+      }
+    } catch (err) {
+      console.warn("createProfileChangeRequest using cache fallback:", err);
+    }
+
+    cache.changeRequests.unshift(newRequest);
+    return newRequest;
   }
-
-  if (!data?.id) {
-    throw new Error(
-      "Profile change request was not saved. No request ID returned."
-    );
-  }
-
-  return {
-    ...data,
-    employee,
-  } as ProfileChangeRequest;
-}
 
 
   static readonly SENSITIVE_PROFILE_FIELDS = [
@@ -1366,20 +1351,17 @@ export class DataStore {
   return data as AttendanceLog | null;
 }
 
+
   static async clockIn(employeeId: string): Promise<AttendanceLog> {
     const supabase = await createAdminClient();
     const now = new Date();
     const todayStr = now.toISOString().split("T")[0];
 
     const employee = await this.getEmployeeById(employeeId);
-    if (!employee) {
-      throw new Error("Employee not found");
-    }
+    if (!employee) throw new Error("Employee not found");
 
     const project = employee.project;
-    if (!project) {
-      throw new Error("Employee project not found");
-    }
+    if (!project) throw new Error("Employee project not found");
 
     const evaluation = evaluateAttendancePunch(
       now,
@@ -1395,11 +1377,10 @@ export class DataStore {
       .eq("attendance_date", todayStr)
       .maybeSingle();
 
-    if (findError) {
-      throw new Error(findError.message);
-    }
+    if (findError) throw new Error(findError.message);
 
     if (existingLog) {
+      // Prevent a second clock-in while a session is still active.
       if (
         existingLog.check_out_time == null &&
         existingLog.check_in_time != null
@@ -1410,9 +1391,14 @@ export class DataStore {
       const { data, error } = await supabase
         .from("attendance_logs")
         .update({
+          // Keep the original first clock-in for the day.
           check_in_time: existingLog.check_in_time ?? now.toISOString(),
+
+          // Start tracking the new session independently.
           session_check_in_time: now.toISOString(),
           check_out_time: null,
+
+          // Preserve previously accumulated hours and attendance status.
           total_hours: Number(existingLog.total_hours ?? 0),
           status: existingLog.status,
           is_late: existingLog.is_late || evaluation.isLate,
@@ -1421,10 +1407,7 @@ export class DataStore {
         .select()
         .single();
 
-      if (error) {
-        throw new Error(error.message);
-      }
-
+      if (error) throw new Error(error.message);
       return data as AttendanceLog;
     }
 
@@ -1444,10 +1427,7 @@ export class DataStore {
       .select()
       .single();
 
-    if (error) {
-      throw new Error(error.message);
-    }
-
+    if (error) throw new Error(error.message);
     return data as AttendanceLog;
   }
 

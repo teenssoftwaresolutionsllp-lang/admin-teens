@@ -1661,7 +1661,7 @@ INSERT INTO storage.buckets (
 )
 VALUES (
     'employee-exit-documents',
-    'employee-exit-documents',
+    'employee-exit-',
     false
 )
 ON CONFLICT (id) DO NOTHING;

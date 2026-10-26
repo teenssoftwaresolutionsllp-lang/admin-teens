@@ -5,6 +5,8 @@ import {
   createAdminClient,
 } from "@/lib/supabase-server";
 
+
+
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
@@ -40,20 +42,16 @@ export async function POST(request: Request) {
 
     const admin = await createAdminClient();
 
-    const parts = new Intl.DateTimeFormat("en-CA", {
+    const parts = new Intl.DateTimeFormat("en-GB", {
       timeZone: "Asia/Kolkata",
       year: "numeric",
       month: "2-digit",
       day: "2-digit",
     }).formatToParts(new Date());
 
-    const year = parts.find((part) => part.type === "year")?.value ?? "";
-    const month = parts.find((part) => part.type === "month")?.value ?? "";
-    const day = parts.find((part) => part.type === "day")?.value ?? "";
-
-    if (!year || !month || !day) {
-      throw new Error("Unable to determine attendance date.");
-    }
+    const year = parts.find((part) => part.type === "year")!.value;
+    const month = parts.find((part) => part.type === "month")!.value;
+    const day = parts.find((part) => part.type === "day")!.value;
 
     const today = `${year}-${month}-${day}`;
 
@@ -117,14 +115,11 @@ export async function POST(request: Request) {
     const log = await DataStore.clockOut(employee.id);
 
     return NextResponse.json({ success: true, log });
-  } catch (error: unknown) {
+  } catch (error: any) {
     console.error("Punch API error:", error);
 
     return NextResponse.json(
-      {
-        error:
-          error instanceof Error ? error.message : "Internal server error",
-      },
+      { error: error.message || "Internal server error" },
       { status: 500 }
     );
   }

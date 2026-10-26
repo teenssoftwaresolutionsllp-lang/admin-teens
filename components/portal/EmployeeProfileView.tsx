@@ -1,5 +1,6 @@
 "use client";
 
+import { toast } from "react-hot-toast";
 import {
   useEffect,
   useRef,
@@ -21,6 +22,8 @@ import type {
 import {
   User,
   MapPin,
+  EyeOff,
+  Copy,
   CreditCard,
   Briefcase,
   FileText,
@@ -34,10 +37,10 @@ import {
   UserRound,
   MapPinned,
   Upload,
-  Trash2,
   Download,
   Eye,
   LaptopMinimal,
+  Landmark,
 } from "lucide-react";
 
 import ProfileProgressBar from "./ProfileProgressBar";
@@ -110,6 +113,7 @@ const documentTypes = [
   "12th Certificate",
   "Graduation Certificate",
   "Post-Graduation Certificate",
+  "Bank Passbook",
   "Experience Letter",
   "Relieving Letter",
   "Offer Letter",
@@ -121,6 +125,8 @@ const documentTypes = [
 ];
 
 const MAX_DOCUMENT_SIZE = 5 * 1024 * 1024;
+
+
 
 const emptyEditForm: EditFormData = {
   phone: "",
@@ -176,6 +182,10 @@ const emptyEditForm: EditFormData = {
   peripherals: [],
 };
 
+
+
+
+
 type EditSection =
   | "all"
   | "personal"
@@ -187,11 +197,9 @@ type EditSection =
   | "accessory"
   | null;
 
-const inputClass =
-  "w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100";
+const inputClass = "w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100";
 
-const labelClass =
-  "block mb-2 text-xs font-bold text-slate-700 uppercase tracking-wider";
+const labelClass = "block mb-2 text-xs font-bold text-slate-700 uppercase tracking-wider";
 
 export default function EmployeeProfileView({
   employee,
@@ -209,6 +217,7 @@ export default function EmployeeProfileView({
     employeeData.name ||
     "Employee";
 
+  
   const departmentName = () => {
     const department = departments.find(
       (item) =>
@@ -233,9 +242,29 @@ export default function EmployeeProfileView({
     | "accessory"
   >("personal");
 
+  
+
   const [isEditModalOpen, setIsEditModalOpen] =
     useState(false);
+  
 
+
+  const [revealedNumbers, setRevealedNumbers] = useState<Record<string, boolean>>({});
+
+  const toggleRevealedNumber = (field: string) => {
+    setRevealedNumbers((prev) => ({
+      ...prev,
+      [field]: !prev[field],
+    }));
+  };
+
+  const copySensitiveValue = async (value: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+    } catch (error) {
+      console.error("Failed to copy value:", error);
+    }
+  };
   const [editSection, setEditSection] =
     useState<EditSection>(null);
 
@@ -263,8 +292,32 @@ export default function EmployeeProfileView({
       employeeData.profile_photo_url || null
     );
 
-  const [documents, setDocuments] =
-    useState<EmployeeDocument[]>([]);
+  const [documents, setDocuments] = useState<EmployeeDocument[]>([]);
+
+
+  const [sensitiveDocumentIds, setSensitiveDocumentIds] = useState<Record<string, string>>({});
+
+  const sensitiveDocumentIdsRef = useRef<Record<string, string>>({});
+
+
+  const [requestDocumentType, setRequestDocumentType] =
+    useState("Bank Passbook");
+
+  const [requestDocumentError, setRequestDocumentError] =
+    useState<string | null>(null);
+
+  const [requestDocumentUploading, setRequestDocumentUploading] =
+    useState(false);
+
+  const requestDocumentInputRef =
+    useRef<HTMLInputElement | null>(null);
+
+
+  const [savedBankDetails, setSavedBankDetails] = useState({
+    bank_name: employeeData.bank_name ?? "",
+    bank_account_number: employeeData.bank_account_number ?? "",
+    ifsc_code: employeeData.ifsc_code ?? "",
+  });
 
   const [isUploading, setIsUploading] =
     useState(false);
@@ -292,6 +345,8 @@ export default function EmployeeProfileView({
     setErrorMessage(null);
     setDocumentError(null);
     setEditSection(section);
+    sensitiveDocumentIdsRef.current = {};
+    setSensitiveDocumentIds({});
     setIsEditModalOpen(true);
   };
 
@@ -535,50 +590,105 @@ export default function EmployeeProfileView({
     let cancelled = false;
 
     const loadDocuments = async () => {
-      if (!employeeData.id) {
-        return;
-      }
+      if (!employeeData.id) return;
 
       try {
-        const response =
-          await fetch(
-            `/api/documents?employee_id=${encodeURIComponent(
-              String(employeeData.id)
-            )}`,
-            {
-              method: "GET",
-              cache: "no-store",
-            }
-          );
+        const response = await fetch(
+          `/api/documents?employee_id=${encodeURIComponent(
+            String(employeeData.id)
+          )}`,
+          {
+            method: "GET",
+            cache: "no-store",
+          }
+        );
 
         if (!response.ok) {
-          return;
+          const message = await response.text();
+          throw new Error(message || "Failed to load documents");
         }
 
-        const data =
-          await response.json();
+        const data = await response.json();
 
-        if (cancelled) {
-          return;
+        if (cancelled) return;
+
+        const loadedDocuments: EmployeeDocument[] = Array.isArray(data) ? data : Array.isArray(data?.documents) ? data.documents : [];
+
+        
+        const latestByType = new Map<string, EmployeeDocument>();
+
+        for (const doc of loadedDocuments) {
+          const status = String(doc.verification_status ?? "")
+            .trim()
+            .toLowerCase();
+
+          // Never display documents that have been superseded.
+          if (["rejected", "superseded"].includes(status)) continue;
+
+          const type = String(doc.document_type ?? "")
+            .trim()
+            .toLowerCase();
+
+          if (!type) continue;
+
+          // These categories can legitimately contain multiple documents.
+          const allowsMultiple = [
+            "experience letter",
+            "other",
+          ].includes(type);
+
+          if (allowsMultiple) {
+            latestByType.set(`${type}-${doc.id}`, doc);
+            continue;
+          }
+
+          const existing = latestByType.get(type);
+
+          if (
+            !existing ||
+            new Date(doc.uploaded_at ?? 0).getTime() >
+              new Date(existing.uploaded_at ?? 0).getTime()
+          ) {
+            latestByType.set(type, doc);
+          }
         }
 
-        const loadedDocuments =
-          Array.isArray(data)
-            ? data
-            : Array.isArray(
-                data?.documents
-              )
-            ? data.documents
-            : [];
+        setDocuments(Array.from(latestByType.values()).sort((a, b) => new Date(b.uploaded_at ?? 0).getTime() - new Date(a.uploaded_at ?? 0).getTime()));
 
-        setDocuments(
-          loadedDocuments as EmployeeDocument[]
-        );
+
+        
+
+      const approvedPassbook = loadedDocuments
+        .filter(
+          (doc) =>
+            String(doc.document_type ?? "").trim().toLowerCase() ===
+              "bank passbook" &&
+            String(doc.verification_status ?? "").trim().toLowerCase() ===
+              "approved"
+        )
+        .sort(
+          (a, b) =>
+            new Date(b.uploaded_at ?? 0).getTime() -
+            new Date(a.uploaded_at ?? 0).getTime()
+        )[0];
+
+      setSavedBankDetails({
+        bank_name:
+          approvedPassbook?.bank_name ??
+          employeeData.bank_name ??
+          "",
+        bank_account_number:
+          approvedPassbook?.bank_account_number ??
+          employeeData.bank_account_number ??
+          "",
+        ifsc_code:
+          approvedPassbook?.ifsc_code ??
+          employeeData.ifsc_code ??
+          "",
+      });
+
       } catch (error) {
-        console.error(
-          "Failed to load employee documents:",
-          error
-        );
+        console.error("Failed to load employee documents:", error);
       }
     };
 
@@ -587,7 +697,12 @@ export default function EmployeeProfileView({
     return () => {
       cancelled = true;
     };
-  }, [employeeData.id]);
+  }, [
+    employeeData.id,
+    employeeData.bank_name,
+    employeeData.bank_account_number,
+    employeeData.ifsc_code,
+  ]);
 
   /* ============================================================
      INPUT CHANGE
@@ -725,15 +840,172 @@ export default function EmployeeProfileView({
         );
       }
 
-      const newDocument =
-        data.document as EmployeeDocument;
+      const newDocument = data.document as EmployeeDocument;
+      const extracted = data?.extractedDetails;
 
-      setDocuments(
-        (previous) => [
+      const sensitiveTypes = [
+        "Aadhar Card",
+        "Aadhaar Card",
+        "PAN Card",
+        "Passport",
+        "Bank Passbook",
+      ];
+
+      if (
+        sensitiveTypes.some(
+          (type) =>
+            type.toLowerCase() ===
+            String(newDocument.document_type ?? "").trim().toLowerCase()
+        ) &&
+        newDocument.id
+      ) {
+      const documentTypeKey = String(newDocument.document_type)
+        .trim()
+        .toLowerCase();
+
+      const updatedDocumentIds = {
+        ...sensitiveDocumentIdsRef.current,
+        [documentTypeKey]: String(newDocument.id),
+      };
+
+      sensitiveDocumentIdsRef.current = updatedDocumentIds;
+      setSensitiveDocumentIds(updatedDocumentIds);
+      }
+
+
+      if (extracted && typeof extracted === "object") {
+        setEditFormData((previous) => ({
           ...previous,
+          ...(extracted.aadhar_number ? { aadhar_number: extracted.aadhar_number } : {}),
+          ...(extracted.pan_number ? { pan_number: extracted.pan_number } : {}),
+          ...(extracted.passport_number ? { passport_number: extracted.passport_number } : {}),
+          ...(extracted.bank_name ? { bank_name: extracted.bank_name } : {}),
+          ...(extracted.bank_account_number ? { bank_account_number: extracted.bank_account_number } : {}),
+          ...(extracted.ifsc_code ? { ifsc_code: extracted.ifsc_code } : {}),
+        }));
+      }
+
+      setDocuments((previous) => {
+        const allowsMultiple = [
+          "Experience Letter",
+          "Other",
+        ].includes(newDocument.document_type);
+
+        if (allowsMultiple) {
+          return [...previous, newDocument];
+        }
+
+        return [
+          ...previous.filter(
+            (doc) =>
+              doc.document_type !== newDocument.document_type
+          ),
           newDocument,
-        ]
-      );
+        ];
+      });
+
+      if (
+        String(newDocument.document_type ?? "")
+          .trim()
+          .toLowerCase() === "bank passbook"
+      ) {
+        const refreshResponse = await fetch(
+          `/api/documents?employee_id=${encodeURIComponent(
+            String(employeeData.id)
+          )}`,
+          {
+            method: "GET",
+            cache: "no-store",
+          }
+        );
+
+        if (refreshResponse.ok) {
+          const refreshData = await refreshResponse.json();
+
+          const refreshedDocuments: EmployeeDocument[] =
+            Array.isArray(refreshData?.documents)
+              ? refreshData.documents
+              : Array.isArray(refreshData)
+                ? refreshData
+                : [];
+
+          setDocuments(() => {
+            const latestByType = new Map<string, EmployeeDocument>();
+
+            for (const doc of refreshedDocuments) {
+              if (
+                String(doc.verification_status ?? "").toLowerCase() === "superseded"
+              ) {
+                continue;
+              }
+
+              const type = String(doc.document_type ?? "").trim().toLowerCase();
+
+              // Experience Letters and Other documents may have multiple uploads.
+              const allowsMultiple = ["experience letter", "other"].includes(type);
+
+              if (allowsMultiple) {
+                latestByType.set(`${type}-${doc.id}`, doc);
+                continue;
+              }
+
+              const existing = latestByType.get(type);
+
+              if (
+                !existing ||
+                new Date(doc.uploaded_at ?? 0).getTime() >
+                  new Date(existing.uploaded_at ?? 0).getTime()
+              ) {
+                latestByType.set(type, doc);
+              }
+            }
+
+            return Array.from(latestByType.values());
+          });
+
+          
+          const approvedPassbook = refreshedDocuments
+            .filter(
+              (doc) =>
+                String(doc.document_type ?? "").trim().toLowerCase() === "bank passbook" &&
+                String(doc.verification_status ?? "").trim().toLowerCase() === "approved"
+              )
+            .sort(
+              (a, b) =>
+                new Date(b.uploaded_at ?? 0).getTime() -
+                new Date(a.uploaded_at ?? 0).getTime()
+            )[0] ;
+
+            setSavedBankDetails({
+              bank_name: approvedPassbook?.bank_name ?? employeeData.bank_name ?? "",
+              bank_account_number:
+                approvedPassbook?.bank_account_number ??
+                employeeData.bank_account_number ??
+                "",
+              ifsc_code: approvedPassbook?.ifsc_code ?? employeeData.ifsc_code ?? "",
+            });
+            
+
+          setSavedBankDetails({
+            bank_name:
+              approvedPassbook?.bank_name ??
+              employeeData.bank_name ??
+              "",
+            bank_account_number:
+              approvedPassbook?.bank_account_number ??
+              employeeData.bank_account_number ??
+              "",
+            ifsc_code:
+              approvedPassbook?.ifsc_code ??
+              employeeData.ifsc_code ??
+              "",
+          });
+
+        }
+
+        
+        
+      }
 
       setDocumentName("");
       setDocumentError(null);
@@ -753,70 +1025,182 @@ export default function EmployeeProfileView({
     }
   };
 
-  /* ============================================================
-     DELETE DOCUMENT
-  ============================================================ */
 
-  const handleDelete = async (
-    id: string
+
+  const handleRequestDocumentUpload = async (
+    e: ChangeEvent<HTMLInputElement>
   ) => {
+    const input = e.currentTarget;
+    const file = input.files?.[0];
+    if (!file) return;
+
+    // Reset immediately so the same file can be selected again after an error.
+    input.value = "";
+
+    if (file.size > MAX_DOCUMENT_SIZE) {
+      setRequestDocumentError("File size exceeds the 5MB limit.");
+      return;
+    }
+
+    if (!employeeData.id) {
+      setRequestDocumentError("Employee ID is missing. Please refresh and try again.");
+      return;
+    }
+
+    const selectedType = requestDocumentType.trim();
+    const normalizedSelectedType = selectedType.toLowerCase();
+
+    const supportedSensitiveTypes = new Set([
+      "bank passbook",
+      "aadhar card",
+      "aadhaar card",
+      "pan card",
+      "passport",
+    ]);
+
+    if (!supportedSensitiveTypes.has(normalizedSelectedType)) {
+      setRequestDocumentError(
+        "Choose Bank Passbook, Aadhaar/Aadhar Card, PAN Card, or Passport."
+      );
+      return;
+    }
+
+    setRequestDocumentUploading(true);
+    setRequestDocumentError(null);
+
     try {
-      setDocumentError(null);
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("document_type", selectedType);
+      formData.append("document_name", file.name);
+      formData.append("employee_id", String(employeeData.id));
 
-      const response =
-        await fetch(
-          `/api/documents/${id}`,
-          {
-            method: "DELETE",
-          }
-        );
+      const response = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+        cache: "no-store",
+      });
 
-      if (!response.ok) {
-        const contentType =
-          response.headers.get(
-            "content-type"
-          ) || "";
+      const contentType = response.headers.get("content-type") || "";
+      let data: any = null;
 
-        let message =
-          "Delete failed";
-
-        if (
-          contentType.includes(
-            "application/json"
-          )
-        ) {
-          const data =
-            await response.json();
-
-          message =
-            data?.error ||
-            message;
-        }
-
+      if (contentType.includes("application/json")) {
+        data = await response.json();
+      } else {
+        const responseText = await response.text();
         throw new Error(
-          message
+          responseText ||
+            `Upload endpoint returned an unexpected response (HTTP ${response.status}).`
         );
       }
 
-      setDocuments(
-        (previous) =>
-          previous.filter(
-            (document) =>
-              document.id !== id
-          )
-      );
-    } catch (error: any) {
-      console.error(
-        "Document delete error:",
-        error
-      );
+      if (!response.ok) {
+        throw new Error(
+          data?.error ||
+            data?.message ||
+            `Document upload failed (HTTP ${response.status}).`
+        );
+      }
 
-      setDocumentError(
-        error?.message ||
-          "Failed to delete file"
+      // /api/upload is expected to return { document, extractedDetails? }.
+      const uploadedDocument = data?.document;
+
+      if (!uploadedDocument?.id) {
+        console.error("[SUPPORTING DOCUMENT] Unexpected upload response:", data);
+        throw new Error(
+          "The upload endpoint did not return a saved document ID. Check the /api/upload response."
+        );
+      }
+
+      const returnedType = String(uploadedDocument.document_type || selectedType)
+        .trim()
+        .toLowerCase();
+
+      // Normalize the spelling variants used by the app and database.
+      const canonicalType =
+        returnedType === "aadhaar card" || returnedType === "aadhar card"
+          ? "aadhar card"
+          : returnedType;
+
+      const selectedCanonicalType =
+        normalizedSelectedType === "aadhaar card" ||
+        normalizedSelectedType === "aadhar card"
+          ? "aadhar card"
+          : normalizedSelectedType;
+
+      if (canonicalType !== selectedCanonicalType) {
+        console.error("[SUPPORTING DOCUMENT] Type mismatch:", {
+          selectedType,
+          returnedType,
+          response: data,
+        });
+        throw new Error(
+          `Selected "${selectedType}", but the server saved "${uploadedDocument.document_type}". Please check the document type in /api/upload.`
+        );
+      }
+
+      const updatedIds = {
+        ...sensitiveDocumentIdsRef.current,
+        [canonicalType]: String(uploadedDocument.id),
+      };
+
+      // Update the ref immediately: form submission can happen before React rerenders.
+      sensitiveDocumentIdsRef.current = updatedIds;
+      setSensitiveDocumentIds(updatedIds);
+
+      setDocuments((previous) => [
+        ...previous.filter(
+          (item) =>
+            String(item.document_type || "").trim().toLowerCase() !==
+            returnedType
+        ),
+        uploadedDocument as EmployeeDocument,
+      ]);
+
+      const extracted = data?.extractedDetails;
+      if (extracted && typeof extracted === "object") {
+        setEditFormData((previous) => ({
+          ...previous,
+          ...(extracted.aadhar_number
+            ? { aadhar_number: extracted.aadhar_number }
+            : {}),
+          ...(extracted.pan_number
+            ? { pan_number: extracted.pan_number }
+            : {}),
+          ...(extracted.passport_number
+            ? { passport_number: extracted.passport_number }
+            : {}),
+          ...(extracted.bank_name
+            ? { bank_name: extracted.bank_name }
+            : {}),
+          ...(extracted.bank_account_number
+            ? { bank_account_number: extracted.bank_account_number }
+            : {}),
+          ...(extracted.ifsc_code
+            ? { ifsc_code: extracted.ifsc_code }
+            : {}),
+        }));
+      }
+
+      console.info("[SUPPORTING DOCUMENT] Uploaded and linked locally:", {
+        documentType: canonicalType,
+        documentId: uploadedDocument.id,
+        capturedDocumentTypes: Object.keys(updatedIds),
+      });
+
+      toast.success(`${selectedType} uploaded successfully.`);
+    } catch (error: unknown) {
+      console.error("[SUPPORTING DOCUMENT] Upload failed:", error);
+      setRequestDocumentError(
+        error instanceof Error
+          ? error.message
+          : "Document upload failed. Check the browser console and /api/upload response."
       );
+    } finally {
+      setRequestDocumentUploading(false);
     }
   };
+
 
   /* ============================================================
      PROFILE CHANGE REQUEST
@@ -827,7 +1211,7 @@ export default function EmployeeProfileView({
   ) => {
     e.preventDefault();
 
-    if (loading) {
+    if (loading || requestDocumentUploading) {
       return;
     }
 
@@ -850,128 +1234,47 @@ export default function EmployeeProfileView({
         string,
         unknown
       > = {
-        phone:
-          editFormData.phone,
-
-        date_of_birth:
-          editFormData.date_of_birth,
-
-        gender:
-          editFormData.gender,
-
-        blood_group:
-          editFormData.blood_group,
-
-        marital_status:
-          editFormData.marital_status,
-
-        permanent_address:
-          editFormData.address,
-
-        permanent_city:
-          editFormData.city,
-
-        permanent_state:
-          editFormData.state,
-
-        permanent_pincode:
-          editFormData.pincode,
-
-        communication_address:
-          editFormData.communication_address,
-
-        communication_city:
-          editFormData.communication_city,
-
-        communication_state:
-          editFormData.communication_state,
-
-        communication_pincode:
-          editFormData.communication_pincode,
-
-        emergency_contact_name:
-          editFormData.emergency_contact_name,
-
-        emergency_contact_phone:
-          editFormData.emergency_contact_phone,
-
-        emergency_contact_relation:
-          editFormData.emergency_contact_relation,
-
-        emergency_contact_2_name:
-          editFormData.emergency_contact_2_name,
-
-        emergency_contact_2_phone:
-          editFormData.emergency_contact_2_phone,
-
-        emergency_contact_2_relation:
-          editFormData.emergency_contact_2_relation,
-
-        emergency_contact_3_name:
-          editFormData.emergency_contact_3_name,
-
-        emergency_contact_3_phone:
-          editFormData.emergency_contact_3_phone,
-
-        emergency_contact_3_relation:
-          editFormData.emergency_contact_3_relation,
-
-        department_id:
-          editFormData.department_id,
-
-        designation:
-          editFormData.designation,
-
-        probation_end_date:
-          editFormData.probation_end_date,
-
-        confirmation_date:
-          editFormData.confirmation_date,
-
-        reporting_manager:
-          editFormData.reporting_manager,
-
-        work_location:
-          editFormData.work_location,
-
-        bank_name:
-          editFormData.bank_name,
-
-        bank_account_number:
-          editFormData.bank_account_number,
-
-        ifsc_code:
-          editFormData.ifsc_code,
-
-        pan_number:
-          editFormData.pan_number,
-
-        aadhar_number:
-          editFormData.aadhar_number,
-
-        passport_number:
-          editFormData.passport_number,
-
-        pf:
-          editFormData.pf,
-
-        esi:
-          editFormData.esi,
-
-        pt:
-          editFormData.pt,
-
-        tds:
-          editFormData.tds,
-
-        accessory_type:
-          editFormData.accessory_type,
-
-        accessory_serial:
-          editFormData.accessory_serial,
-
-        peripherals:
-          editFormData.peripherals,
+        phone: editFormData.phone,
+        date_of_birth: editFormData.date_of_birth,
+        gender: editFormData.gender,
+        blood_group: editFormData.blood_group,
+        marital_status: editFormData.marital_status,
+        permanent_address: editFormData.address,
+        permanent_city: editFormData.city,
+        permanent_state: editFormData.state,
+        permanent_pincode: editFormData.pincode,
+        communication_address: editFormData.communication_address,
+        communication_city: editFormData.communication_city,
+        communication_state: editFormData.communication_state,
+        communication_pincode: editFormData.communication_pincode,
+        emergency_contact_name: editFormData.emergency_contact_name,
+        emergency_contact_phone: editFormData.emergency_contact_phone,
+        emergency_contact_relation: editFormData.emergency_contact_relation,
+        emergency_contact_2_name: editFormData.emergency_contact_2_name,
+        emergency_contact_2_phone: editFormData.emergency_contact_2_phone,
+        emergency_contact_2_relation: editFormData.emergency_contact_2_relation,
+        emergency_contact_3_name: editFormData.emergency_contact_3_name,
+        emergency_contact_3_phone: editFormData.emergency_contact_3_phone,
+        emergency_contact_3_relation: editFormData.emergency_contact_3_relation,
+        department_id: editFormData.department_id,
+        designation: editFormData.designation,
+        probation_end_date: editFormData.probation_end_date,
+        confirmation_date: editFormData.confirmation_date,
+        reporting_manager: editFormData.reporting_manager,
+        work_location: editFormData.work_location,
+        bank_name: editFormData.bank_name,
+        bank_account_number: editFormData.bank_account_number,
+        ifsc_code: editFormData.ifsc_code,
+        pan_number: editFormData.pan_number,
+        aadhar_number: editFormData.aadhar_number,
+        passport_number: editFormData.passport_number,
+        pf: editFormData.pf,
+        esi: editFormData.esi,
+        pt: editFormData.pt,
+        tds: editFormData.tds,
+        accessory_type: editFormData.accessory_type,
+        accessory_serial: editFormData.accessory_serial,
+        peripherals: editFormData.peripherals,
       };
 
       const fieldMap: Record<
@@ -983,107 +1286,42 @@ export default function EmployeeProfileView({
         gender: "gender",
         blood_group: "blood_group",
         marital_status: "marital_status",
-
-        permanent_address:
-          "permanent_address",
-
-        permanent_city:
-          "permanent_city",
-
-        permanent_state:
-          "permanent_state",
-
-        permanent_pincode:
-          "permanent_pincode",
-
-        communication_address:
-          "communication_address",
-
-        communication_city:
-          "communication_city",
-
-        communication_state:
-          "communication_state",
-
-        communication_pincode:
-          "communication_pincode",
-
-        emergency_contact_name:
-          "emergency_contact_name",
-
-        emergency_contact_phone:
-          "emergency_contact_phone",
-
-        emergency_contact_relation:
-          "emergency_contact_relation",
-
-        emergency_contact_2_name:
-          "emergency_contact_2_name",
-
-        emergency_contact_2_phone:
-          "emergency_contact_2_phone",
-
-        emergency_contact_2_relation:
-          "emergency_contact_2_relation",
-
-        emergency_contact_3_name:
-          "emergency_contact_3_name",
-
-        emergency_contact_3_phone:
-          "emergency_contact_3_phone",
-
-        emergency_contact_3_relation:
-          "emergency_contact_3_relation",
-
-        department_id:
-          "department_id",
-
-        designation:
-          "designation",
-
-        probation_end_date:
-          "probation_end_date",
-
-        confirmation_date:
-          "confirmation_date",
-
-        reporting_manager:
-          "reporting_manager",
-
-        work_location:
-          "work_location",
-
-        bank_name:
-          "bank_name",
-
-        bank_account_number:
-          "bank_account_number",
-
-        ifsc_code:
-          "ifsc_code",
-
-        pan_number:
-          "pan_number",
-
-        aadhar_number:
-          "aadhar_number",
-
-        passport_number:
-          "passport_number",
-
+        permanent_address: "permanent_address",
+        permanent_city: "permanent_city",
+        permanent_state: "permanent_state",
+        permanent_pincode: "permanent_pincode",
+        communication_address: "communication_address",
+        communication_city: "communication_city",
+        communication_state: "communication_state",
+        communication_pincode: "communication_pincode",
+        emergency_contact_name: "emergency_contact_name",
+        emergency_contact_phone: "emergency_contact_phone",
+        emergency_contact_relation: "emergency_contact_relation",
+        emergency_contact_2_name: "emergency_contact_2_name",
+        emergency_contact_2_phone: "emergency_contact_2_phone",
+        emergency_contact_2_relation: "emergency_contact_2_relation",
+        emergency_contact_3_name: "emergency_contact_3_name",
+        emergency_contact_3_phone: "emergency_contact_3_phone",
+        emergency_contact_3_relation: "emergency_contact_3_relation",
+        department_id: "department_id",
+        designation: "designation",
+        probation_end_date: "probation_end_date",
+        confirmation_date: "confirmation_date",
+        reporting_manager: "reporting_manager",
+        work_location: "work_location",
+        bank_name: "bank_name",
+        bank_account_number: "bank_account_number",
+        ifsc_code: "ifsc_code",
+        pan_number: "pan_number",
+        aadhar_number: "aadhar_number",
+        passport_number: "passport_number",
         pf: "pf",
         esi: "esi",
         pt: "pt",
         tds: "tds",
-
-        accessory_type:
-          "accessory_type",
-
-        accessory_serial:
-          "accessory_serial",
-
-        peripherals:
-          "peripherals",
+        accessory_type: "accessory_type",
+        accessory_serial: "accessory_serial",
+        peripherals: "peripherals",
       };
 
       const sectionFields: Record<
@@ -1258,6 +1496,8 @@ export default function EmployeeProfileView({
         }
       );
 
+      console.log("[PROFILE CHANGE] Submit handler started");
+
       if (
         Object.keys(
           changedFields
@@ -1269,6 +1509,12 @@ export default function EmployeeProfileView({
 
         return;
       }
+
+      console.log("Submitting profile change:", {
+        employeeId: employeeData.id,
+        requestedChanges: changedFields,
+        sensitiveDocumentIds: sensitiveDocumentIdsRef.current,
+      });
 
       const response =
         await fetch(
@@ -1282,14 +1528,10 @@ export default function EmployeeProfileView({
             },
 
             body: JSON.stringify({
-              employeeId:
-                employeeData.id,
-
-              requestedChanges:
-                changedFields,
-
-              previousValues:
-                previousValues,
+              employeeId: employeeData.id,
+              requestedChanges: changedFields,
+              previousValues: previousValues,
+              sensitiveDocumentIds: sensitiveDocumentIdsRef.current,
             }),
           }
         );
@@ -1319,15 +1561,21 @@ export default function EmployeeProfileView({
       }
 
       if (!response.ok) {
+        console.error("Upload rejected:", {
+          status: response.status,
+          body: data,
+        });
+
         throw new Error(
           data?.error ||
-            "Failed to submit profile change request."
+            `Upload failed with status ${response.status}`
         );
       }
 
-      setPendingRequest(
-        data?.request || data
-      );
+      setPendingRequest(data?.request || data);
+
+      sensitiveDocumentIdsRef.current = {};
+      setSensitiveDocumentIds({});
 
       setSuccessMessage(
         "Profile change request submitted successfully. HR can now review your changes."
@@ -1544,7 +1792,7 @@ export default function EmployeeProfileView({
 
               </button>
 
-            </div>
+      </div>
 
           </div>
 
@@ -2078,98 +2326,140 @@ export default function EmployeeProfileView({
               BANK
           ======================================================== */}
 
+
           {activeTab === "bank" && (
             <div className="space-y-8">
-
+              {/* Header */}
               <div className="flex items-start justify-between gap-4">
-
                 <div>
-
                   <h3 className="text-lg font-bold text-slate-900">
                     Bank & Identity Details
                   </h3>
-
                   <p className="text-sm text-slate-500 mt-1">
                     Bank account and identification information.
                   </p>
-
                 </div>
 
                 <button
                   type="button"
-                  onClick={() =>
-                    openEditSection(
-                      "bank"
-                    )
-                  }
+                  onClick={() => openEditSection("bank")}
                   className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 text-xs font-bold transition-colors shrink-0"
                 >
-
                   <Edit3 className="w-4 h-4" />
-
                   Edit
-
                 </button>
-
               </div>
 
+              {/* Bank & Identity Fields */}
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5 text-sm">
-
                 {[
-                  [
-                    "Bank Name",
-                    employeeData.bank_name,
-                  ],
+                  {
+                    label: "Bank Name",
+                    value: savedBankDetails.bank_name,
+                    sensitive: false,
+                  },
+                  {
+                    label: "Account Number",
+                     value: savedBankDetails.bank_account_number,
+                    sensitive: true,
+                  },
+                  {
+                    label: "IFSC Code",
+                     value: savedBankDetails.ifsc_code,
+                    sensitive: true,
+                  },
+                  {
+                    label: "PAN Number",
+                    value: employeeData.pan_number,
+                    sensitive: true,
+                  },
+                  {
+                    label: "Aadhaar Number",
+                    value: employeeData.aadhar_number,
+                    sensitive: true,
+                  },
+                  {
+                    label: "Passport Number",
+                    value: employeeData.passport_number,
+                    sensitive: true,
+                  },
+                ].map(({ label, value, sensitive }) => {
+                  const fieldKey = label;
+                  const textValue = String(value ?? "");
+                  const hasValue = textValue.trim().length > 0;
+                  const isRevealed = !!revealedNumbers[fieldKey];
 
-                  [
-                    "Account Number",
-                    employeeData.bank_account_number,
-                  ],
+                  const displayValue = !hasValue
+                    ? "Not specified"
+                    : sensitive && !isRevealed
+                      ? textValue.length <= 4
+                        ? "•".repeat(textValue.length)
+                        : "•".repeat(textValue.length - 4) +
+                          textValue.slice(-4)
+                      : textValue;
 
-                  [
-                    "IFSC Code",
-                    employeeData.ifsc_code,
-                  ],
-
-                  [
-                    "PAN Number",
-                    employeeData.pan_number,
-                  ],
-
-                  [
-                    "Aadhaar Number",
-                    employeeData.aadhar_number,
-                  ],
-
-                  [
-                    "Passport Number",
-                    employeeData.passport_number,
-                  ],
-                ].map(
-                  ([label, value]) => (
+                  return (
                     <div
                       key={label}
-                      className="p-4 bg-slate-50/70 rounded-xl border border-slate-100"
+                      className="min-w-0 p-4 bg-slate-50/70 rounded-xl border border-slate-100 hover:border-indigo-100 transition-colors"
                     >
-
-                      <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
+                      <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-2">
                         {label}
                       </span>
 
-                      <span className="font-semibold text-slate-800 font-mono break-all">
-                        {value ||
-                          "Not specified"}
-                      </span>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="font-semibold text-slate-800 font-mono break-all flex-1 min-w-0">
+                          {displayValue}
+                        </span>
 
+                        {sensitive && hasValue && (
+                          <div className="flex items-center gap-1 shrink-0">
+                            {/* Show / Hide */}
+                            <button
+                              type="button"
+                              onClick={() =>
+                                toggleRevealedNumber(fieldKey)
+                              }
+                              title={
+                                isRevealed
+                                  ? "Hide number"
+                                  : "Show number"
+                              }
+                              aria-label={
+                                isRevealed
+                                  ? `Hide ${label}`
+                                  : `Show ${label}`
+                              }
+                              className="p-1.5 rounded-md text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                            >
+                              {isRevealed ? (
+                                <EyeOff className="w-4 h-4" />
+                              ) : (
+                                <Eye className="w-4 h-4" />
+                              )}
+                            </button>
+
+                            {/* Copy */}
+                            <button
+                              type="button"
+                              onClick={() =>
+                                copySensitiveValue(textValue)
+                              }
+                              title={`Copy ${label}`}
+                              aria-label={`Copy ${label}`}
+                              className="p-1.5 rounded-md text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                            >
+                              <Copy className="w-4 h-4" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  )
-                )}
-
+                  );
+                })}
               </div>
-
             </div>
           )}
-
           {/* ========================================================
               EMPLOYMENT
           ======================================================== */}
@@ -2291,303 +2581,332 @@ export default function EmployeeProfileView({
               DOCUMENTS
           ======================================================== */}
 
+
           {activeTab === "document" && (
             <div className="space-y-6">
-
+              {/* Header */}
               <div className="flex items-start justify-between gap-4">
-
                 <div>
-
                   <h3 className="text-lg font-bold text-slate-900">
                     Documents
                   </h3>
-
-                  <p className="text-sm text-slate-500 mt-1">
-                    Upload and manage employee documents.
+                  <p className="mt-1 text-sm text-slate-500">
+                    View and download documents uploaded by HR or yourself.
                   </p>
-
                 </div>
 
                 <button
                   type="button"
-                  onClick={() =>
-                    openEditSection(
-                      "document"
-                    )
-                  }
-                  className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 text-xs font-bold transition-colors shrink-0"
+                  onClick={() => openEditSection("document")}
+                  className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-indigo-50 px-3.5 py-2 text-xs font-bold text-indigo-600 transition-colors hover:bg-indigo-100"
                 >
-
-                  <Edit3 className="w-4 h-4" />
-
+                  <Edit3 className="h-4 w-4" />
                   Edit
-
                 </button>
-
               </div>
 
-              <div className="bg-slate-50/70 border-2 border-dashed border-slate-200 rounded-2xl p-6 sm:p-7">
-
-                <div className="max-w-xl mx-auto space-y-4">
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-
-                    <div>
-
-                      <label className={labelClass}>
-                        Document Type
-                      </label>
-
-                      <select
-                        value={docType}
-                        onChange={(e) => {
-                          setDocType(
-                            e.target.value
-                          );
-
-                          setDocumentError(
-                            null
-                          );
-                        }}
-                        className={inputClass}
-                        disabled={
-                          isUploading
-                        }
-                      >
-
-                        {documentTypes.map(
-                          (type) => (
-                            <option
-                              key={type}
-                              value={type}
-                            >
-                              {type}
-                            </option>
-                          )
-                        )}
-
-                      </select>
-
-                    </div>
-
-                    <div>
-
-                      <label
-                        htmlFor="document-name"
-                        className={labelClass}
-                      >
-                        Custom Label
-                        <span className="font-normal text-slate-400 normal-case">
-                          {" "}
-                          (optional)
-                        </span>
-                      </label>
-
-                      <input
-                        id="document-name"
-                        type="text"
-                        value={
-                          documentName
-                        }
-                        onChange={(e) =>
-                          setDocumentName(
-                            e.target.value
-                          )
-                        }
-                        placeholder="Defaults to filename"
-                        className={inputClass}
-                        disabled={
-                          isUploading
-                        }
-                      />
-
-                    </div>
-
-                  </div>
-
-                  <label className="flex flex-col items-center justify-center w-full py-8 px-4 bg-white border border-slate-200 rounded-2xl shadow-sm hover:border-indigo-400 hover:shadow-md transition-all cursor-pointer">
-
-                    <div className="h-12 w-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mb-3">
-
-                      {isUploading ? (
-                        <Loader2 className="w-6 h-6 animate-spin" />
-                      ) : (
-                        <Upload className="w-6 h-6" />
-                      )}
-
-                    </div>
-
-                    <span className="text-sm font-bold text-slate-800">
-
-                      {isUploading
-                        ? "Uploading Document..."
-                        : "Choose Document to Upload"}
-
-                    </span>
-
-                    <span className="text-xs text-slate-400 mt-1 font-medium">
-                      Supports PDF, PNG, JPG files up to 5MB
-                    </span>
-
-                    <input
-                      ref={
-                        documentFileInputRef
-                      }
-                      type="file"
-                      name="file_upload"
-                      className="hidden"
-                      accept=".pdf,image/*"
-                      onChange={
-                        handleFileChange
-                      }
-                      disabled={
-                        isUploading
-                      }
-                    />
-
-                  </label>
-
-                </div>
-
-                {documentError && (
-                  <p className="mt-3 text-xs font-bold text-rose-600 text-center">
-                    {documentError}
-                  </p>
-                )}
-
-              </div>
-
+              {/* Document List */}
               <div className="space-y-3">
-
                 <div className="flex items-center justify-between">
-
-                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                    Verified Documents (
-                    {documents.length}
-                    )
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                    Verified Documents ({documents.length})
                   </h4>
-
                 </div>
 
                 {documents.length === 0 ? (
-                  <div className="text-center py-10 bg-slate-50/50 rounded-2xl border border-slate-100">
-
-                    <p className="text-xs text-slate-400 font-medium">
+                  <div className="rounded-2xl border border-slate-100 bg-slate-50/50 py-10 text-center">
+                    <FileText className="mx-auto mb-2 h-8 w-8 text-slate-300" />
+                    <p className="text-xs font-medium text-slate-400">
                       No documents uploaded yet for this employee record.
                     </p>
-
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-
-                    {documents.map(
-                      (doc) => (
-                        <div
-                          key={doc.id}
-                          className="flex items-center justify-between p-4 bg-white rounded-xl border border-slate-200/90 shadow-sm hover:shadow-sm transition-all"
-                        >
-
-                          <div className="flex items-center gap-3 min-w-0">
-
-                            <div className="h-10 w-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
-
-                              <FileText className="w-5 h-5" />
-
-                            </div>
-
-                            <div className="min-w-0">
-
-                              <p className="text-xs font-bold text-slate-900 truncate">
-                                {doc.document_name}
-                              </p>
-
-                              <div className="flex items-center gap-2 mt-1">
-
-                                <span className="text-[10px] font-bold px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md">
-                                  {doc.document_type}
-                                </span>
-
-                                <span className="text-[10px] text-slate-400 font-mono">
-
-                                  {[
-                                    "Aadhar Card",
-                                    "Aadhaar Card",
-                                  ].includes(
-                                    doc.document_type
-                                  )
-                                    ? employeeData.aadhar_number ||
-                                      "Not specified"
-                                    : doc.uploaded_at
-                                    ? new Date(
-                                        doc.uploaded_at
-                                      ).toLocaleDateString()
-                                    : "Not specified"}
-
-                                </span>
-
-                              </div>
-
-                            </div>
-
+                  <div className="grid grid-cols-1 gap-3">
+                    {documents.map((doc, index) => (
+                      <div
+                        key={`${doc.id}-${index}`}
+                        className="flex min-w-0 items-start justify-between gap-3 rounded-xl border border-slate-200/90 bg-white p-4 shadow-sm transition-all hover:shadow-md"
+                      >
+                        {/* Document Information */}
+                        <div className="flex min-w-0 flex-1 items-start gap-3">
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+                            <FileText className="h-5 w-5" />
                           </div>
 
-                          <div className="flex items-center gap-1 shrink-0 ml-3">
+                          <div className="min-w-0 flex-1">
+                            <p className="break-words text-xs font-bold text-slate-900">
+                              {doc.document_name || "Untitled document"}
+                            </p>
 
-                            <a
-                              href={
-                                doc.document_url
-                              }
-                              target="_blank"
-                              rel="noreferrer"
-                              className="p-1.5 rounded-lg text-slate-400 hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
-                              title="View"
-                            >
+                            {/* Document Type and Identity Numbers */}
+                            <div className="mt-2 flex flex-wrap items-center gap-2">
+                              <span className="rounded-md bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-600">
+                                {doc.document_type || "Not specified"}
+                              </span>
 
-                              <Eye className="w-4 h-4" />
+                              {[
+                                {
+                                  label: "Aadhaar",
+                                  value: doc.aadhaar_number,
+                                  key: `${doc.id}-aadhaar`,
+                                },
+                                {
+                                  label: "PAN",
+                                  value: doc.pan_number,
+                                  key: `${doc.id}-pan`,
+                                },
+                                {
+                                  label: "Passport",
+                                  value: doc.passport_number,
+                                  key: `${doc.id}-passport`,
+                                },
+                              ]
+                                .filter((field) => Boolean(field.value))
+                                .map((field) => {
+                                  const value = String(field.value);
+                                  const isRevealed = Boolean(
+                                    revealedNumbers[field.key]
+                                  );
 
-                            </a>
+                                  const maskedValue =
+                                    value.length > 4
+                                      ? `${"*".repeat(value.length - 4)}${value.slice(-4)}`
+                                      : "*".repeat(value.length);
 
-                            <a
-                              href={
-                                doc.document_url
-                              }
-                              download
-                              className="p-1.5 rounded-lg text-slate-400 hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
-                              title="Download"
-                            >
+                                  return (
+                                    <span
+                                      key={field.key}
+                                      className="inline-flex max-w-full items-center gap-1 rounded-md border border-green-100 bg-green-50 px-2 py-1 text-[10px] font-bold text-green-700"
+                                    >
+                                      <span>{field.label}:</span>
 
-                              <Download className="w-4 h-4" />
+                                      <span className="break-all">
+                                        {isRevealed ? value : maskedValue}
+                                      </span>
 
-                            </a>
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setRevealedNumbers((previous) => ({
+                                            ...previous,
+                                            [field.key]: !previous[field.key],
+                                          }))
+                                        }
+                                        className="shrink-0 rounded p-1 hover:bg-green-100"
+                                        title={
+                                          isRevealed ? "Hide number" : "Reveal number"
+                                        }
+                                        aria-label={`${isRevealed ? "Hide" : "Reveal"} ${field.label}`}
+                                      >
+                                        {isRevealed ? (
+                                          <EyeOff className="h-3 w-3" />
+                                        ) : (
+                                          <Eye className="h-3 w-3" />
+                                        )}
+                                      </button>
 
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handleDelete(
-                                  doc.id
-                                )
-                              }
-                              className="p-1.5 rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-colors"
-                              title="Delete"
-                            >
+                                      <button
+                                        type="button"
+                                        onClick={async () => {
+                                          try {
+                                            await navigator.clipboard.writeText(value);
+                                            toast.success(
+                                              `${field.label} number copied`
+                                            );
+                                          } catch {
+                                            toast.error(
+                                              "Could not copy number. Check browser permissions."
+                                            );
+                                          }
+                                        }}
+                                        className="shrink-0 rounded p-1 hover:bg-green-100"
+                                        title={`Copy ${field.label}`}
+                                        aria-label={`Copy ${field.label}`}
+                                      >
+                                        <Copy className="h-3 w-3" />
+                                      </button>
+                                    </span>
+                                  );
+                                })}
+                            </div>
 
-                              <Trash2 className="w-4 h-4" />
+                            {/* Bank Passbook Details */}
+{doc.document_type?.trim().toLowerCase() === "bank passbook" && (
+  <div className="mt-4 w-full overflow-hidden rounded-xl border border-slate-200 bg-white">
+    <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2.5">
+      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-100 text-indigo-600">
+        <Landmark className="h-4 w-4" />
+      </div>
 
-                            </button>
+      <div>
+        <p className="text-xs font-bold text-slate-800">Bank Details</p>
+        <p className="text-[10px] text-slate-500">
+          Employee bank information
+        </p>
+      </div>
+    </div>
 
+    <div className="grid grid-cols-1 divide-y divide-slate-100 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+      {/* Bank Name */}
+      <div className="min-w-0 px-3 py-3">
+        <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+          Bank Name
+        </p>
+        <p className="break-words text-xs font-bold text-slate-800">
+          {doc.bank_name || "Not available"}
+        </p>
+      </div>
+
+      {/* Account Number */}
+      <div className="min-w-0 px-3 py-3">
+        <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+          Account Number
+        </p>
+
+        <div className="flex min-w-0 items-center gap-1">
+          <p className="min-w-0 flex-1 break-all font-mono text-xs font-bold text-slate-800">
+            {doc.bank_account_number
+              ? revealedNumbers[`${doc.id}-bank-account`]
+                ? doc.bank_account_number
+                : `•••• •••• ${doc.bank_account_number.slice(-4)}`
+              : "Not available"}
+          </p>
+
+          {doc.bank_account_number && (
+            <>
+              <button
+                type="button"
+                onClick={() =>
+                  toggleRevealedNumber(`${doc.id}-bank-account`)
+                }
+                className="shrink-0 rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-indigo-600"
+                title="Show or hide account number"
+                aria-label="Toggle account number visibility"
+              >
+                {revealedNumbers[`${doc.id}-bank-account`] ? (
+                  <EyeOff className="h-3.5 w-3.5" />
+                ) : (
+                  <Eye className="h-3.5 w-3.5" />
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  await copySensitiveValue(doc.bank_account_number!);
+                  toast.success("Account number copied");
+                }}
+                className="shrink-0 rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-indigo-600"
+                title="Copy account number"
+                aria-label="Copy account number"
+              >
+                <Copy className="h-3.5 w-3.5" />
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* IFSC Code */}
+      <div className="min-w-0 px-3 py-3">
+        <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+          IFSC Code
+        </p>
+
+        <div className="flex min-w-0 items-center gap-1">
+          <p className="min-w-0 flex-1 break-all font-mono text-xs font-bold text-slate-800">
+            {!doc.ifsc_code
+              ? "Not available"
+              : revealedNumbers[`${doc.id}-ifsc`] === true
+                ? doc.ifsc_code
+                : "*".repeat(Math.max(0, doc.ifsc_code.length - 4)) +
+                  doc.ifsc_code.slice(-4)}
+          </p>
+
+          {doc.ifsc_code && (
+            <>
+              <button
+                type="button"
+                onClick={() => toggleRevealedNumber(`${doc.id}-ifsc`)}
+                className="shrink-0 rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-indigo-600"
+                title={
+                  revealedNumbers[`${doc.id}-ifsc`]
+                    ? "Hide IFSC code"
+                    : "Show IFSC code"
+                }
+                aria-label="Toggle IFSC visibility"
+              >
+                {revealedNumbers[`${doc.id}-ifsc`] ? (
+                  <EyeOff className="h-3.5 w-3.5" />
+                ) : (
+                  <Eye className="h-3.5 w-3.5" />
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => copySensitiveValue(doc.ifsc_code!)}
+                className="shrink-0 rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-indigo-600"
+                title="Copy IFSC code"
+                aria-label="Copy IFSC code"
+              >
+                <Copy className="h-3.5 w-3.5" />
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  </div>
+)}
+                            {/* Upload Date */}
+                            <div className="mt-3">
+                              <span className="inline-flex rounded-md bg-slate-50 px-2 py-1 text-[10px] font-medium text-slate-500">
+                                Uploaded:{" "}
+                                {doc.uploaded_at
+                                  ? new Date(doc.uploaded_at).toLocaleDateString(
+                                      "en-IN"
+                                    )
+                                  : "Not available"}
+                              </span>
+                            </div>
                           </div>
-
                         </div>
-                      )
-                    )}
 
+                        {/* View and Download */}
+                        <div className="flex shrink-0 items-center gap-1">
+                          <a
+                            href={`/api/documents/${doc.id}/view`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-indigo-50 hover:text-indigo-600"
+                            title="View document"
+                            aria-label="View document"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </a>
+
+                          <a
+                            href={doc.document_url}
+                            download={doc.document_name || "document"}
+                            className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-indigo-50 hover:text-indigo-600"
+                            title="Download document"
+                            aria-label="Download document"
+                          >
+                            <Download className="h-4 w-4" />
+                          </a>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
-
               </div>
-
             </div>
           )}
+
+
+
+          
 
           {/* ========================================================
               STATUTORY
@@ -2737,7 +3056,7 @@ export default function EmployeeProfileView({
                         "No Main Accessory"}
                     </span>
 
-                  </div>
+                </div>
 
                   <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
 
@@ -2843,23 +3162,23 @@ export default function EmployeeProfileView({
           makes the modal exactly center of the viewport.
       ============================================================ */}
 
-    {isEditModalOpen && (
-  <div
-    className="fixed inset-0 z-[100] flex items-center justify-center bg-black/45 p-4"
-    onMouseDown={(event) => {
-      if (
-        event.target === event.currentTarget
-      ) {
-        closeEditModal();
-      }
-    }}
-  >
-<div
-  className="relative translate-y-6 w-full max-w-2xl max-h-[85vh] overflow-hidden rounded-2xl bg-white shadow-2xl flex flex-col"
-  onMouseDown={(event) => event.stopPropagation()
+      {isEditModalOpen && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/45 p-4"
+          onMouseDown={(event) => {
+            if (
+              event.target === event.currentTarget
+            ) {
+              closeEditModal();
+            }
+          }}
+        >
+      <div
+        className="relative translate-y-6 w-full max-w-2xl max-h-[85vh] overflow-hidden rounded-2xl bg-white shadow-2xl flex flex-col"
+        onMouseDown={(event) => event.stopPropagation()
 
-  }
->
+        }
+      >
 
 
             {/* ======================================================
@@ -3064,6 +3383,65 @@ export default function EmployeeProfileView({
                 }
                 className="flex-1 overflow-y-auto p-6 space-y-8"
               >
+
+
+              <section className="rounded-xl border border-indigo-200 bg-indigo-50/50 p-4 space-y-3">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">
+                    Supporting Documents
+                  </h3>
+                  <p className="mt-1 text-xs text-slate-600">
+                    Upload the pending identity or bank document required for your sensitive profile changes.
+                    The document will be linked when you submit the request.
+                  </p>
+                </div>
+
+                <select
+                  value={requestDocumentType}
+                  onChange={(e) => {
+                    setRequestDocumentType(e.target.value);
+                    setRequestDocumentError(null);
+                  }}
+                  disabled={requestDocumentUploading || loading}
+                  className={inputClass}
+                >
+                  <option value="Bank Passbook">Bank Passbook</option>
+                  <option value="Aadhaar Card">Aadhaar Card</option>
+                  <option value="Aadhar Card">Aadhar Card</option>
+                  <option value="PAN Card">PAN Card</option>
+                  <option value="Passport">Passport</option>
+                </select>
+
+                <input
+                  ref={requestDocumentInputRef}
+                  type="file"
+                  accept=".pdf,.png,.jpg,.jpeg"
+                  className="block w-full text-sm"
+                  disabled={requestDocumentUploading || loading}
+                  onChange={handleRequestDocumentUpload}
+                />
+
+                {requestDocumentUploading && (
+                  <p className="text-xs text-indigo-700">
+                    Uploading and verifying document format...
+                  </p>
+                )}
+
+                {requestDocumentError && (
+                  <p className="text-xs text-rose-600">
+                    {requestDocumentError}
+                  </p>
+                )}
+
+                <div className="space-y-1">
+                  {Object.entries(sensitiveDocumentIds).map(([type, id]) => (
+                    <p key={type} className="text-xs text-emerald-700">
+                      Uploaded: {type} — {id.slice(0, 8)}…
+                    </p>
+                  ))}
+                </div>
+              </section>
+
 
                 {/* ==================================================
                     PERSONAL INFORMATION

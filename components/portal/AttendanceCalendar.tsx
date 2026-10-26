@@ -43,43 +43,43 @@ interface AttendanceCalendarProps {
    EXISTING DUMMY DATA
    ========================================================= */
 
-// const dummyAttendance: Record<string, SelectedAttendance> = {
-//   "2026-09-10": {
-//     date: "2026-09-10",
-//     status: "leave",
-//   },
-//   "2026-09-11": {
-//     date: "2026-09-11",
-//     status: "leave",
-//   },
-//   "2026-09-22": {
-//     date: "2026-09-22",
-//     status: "half_day",
-//     clockIn: "09:20 AM",
-//     clockOut: "01:15 PM",
-//     worked: "3h 55m",
-//   },
-//   "2026-09-23": {
-//     date: "2026-09-23",
-//     status: "present",
-//     clockIn: "09:18 AM",
-//     clockOut: "06:12 PM",
-//     worked: "8h 54m",
-//   },
-//   "2026-09-24": {
-//     date: "2026-09-24",
-//     status: "present",
-//     clockIn: "09:42 AM",
-//     clockOut: "06:05 PM",
-//     worked: "8h 23m",
-//   },
-//   "2026-09-25": {
-//     date: "2026-09-25",
-//     status: "present",
-//     clockIn: "02:35 PM",
-//     worked: "1h 07m",
-//   },
-// };
+const dummyAttendance: Record<string, SelectedAttendance> = {
+  "2026-09-10": {
+    date: "2026-09-10",
+    status: "leave",
+  },
+  "2026-09-11": {
+    date: "2026-09-11",
+    status: "leave",
+  },
+  "2026-09-22": {
+    date: "2026-09-22",
+    status: "half_day",
+    clockIn: "09:20 AM",
+    clockOut: "01:15 PM",
+    worked: "3h 55m",
+  },
+  "2026-09-23": {
+    date: "2026-09-23",
+    status: "present",
+    clockIn: "09:18 AM",
+    clockOut: "06:12 PM",
+    worked: "8h 54m",
+  },
+  "2026-09-24": {
+    date: "2026-09-24",
+    status: "present",
+    clockIn: "09:42 AM",
+    clockOut: "06:05 PM",
+    worked: "8h 23m",
+  },
+  "2026-09-25": {
+    date: "2026-09-25",
+    status: "present",
+    clockIn: "02:35 PM",
+    worked: "1h 07m",
+  },
+};
 
 /* =========================================================
    HELPERS
@@ -260,9 +260,9 @@ export default function AttendanceCalendar({
     )}-${String(day).padStart(2, "0")}`;
 
     // Preserve the existing demo data.
-    // if (dummyAttendance[date]) {
-    //   return dummyAttendance[date].status;
-    // }
+    if (dummyAttendance[date]) {
+      return dummyAttendance[date].status;
+    }
 
     // Approved leave takes priority over missing attendance.
     if (leaveDates.has(date)) {
@@ -320,9 +320,9 @@ export default function AttendanceCalendar({
       "0"
     )}-${String(day).padStart(2, "0")}`;
 
-    // if (dummyAttendance[date]) {
-    //   return dummyAttendance[date];
-    // }
+    if (dummyAttendance[date]) {
+      return dummyAttendance[date];
+    }
 
     const state = getDayState(day);
 

@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { toast } from "react-hot-toast";
 import { useRouter } from "next/navigation";
 import { EmployeeDocument } from "@/lib/types";
-import { Upload, FileText, Trash2, Download, Eye, Loader2, Plus } from "lucide-react";
+import { Upload, FileText, Trash2, Download, Eye, Loader2, EyeOff, Copy, Landmark } from "lucide-react";
 
 interface DocumentUploadProps {
   employeeId?: string;
@@ -19,16 +20,60 @@ export default function DocumentUpload({ employeeId, documents: initialDocs, onU
   const [error, setError] = useState<string | null>(null);
   const [docType, setDocType] = useState<string>("Resume");
   const [documentName, setDocumentName] = useState("");
+  const [revealedNumbers, setRevealedNumbers] = useState<Record<string, boolean>>({});
+
 
   useEffect(() => {
-    setDocuments(initialDocs);
-  }, [initialDocs]);
+    let cancelled = false;
+
+    async function loadDocuments() {
+      if (!employeeId) {
+        setDocuments(initialDocs);
+        return;
+      }
+
+      try {
+        const response = await fetch(
+          `/api/documents?employee_id=${encodeURIComponent(employeeId)}`,
+          { cache: "no-store" }
+        );
+
+        if (!response.ok) {
+          console.error(
+            "Failed to load documents:",
+            await response.text()
+          );
+          setDocuments(initialDocs);
+          return;
+        }
+
+        const result = await response.json();
+
+        if (!cancelled && Array.isArray(result.documents)) {
+          setDocuments(result.documents);
+        }
+      } catch (error) {
+        console.error("Error loading documents:", error);
+
+        if (!cancelled) {
+          setDocuments(initialDocs);
+        }
+      }
+    }
+
+    loadDocuments();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [employeeId, initialDocs]);
 
   const docTypes = [
     "10th Certificate",
     "12th Certificate",
     "Graduation Certificate",
     "Post-Graduation Certificate",
+    "Bank Passbook",
     "Experience Letter",
     "Relieving Letter",
     "Offer Letter",
@@ -181,81 +226,316 @@ export default function DocumentUpload({ employeeId, documents: initialDocs, onU
             <p className="text-xs text-slate-400 font-medium">No documents uploaded yet for this employee record.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-4">
+
             {documents.map((doc, index) => (
-              <div key={`${doc.id}-${index}`} className="flex items-center justify-between p-4 bg-white rounded-xl border border-slate-200/90 shadow-2xs hover:shadow-sm transition-all">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="h-10 w-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
-                    <FileText className="w-5 h-5" />
+              <div
+                key={`${doc.id}-${index}`}
+                className="flex items-start justify-between gap-3 rounded-xl border border-slate-200/90 bg-white p-4 shadow-sm transition-shadow hover:shadow-md"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+                    <FileText className="h-5 w-5" />
                   </div>
-                  <div className="min-w-0">
-                    <p className="text-xs font-bold text-slate-900 truncate">{doc.document_name}</p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className="text-[10px] font-bold px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md">
+
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-bold text-slate-900">
+                      {doc.document_name}
+                    </p>
+
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">
                         {doc.document_type}
                       </span>
 
-                      {doc.aadhaar_number && (
-                        <span className="text-[10px] font-bold px-2 py-0.5 bg-green-50 text-green-700 rounded-md">
-                          Aadhaar:{" "}
-                          {doc.aadhaar_number.replace(
-                            /(\d{4})(\d{4})(\d{4})/,
-                            "$1 $2 $3"
-                          )}
-                        </span>
-                      )}
+                      {[
+                        {
+                          label: "Aadhaar",
+                          value: doc.aadhaar_number,
+                          key: `${doc.id}-aadhaar`,
+                        },
+                        {
+                          label: "PAN",
+                          value: doc.pan_number,
+                          key: `${doc.id}-pan`,
+                        },
+                        {
+                          label: "Passport",
+                          value: doc.passport_number,
+                          key: `${doc.id}-passport`,
+                        },
+                      ]
+                        .filter((field) => Boolean(field.value))
+                        .map((field) => {
+                          const value = String(field.value);
+                          const isRevealed = Boolean(revealedNumbers[field.key]);
 
-                      {doc.pan_number && (
-                        <span className="text-[10px] font-bold px-2 py-0.5 bg-green-50 text-green-700 rounded-md">
-                          PAN: {doc.pan_number}
-                        </span>
-                      )}
+                          const maskedValue =
+                            value.length > 4
+                              ? `${"*".repeat(value.length - 4)}${value.slice(-4)}`
+                              : "*".repeat(value.length);
 
-                      {doc.passport_number && (
-                        <span className="text-[10px] font-bold px-2 py-0.5 bg-green-50 text-green-700 rounded-md">
-                          Passport: {doc.passport_number}
-                        </span>
+                          return (
+                            <span
+                              key={field.key}
+                              className="inline-flex max-w-full items-center gap-1 rounded-md border border-green-100 bg-green-50 px-2 py-1 text-[10px] font-bold text-green-700"
+                            >
+                              <span>{field.label}:</span>
+
+                              <span className="break-all">
+                                {isRevealed ? value : maskedValue}
+                              </span>
+
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setRevealedNumbers((previous) => ({
+                                    ...previous,
+                                    [field.key]: !previous[field.key],
+                                  }))
+                                }
+                                className="shrink-0 rounded p-1 hover:bg-green-100"
+                                title={isRevealed ? "Hide number" : "Reveal number"}
+                                aria-label={`${isRevealed ? "Hide" : "Reveal"} ${field.label}`}
+                              >
+                                {isRevealed ? (
+                                  <EyeOff className="h-3 w-3" />
+                                ) : (
+                                  <Eye className="h-3 w-3" />
+                                )}
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  try {
+                                    await navigator.clipboard.writeText(value);
+                                    toast.success(`${field.label} number copied`);
+                                  } catch {
+                                    toast.error(
+                                      "Could not copy. Check browser clipboard permissions."
+                                    );
+                                  }
+                                }}
+                                className="shrink-0 rounded p-1 hover:bg-green-100"
+                                title={`Copy ${field.label}`}
+                                aria-label={`Copy ${field.label}`}
+                              >
+                                <Copy className="h-3 w-3" />
+                              </button>
+                            </span>
+                          );
+                        })}
+
+                      {doc.document_type === "Bank Passbook" && (
+                        <div className="mt-3 w-full overflow-hidden rounded-xl border border-slate-200 bg-slate-50/80">
+                          {/* Section heading */}
+                          <div className="flex items-center gap-2 border-b border-slate-200 px-4 py-3">
+                            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white text-slate-600 shadow-sm ring-1 ring-slate-200">
+                              <Landmark className="h-4 w-4" />
+                            </div>
+
+                            <span className="text-xs font-bold text-slate-800">
+                              Bank Details
+                            </span>
+
+                            <span className="ml-auto rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[9px] font-bold uppercase tracking-wide text-emerald-700">
+                              Available
+                            </span>
+                          </div>
+
+                          {/* Three aligned columns */}
+                          <div className="grid grid-cols-1 divide-y divide-slate-200 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+                            {/* Bank name */}
+                            <div className="min-w-0 px-4 py-3">
+                              <p className="mb-1 text-[10px] font-medium uppercase tracking-wider text-slate-500">
+                                Bank Name
+                              </p>
+
+                              <p className="break-words text-xs font-bold text-slate-800">
+                                {doc.bank_name || "Not available"}
+                              </p>
+                            </div>
+
+                            {/* Account number */}
+                            <div className="min-w-0 px-4 py-3">
+                              <p className="mb-1 text-[10px] font-medium uppercase tracking-wider text-slate-500">
+                                Account Number
+                              </p>
+
+                              <div className="flex min-w-0 items-center gap-1.5">
+                                <p className="min-w-0 flex-1 break-all font-mono text-xs font-bold text-slate-800">
+                                  {doc.bank_account_number
+                                    ? revealedNumbers[`${doc.id}-bank-account`]
+                                      ? doc.bank_account_number
+                                      : `•••• •••• ${doc.bank_account_number.slice(-4)}`
+                                    : "Not available"}
+                                </p>
+
+                                {doc.bank_account_number && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setRevealedNumbers((previous) => ({
+                                          ...previous,
+                                          [`${doc.id}-bank-account`]:
+                                            !previous[`${doc.id}-bank-account`],
+                                        }))
+                                      }
+                                      className="shrink-0 rounded-md p-1 text-slate-500 transition hover:bg-white hover:text-indigo-600"
+                                      title={
+                                        revealedNumbers[`${doc.id}-bank-account`]
+                                          ? "Hide account number"
+                                          : "Reveal account number"
+                                      }
+                                      aria-label="Toggle account number visibility"
+                                    >
+                                      {revealedNumbers[`${doc.id}-bank-account`] ? (
+                                        <EyeOff className="h-3.5 w-3.5" />
+                                      ) : (
+                                        <Eye className="h-3.5 w-3.5" />
+                                      )}
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={async () => {
+                                        try {
+                                          await navigator.clipboard.writeText(
+                                            doc.bank_account_number!
+                                          );
+                                          toast.success("Account number copied");
+                                        } catch {
+                                          toast.error("Could not copy account number");
+                                        }
+                                      }}
+                                      className="shrink-0 rounded-md p-1 text-slate-500 transition hover:bg-white hover:text-indigo-600"
+                                      title="Copy account number"
+                                      aria-label="Copy account number"
+                                    >
+                                      <Copy className="h-3.5 w-3.5" />
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            </div> 
+                            {/* IFSC */}
+                            <div className="min-w-0 px-4 py-3">
+                              <p className="mb-1 text-[10px] font-medium uppercase tracking-wider text-slate-500">
+                                IFSC Code
+                              </p>
+
+                              <div className="flex min-w-0 items-center gap-1.5">
+                                <p className="min-w-0 flex-1 break-all font-mono text-xs font-bold text-slate-800">
+                                  {doc.ifsc_code
+                                    ? revealedNumbers[`${doc.id}-ifsc`]
+                                      ? doc.ifsc_code
+                                      : `${"*".repeat(Math.max(0, doc.ifsc_code.length - 4))}${doc.ifsc_code.slice(-4)}`
+                                    : "Not available"}
+                                </p>
+
+                                {doc.ifsc_code && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setRevealedNumbers((previous) => ({
+                                          ...previous,
+                                          [`${doc.id}-ifsc`]: !previous[`${doc.id}-ifsc`],
+                                        }))
+                                      }
+                                      className="shrink-0 rounded-md p-1 text-slate-500 transition hover:bg-white hover:text-indigo-600"
+                                      title={
+                                        revealedNumbers[`${doc.id}-ifsc`]
+                                          ? "Hide IFSC code"
+                                          : "Reveal IFSC code"
+                                      }
+                                      aria-label={
+                                        revealedNumbers[`${doc.id}-ifsc`]
+                                          ? "Hide IFSC code"
+                                          : "Reveal IFSC code"
+                                      }
+                                    >
+                                      {revealedNumbers[`${doc.id}-ifsc`] ? (
+                                        <EyeOff className="h-3.5 w-3.5" />
+                                      ) : (
+                                        <Eye className="h-3.5 w-3.5" />
+                                      )}
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={async () => {
+                                        try {
+                                          await navigator.clipboard.writeText(doc.ifsc_code!);
+                                          toast.success("IFSC code copied");
+                                        } catch {
+                                          toast.error("Could not copy IFSC code");
+                                        }
+                                      }}
+                                      className="shrink-0 rounded-md p-1 text-slate-500 transition hover:bg-white hover:text-indigo-600"
+                                      title="Copy IFSC code"
+                                      aria-label="Copy IFSC code"
+                                    >
+                                      <Copy className="h-3.5 w-3.5" />
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
                       )}
 
                       {doc.uploaded_at && (
-                        <span className="text-[10px] text-slate-400 font-mono">
+
+                        
+                        <span className="font-mono text-[10px] text-slate-400">
                           {new Date(doc.uploaded_at).toLocaleDateString()}
                         </span>
                       )}
                     </div>
                   </div>
-                  
                 </div>
-                <div className="flex items-center gap-1 shrink-0 ml-3">
+
+                <div className="ml-1 flex shrink-0 items-center gap-1">
                   <a
                     href={`/api/documents/${doc.id}/view`}
                     target="_blank"
                     rel="noreferrer"
-                    className="p-1.5 rounded-lg text-slate-400 hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
+                    className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-indigo-50 hover:text-indigo-600"
                     title="View"
+                    aria-label="View document"
                   >
-                    <Eye className="w-4 h-4" />
+                    <Eye className="h-4 w-4" />
                   </a>
+
                   <a
                     href={doc.document_url}
                     download
-                    className="p-1.5 rounded-lg text-slate-400 hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
+                    className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-indigo-50 hover:text-indigo-600"
                     title="Download"
+                    aria-label="Download document"
                   >
-                    <Download className="w-4 h-4" />
+                    <Download className="h-4 w-4" />
                   </a>
+
                   {canUpload && (
                     <button
+                      type="button"
                       onClick={() => handleDelete(doc.id)}
-                      className="p-1.5 rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-colors"
+                      className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-rose-50 hover:text-rose-600"
                       title="Delete"
+                      aria-label="Delete document"
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Trash2 className="h-4 w-4" />
                     </button>
                   )}
                 </div>
               </div>
             ))}
+
           </div>
         )}
       </div>

@@ -58,7 +58,7 @@ export default function EmployeeDetail({ employee, documents, role }: EmployeeDe
 
           <div className="flex items-center justify-between gap-2">
             <span className="min-w-0 break-all text-sm font-medium text-slate-900">
-              {hasValue ? canReveal && isRevealed ? value : maskString(value, 4) : "N/A"}
+              {hasValue ? canReveal && isRevealed ? value : fieldKey === "ifsc_code" ? `${"*".repeat(Math.max(0, value!.length - 4))}${value!.slice(-4)}` : maskString(value, 4)  : "N/A"}
             </span>
 
             {canReveal && hasValue && (
@@ -440,7 +440,7 @@ const isExitStatus = [
                   <DetailTile label="Annual CTC" value={employee.salary ? `₹${employee.salary.toLocaleString('en-IN')}` : "N/A"} />
                   <DetailTile label="Bank Name" value={employee.bank_name} />
                   {renderSensitiveField("Bank Account Number",employee.bank_account_number,"bank_account_number")}
-                  <DetailTile label="IFSC Code" value={employee.ifsc_code} />
+                  {renderSensitiveField("IFSC Code", employee.ifsc_code, "ifsc_code")}
                 </div>
               </div>
 

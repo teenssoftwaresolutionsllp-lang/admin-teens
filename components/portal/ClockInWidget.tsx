@@ -147,11 +147,8 @@ export default function ClockInWidget({
           Number(log.total_hours ?? 0) * 60
         );
 
-        const sessionCheckInTime =
-          log.session_check_in_time ?? log.check_in_time;
-
-        if (sessionCheckInTime) {
-          const start = new Date(sessionCheckInTime);
+        if (log.check_in_time) {
+          const start = new Date(log.check_in_time);
           const end = log.check_out_time ? new Date(log.check_out_time) : now;
 
           const sessionMinutes = Math.max(0,Math.floor((end.getTime() - start.getTime()) / 60000));

@@ -1216,7 +1216,7 @@ export default function ApprovalsHub({
                                 >
                                   <XCircle className="h-4 w-4" />
                                 </button>
-
+                                 
                                 <button
                                   type="button"
                                   onClick={() =>
@@ -1254,7 +1254,7 @@ export default function ApprovalsHub({
 
       </div>
       {/* Shared rejection dialog: Profile Change + Attendance Regularization */}
-
+    
       {rejectingRequest && (
         <div
           className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm"
