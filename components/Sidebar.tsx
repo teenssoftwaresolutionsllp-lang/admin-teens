@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import type { ElementType, ChangeEvent } from "react";
 
 import {
   LayoutDashboard,
@@ -21,6 +22,15 @@ import {
   UploadCloud,
   Award,
   Loader2,
+  ChevronDown,
+  ListChecks,
+  ChevronRight,
+  Database,
+  UserRound,
+  UserX,
+  UserMinus,
+  CalendarClock,
+  CalendarCheck,
   ShieldCheck,
 } from "lucide-react";
 
@@ -33,20 +43,41 @@ interface SidebarProps {
   avatarUrl?: string | null;
 }
 
+type SidebarNavItem = {
+  name: string;
+  href?: string;
+  icon: ElementType;
+  roles: UserRole[];
+  children?: SidebarNavItem[];
+};
+
 export default function Sidebar({
   role,
   avatarUrl,
 }: SidebarProps) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const router = useRouter();
 
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [openMenus, setOpenMenus] = useState<string[]>([
+    "Employees",
+    "Approval Hub",
+    "Payroll",
+  ]);
 
   const [profileImage, setProfileImage] = useState<string | null>(
     avatarUrl || null
   );
-
   const [uploading, setUploading] = useState(false);
+
+  const toggleMenu = (name: string) => {
+    setOpenMenus((previous) =>
+      previous.includes(name)
+        ? previous.filter((item) => item !== name)
+        : [...previous, name]
+    );
+  };
 
   // ============================================================
   // SIDEBAR COLLAPSE STATE
@@ -54,16 +85,10 @@ export default function Sidebar({
 
   useEffect(() => {
     try {
-      const saved = window.localStorage.getItem(
-        "sidebar-collapsed"
-      );
-
+      const saved = window.localStorage.getItem("sidebar-collapsed");
       setIsCollapsed(saved === "true");
     } catch (error) {
-      console.error(
-        "Unable to read sidebar state:",
-        error
-      );
+      console.error("Unable to read sidebar state:", error);
     }
   }, []);
 
@@ -72,15 +97,9 @@ export default function Sidebar({
       const next = !previous;
 
       try {
-        window.localStorage.setItem(
-          "sidebar-collapsed",
-          String(next)
-        );
+        window.localStorage.setItem("sidebar-collapsed", String(next));
       } catch (error) {
-        console.error(
-          "Unable to save sidebar state:",
-          error
-        );
+        console.error("Unable to save sidebar state:", error);
       }
 
       return next;
@@ -97,20 +116,12 @@ export default function Sidebar({
 
       try {
         if (avatarUrl) {
-          window.localStorage.setItem(
-            "profile-avatar-url",
-            avatarUrl
-          );
+          window.localStorage.setItem("profile-avatar-url", avatarUrl);
         } else {
-          window.localStorage.removeItem(
-            "profile-avatar-url"
-          );
+          window.localStorage.removeItem("profile-avatar-url");
         }
       } catch (error) {
-        console.error(
-          "Unable to synchronize profile photo:",
-          error
-        );
+        console.error("Unable to synchronize profile photo:", error);
       }
     }
   }, [avatarUrl]);
@@ -120,24 +131,16 @@ export default function Sidebar({
   // ============================================================
 
   useEffect(() => {
-    if (avatarUrl) {
-      return;
-    }
+    if (avatarUrl) return;
 
     try {
-      const savedAvatar =
-        window.localStorage.getItem(
-          "profile-avatar-url"
-        );
+      const savedAvatar = window.localStorage.getItem("profile-avatar-url");
 
       if (savedAvatar) {
         setProfileImage(savedAvatar);
       }
     } catch (error) {
-      console.error(
-        "Unable to restore profile photo:",
-        error
-      );
+      console.error("Unable to restore profile photo:", error);
     }
   }, [avatarUrl]);
 
@@ -147,43 +150,27 @@ export default function Sidebar({
 
   useEffect(() => {
     const handlePhotoUpdate = (event: Event) => {
-      const customEvent =
-        event as CustomEvent<{
-          avatarUrl?: string | null;
-        }>;
+      const customEvent = event as CustomEvent<{
+        avatarUrl?: string | null;
+      }>;
 
-      const newAvatar =
-        customEvent.detail?.avatarUrl;
+      const newAvatar = customEvent.detail?.avatarUrl;
 
-      if (!newAvatar) {
-        return;
-      }
+      if (!newAvatar) return;
 
       setProfileImage(newAvatar);
 
       try {
-        window.localStorage.setItem(
-          "profile-avatar-url",
-          newAvatar
-        );
+        window.localStorage.setItem("profile-avatar-url", newAvatar);
       } catch (error) {
-        console.error(
-          "Unable to save updated profile photo:",
-          error
-        );
+        console.error("Unable to save updated profile photo:", error);
       }
     };
 
-    window.addEventListener(
-      "profile-photo-updated",
-      handlePhotoUpdate
-    );
+    window.addEventListener("profile-photo-updated", handlePhotoUpdate);
 
     return () => {
-      window.removeEventListener(
-        "profile-photo-updated",
-        handlePhotoUpdate
-      );
+      window.removeEventListener("profile-photo-updated", handlePhotoUpdate);
     };
   }, []);
 
@@ -198,20 +185,15 @@ export default function Sidebar({
       });
 
       try {
-        window.localStorage.removeItem(
-          "profile-avatar-url"
-        );
+        window.localStorage.removeItem("profile-avatar-url");
       } catch {
-        // Ignore localStorage errors
+        // Ignore localStorage errors.
       }
 
       router.push("/login");
       router.refresh();
     } catch (error) {
-      console.error(
-        "Logout failed:",
-        error
-      );
+      console.error("Logout failed:", error);
     }
   };
 
@@ -228,25 +210,14 @@ export default function Sidebar({
     message?: string;
     [key: string]: unknown;
   }> => {
-    const contentType =
-      response.headers.get("content-type") || "";
+    const contentType = response.headers.get("content-type") || "";
+    const responseText = await response.text();
 
-    const responseText =
-      await response.text();
+    if (!responseText) return {};
 
-    if (!responseText) {
-      return {};
-    }
-
-    if (
-      contentType.includes(
-        "application/json"
-      )
-    ) {
+    if (contentType.includes("application/json")) {
       try {
-        return JSON.parse(
-          responseText
-        );
+        return JSON.parse(responseText);
       } catch (error) {
         console.error(
           "Invalid JSON response from photo upload API:",
@@ -260,9 +231,7 @@ export default function Sidebar({
     }
 
     try {
-      return JSON.parse(
-        responseText
-      );
+      return JSON.parse(responseText);
     } catch {
       return {
         error: responseText,
@@ -276,130 +245,60 @@ export default function Sidebar({
   // ============================================================
 
   const handlePhotoUpload = async (
-    event: React.ChangeEvent<HTMLInputElement>
+    event: ChangeEvent<HTMLInputElement>
   ) => {
-    const file =
-      event.target.files?.[0];
+    const file = event.target.files?.[0];
 
-    if (!file) {
-      return;
-    }
+    if (!file) return;
 
-    // ----------------------------------------------------------
-    // FILE TYPE VALIDATION
-    // ----------------------------------------------------------
-
-    if (
-      !file.type.startsWith("image/")
-    ) {
-      alert(
-        "Please select an image file."
-      );
-
+    if (!file.type.startsWith("image/")) {
+      alert("Please select an image file.");
       event.target.value = "";
       return;
     }
 
-    // ----------------------------------------------------------
-    // FILE SIZE VALIDATION
-    // ----------------------------------------------------------
-
-    const maxSize =
-      5 * 1024 * 1024;
+    const maxSize = 5 * 1024 * 1024;
 
     if (file.size > maxSize) {
-      alert(
-        "Image size must be less than 5 MB."
-      );
-
+      alert("Image size must be less than 5 MB.");
       event.target.value = "";
       return;
     }
 
-    let localPreview:
-      | string
-      | null = null;
-
-    const previousImage =
-      profileImage;
+    let localPreview: string | null = null;
+    const previousImage = profileImage;
 
     try {
       setUploading(true);
 
-      // --------------------------------------------------------
-      // IMMEDIATE PREVIEW
-      // --------------------------------------------------------
+      // Immediate preview.
+      localPreview = URL.createObjectURL(file);
+      setProfileImage(localPreview);
 
-      localPreview =
-        URL.createObjectURL(file);
+      const formData = new FormData();
+      formData.append("file", file);
 
-      setProfileImage(
-        localPreview
-      );
+      const response = await fetch("/api/profile/photo", {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
 
-      // --------------------------------------------------------
-      // FORM DATA
-      // --------------------------------------------------------
-
-      const formData =
-        new FormData();
-
-      formData.append(
-        "file",
-        file
-      );
-
-      // --------------------------------------------------------
-      // UPLOAD
-      // --------------------------------------------------------
-
-      const response =
-        await fetch(
-          "/api/profile/photo",
-          {
-            method: "POST",
-            body: formData,
-            credentials: "include",
-          }
-        );
-
-      // --------------------------------------------------------
-      // PARSE RESPONSE
-      // --------------------------------------------------------
-
-      const data =
-        await parseUploadResponse(
-          response
-        );
-
-      // --------------------------------------------------------
-      // SERVER ERROR
-      // --------------------------------------------------------
+      const data = await parseUploadResponse(response);
 
       if (!response.ok) {
         const serverMessage =
-          typeof data?.error ===
-          "string"
+          typeof data.error === "string"
             ? data.error
-            : typeof data?.message ===
-              "string"
-            ? data.message
-            : `Photo upload failed (${response.status})`;
+            : typeof data.message === "string"
+              ? data.message
+              : `Photo upload failed (${response.status})`;
 
-        throw new Error(
-          serverMessage
-        );
+        throw new Error(serverMessage);
       }
 
-      // --------------------------------------------------------
-      // CLOUDINARY URL
-      // --------------------------------------------------------
-
       const newAvatarUrl =
-        typeof data?.avatarUrl ===
-        "string"
-          ? data.avatarUrl
-          : null;
+        typeof data.avatarUrl === "string" ? data.avatarUrl : null;
 
       if (!newAvatarUrl) {
         throw new Error(
@@ -407,17 +306,7 @@ export default function Sidebar({
         );
       }
 
-      // --------------------------------------------------------
-      // UPDATE SIDEBAR
-      // --------------------------------------------------------
-
-      setProfileImage(
-        newAvatarUrl
-      );
-
-      // --------------------------------------------------------
-      // SAVE URL
-      // --------------------------------------------------------
+      setProfileImage(newAvatarUrl);
 
       try {
         window.localStorage.setItem(
@@ -425,42 +314,21 @@ export default function Sidebar({
           newAvatarUrl
         );
       } catch (error) {
-        console.error(
-          "Unable to save profile photo locally:",
-          error
-        );
+        console.error("Unable to save profile photo locally:", error);
       }
 
-      // --------------------------------------------------------
-      // NOTIFY OTHER COMPONENTS
-      // --------------------------------------------------------
-
       window.dispatchEvent(
-        new CustomEvent(
-          "profile-photo-updated",
-          {
-            detail: {
-              avatarUrl:
-                newAvatarUrl,
-            },
-          }
-        )
+        new CustomEvent("profile-photo-updated", {
+          detail: {
+            avatarUrl: newAvatarUrl,
+          },
+        })
       );
-
-      // --------------------------------------------------------
-      // REFRESH
-      // --------------------------------------------------------
 
       router.refresh();
     } catch (error) {
-      console.error(
-        "Photo upload failed:",
-        error
-      );
-
-      setProfileImage(
-        previousImage || null
-      );
+      console.error("Photo upload failed:", error);
+      setProfileImage(previousImage || null);
 
       alert(
         error instanceof Error
@@ -469,13 +337,10 @@ export default function Sidebar({
       );
     } finally {
       if (localPreview) {
-        URL.revokeObjectURL(
-          localPreview
-        );
+        URL.revokeObjectURL(localPreview);
       }
 
       setUploading(false);
-
       event.target.value = "";
     }
   };
@@ -484,7 +349,7 @@ export default function Sidebar({
   // ADMIN NAVIGATION
   // ============================================================
 
-  const adminNavItems = [
+  const adminNavItems: SidebarNavItem[] = [
     {
       name: "Overview",
       href: "/dashboard",
@@ -493,9 +358,59 @@ export default function Sidebar({
     },
     {
       name: "Employees",
-      href: "/dashboard/employees",
       icon: Users,
       roles: ["ceo", "hr"],
+      children: [
+        {
+          name: "All",
+          href: "/dashboard/employees",
+          icon: Users,
+          roles: ["ceo", "hr"],
+        },
+        {
+          name: "Joining",
+          href: "/dashboard/employees?status=joining",
+          icon: UserPlus,
+          roles: ["ceo", "hr"],
+        },
+        {
+          name: "Terminated",
+          href: "/dashboard/employees?status=terminated",
+          icon: UserX,
+          roles: ["ceo", "hr"],
+        },
+        {
+          name: "Layoff",
+          href: "/dashboard/employees?status=laid_off",
+          icon: UserMinus,
+          roles: ["ceo", "hr"],
+        },
+        {
+          name: "Resign",
+          icon: CalendarClock,
+          roles: ["ceo", "hr"],
+          children: [
+            {
+              name: "Notice Period",
+              href: "/dashboard/employees?status=notice_period",
+              icon: Clock,
+              roles: ["ceo", "hr"],
+            },
+            {
+              name: "Notice Completed",
+              href: "/dashboard/employees?status=notice_completed",
+              icon: CalendarCheck,
+              roles: ["ceo", "hr"],
+            },
+            {
+              name: "Early Release",
+              href: "/dashboard/employees?status=early_release",
+              icon: UserMinus,
+              roles: ["ceo", "hr"],
+            },
+          ],
+        },
+      ],
     },
     {
       name: "Add Employee",
@@ -504,10 +419,23 @@ export default function Sidebar({
       roles: ["hr"],
     },
     {
-      name: "Approvals Hub",
-      href: "/dashboard/approvals",
+      name: "Approval Hub",
       icon: CheckSquare,
       roles: ["hr"],
+      children: [
+        {
+          name: "Approval",
+          href: "/dashboard/approvals?status=pending",
+          icon: CheckSquare,
+          roles: ["hr"],
+        },
+        {
+          name: "Approval History",
+          href: "/dashboard/approvals?status=history",
+          icon: ListChecks,
+          roles: ["hr"],
+        },
+      ],
     },
     {
       name: "Attendance & Shifts",
@@ -522,10 +450,23 @@ export default function Sidebar({
       roles: ["ceo", "hr"],
     },
     {
-      name: "Payroll & Payslips",
-      href: "/dashboard/payroll",
+      name: "Payroll",
       icon: Banknote,
       roles: ["ceo", "hr"],
+      children: [
+        {
+          name: "Master Data",
+          href: "/dashboard/payroll/master-data",
+          icon: Database,
+          roles: ["ceo", "hr"],
+        },
+        {
+          name: "Individual Data",
+          href: "/dashboard/payroll",
+          icon: UserRound,
+          roles: ["ceo", "hr"],
+        },
+      ],
     },
     {
       name: "Projects & Calendars",
@@ -545,7 +486,7 @@ export default function Sidebar({
   // EMPLOYEE NAVIGATION
   // ============================================================
 
-  const employeeNavItems = [
+  const employeeNavItems: SidebarNavItem[] = [
     {
       name: "My Profile",
       href: "/portal/profile",
@@ -582,6 +523,13 @@ export default function Sidebar({
       icon: UserCheck,
       roles: ["employee"],
     },
+    {
+      name: "My Resignation",
+      href: "/portal/resignation",
+      icon: FileText,
+      roles: ["employee"],
+    },
+
   ];
 
   // ============================================================
@@ -589,33 +537,40 @@ export default function Sidebar({
   // ============================================================
 
   const items =
-    role === "employee"
-      ? employeeNavItems
-      : adminNavItems;
+    role === "employee" ? employeeNavItems : adminNavItems;
 
-  const visibleItems =
-    items.filter((item) =>
-      item.roles.includes(role)
-    );
+  const visibleItems = items.filter((item) =>
+    item.roles.includes(role)
+  );
 
   // ============================================================
   // ACTIVE NAVIGATION
   // ============================================================
 
-  const activeItem =
-    visibleItems
-      .filter(
-        (item) =>
-          pathname === item.href ||
-          pathname.startsWith(
-            `${item.href}/`
-          )
-      )
-      .sort(
-        (a, b) =>
-          b.href.length -
-          a.href.length
-      )[0];
+  const isPathActive = (href?: string): boolean => {
+    if (!href) return false;
+
+    const [path, query] = href.split("?");
+
+    if (pathname !== path) return false;
+
+    // For paths without a query, only activate when the current
+    // URL has no query parameters.
+    if (!query) {
+      return searchParams.toString() === "";
+    }
+
+    // Compare expected parameters without relying on their order.
+    const expectedParams = new URLSearchParams(query);
+
+    for (const [key, value] of expectedParams.entries()) {
+      if (searchParams.get(key) !== value) {
+        return false;
+      }
+    }
+
+    return true;
+  };
 
   // ============================================================
   // SIDEBAR
@@ -624,18 +579,13 @@ export default function Sidebar({
   return (
     <aside
       className={`relative flex flex-col w-full bg-slate-900 text-white flex-shrink-0 shadow-lg z-20 md:h-screen transition-[width] duration-200 ${
-        isCollapsed
-          ? "md:w-[72px]"
-          : "md:w-64"
+        isCollapsed ? "md:w-[72px]" : "md:w-64"
       }`}
     >
       {/* HEADER */}
-
       <div
         className={`p-4 sm:p-5 flex items-center border-b border-slate-800 ${
-          isCollapsed
-            ? "justify-center"
-            : "gap-3"
+          isCollapsed ? "justify-center" : "gap-3"
         }`}
       >
         <div className="bg-white rounded-lg p-1 shrink-0">
@@ -652,13 +602,7 @@ export default function Sidebar({
           />
         </div>
 
-        <div
-          className={
-            isCollapsed
-              ? "hidden"
-              : ""
-          }
-        >
+        <div className={isCollapsed ? "hidden" : ""}>
           <span className="font-semibold text-sm sm:text-base leading-tight block">
             Teens Software
           </span>
@@ -666,19 +610,14 @@ export default function Sidebar({
           <span className="text-[10px] text-slate-400 font-medium tracking-wide uppercase">
             {role === "employee"
               ? "Employee Portal"
-              : `${
-                  role?.toUpperCase() ||
-                  "USER"
-                } Workspace`}
+              : `${role?.toUpperCase() || "USER"} Workspace`}
           </span>
         </div>
       </div>
 
       {/* CONTENT */}
-
       <div className="flex-1 px-3 py-4 overflow-y-auto">
         {/* PHOTO UPLOAD */}
-
         {role === "employee" && (
           <div className="mb-5">
             <input
@@ -686,27 +625,19 @@ export default function Sidebar({
               type="file"
               accept="image/jpeg,image/jpg,image/png,image/webp"
               className="hidden"
-              onChange={
-                handlePhotoUpload
-              }
+              onChange={handlePhotoUpload}
               disabled={uploading}
             />
 
             <label
               htmlFor="sidebar-photo-upload"
-              title={
-                isCollapsed
-                  ? "Upload Photo"
-                  : undefined
-              }
+              title={isCollapsed ? "Upload Photo" : undefined}
               className={`group relative flex items-center justify-center overflow-hidden rounded-xl border border-indigo-500/70 bg-slate-800/80 hover:bg-slate-800 hover:border-indigo-400 cursor-pointer transition-all duration-200 ${
                 isCollapsed
                   ? "mx-auto h-12 w-12"
                   : "mx-auto h-[88px] w-[88px]"
               } ${
-                uploading
-                  ? "pointer-events-none opacity-80"
-                  : ""
+                uploading ? "pointer-events-none opacity-80" : ""
               }`}
             >
               {profileImage ? (
@@ -725,26 +656,22 @@ export default function Sidebar({
                   ) : (
                     <UploadCloud
                       className={`text-indigo-300 group-hover:text-white transition-colors ${
-                        isCollapsed
-                          ? "h-5 w-5"
-                          : "h-7 w-7"
+                        isCollapsed ? "h-5 w-5" : "h-7 w-7"
                       }`}
                     />
                   )}
 
-                  {!isCollapsed &&
-                    !uploading && (
-                      <span className="text-[10px] font-semibold text-slate-200 group-hover:text-white">
-                        Upload Photo
-                      </span>
-                    )}
+                  {!isCollapsed && !uploading && (
+                    <span className="text-[10px] font-semibold text-slate-200 group-hover:text-white">
+                      Upload Photo
+                    </span>
+                  )}
 
-                  {uploading &&
-                    !isCollapsed && (
-                      <span className="text-[10px] font-semibold text-slate-200">
-                        Uploading...
-                      </span>
-                    )}
+                  {uploading && !isCollapsed && (
+                    <span className="text-[10px] font-semibold text-slate-200">
+                      Uploading...
+                    </span>
+                  )}
                 </div>
               )}
 
@@ -762,82 +689,191 @@ export default function Sidebar({
         )}
 
         {/* NAVIGATION */}
-
         <div className="space-y-1">
-          {visibleItems.map(
-            (item) => {
-              const isActive =
-                activeItem?.href ===
-                item.href;
+          {visibleItems.map((item) => {
+            const children = item.children ?? [];
+            const hasChildren = children.length > 0;
+            const isOpen = openMenus.includes(item.name);
 
+            const isActive =
+              (item.href ? isPathActive(item.href) : false) ||
+              children.some(
+                (child) =>
+                  (child.href ? isPathActive(child.href) : false) ||
+                  (child.children?.some((nested) =>
+                    isPathActive(nested.href)
+                  ) ??
+                    false)
+              );
+
+            if (hasChildren) {
               return (
-                <Link
-                  key={item.name}
-                  href={item.href}
-                  title={
-                    isCollapsed
-                      ? item.name
-                      : undefined
-                  }
-                  className={`flex w-full items-center rounded-lg py-2.5 text-left transition-all duration-200 ${
-                    isCollapsed
-                      ? "justify-center px-2"
-                      : "gap-3 px-3"
-                  } ${
-                    isActive
-                      ? "bg-indigo-600 text-white font-medium shadow-sm"
-                      : "text-slate-300 hover:bg-slate-800 hover:text-white"
-                  }`}
-                >
-                  <item.icon
-                    className={`h-4 w-4 shrink-0 ${
-                      isActive
-                        ? "text-white"
-                        : "text-slate-400"
-                    }`}
-                  />
+                <div key={item.name}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (isCollapsed) {
+                        setIsCollapsed(false);
+                        return;
+                      }
 
-                  <span
-                    className={
-                      isCollapsed
-                        ? "sr-only"
-                        : "text-sm"
-                    }
+                      toggleMenu(item.name);
+                    }}
+                    title={isCollapsed ? item.name : undefined}
+                    aria-expanded={isOpen}
+                    className={`flex w-full items-center rounded-lg py-2.5 transition-all ${
+                      isCollapsed ? "justify-center px-2" : "gap-3 px-3"
+                    } ${
+                      isActive
+                        ? "bg-slate-800 text-white"
+                        : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                    }`}
                   >
-                    {item.name}
-                  </span>
-                </Link>
+                    <item.icon className="h-4 w-4 shrink-0 text-slate-400" />
+
+                    <span
+                      className={
+                        isCollapsed
+                          ? "sr-only"
+                          : "flex-1 text-left text-sm"
+                      }
+                    >
+                      {item.name}
+                    </span>
+
+                    {!isCollapsed &&
+                      (isOpen ? (
+                        <ChevronDown className="h-4 w-4" />
+                      ) : (
+                        <ChevronRight className="h-4 w-4" />
+                      ))}
+                  </button>
+
+                  {!isCollapsed && isOpen && (
+                    <div className="ml-4 mt-1 space-y-1 border-l border-slate-700 pl-2">
+                      {children
+                        .filter((child) => child.roles.includes(role))
+                        .map((child) => {
+                          const nestedChildren = child.children ?? [];
+
+                          if (nestedChildren.length > 0) {
+                            const nestedOpen = openMenus.includes(child.name);
+                            const nestedActive = nestedChildren.some(
+                              (nested) =>
+                                nested.href
+                                  ? isPathActive(nested.href)
+                                  : false
+                            );
+
+                            return (
+                              <div key={child.name}>
+                                <button
+                                  type="button"
+                                  onClick={() => toggleMenu(child.name)}
+                                  aria-expanded={nestedOpen}
+                                  className={`flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm transition-colors ${
+                                    nestedActive
+                                      ? "bg-slate-800 text-white"
+                                      : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                                  }`}
+                                >
+                                  <child.icon className="h-4 w-4 shrink-0" />
+
+                                  <span className="flex-1 text-left">
+                                    {child.name}
+                                  </span>
+
+                                  {nestedOpen ? (
+                                    <ChevronDown className="h-3.5 w-3.5" />
+                                  ) : (
+                                    <ChevronRight className="h-3.5 w-3.5" />
+                                  )}
+                                </button>
+
+                                {nestedOpen && (
+                                  <div className="ml-3 mt-1 space-y-1 border-l border-slate-700 pl-2">
+                                    {nestedChildren
+                                      .filter((nested) =>
+                                        nested.roles.includes(role)
+                                      )
+                                      .map((nested) => (
+                                        <Link
+                                          key={nested.name}
+                                          href={nested.href ?? "#"}
+                                          className={`flex items-center gap-2 rounded-lg px-2 py-2 text-xs transition-colors ${
+                                            nested.href &&
+                                            isPathActive(nested.href)
+                                              ? "bg-indigo-600 text-white"
+                                              : "text-slate-400 hover:bg-slate-800 hover:text-white"
+                                          }`}
+                                        >
+                                          <nested.icon className="h-3.5 w-3.5 shrink-0" />
+                                          {nested.name}
+                                        </Link>
+                                      ))}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          }
+
+                          return (
+                            <Link
+                              key={child.name}
+                              href={child.href ?? "#"}
+                              className={`flex items-center gap-2 rounded-lg px-2 py-2 text-sm transition-colors ${
+                                child.href && isPathActive(child.href)
+                                  ? "bg-indigo-600 text-white"
+                                  : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                              }`}
+                            >
+                              <child.icon className="h-4 w-4 shrink-0" />
+                              {child.name}
+                            </Link>
+                          );
+                        })}
+                    </div>
+                  )}
+                </div>
               );
             }
-          )}
+
+            return (
+              <Link
+                key={item.name}
+                href={item.href ?? "#"}
+                title={isCollapsed ? item.name : undefined}
+                className={`flex w-full items-center rounded-lg py-2.5 transition-all ${
+                  isCollapsed ? "justify-center px-2" : "gap-3 px-3"
+                } ${
+                  isActive
+                    ? "bg-indigo-600 text-white font-medium shadow-sm"
+                    : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                }`}
+              >
+                <item.icon className="h-4 w-4 shrink-0" />
+
+                <span className={isCollapsed ? "sr-only" : "text-sm"}>
+                  {item.name}
+                </span>
+              </Link>
+            );
+          })}
         </div>
       </div>
 
       {/* FOOTER */}
-
       <div className="p-3 border-t border-slate-800">
         <div
           className={`flex items-center ${
-            isCollapsed
-              ? "flex-col gap-2"
-              : "gap-2"
+            isCollapsed ? "flex-col gap-2" : "gap-2"
           }`}
         >
           <button
             type="button"
-            onClick={
-              toggleSidebar
-            }
-            aria-label={
-              isCollapsed
-                ? "Expand sidebar"
-                : "Collapse sidebar"
-            }
-            title={
-              isCollapsed
-                ? "Expand sidebar"
-                : "Collapse sidebar"
-            }
+            onClick={toggleSidebar}
+            aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
             className="hidden md:inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white"
           >
             {isCollapsed ? (
@@ -849,14 +885,8 @@ export default function Sidebar({
 
           <button
             type="button"
-            onClick={
-              handleLogout
-            }
-            title={
-              isCollapsed
-                ? "Sign Out"
-                : undefined
-            }
+            onClick={handleLogout}
+            title={isCollapsed ? "Sign Out" : undefined}
             className={`flex items-center rounded-lg py-2 text-left text-slate-300 transition-colors hover:bg-slate-800 hover:text-white ${
               isCollapsed
                 ? "justify-center px-2"

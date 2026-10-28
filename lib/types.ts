@@ -182,10 +182,14 @@ export interface Employee {
   // Exit Information
   // ==============================
   exit_reason?: string | null;
+  planned_last_working_date?: string | null;
   exit_document_url?: string | null;
   exit_document_name?: string | null;
   exit_date?: string | null;
   temporary_login_expires_at?: string | null;
+  notice_period_days?: number | null;
+  resignation_date?: string | null;
+  notice_status?: string | null;
 
   // ==============================
   // Timestamps
@@ -305,6 +309,38 @@ export interface LeaveRequest {
   created_at: string;
   leave_type?: LeaveType;
   employee?: Employee;
+}
+
+export interface ResignationRevertRequest {
+  id: string;
+  resignation_request_id: string;
+  employee_id: string;
+  reason: string | null;
+  status: "pending" | "approved" | "rejected";
+  rejection_reason: string | null;
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
+  created_at: string;
+}
+
+export interface ResignationRequest {
+  id: string;
+  employee_id: string;
+  resignation_date: string;
+  notice_period_days: number| null;
+  planned_last_working_date: string | null;
+  reason: string;
+  document_url: string;
+  document_name: string;
+  status: "pending" | "approved" | "rejected" |"withdrawn" | "reverted";
+  rejection_reason?: string | null;
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
+  submitted_by?: string | null;
+  created_at: string;
+  updated_at?: string;
+  employee?: Employee | null;
+  revert_requests?: ResignationRevertRequest[];
 }
 
 export type SalaryComponentType = 'earning' | 'deduction';

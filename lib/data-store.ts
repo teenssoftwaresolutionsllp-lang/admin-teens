@@ -2072,14 +2072,21 @@ export class DataStore {
 
       let query = supabase
         .from("leave_requests")
-        .select(`*, 
+        .select(`
+          *,
           employee:employees (
             id,
             employee_id,
             first_name,
             last_name,
-            profile_photo_url
-        )`)
+            profile_photo_url,
+            department_id,
+            department:departments (
+              id,
+              name
+            )
+          )
+        `)
         .order("created_at", { ascending: false });
 
       if (employeeUuid) {
