@@ -1,9 +1,11 @@
 "use client";
 import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   ProfileChangeRequest,
   LeaveRequest,
   AttendanceRegularization,
+  ResignationRequest,
 } from "@/lib/types";
 import {
   CheckSquare,
@@ -16,12 +18,15 @@ import {
   Loader2,
   AlertCircle,
   ArrowRight,
+  CheckCircle2,
+  RotateCcw
 } from "lucide-react";
 
 interface ApprovalsHubProps {
   initialProfileRequests: ProfileChangeRequest[];
   initialLeaveRequests: LeaveRequest[];
   initialRegularizations: AttendanceRegularization[];
+  initialResignationRequests: ResignationRequest[];
 }
 
 type Feedback = {
@@ -33,13 +38,14 @@ export default function ApprovalsHub({
   initialProfileRequests,
   initialLeaveRequests,
   initialRegularizations,
+  initialResignationRequests,
 }: ApprovalsHubProps) {
-  const [activeTab, setActiveTab] = useState<
-    "profile" | "leaves" | "attendance" | "documents"
-  >("profile");
+  const searchParams = useSearchParams();
+  const requestedView = (searchParams.get("status") ?? "pending").toLowerCase();
+  const isHistoryView = requestedView === "history";
+  const [activeTab, setActiveTab] = useState<"profile" | "leaves" | "attendance" | "documents" | "resignations" | "revert_resignations">("profile");
 
-  const [profileRequests, setProfileRequests] =
-    useState<ProfileChangeRequest[]>(initialProfileRequests);
+  const [profileRequests, setProfileRequests] = useState<ProfileChangeRequest[]>(initialProfileRequests);
 
   const [profileStatusFilter, setProfileStatusFilter] = useState("all");
   const [profileEmployeeSearch, setProfileEmployeeSearch] = useState("");
@@ -48,22 +54,71 @@ export default function ApprovalsHub({
   const [profileToDate, setProfileToDate] = useState("");
   const [leaveRequests, setLeaveRequests] =
     useState<LeaveRequest[]>(initialLeaveRequests);
+  const [leaveDepartmentFilter, setLeaveDepartmentFilter] = useState("all");
+  const [leaveDurationFilter, setLeaveDurationFilter] = useState("all");
+  const [leaveEmployeeSearch, setLeaveEmployeeSearch] = useState("");
+  const [leaveHistoryStatusFilter, setLeaveHistoryStatusFilter] = useState("all");
+  const [leaveFromDate, setLeaveFromDate] = useState("");
+  const [leaveToDate, setLeaveToDate] = useState("");
+  const [resignationDepartmentFilter, setResignationDepartmentFilter] = useState("all");
+  const [resignationHistoryStatusFilter, setResignationHistoryStatusFilter] = useState("all");
+  const [resignationEmployeeSearch, setResignationEmployeeSearch] = useState("");
+  const [resignationFromDate, setResignationFromDate] = useState("");
+  const [resignationToDate, setResignationToDate] = useState("");
 
-  const [regularizations, setRegularizations] =
-    useState<AttendanceRegularization[]>(initialRegularizations);
+  const [regularizations, setRegularizations] = useState<AttendanceRegularization[]>(initialRegularizations);
+  const [resignationRequests, setResignationRequests] = useState<ResignationRequest[]>(initialResignationRequests);
+  const [noticePeriodValue, setNoticePeriodValue] = useState("30");
+  const [noticePeriodUnit, setNoticePeriodUnit] = useState<"days" | "months">("days");
+  const [temporaryLoginDays, setTemporaryLoginDays] = useState("0");
 
-  const [reviewNotes, setReviewNotes] = useState<Record<string, string>>({});
+
+  const allRevertRequests = resignationRequests.flatMap((request) =>
+    (request.revert_requests ?? []).map((revert) => ({
+        ...revert,
+        originalResignation: request,
+      }))
+  );
+
 
   // Rejection dialog state
   const [profileRejectionReason, setProfileRejectionReason] = useState("");
 
   const [rejectingRequest, setRejectingRequest] = useState<{
     id: string;
-    type: "profile" | "attendance" | "leave";
+    type: "profile" | "attendance" | "leave" | "resignation" | "resignation_revert";
   } | null>(null);
 
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
+  const [revertDepartmentFilter, setRevertDepartmentFilter] = useState("all");
+  const [revertEmployeeSearch, setRevertEmployeeSearch] = useState("");
+  const [revertHistoryStatusFilter, setRevertHistoryStatusFilter] = useState("all");
+  const [revertFromDate, setRevertFromDate] = useState("");
+  const [revertToDate, setRevertToDate] = useState("");
+
+  //Approval dialog state for temp login access
+  const [approvingResignationId, setApprovingResignationId] =
+    useState<string | null>(null);
+  const [approvalTemporaryLoginDays, setApprovalTemporaryLoginDays] =
+    useState("0");
+
+
+  useEffect(() => {
+    setActiveTab("profile");
+    setProfileStatusFilter("all");
+    setLeaveDepartmentFilter("all");
+    setLeaveDurationFilter("all");
+    setLeaveEmployeeSearch("");
+    setLeaveHistoryStatusFilter("all");
+    setLeaveFromDate("");
+    setLeaveToDate("");
+    setResignationDepartmentFilter("all");
+    setResignationHistoryStatusFilter("all");
+    setResignationEmployeeSearch("");
+    setResignationFromDate("");
+    setResignationToDate("");
+  }, [isHistoryView]);
 
   // Open rejection dialogs
   const openLeaveRejectionDialog = (id: string) => {
@@ -79,6 +134,8 @@ export default function ApprovalsHub({
     status: "approved" | "rejected",
     rejectionReason?: string
   ) => {
+    // History is read-only: reviews are allowed only in the Approval submenu.
+    if (isHistoryView) return;
     const reason = rejectionReason?.trim() ?? "";
 
     if (status === "rejected" && !reason) {
@@ -171,6 +228,8 @@ export default function ApprovalsHub({
     status: "approved" | "rejected",
     rejectionReason?: string
   ) => {
+    // History is read-only: reviews are allowed only in the Approval submenu.
+    if (isHistoryView) return;
     const reason = rejectionReason?.trim() ?? "";
 
     if (status === "rejected" && !reason) {
@@ -239,6 +298,216 @@ export default function ApprovalsHub({
   };
 
 
+  const handleResignationReview = async (
+    id: string,
+    status: "approved" | "rejected",
+    rejectionReason?: string,
+    temporaryLoginDaysOverride?: number
+  ) => {
+    // History is read-only: reviews are allowed only in the Approval submenu.
+    if (isHistoryView) return;
+    const reason = rejectionReason?.trim() ?? "";
+
+    if (status === "rejected" && !reason) {
+      setFeedback({
+        msg: "Please provide a reason for rejecting this resignation.",
+        type: "error",
+      });
+      return;
+    }
+
+    const value = Number(noticePeriodValue);
+
+    if (
+      status === "approved" &&
+      (!Number.isInteger(value) ||
+        value < 1 ||
+        (noticePeriodUnit === "days" && value > 365) ||
+        (noticePeriodUnit === "months" && value > 12))
+    ) {
+      setFeedback({
+        msg: "Enter a valid notice period.",
+        type: "error",
+      });
+      
+      if (status === "approved") {
+        setApprovingResignationId(null);
+        setApprovalTemporaryLoginDays("0");
+      }
+      return;
+    }
+
+
+
+    const loginDaysValue = temporaryLoginDaysOverride !== undefined ? temporaryLoginDaysOverride : Number(temporaryLoginDays);
+
+    if (
+      status === "approved" &&
+      (!Number.isInteger(loginDaysValue) ||
+        loginDaysValue < 0 ||
+        loginDaysValue > 45)
+    ) {
+      setFeedback({
+        msg: "Temporary login access must be between 0 and 45 days.",
+        type: "error",
+      });
+      return;
+    }
+
+    setActionLoading(id);
+    setFeedback(null);
+
+    try {
+      const response = await fetch(`/api/resignations/${id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          status,
+          noticePeriodValue: status === "approved" ? value : null,
+          noticePeriodUnit: status === "approved" ? noticePeriodUnit : null,
+          temporaryLoginDays: status === "approved" ? loginDaysValue : null,
+          rejectionReason: status === "rejected" ? reason : null,
+        }),
+      });
+
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(data?.error || "Failed to review resignation.");
+      }
+
+      setResignationRequests((previous) =>
+        previous.map((request) =>
+          request.id === id
+            ? {
+                ...request,
+                status,
+                rejection_reason: status === "rejected" ? reason : null,
+              }
+            : request
+        )
+      );
+
+      setFeedback({
+        msg:
+          status === "approved"
+            ? "Resignation approved and employee notice period updated."
+            : "Resignation rejected.",
+        type: "success",
+      });
+
+      setRejectingRequest(null);
+      setProfileRejectionReason("");
+    } catch (error) {
+      setFeedback({
+        msg:
+          error instanceof Error
+            ? error.message
+            : "Failed to review resignation.",
+        type: "error",
+      });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+
+
+  const handleResignationRevertReview = async (
+    resignationRequestId: string,
+    revertRequestId: string,
+    status: "approved" | "rejected",
+    rejectionReason?: string
+  ) => {
+    if (isHistoryView) return;
+
+    const reason = rejectionReason?.trim() ?? "";
+
+    if (status === "rejected" && !reason) {
+      setFeedback({
+        msg: "Please provide a reason for rejecting this reversal request.",
+        type: "error",
+      });
+      return;
+    }
+
+    setActionLoading(revertRequestId);
+    setFeedback(null);
+
+    try {
+      const response = await fetch(
+        `/api/resignations/${resignationRequestId}/revert`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify({
+            action: status === "approved" ? "approve" : "reject",
+            revertRequestId,
+            rejectionReason: status === "rejected" ? reason : null,
+          }),
+        }
+      );
+
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(
+          data?.error || "Failed to review resignation reversal."
+        );
+      }
+
+      setResignationRequests((previous) =>
+        previous.map((request) =>
+          request.id !== resignationRequestId
+            ? request
+            : {
+                ...request,
+                revert_requests: (request.revert_requests ?? []).map(
+                  (revert) =>
+                    revert.id !== revertRequestId
+                      ? revert
+                      : {
+                          ...revert,
+                          status,
+                          rejection_reason:
+                            status === "rejected" ? reason : null,
+                        }
+                ),
+                ...(status === "approved" ? { status: "reverted" as const } : {}),
+              }
+        )
+      );
+
+      setFeedback({
+        msg:
+          status === "approved"
+            ? "Resignation reversal approved. Employee state restored."
+            : "Resignation reversal rejected. Original resignation remains approved.",
+        type: "success",
+      });
+
+      setRejectingRequest(null);
+      setProfileRejectionReason("");
+    } catch (error) {
+      setFeedback({
+        msg:
+          error instanceof Error
+            ? error.message
+            : "Failed to review resignation reversal.",
+        type: "error",
+      });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+
   // Attendance Regularization Approval/Rejection.
 
   const handleRegularizationReview = async (
@@ -246,6 +515,8 @@ export default function ApprovalsHub({
     status: "approved" | "rejected",
     rejectionReason?: string
   ) => {
+    // History is read-only: reviews are allowed only in the Approval submenu.
+    if (isHistoryView) return;
     const reason = rejectionReason?.trim() ?? "";
 
     if (status === "rejected" && !reason) {
@@ -319,42 +590,38 @@ export default function ApprovalsHub({
 
 
   const filteredProfileRequests = profileRequests.filter((request) => {
-    const statusMatches =
-      profileStatusFilter === "all" ||
-      String(request.status ?? "").toLowerCase() === profileStatusFilter;
+  const requestStatus = String(request.status ?? "").toLowerCase();
 
-    const employee = request.employee as
-      | {
-          first_name?: string | null;
-          last_name?: string | null;
-          employee_id?: string | null;
-          email?: string | null;
-        }
-      | undefined;
+  const statusMatches = isHistoryView
+    ? (requestStatus === "approved" || requestStatus === "rejected") &&
+      (profileStatusFilter === "all" || requestStatus === profileStatusFilter.toLowerCase())
+    : requestStatus === "pending";
 
-    const employeeName = [
-      employee?.first_name,
-      employee?.last_name,
-    ]
-      .filter(Boolean)
-      .join(" ");
+  const employee = request.employee as
+  {
+    first_name?: string | null;
+    last_name?: string | null;
+    employee_id?: string | null;
+    email?: string | null;
+  } | undefined;
 
-    const searchText = profileEmployeeSearch.trim().toLowerCase();
+  const employeeName = [ employee?.first_name,employee?.last_name,].filter(Boolean).join(" ");
 
-    const employeeMatches =
-      !searchText ||
-      employeeName.toLowerCase().includes(searchText) ||
-      String(employee?.employee_id ?? "")
-        .toLowerCase()
-        .includes(searchText) ||
-      String(employee?.email ?? "").toLowerCase().includes(searchText) ||
-      String(request.employee_id ?? "").toLowerCase().includes(searchText);
+  const searchText = profileEmployeeSearch.trim().toLowerCase();
 
-    const changes = Object.keys(request.requested_changes ?? {}).map((key) =>
-      key.toLowerCase()
-    );
+  const employeeMatches =
+    !searchText || employeeName.toLowerCase().includes(searchText) ||
+    String(employee?.employee_id ?? "")
+      .toLowerCase()
+      .includes(searchText) ||
+    String(employee?.email ?? "").toLowerCase().includes(searchText) ||
+    String(request.employee_id ?? "").toLowerCase().includes(searchText);
 
-    const requestTypeMatches =
+  const changes = Object.keys(request.requested_changes ?? {}).map((key) =>
+    key.toLowerCase()
+  );
+
+  const requestTypeMatches =
       profileRequestTypeFilter === "all" ||
       changes.some((key) => {
         switch (profileRequestTypeFilter) {
@@ -375,7 +642,7 @@ export default function ApprovalsHub({
           default:
             return true;
         }
-      });
+   });
 
     const requestDate = request.created_at
       ? new Date(request.created_at)
@@ -402,6 +669,87 @@ export default function ApprovalsHub({
     );
   });
 
+  // Always show the department name, never a raw department ID.
+  // The data query must include employee.department.name for this to populate.
+  const getDepartmentKey = (record: any): string => {
+    const employee = record?.employee;
+    const departmentName =
+      employee?.department?.name ??
+      employee?.departments?.name ??
+      employee?.department_name;
+
+    return typeof departmentName === "string" && departmentName.trim()
+      ? departmentName.trim()
+      : "Not specified";
+  };
+
+  const leaveDepartmentOptions = Array.from(
+    new Set(leaveRequests.map((record) => getDepartmentKey(record)).filter(Boolean))
+  ).sort((a, b) => a.localeCompare(b));
+  const resignationDepartmentOptions = Array.from(
+    new Set(resignationRequests.map((record) => getDepartmentKey(record)).filter(Boolean))
+  ).sort((a, b) => a.localeCompare(b));
+
+  const revertDepartmentOptions = Array.from(
+    new Set(
+      allRevertRequests
+        .map((revert) => getDepartmentKey(revert.originalResignation))
+        .filter(
+          (department): department is string =>
+            department !== "Not specified"
+        )
+    )
+  ).sort((a, b) => a.localeCompare(b));
+
+
+
+  const filteredLeaveRequests = leaveRequests.filter((leave) => {
+    const status = String(leave.status ?? "").toLowerCase();
+    const statusMatches = isHistoryView
+      ? (status === "approved" || status === "rejected") &&
+        (leaveHistoryStatusFilter === "all" || status === leaveHistoryStatusFilter)
+      : status === "pending";
+    const departmentMatches = leaveDepartmentFilter === "all" || getDepartmentKey(leave) === leaveDepartmentFilter;
+    const employeeName = `${leave.employee?.first_name ?? ""} ${leave.employee?.last_name ?? ""}`.trim().toLowerCase();
+    const employeeMatches = !leaveEmployeeSearch.trim() || employeeName.includes(leaveEmployeeSearch.trim().toLowerCase()) || String(leave.employee?.employee_id ?? "").toLowerCase().includes(leaveEmployeeSearch.trim().toLowerCase());
+    const duration = Number(leave.total_days ?? 0);
+    const durationMatches = leaveDurationFilter === "all" ||
+      (leaveDurationFilter === "1" && duration === 1) ||
+      (leaveDurationFilter === "2-3" && duration >= 2 && duration <= 3) ||
+      (leaveDurationFilter === "4-7" && duration >= 4 && duration <= 7) ||
+      (leaveDurationFilter === "8+" && duration >= 8);
+    const leaveDate = leave.start_date ? new Date(`${leave.start_date}T00:00:00`) : null;
+    const leaveFrom = leaveFromDate ? new Date(`${leaveFromDate}T00:00:00`) : null;
+    const leaveTo = leaveToDate ? new Date(`${leaveToDate}T23:59:59.999`) : null;
+    const dateMatches = (!leaveFrom || (leaveDate !== null && leaveDate >= leaveFrom)) &&
+      (!leaveTo || (leaveDate !== null && leaveDate <= leaveTo));
+    return statusMatches && departmentMatches && employeeMatches && durationMatches && dateMatches;
+  });
+
+  const filteredRegularizations = regularizations.filter(
+    (request) => String(request.status ?? "").toLowerCase() === "pending"
+  );
+
+  const filteredResignationRequests = resignationRequests.filter((request) => {
+    const status = String(request.status ?? "").toLowerCase();
+    const statusMatches = isHistoryView
+      ? (status === "approved" || status === "rejected") &&
+        (resignationHistoryStatusFilter === "all" || status === resignationHistoryStatusFilter)
+      : status === "pending";
+    const departmentMatches = resignationDepartmentFilter === "all" || getDepartmentKey(request) === resignationDepartmentFilter;
+    const employeeName = `${request.employee?.first_name ?? ""} ${request.employee?.last_name ?? ""}`.trim().toLowerCase();
+    const search = resignationEmployeeSearch.trim().toLowerCase();
+    const employeeMatches = !search || employeeName.includes(search) ||
+      String(request.employee?.employee_id ?? "").toLowerCase().includes(search) ||
+      String(request.employee_id ?? "").toLowerCase().includes(search);
+    const resignationDate = request.resignation_date ? new Date(`${request.resignation_date}T00:00:00`) : null;
+    const fromDate = resignationFromDate ? new Date(`${resignationFromDate}T00:00:00`) : null;
+    const toDate = resignationToDate ? new Date(`${resignationToDate}T23:59:59.999`) : null;
+    const dateMatches = (!fromDate || (resignationDate !== null && resignationDate >= fromDate)) &&
+      (!toDate || (resignationDate !== null && resignationDate <= toDate));
+    return statusMatches && departmentMatches && employeeMatches && dateMatches;
+  });
+
   const pendingProfileCount = profileRequests.filter(
     (request) => request.status === "pending"
   ).length;
@@ -414,9 +762,81 @@ export default function ApprovalsHub({
     (request) => request.status === "pending"
   ).length;
 
-  const totalPending =
-    pendingProfileCount + pendingLeaveCount + pendingRegCount;
+  const pendingResignationCount = resignationRequests.filter((request) => request.status === "pending").length;
 
+  const pendingRevertRequests = resignationRequests.flatMap((request) =>
+    (request.revert_requests ?? [])
+      .filter((revert) => revert.status === "pending")
+      .map((revert) => ({
+        ...revert,
+        originalResignation: request,
+      }))
+  );
+
+//   const allRevertRequests = resignationRequests.flatMap((request) =>
+//     (request.revert_requests ?? []).map((revert) => ({
+//         ...revert,
+//         originalResignation: request,
+//       }))
+//     );
+
+  const displayedRevertRequests = allRevertRequests.filter((revert) => {
+    const originalStatus = String(
+      revert.originalResignation.status ?? ""
+    ).toLowerCase();
+
+    const requestStatus = String(revert.status ?? "").toLowerCase();
+
+    const eligibleOriginalStatus =
+      originalStatus === "approved" ||
+      (isHistoryView && originalStatus === "reverted");
+
+    const matchesStatus = isHistoryView
+      ? revertHistoryStatusFilter === "all" ||
+        requestStatus === revertHistoryStatusFilter
+      : requestStatus === "pending";
+
+    const department = getDepartmentKey(revert.originalResignation);
+    const employee = revert.originalResignation.employee;
+    const employeeName =
+      `${employee?.first_name ?? ""} ${employee?.last_name ?? ""}`.trim();
+    const employeeId = String(employee?.employee_id ?? "");
+
+    const matchesDepartment =
+      revertDepartmentFilter === "all" ||
+      department === revertDepartmentFilter;
+
+    const search = revertEmployeeSearch.trim().toLowerCase();
+    const matchesEmployee =
+      !search ||
+      employeeName.toLowerCase().includes(search) ||
+      employeeId.toLowerCase().includes(search);
+
+    const resignationDate = String(
+      revert.originalResignation.resignation_date ?? ""
+    ).slice(0, 10);
+
+    const matchesFromDate =
+      !revertFromDate || resignationDate >= revertFromDate;
+
+    const matchesToDate =
+      !revertToDate || resignationDate <= revertToDate;
+
+    return (
+      eligibleOriginalStatus &&
+      matchesStatus &&
+      matchesDepartment &&
+      matchesEmployee &&
+      matchesFromDate &&
+      matchesToDate
+    );
+  });
+
+
+  const pendingRevertCount = pendingRevertRequests.length;
+
+
+  const totalPending = pendingProfileCount + pendingLeaveCount + pendingRegCount + pendingResignationCount + pendingRevertCount;
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -429,7 +849,7 @@ export default function ApprovalsHub({
             </div>
 
             <h2 className="text-xl font-bold tracking-tight text-slate-900">
-              HR Approvals Hub
+              {isHistoryView ? "Leaves / Profile History" : "Pending Approval Hub"}
             </h2>
 
             {totalPending > 0 && (
@@ -440,8 +860,9 @@ export default function ApprovalsHub({
           </div>
 
           <p className="mt-1.5 pl-12 text-xs leading-relaxed text-slate-500">
-            Review employee profile changes, leave applications, attendance
-            regularizations, and identity or bank document submissions.
+            {isHistoryView
+              ? "View approved and rejected profile-change requests and leave applications."
+              : "Review pending employee profile changes, leave applications, attendance regularizations, and resignations."}
           </p>
         </div>
       </div>
@@ -465,115 +886,206 @@ export default function ApprovalsHub({
         </div>
       )}
 
-      {/* Profile request filters */}
-
-      {activeTab === "profile" &&(
-              <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-          <h3 className="text-sm font-bold text-slate-800">
-            Filter Profile Change Requests
-          </h3>
-
-          <span className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700">
-            {filteredProfileRequests.length} of {profileRequests.length} requests
-          </span>
-        </div>
-
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <div>
-            <label className="mb-1.5 block text-xs font-semibold text-slate-600">
-              Status
-            </label>
-            <select
-              value={profileStatusFilter}
-              onChange={(event) => setProfileStatusFilter(event.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-indigo-500"
-            >
-              <option value="all">All statuses</option>
-              <option value="pending">Pending</option>
-              <option value="approved">Approved</option>
-              <option value="rejected">Rejected</option>
-            </select>
+      {/* Shared filters: the same area adapts to the selected request tab */}
+      {activeTab !== "attendance" && activeTab !== "documents" && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-sm font-bold text-slate-800">
+              {activeTab === "profile" ? "Filter Profile Change Requests" : activeTab === "leaves" ? "Filter Leave Applications" : activeTab === "revert_resignations" ? "Filter Resignation Reversals" : "Filter Resignations"}
+            </h3>
+            <span className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700">
+              {activeTab === "profile" ? `${filteredProfileRequests.length} of ${profileRequests.length} requests` : activeTab === "leaves" ? `${filteredLeaveRequests.length} of ${leaveRequests.length} requests` : activeTab === "resignations" ? `${filteredResignationRequests.length} of ${resignationRequests.length} requests` : activeTab === "revert_resignations" ? `${displayedRevertRequests.length} of ${allRevertRequests.length} requests` : " "}
+            </span>
           </div>
 
-          <div>
-            <label className="mb-1.5 block text-xs font-semibold text-slate-600">
-              Employee
-            </label>
-            <input
-              type="text"
-              value={profileEmployeeSearch}
-              onChange={(event) => setProfileEmployeeSearch(event.target.value)}
-              placeholder="Search name, employee ID or email"
-              className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-indigo-500"
-            />
-          </div>
+          {activeTab === "profile" && (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-slate-600">Status</label>
+                <select value={profileStatusFilter} onChange={(event) => setProfileStatusFilter(event.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-indigo-500">
+                  {isHistoryView ? <><option value="all">All completed requests</option><option value="approved">Approved</option><option value="rejected">Rejected</option></> : <option value="all">Pending requests</option>}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-slate-600">Employee</label>
+                <input value={profileEmployeeSearch} onChange={(event) => setProfileEmployeeSearch(event.target.value)} placeholder="Search name, employee ID or email" className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-indigo-500" />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-slate-600">Request type</label>
+                <select value={profileRequestTypeFilter} onChange={(event) => setProfileRequestTypeFilter(event.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-indigo-500">
+                  <option value="all">All request types</option><option value="identity">Aadhaar, PAN or Passport</option><option value="bank">Bank details</option><option value="address">Address</option><option value="personal">Personal details</option><option value="employment">Employment details</option>
+                </select>
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-slate-600">From date</label>
+                <input type="date" value={profileFromDate} max={profileToDate || undefined} onChange={(event) => setProfileFromDate(event.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-indigo-500" />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-slate-600">To date</label>
+                <input type="date" value={profileToDate} min={profileFromDate || undefined} onChange={(event) => setProfileToDate(event.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-indigo-500" />
+              </div>
+              <div className="flex items-end">
+                <button type="button" onClick={() => { setProfileStatusFilter("all"); setProfileEmployeeSearch(""); setProfileRequestTypeFilter("all"); setProfileFromDate(""); setProfileToDate(""); }} className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">Clear filters</button>
+              </div>
+            </div>
+          )}
 
-          <div>
-            <label className="mb-1.5 block text-xs font-semibold text-slate-600">
-              Request type
-            </label>
-            <select
-              value={profileRequestTypeFilter}
-              onChange={(event) =>
-                setProfileRequestTypeFilter(event.target.value)
-              }
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-indigo-500"
-            >
-              <option value="all">All request types</option>
-              <option value="identity">Aadhaar, PAN or Passport</option>
-              <option value="bank">Bank details</option>
-              <option value="address">Address</option>
-              <option value="personal">Personal details</option>
-              <option value="employment">Employment details</option>
-            </select>
-          </div>
+          {activeTab === "leaves" && (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-slate-600">Department</label>
+                <select value={leaveDepartmentFilter} onChange={(event) => setLeaveDepartmentFilter(event.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-indigo-500">
+                  <option value="all">All departments</option>{leaveDepartmentOptions.map((department) => <option key={department} value={department}>{department}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-slate-600">Employee</label>
+                <input value={leaveEmployeeSearch} onChange={(event) => setLeaveEmployeeSearch(event.target.value)} placeholder="Search name or employee ID" className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-indigo-500" />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-slate-600">Leave duration</label>
+                <select value={leaveDurationFilter} onChange={(event) => setLeaveDurationFilter(event.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-indigo-500">
+                  <option value="all">Any duration</option><option value="1">1 day</option><option value="2-3">2–3 days</option><option value="4-7">4–7 days</option><option value="8+">8+ days</option>
+                </select>
+              </div>
+              {isHistoryView && <div>
+                <label className="mb-1.5 block text-xs font-semibold text-slate-600">Status</label>
+                <select value={leaveHistoryStatusFilter} onChange={(event) => setLeaveHistoryStatusFilter(event.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-indigo-500"><option value="all">All history</option><option value="approved">Approved</option><option value="rejected">Rejected</option></select>
+              </div>}
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-slate-600">From leave date</label>
+                <input type="date" value={leaveFromDate} max={leaveToDate || undefined} onChange={(event) => setLeaveFromDate(event.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-indigo-500" />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-slate-600">To leave date</label>
+                <input type="date" value={leaveToDate} min={leaveFromDate || undefined} onChange={(event) => setLeaveToDate(event.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-indigo-500" />
+              </div>
+              <div className="flex items-end"><button type="button" onClick={() => { setLeaveDepartmentFilter("all"); setLeaveDurationFilter("all"); setLeaveEmployeeSearch(""); setLeaveHistoryStatusFilter("all"); setLeaveFromDate(""); setLeaveToDate(""); }} className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">Clear filters</button></div>
+            </div>
+          )}
 
-          <div>
-            <label className="mb-1.5 block text-xs font-semibold text-slate-600">
-              From date
-            </label>
-            <input
-              type="date"
-              value={profileFromDate}
-              max={profileToDate || undefined}
-              onChange={(event) => setProfileFromDate(event.target.value)}
-              className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-indigo-500"
-            />
-          </div>
+          {activeTab === "resignations" && (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-slate-600">Department</label>
+                <select value={resignationDepartmentFilter} onChange={(event) => setResignationDepartmentFilter(event.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-indigo-500"><option value="all">All departments</option>{resignationDepartmentOptions.map((department) => <option key={department} value={department}>{department}</option>)}</select>
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-slate-600">Employee</label>
+                <input value={resignationEmployeeSearch} onChange={(event) => setResignationEmployeeSearch(event.target.value)} placeholder="Search name or employee ID" className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-indigo-500" />
+              </div>
+              {isHistoryView && <div>
+                <label className="mb-1.5 block text-xs font-semibold text-slate-600">Status</label>
+                <select value={resignationHistoryStatusFilter} onChange={(event) => setResignationHistoryStatusFilter(event.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-indigo-500"><option value="all">All history</option><option value="approved">Approved</option><option value="rejected">Rejected</option></select>
+              </div>}
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-slate-600">From resignation date</label>
+                <input type="date" value={resignationFromDate} max={resignationToDate || undefined} onChange={(event) => setResignationFromDate(event.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-indigo-500" />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-slate-600">To resignation date</label>
+                <input type="date" value={resignationToDate} min={resignationFromDate || undefined} onChange={(event) => setResignationToDate(event.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-indigo-500" />
+              </div>
+              <div className="flex items-end"><button type="button" onClick={() => { setResignationDepartmentFilter("all"); setResignationHistoryStatusFilter("all"); setResignationEmployeeSearch(""); setResignationFromDate(""); setResignationToDate(""); }} className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">Clear filters</button></div>
+            </div>
+          )}
 
-          <div>
-            <label className="mb-1.5 block text-xs font-semibold text-slate-600">
-              To date
-            </label>
-            <input
-              type="date"
-              value={profileToDate}
-              min={profileFromDate || undefined}
-              onChange={(event) => setProfileToDate(event.target.value)}
-              className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-indigo-500"
-            />
-          </div>
 
-          <div className="flex items-end">
-            <button
-              type="button"
-              onClick={() => {
-                setProfileStatusFilter("all");
-                setProfileEmployeeSearch("");
-                setProfileRequestTypeFilter("all");
-                setProfileFromDate("");
-                setProfileToDate("");
-              }}
-              className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-            >
-              Clear filters
-            </button>
-          </div>
-        </div>
+{activeTab === "revert_resignations" && (
+  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <div>
+      <label className="mb-1.5 block text-xs font-semibold text-slate-600">
+        Department
+      </label>
+      <select
+        value={revertDepartmentFilter}
+        onChange={(event) => setRevertDepartmentFilter(event.target.value)}
+        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-indigo-500"
+      >
+        <option value="all">All departments</option>
+        {revertDepartmentOptions.map((department) => (
+          <option key={department} value={department}>
+            {department}
+          </option>
+        ))}
+      </select>
+    </div>
+
+    <div>
+      <label className="mb-1.5 block text-xs font-semibold text-slate-600">
+        Employee
+      </label>
+      <input
+        value={revertEmployeeSearch}
+        onChange={(event) => setRevertEmployeeSearch(event.target.value)}
+        placeholder="Search name or employee ID"
+        className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-indigo-500"
+      />
+    </div>
+
+    {isHistoryView && (
+      <div>
+        <label className="mb-1.5 block text-xs font-semibold text-slate-600">
+          Status
+        </label>
+        <select
+          value={revertHistoryStatusFilter}
+          onChange={(event) => setRevertHistoryStatusFilter(event.target.value)}
+          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-indigo-500"
+        >
+          <option value="all">All history</option>
+          <option value="approved">Approved</option>
+          <option value="rejected">Rejected</option>
+        </select>
       </div>
-      )}
+    )}
 
+    <div>
+      <label className="mb-1.5 block text-xs font-semibold text-slate-600">
+        From resignation date
+      </label>
+      <input
+        type="date"
+        value={revertFromDate}
+        max={revertToDate || undefined}
+        onChange={(event) => setRevertFromDate(event.target.value)}
+        className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-indigo-500"
+      />
+    </div>
+
+    <div>
+      <label className="mb-1.5 block text-xs font-semibold text-slate-600">
+        To resignation date
+      </label>
+      <input
+        type="date"
+        value={revertToDate}
+        min={revertFromDate || undefined}
+        onChange={(event) => setRevertToDate(event.target.value)}
+        className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-indigo-500"
+      />
+    </div>
+
+    <div className="flex items-end">
+      <button
+        type="button"
+        onClick={() => {
+          setRevertDepartmentFilter("all");
+          setRevertEmployeeSearch("");
+          setRevertHistoryStatusFilter("all");
+          setRevertFromDate("");
+          setRevertToDate("");
+        }}
+        className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+      >
+        Clear filters
+      </button>
+    </div>
+  </div>
+)}
+
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-sm">
@@ -588,8 +1100,8 @@ export default function ApprovalsHub({
             }`}
           >
             <UserCheck className="h-4 w-4" />
-            <span>Profile Change Requests</span>
-            {pendingProfileCount > 0 && (
+            <span>{isHistoryView ? "Profile History" : "Profile Change Requests"}</span>
+            {!isHistoryView && pendingProfileCount > 0 && (
               <span className="rounded-full border border-amber-200 bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-900">
                 {pendingProfileCount}
               </span>
@@ -606,14 +1118,15 @@ export default function ApprovalsHub({
             }`}
           >
             <Calendar className="h-4 w-4" />
-            <span>Leave Applications</span>
-            {pendingLeaveCount > 0 && (
+            <span>{isHistoryView ? "Leave History" : "Leave Applications"}</span>
+            {!isHistoryView && pendingLeaveCount > 0 && (
               <span className="rounded-full border border-amber-200 bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-900">
                 {pendingLeaveCount}
               </span>
             )}
           </button>
 
+          {!isHistoryView && (
           <button
             type="button"
             onClick={() => setActiveTab("attendance")}
@@ -632,6 +1145,44 @@ export default function ApprovalsHub({
             )}
           </button>
 
+          )}
+          <button
+            type="button"
+            onClick={() => setActiveTab("resignations")}
+            className={`flex items-center gap-2.5 whitespace-nowrap border-b-2 px-6 py-4 text-xs font-bold transition-all ${
+              activeTab === "resignations"
+                ? "border-indigo-600 bg-white text-indigo-600"
+                : "border-transparent text-slate-500 hover:bg-slate-100/50 hover:text-slate-900"
+            }`}
+          >
+            <FileText className="h-4 w-4" />
+            <span>{isHistoryView ? "Resignation History" : "Resignations"}</span>
+            {!isHistoryView && pendingResignationCount > 0 && (
+              <span className="rounded-full border border-amber-200 bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-900">
+                {pendingResignationCount}
+              </span>
+            )}
+          </button>
+
+          
+          <button
+            type="button"
+            onClick={() => setActiveTab("revert_resignations")}
+            className={`flex items-center gap-2.5 whitespace-nowrap border-b-2 px-6 py-4 text-xs font-bold transition-all ${
+              activeTab === "revert_resignations"
+                ? "border-indigo-600 bg-white text-indigo-600"
+                : "border-transparent text-slate-500 hover:bg-slate-100/50 hover:text-slate-900"
+            }`}
+          >
+            <RotateCcw className="h-4 w-4" />
+            <span>Revert Resignations</span>
+            {!isHistoryView && pendingRevertCount > 0 && (
+              <span className="rounded-full border border-amber-200 bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-900">
+                {pendingRevertCount}
+              </span>
+            )}
+          </button>
+
         </div>
 
         {/* Profile Change Requests */}
@@ -643,7 +1194,7 @@ export default function ApprovalsHub({
               </p>
             ) : filteredProfileRequests.length === 0 ? (
               <p className="py-12 text-center text-xs font-medium text-slate-400">
-                No requests match your filters.
+                {isHistoryView ? "No approved or rejected profile requests found." : "No pending profile requests found."}
               </p>
             ) : (
               <div className="space-y-4">
@@ -812,7 +1363,7 @@ export default function ApprovalsHub({
                           </p>
                         </div>
 
-                        {isPending && (
+                        {!isHistoryView && isPending && (
                           <div className="flex shrink-0 items-center gap-2.5">
                             <button
                               type="button"
@@ -975,9 +1526,11 @@ export default function ApprovalsHub({
         {/* Leave Applications */}
         {activeTab === "leaves" && (
           <div className="p-6">
-            {leaveRequests.length === 0 ? (
+            {filteredLeaveRequests.length === 0 ? (
               <p className="py-12 text-center text-xs font-medium text-slate-400">
-                No leave applications awaiting review.
+                {isHistoryView
+                  ? "No approved or rejected leave applications found."
+                  : "No pending leave applications awaiting review."}
               </p>
             ) : (
               <div className="overflow-x-auto rounded-xl border border-slate-100">
@@ -985,6 +1538,7 @@ export default function ApprovalsHub({
                   <thead className="border-b border-slate-200/80 bg-slate-50/80 text-[11px] font-bold uppercase tracking-wider text-slate-700">
                     <tr>
                       <th className="px-4 py-3.5">Employee</th>
+                      <th className="px-4 py-3.5">Department</th>
                       <th className="px-4 py-3.5">Leave Type</th>
                       <th className="px-4 py-3.5">Duration</th>
                       <th className="px-4 py-3.5">Dates</th>
@@ -994,7 +1548,7 @@ export default function ApprovalsHub({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {leaveRequests.map((leave) => {
+                    {filteredLeaveRequests.map((leave) => {
                       const emp = leave.employee;
                       const isPending = leave.status === "pending";
 
@@ -1035,6 +1589,7 @@ export default function ApprovalsHub({
                               </div>
                             </div>
                           </td>
+                          <td className="px-4 py-3.5">{getDepartmentKey(leave)}</td>
                           <td className="px-4 py-3.5">
                             <span className="rounded-md bg-indigo-50 px-2.5 py-0.5 font-semibold text-indigo-700">
                               {leave.leave_type?.name || "Casual Leave"}
@@ -1076,7 +1631,7 @@ export default function ApprovalsHub({
                             </span>
                           </td>
                           <td className="px-4 py-3.5 text-right">
-                            {isPending ? (
+                            {!isHistoryView && isPending ? (
                               <div className="flex items-center justify-end gap-2">
                                 <button
                                   type="button"
@@ -1122,9 +1677,9 @@ export default function ApprovalsHub({
         {/* Attendance Regularizations */}
         {activeTab === "attendance" && (
           <div className="p-6">
-            {regularizations.length === 0 ? (
+            {filteredRegularizations.length === 0 ? (
               <p className="py-12 text-center text-xs font-medium text-slate-400">
-                No attendance regularization requests.
+                No pending attendance regularization requests.
               </p>
             ) : (
               <div className="overflow-x-auto rounded-xl border border-slate-100">
@@ -1140,7 +1695,7 @@ export default function ApprovalsHub({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {regularizations.map((regularization) => {
+                    {filteredRegularizations.map((regularization) => {
                       const emp = regularization.employee;
                       const isPending = regularization.status === "pending";
 
@@ -1205,7 +1760,7 @@ export default function ApprovalsHub({
                             </span>
                           </td>
                           <td className="px-4 py-3.5 text-right">
-                            {isPending ? (
+                            {!isHistoryView && isPending ? (
                               <div className="flex items-center justify-end gap-2">
                                 <button
                                   type="button"
@@ -1252,6 +1807,366 @@ export default function ApprovalsHub({
           </div>
         )}
 
+        {/* Resignations */}
+        {activeTab === "resignations" && (
+          <div className="p-6">
+            {filteredResignationRequests.length === 0 ? (
+              <p className="py-12 text-center text-xs font-medium text-slate-400">
+                {isHistoryView ? "No approved or rejected resignation requests found." : "No pending resignation requests found."}
+              </p>
+            ) : (
+              <div className="overflow-x-auto rounded-xl border border-slate-100">
+                <table className="w-full text-left text-xs text-slate-600">
+                  <thead className="border-b border-slate-200/80 bg-slate-50/80 text-[11px] font-bold uppercase tracking-wider text-slate-700">
+                    <tr>
+                      <th className="px-4 py-3.5">Employee</th>
+                      <th className="px-4 py-3.5">Department</th>
+                      <th className="px-4 py-3.5">Resignation Date</th>
+                      {isHistoryView && (
+                        <>
+                          <th className="px-4 py-3.5">Requested Notice</th>
+                          <th className="px-4 py-3.5">Planned Last Working Date</th>
+                        </>
+                      )}
+                      <th className="px-4 py-3.5">Reason / Document</th>
+                      <th className="px-4 py-3.5">Status</th>
+                      {!isHistoryView && (
+                        <th className="px-4 py-3.5 text-right">Actions</th>
+                      )}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredResignationRequests.map((request) => {
+                      const employee = request.employee;
+                      const isPending = request.status === "pending";
+
+                      // Resignation notice details are saved on public.employees.
+                      // Depending on the server-side mapper, they may be exposed
+                      // either directly on the request or on its related employee.
+                      const requestWithNotice = request as ResignationRequest & {
+                        notice_period_days?: number | null;
+                        planned_last_working_date?: string | null;
+                      };
+                      const employeeWithNotice = employee as
+                        | (NonNullable<typeof employee> & {
+                            notice_period_days?: number | null;
+                            planned_last_working_date?: string | null;
+                          })
+                        | null
+                        | undefined;
+
+                      const noticePeriodDays =
+                        requestWithNotice.notice_period_days ??
+                        employeeWithNotice?.notice_period_days ??
+                        null;
+                      const plannedLastWorkingDate =
+                        requestWithNotice.planned_last_working_date ??
+                        employeeWithNotice?.planned_last_working_date ??
+                        null;
+
+                      return (
+                        <tr key={request.id} className="hover:bg-slate-50/80">
+                          <td className="px-4 py-3.5">
+                            <div className="font-bold text-slate-900">
+                              {employee
+                                ? `${employee.first_name} ${employee.last_name}`
+                                : "Unknown Employee"}
+                            </div>
+                            {employee?.employee_id && (
+                              <div className="mt-0.5 font-mono text-[10px] text-slate-400">
+                                {employee.employee_id}
+                              </div>
+                            )}
+                          </td>
+
+                          <td className="px-4 py-3.5">{getDepartmentKey(request)}</td>
+                          <td className="px-4 py-3.5">
+                            {request.resignation_date}
+                          </td>
+
+                          {isHistoryView && (
+                            <>
+                              <td className="px-4 py-3.5">
+                                {noticePeriodDays != null
+                                  ? `${noticePeriodDays} days`
+                                  : "Not set"}
+                              </td>
+
+                              <td className="px-4 py-3.5">
+                                {plannedLastWorkingDate
+                                  ? new Date(
+                                      `${String(plannedLastWorkingDate).slice(0, 10)}T00:00:00`
+                                    ).toLocaleDateString("en-GB")
+                                  : "Not set"}
+                              </td>
+                            </>
+                          )}
+
+                          <td className="max-w-xs px-4 py-3.5">
+                            <p className="whitespace-pre-wrap break-words">
+                              {request.reason}
+                            </p>
+                            {request.document_url && (
+                              <a
+                                href={`/api/resignations/${request.id}/document`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="mt-2 inline-flex items-center gap-1 font-semibold text-indigo-600 hover:underline"
+                              >
+                                <FileText className="h-3.5 w-3.5" />
+                                {request.document_name || "View document"}
+                              </a>
+                            )}
+                            {request.status === "rejected" &&
+                              request.rejection_reason && (
+                                <p className="mt-2 whitespace-pre-wrap break-words text-rose-700">
+                                  Rejection: {request.rejection_reason}
+                                </p>
+                              )}
+                          </td>
+
+                          <td className="px-4 py-3.5">
+                            <span
+                              className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase ${
+                                request.status === "approved"
+                                  ? "border-emerald-200 bg-emerald-100 text-emerald-800"
+                                  : request.status === "rejected"
+                                    ? "border-red-200 bg-red-100 text-red-800"
+                                    : "border-amber-200 bg-amber-100 text-amber-900"
+                              }`}
+                            >
+                              {request.status}
+                            </span>
+                          </td>
+
+                          {!isHistoryView && (
+                            <td className="px-4 py-3.5">
+                              {isPending ? (
+                                <div className="min-w-[220px] space-y-3">
+                                  {/* Notice period */}
+                                  <div className="flex items-center gap-2">
+                                    <input
+                                      type="number"
+                                      min={1}
+                                      max={noticePeriodUnit === "days" ? 365 : 12}
+                                      value={noticePeriodValue}
+                                      onChange={(event) =>
+                                        setNoticePeriodValue(event.target.value)
+                                      }
+                                      aria-label="Approved notice period"
+                                      className="w-20 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                    />
+
+                                    <select
+                                      value={noticePeriodUnit}
+                                      onChange={(event) =>
+                                        setNoticePeriodUnit(
+                                          event.target.value as "days" | "months"
+                                        )
+                                      }
+                                      aria-label="Notice period unit"
+                                      className="min-w-24 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                    >
+                                      <option value="days">Days</option>
+                                      <option value="months">Months</option>
+                                    </select>
+                                  </div>
+
+                            
+                                  {/* Actions */}
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      type="button"
+                                      disabled={actionLoading === request.id}
+                                      onClick={() =>{
+                                        setApprovalTemporaryLoginDays(temporaryLoginDays);
+                                        setApprovingResignationId(request.id);
+                                      }}
+                                      className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                      {actionLoading === request.id ? (
+                                        <>
+                                          <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+                                          Processing
+                                        </>
+                                      ) : (
+                                        <>
+                                          <CheckCircle2 className="h-4 w-4" />
+                                          Approve
+                                        </>
+                                      )}
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      disabled={actionLoading === request.id}
+                                      onClick={() => {
+                                        setProfileRejectionReason("");
+                                        setRejectingRequest({
+                                          id: request.id,
+                                          type: "resignation",
+                                        });
+                                      }}
+                                      className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-rose-300 bg-white px-3 py-2 text-sm font-semibold text-rose-700 transition hover:bg-rose-50 focus:outline-none focus:ring-2 focus:ring-rose-500 focus:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                      <XCircle className="h-4 w-4" />
+                                      Reject
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-500">
+                                  Processed
+                                </span>
+                              )}
+                            </td>
+                          )}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Revert Resignation */}
+        {activeTab === "revert_resignations" && (
+          <div className="p-6">
+            {displayedRevertRequests.length === 0 ? (
+              <p className="py-12 text-center text-xs font-medium text-slate-400">
+                {isHistoryView
+                  ? "No completed resignation reversal requests found."
+                  : "No pending resignation reversal requests found."}
+              </p>
+            ) : (
+              <div className="overflow-x-auto rounded-xl border border-slate-100">
+                <table className="w-full text-left text-xs text-slate-600">
+                  <thead className="border-b bg-slate-50 text-[11px] font-bold uppercase text-slate-700">
+                    <tr>
+                      <th className="px-4 py-3">Employee</th>
+                      <th className="px-4 py-3">Resignation Date</th>
+                      <th className="px-4 py-3">Last Working Date</th>
+                      <th className="px-4 py-3">Reversal Reason</th>
+                      <th className="px-4 py-3">Department</th>
+                      {isHistoryView && (
+                        <>
+                          <th className="px-4 py-3">Rejection Reason</th>
+                          <th className="px-4 py-3">Reviewed At</th>
+                        </>
+                      )}
+                      {!isHistoryView && (
+                        <th className="px-4 py-3 text-right">Actions</th>
+                      )}
+                    </tr>
+                  </thead>
+
+                  <tbody className="divide-y divide-slate-100">
+                    {displayedRevertRequests.map((revert) => {
+                      const original = revert.originalResignation;
+                      const employee = original.employee;
+                      const isPending = revert.status === "pending";
+
+                      return (
+                        <tr key={revert.id}>
+                          <td className="px-4 py-3">
+                            <div className="font-semibold text-slate-900">
+                              {[employee?.first_name, employee?.last_name]
+                                .filter(Boolean)
+                                .join(" ") || "Unknown employee"}
+                            </div>
+                            <div className="mt-1 font-mono text-slate-400">
+                              {employee?.employee_id || original.employee_id || "—"}
+                            </div>
+                          </td>
+
+                          <td className="px-4 py-3">
+                            {original.resignation_date || "—"}
+                          </td>
+
+                          <td className="px-4 py-3">
+                            {original.planned_last_working_date ||
+                              employee?.planned_last_working_date ||
+                              "—"}
+                          </td>
+
+                          <td className="max-w-xs whitespace-pre-wrap break-words px-4 py-3">
+                            {revert.reason || "—"}
+                          </td>
+
+                          <td className="px-4 py-3">
+                            <span className="rounded-full border px-2 py-1 text-[10px] font-bold uppercase">
+                              {getDepartmentKey(original)}
+                            </span>
+                          </td>
+
+                          {isHistoryView && (
+                            <>
+                              <td className="max-w-xs whitespace-pre-wrap break-words px-4 py-3 text-rose-700">
+                                {revert.rejection_reason || "—"}
+                              </td>
+                              <td className="px-4 py-3">
+                                {revert.reviewed_at
+                                  ? new Date(revert.reviewed_at).toLocaleString()
+                                  : "—"}
+                              </td>
+                            </>
+                          )}
+
+                          {!isHistoryView && (
+                            <td className="px-4 py-3">
+                              {isPending ? (
+                                <div className="flex justify-end gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setProfileRejectionReason("");
+                                      setRejectingRequest({
+                                        id: revert.id,
+                                        type: "resignation_revert",
+                                      });
+                                    }}
+                                    disabled={actionLoading === revert.id}
+                                    className="rounded-lg border border-rose-200 px-3 py-2 font-semibold text-rose-600 disabled:opacity-50"
+                                  >
+                                    Reject
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() =>{
+                                      setRejectingRequest(null);
+                                      setProfileRejectionReason("");
+                                      void handleResignationRevertReview(
+                                        original.id,
+                                        revert.id,
+                                        "approved"
+                                      )}
+                                    }
+                                    disabled={actionLoading === revert.id}
+                                    className="rounded-lg border border-emerald-200 px-3 py-2 font-semibold text-emerald-700 disabled:opacity-50"
+                                  >
+                                    {actionLoading === revert.id
+                                      ? "Processing…"
+                                      : "Approve"}
+                                  </button>
+                                </div>
+                              ) : (
+                                <span className="text-slate-400">Processed</span>
+                              )}
+                            </td>
+                          )}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
       </div>
       {/* Shared rejection dialog: Profile Change + Attendance Regularization */}
     
@@ -1284,7 +2199,11 @@ export default function ApprovalsHub({
                     ? "Reject profile-change request"
                     : rejectingRequest.type === "attendance"
                       ? "Reject attendance regularization"
-                      : "Reject leave request"}
+                      : rejectingRequest.type === "resignation"
+                        ? "Reject resignation request"
+                        : rejectingRequest.type === "resignation_revert"
+                          ? "Reject resignation reversal request"
+                          : "Reject leave request"}
                 </h3>
 
                 <p className="mt-1 text-xs leading-relaxed text-slate-500">
@@ -1324,9 +2243,19 @@ export default function ApprovalsHub({
                     );
                   })()}
 
-                {rejectingRequest.type === "leave" &&
-                  (() => {
-                    const request = leaveRequests.find(
+                {rejectingRequest.type === "leave" &&(() => {
+                  const request = leaveRequests.find(
+                    (item) => item.id === rejectingRequest.id
+                  );
+                  return (
+                    <p className="mt-2 text-xs font-semibold text-slate-700">
+                      Employee:{" "}
+                      {request?.employee ? `${request.employee.first_name} ${request.employee.last_name}` : "Unknown Employee"}
+                    </p>
+                    );
+                })()}
+                {rejectingRequest.type === "resignation" &&(() => {
+                    const request = resignationRequests.find(
                       (item) => item.id === rejectingRequest.id
                     );
 
@@ -1335,15 +2264,16 @@ export default function ApprovalsHub({
                         Employee:{" "}
                         {request?.employee
                           ? `${request.employee.first_name} ${request.employee.last_name}`
-                          : "Unknown Employee"}
+                          : request?.employee_id ?? "Unknown Employee"}
                       </p>
                     );
-                  })()}
+                })()}
               </div>
             </div>
 
             <form
               className="mt-5 space-y-4"
+              
               onSubmit={(event) => {
                 event.preventDefault();
 
@@ -1365,6 +2295,31 @@ export default function ApprovalsHub({
                     "rejected",
                     reason
                   );
+                } else if (rejectingRequest.type === "resignation") {
+                  void handleResignationReview(
+                    rejectingRequest.id,
+                    "rejected",
+                    reason
+                  );
+                } else if (rejectingRequest.type === "resignation_revert") {
+                  const revert = allRevertRequests.find(
+                    (item) => item.id === rejectingRequest.id
+                  );
+
+                  if (!revert) {
+                    setFeedback({
+                      msg: "Could not find the resignation reversal request.",
+                      type: "error",
+                    });
+                    return;
+                  }
+
+                  void handleResignationRevertReview(
+                    revert.originalResignation.id,
+                    revert.id,
+                    "rejected",
+                    reason
+                  );
                 } else {
                   void handleLeaveReview(
                     rejectingRequest.id,
@@ -1373,6 +2328,7 @@ export default function ApprovalsHub({
                   );
                 }
               }}
+
             >
               <div>
                 <label
@@ -1392,13 +2348,19 @@ export default function ApprovalsHub({
                   onChange={(event) =>
                     setProfileRejectionReason(event.target.value)
                   }
+                  
                   placeholder={
                     rejectingRequest.type === "profile"
                       ? "Explain why this profile-change request is being rejected..."
                       : rejectingRequest.type === "attendance"
                         ? "Explain why this attendance regularization is being rejected..."
-                        : "Explain why this leave request is being rejected..."
+                        : rejectingRequest.type === "resignation"
+                          ? "Explain why this resignation request is being rejected..."
+                          : rejectingRequest.type === "resignation_revert"
+                            ? "Explain why this resignation reversal request is being rejected..."
+                            : "Explain why this leave request is being rejected..."
                   }
+
                   className="w-full resize-y rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-700 outline-none focus:border-rose-400 focus:ring-2 focus:ring-rose-100"
                 />
 
@@ -1435,6 +2397,91 @@ export default function ApprovalsHub({
               </div>
             </form>
           </section>
+        </div>
+      )}
+
+      {/* Approval pop up for temp login access */}
+      {approvingResignationId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+            <h2 className="text-lg font-semibold text-slate-900">
+              Approve Resignation
+            </h2>
+
+            <p className="mt-2 text-sm text-slate-600">
+              Choose how long the employee can continue logging in after
+              their planned last working day.
+            </p>
+
+            <label
+              htmlFor="approval-temporary-login-days"
+              className="mt-5 block text-sm font-medium text-slate-700"
+            >
+              Temporary login access
+            </label>
+
+            <div className="mt-2 flex items-center gap-3">
+              <input
+                id="approval-temporary-login-days"
+                type="number"
+                min={0}
+                max={45}
+                step={1}
+                value={approvalTemporaryLoginDays}
+                onChange={(event) =>
+                  setApprovalTemporaryLoginDays(event.target.value)
+                }
+                disabled={actionLoading === approvingResignationId}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-100"
+              />
+              <span className="text-sm text-slate-500">days</span>
+            </div>
+
+            <p className="mt-1 text-xs text-slate-500">
+              Enter a whole number from 0 to 45. Choose 0 for no additional
+              login days.
+            </p>
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setApprovingResignationId(null);
+                  setApprovalTemporaryLoginDays("0");
+                }}
+                disabled={actionLoading === approvingResignationId}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                disabled={
+                  approvalTemporaryLoginDays.trim() === "" ||
+                  !Number.isInteger(Number(approvalTemporaryLoginDays)) ||
+                  Number(approvalTemporaryLoginDays) < 0 ||
+                  Number(approvalTemporaryLoginDays) > 45 ||
+                  actionLoading === approvingResignationId
+                }
+                onClick={() => {
+                  const selectedDays = Number(approvalTemporaryLoginDays);
+
+                  void handleResignationReview(
+                    approvingResignationId,
+                    "approved",
+                    undefined,
+                    selectedDays
+                  );
+                }}
+                className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {actionLoading === approvingResignationId
+                  ? "Approving..."
+                  : "Confirm Approval"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

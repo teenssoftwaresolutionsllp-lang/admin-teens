@@ -23,6 +23,152 @@ export async function GET(request: Request) {
       }
     }
 
+
+
+    // Check for last-working-day reminders when HR/CEO loads employees.
+    // This is event-triggered; no cron job is used.
+    try {
+      if (user) {
+        const adminClient = await createAdminClient();
+
+        const { data: profile, error: profileError } = await adminClient
+          .from("profiles")
+          .select("role")
+          .eq("id", user.id)
+          .maybeSingle();
+
+        if (
+          !profileError &&
+          (profile?.role === "hr" || profile?.role === "ceo")
+        ) {
+          // Calculate tomorrow's date in India Standard Time.
+          const indiaToday = new Date(
+            Date.now() + 330 * 60 * 1000
+          )
+            .toISOString()
+            .slice(0, 10);
+
+          const tomorrowDate = new Date(
+            `${indiaToday}T00:00:00.000Z`
+          );
+          tomorrowDate.setUTCDate(tomorrowDate.getUTCDate() + 1);
+          const tomorrow = tomorrowDate.toISOString().slice(0, 10);
+
+          const { data: employeesDue, error: employeesDueError } =
+            await adminClient
+              .from("employees")
+              .select(
+                "id, employee_id, first_name, last_name, planned_last_working_date, notice_status"
+              )
+              .eq("notice_status", "notice_period")
+              .eq("planned_last_working_date", tomorrow);
+
+          if (employeesDueError) {
+            console.error(
+              "Failed to check upcoming last working days:",
+              employeesDueError
+            );
+          } else if (employeesDue?.length) {
+            const { data: hrUsers, error: hrUsersError } =
+              await adminClient
+                .from("profiles")
+                .select("id")
+                .in("role", ["hr", "ceo"]);
+
+            if (hrUsersError) {
+              console.error(
+                "Failed to load HR/CEO notification recipients:",
+                hrUsersError
+              );
+            } else if (hrUsers?.length) {
+              const employeeIds = employeesDue.map(
+                (employee) => employee.id
+              );
+              const recipientIds = hrUsers.map((hr) => hr.id);
+
+              const {
+                data: existingNotifications,
+                error: existingError,
+              } = await adminClient
+                .from("notifications")
+                .select("employee_id, recipient_user_id, message")
+                .eq("title", "Last Working Day Tomorrow")
+                .eq("type", "resignation")
+                .in("employee_id", employeeIds)
+                .in("recipient_user_id", recipientIds);
+
+              if (existingError) {
+                console.error(
+                  "Failed to check duplicate last-working-day notifications:",
+                  existingError
+                );
+              } else {
+                const notificationRows = [];
+
+                for (const employee of employeesDue) {
+                  const employeeName = [
+                    employee.first_name,
+                    employee.last_name,
+                  ]
+                    .filter(Boolean)
+                    .join(" ");
+
+                  const message =
+                    `Reminder: ${employeeName || employee.employee_id} ` +
+                    `has their planned last working day tomorrow (${tomorrow}).`;
+
+                  for (const hr of hrUsers) {
+                    const alreadyExists = (
+                      existingNotifications ?? []
+                    ).some(
+                      (notification) =>
+                        notification.employee_id === employee.id &&
+                        notification.recipient_user_id === hr.id &&
+                        notification.message.includes(
+                          `planned last working day tomorrow (${tomorrow}).`
+                        )
+                    );
+
+                    if (!alreadyExists) {
+                      notificationRows.push({
+                        employee_id: employee.id,
+                        recipient_user_id: hr.id,
+                        title: "Last Working Day Tomorrow",
+                        message,
+                        type: "resignation",
+                        is_read: false,
+                      });
+                    }
+                  }
+                }
+
+                if (notificationRows.length > 0) {
+                  const { error: insertError } = await adminClient
+                    .from("notifications")
+                    .insert(notificationRows);
+
+                  if (insertError) {
+                    console.error(
+                      "Failed to create last-working-day notifications:",
+                      insertError
+                    );
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch (reminderError) {
+      // A reminder failure must not break the employee-list API.
+      console.error(
+        "Last-working-day reminder check failed:",
+        reminderError
+      );
+    }
+
+
+
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search');
     const company = searchParams.get('company');
