@@ -1,4 +1,3 @@
-
 "use client";
 
 import Link from "next/link";
@@ -25,6 +24,7 @@ interface NotificationItem {
   id: number | string;
   title: string;
   message: string;
+  type?: string;
   time?: string;
   created_at?: string;
   read?: boolean;
@@ -239,6 +239,7 @@ export default function Header({ profile }: HeaderProps) {
           id: item.id,
           title: item.title || "Notification",
           message: item.message || "",
+          type: item.type || "general",
           time: item.time,
           created_at: item.created_at,
           read: Boolean(item.read),
@@ -257,9 +258,30 @@ export default function Header({ profile }: HeaderProps) {
     }
   }, []);
 
-  // Fetch once when the Header mounts. No automatic polling.
+  // Refresh periodically and whenever the user returns to this tab.
   useEffect(() => {
     void fetchNotifications();
+
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") {
+        void fetchNotifications();
+      }
+    };
+
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        void fetchNotifications();
+      }
+    }, 60_000);
+
+    window.addEventListener("focus", refreshWhenVisible);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", refreshWhenVisible);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
   }, [fetchNotifications]);
 
   // Close notifications when clicking outside the popup.
@@ -290,7 +312,50 @@ export default function Header({ profile }: HeaderProps) {
     }
   };
 
-  // Update read status in the current UI only.
+  // Mark one notification as read in the database.
+  const markNotificationAsRead = async (notificationId: number | string) => {
+    try {
+      const response = await fetch("/api/notifications", {
+        method: "PATCH",
+        cache: "no-store",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notificationId }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || "Failed to mark notification as read.");
+      }
+
+      setNotifications((previous) =>
+        previous.map((notification) =>
+          notification.id === notificationId
+            ? { ...notification, read: true }
+            : notification
+        )
+      );
+    } catch (error) {
+      console.error("Mark notification as read failed:", error);
+      setNotificationError(
+        error instanceof Error ? error.message : "Unable to update notification."
+      );
+    }
+  };
+
+  const getNotificationCategoryStyle = (type?: string) => {
+    const category = (type || "").toLowerCase();
+
+    if (category.includes("leave")) return "bg-emerald-100 text-emerald-700";
+    if (category.includes("attendance")) return "bg-sky-100 text-sky-700";
+    if (category.includes("pay")) return "bg-violet-100 text-violet-700";
+    if (category.includes("resign")) return "bg-orange-100 text-orange-700";
+    if (category.includes("profile") || category.includes("document")) {
+      return "bg-cyan-100 text-cyan-700";
+    }
+
+    return "bg-indigo-100 text-indigo-600";
+  };
 
   const markAllAsRead = async () => {
     try {
@@ -485,15 +550,9 @@ export default function Header({ profile }: HeaderProps) {
                     >
                       <div className="flex items-start gap-3">
                         <div
-                          className={`mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full ${
-                            /reject/i.test(notification.title)
-                              ? "bg-red-100 text-red-600"
-                              : /approv/i.test(notification.title)
-                                ? "bg-green-100 text-green-600"
-                                : /pending|submitted/i.test(notification.title)
-                                  ? "bg-amber-100 text-amber-600"
-                                  : "bg-indigo-100 text-indigo-600"
-                          }`}
+                          className={`mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full ${getNotificationCategoryStyle(
+                            notification.type
+                          )}`}
                         >
                           <BellRing className="h-4 w-4" />
                         </div>
@@ -519,10 +578,21 @@ export default function Header({ profile }: HeaderProps) {
                         </div>
 
                         {!notification.read && (
-                          <span
-                            className="mt-1.5 h-2 w-2 flex-shrink-0 rounded-full bg-indigo-600"
-                            title="Unread"
-                          />
+                          <div className="flex flex-shrink-0 items-center gap-2">
+                            <span
+                              className="mt-1.5 h-2 w-2 rounded-full bg-indigo-600"
+                              title="Unread"
+                            />
+                            <button
+                              type="button"
+                              title="Mark as read"
+                              aria-label={`Mark ${notification.title} as read`}
+                              onClick={() => void markNotificationAsRead(notification.id)}
+                              className="rounded-md p-1.5 text-slate-400 transition hover:bg-white hover:text-indigo-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                            >
+                              <CheckCheck className="h-4 w-4" />
+                            </button>
+                          </div>
                         )}
                       </div>
                     </div>

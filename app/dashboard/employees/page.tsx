@@ -1,7 +1,8 @@
-import { createClient } from "@/lib/supabase-server";
+import { createClient, createAdminClient } from "@/lib/supabase-server";
 import { DataStore } from "@/lib/data-store";
 import { redirect } from "next/navigation";
 import EmployeeTable from "@/components/EmployeeTable";
+import JoiningEmployeesView from "@/components/admin/JoiningEmployeesView";
 
 type EmployeesPageProps = {
   searchParams: Promise<{
@@ -45,36 +46,32 @@ export default async function EmployeesPage({
 
   const employees = await DataStore.getEmployees();
 
-  const { data: dbDepartments } = await supabase
-    .from("departments")
-    .select("*")
-    .order("name");
+  if (selectedStatus === "joining") {
+    return (
+      <div className="flex-1 space-y-6 p-8">
+        <div className="flex items-center justify-between">
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900">
+            Joining
+          </h1>
+        </div>
 
-  const departments =
-    dbDepartments && dbDepartments.length > 0
-      ? dbDepartments
-      : [
-          {
-            id: "d1",
-            name: "Engineering",
-            description: "Software development",
-          },
-          {
-            id: "d2",
-            name: "Design",
-            description: "UI/UX and product design",
-          },
-          {
-            id: "d3",
-            name: "HR",
-            description: "Human Resources",
-          },
-          {
-            id: "d4",
-            name: "Finance",
-            description: "Finance and payroll",
-          },
-        ];
+        <JoiningEmployeesView />
+      </div>
+    );
+  }
+
+  const adminClient = await createAdminClient();
+
+  const { data: dbDepartments, error: departmentsError } = await adminClient
+    .from("departments")
+    .select("id, name, description, created_at")
+    .order("name", { ascending: true });
+
+  if (departmentsError) {
+    console.error("Failed to load departments:", departmentsError);
+  }
+
+  const departments = dbDepartments ?? [];
 
   // Apply a filter only when a recognized status is selected.
   // The employee status field must match the corresponding key.

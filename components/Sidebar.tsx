@@ -419,6 +419,12 @@ export default function Sidebar({
       roles: ["hr"],
     },
     {
+      name: "Add Joining",
+      href: "/dashboard/joining",
+      icon: UserPlus,
+      roles: ["hr"],
+    },
+    {
       name: "Approval Hub",
       icon: CheckSquare,
       roles: ["hr"],
