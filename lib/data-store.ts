@@ -147,7 +147,7 @@ export class DataStore {
         }
         const result = data.map((emp) => ({
           ...emp,
-          project: includeProject ? projects.find((p) => p.id === emp.project_id) || projects[0] : undefined,
+          project: includeProject ? projects.find((p) => p.id === emp.project_id)  || undefined : undefined,
         }));
         // Sync DB data into cache
         for (const emp of result) {
@@ -1355,7 +1355,6 @@ export class DataStore {
   static async clockIn(employeeId: string): Promise<AttendanceLog> {
     const supabase = await createAdminClient();
     const now = new Date();
-    const todayStr = now.toISOString().split("T")[0];
 
     const employee = await this.getEmployeeById(employeeId);
     if (!employee) throw new Error("Employee not found");
@@ -1369,6 +1368,26 @@ export class DataStore {
       project.grace_period_minutes,
       project.half_day_cutoff_minutes
     );
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Kolkata",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(now);
+
+    const todayStr = `${parts.find(p => p.type === "year")!.value}-${parts.find(p => p.type === "month")!.value}-${parts.find(p => p.type === "day")!.value}`;
+
+    const { data: wfhRequest, error: wfhError } = await supabase
+      .from("wfh_requests")
+      .select("id")
+      .eq("employee_id", employee.id)
+      .eq("request_date", todayStr)
+      .eq("status", "approved")
+      .maybeSingle();
+
+    if (wfhError) throw new Error(wfhError.message);
+
+    const workMode = wfhRequest ? "WFH" : "WFO";
 
     const { data: existingLog, error: findError } = await supabase
       .from("attendance_logs")
@@ -1391,17 +1410,13 @@ export class DataStore {
       const { data, error } = await supabase
         .from("attendance_logs")
         .update({
-          // Keep the original first clock-in for the day.
           check_in_time: existingLog.check_in_time ?? now.toISOString(),
-
-          // Start tracking the new session independently.
           session_check_in_time: now.toISOString(),
           check_out_time: null,
-
-          // Preserve previously accumulated hours and attendance status.
           total_hours: Number(existingLog.total_hours ?? 0),
           status: existingLog.status,
           is_late: existingLog.is_late || evaluation.isLate,
+          work_mode: existingLog.work_mode ?? "WFO",
         })
         .eq("id", existingLog.id)
         .select()
@@ -1423,6 +1438,7 @@ export class DataStore {
         status: evaluation.status,
         is_late: evaluation.isLate,
         is_regularized: false,
+        work_mode: workMode,
       })
       .select()
       .single();
@@ -2081,10 +2097,12 @@ export class DataStore {
             last_name,
             profile_photo_url,
             department_id,
-            department:departments (
-              id,
-              name
-            )
+            department:departments (id,name)
+          ),
+          leave_type:leave_types (
+            id,
+            name,
+            code
           )
         `)
         .order("created_at", { ascending: false });

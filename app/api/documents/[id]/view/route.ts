@@ -1,3 +1,4 @@
+
 import { NextResponse } from "next/server";
 import {
   createClient,
@@ -8,6 +9,21 @@ import { cloudinary } from "@/lib/cloudinary-client";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
+const MIME_TYPES: Record<string, string> = {
+  ".pdf": "application/pdf",
+  ".doc": "application/msword",
+  ".docx":
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".png": "image/png",
+};
+
+function getExtension(fileName: string): string {
+  const index = fileName.lastIndexOf(".");
+  return index >= 0 ? fileName.slice(index).toLowerCase() : "";
+}
+
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -17,8 +33,8 @@ export async function GET(
 
     const supabase = await createClient();
 
-    // First fetch through the authenticated client.
-    // This preserves the existing employee document access rules.
+    // Fetch through the authenticated client to preserve
+    // the existing employee document access rules.
     const { data: document, error } = await supabase
       .from("employee_documents")
       .select(`
@@ -38,18 +54,24 @@ export async function GET(
     }
 
     let fileUrl = document.document_url;
-    let fileName = document.document_name || "employee-document.pdf";
+    let fileName =
+      document.document_name || "employee-document";
 
-    // Joining documents are stored privately in Cloudinary.
-    // Generate a temporary private URL using the original joining document.
     if (document.source_joining_document_id) {
       const admin = await createAdminClient();
 
-      const { data: joiningDocument, error: joiningError } = await admin
-        .from("joining_documents")
-        .select("id, document_type, storage_path, candidate_id, version")
-        .eq("id", document.source_joining_document_id)
-        .maybeSingle();
+      const { data: joiningDocument, error: joiningError } =
+        await admin
+          .from("joining_documents")
+          .select(`
+            id,
+            document_type,
+            storage_path,
+            file_name,
+            mime_type
+          `)
+          .eq("id", document.source_joining_document_id)
+          .maybeSingle();
 
       if (joiningError) {
         console.error(
@@ -70,20 +92,38 @@ export async function GET(
         );
       }
 
+      const documentType = joiningDocument.document_type;
+
+      const defaultNames: Record<string, string> = {
+        offer_letter: "Offer Letter.pdf",
+        joining_letter: "Joining Letter.pdf",
+        resume: "Resume",
+        experience_document: "Experience Letter",
+      };
+
+      fileName =
+        joiningDocument.file_name ||
+        defaultNames[documentType] ||
+        "employee-document";
+
+      const extension = getExtension(fileName);
+
+      if (!extension) {
+        return NextResponse.json(
+          { error: "Document filename has no extension" },
+          { status: 400 }
+        );
+      }
+
       fileUrl = cloudinary.utils.private_download_url(
         joiningDocument.storage_path,
-        "pdf",
+        extension.slice(1),
         {
           resource_type: "raw",
           type: "authenticated",
           expires_at: Math.floor(Date.now() / 1000) + 60,
         }
       );
-
-      fileName =
-        joiningDocument.document_type === "joining_letter"
-          ? "Joining Letter.pdf"
-          : "Offer Letter.pdf";
     }
 
     if (!fileUrl) {
@@ -93,42 +133,43 @@ export async function GET(
       );
     }
 
-    // Retrieve the document from Cloudinary.
     const cloudinaryResponse = await fetch(fileUrl, {
       cache: "no-store",
       signal: AbortSignal.timeout(20000),
     });
 
     if (!cloudinaryResponse.ok || !cloudinaryResponse.body) {
-      console.error("Cloudinary fetch failed:", {
+      console.error("Document fetch failed:", {
         status: cloudinaryResponse.status,
         statusText: cloudinaryResponse.statusText,
         documentId: id,
       });
 
       return NextResponse.json(
-        { error: "Failed to fetch document from Cloudinary" },
+        { error: "Failed to fetch document" },
         { status: 502 }
       );
     }
 
-    // Determine content type from file name.
-    let contentType = "application/octet-stream";
+    const extension = getExtension(fileName);
+    const contentType =
+      MIME_TYPES[extension] || "application/octet-stream";
 
-    if (fileName.toLowerCase().endsWith(".pdf")) {
-      contentType = "application/pdf";
-    } else if (/\.(jpg|jpeg)$/i.test(fileName)) {
-      contentType = "image/jpeg";
-    } else if (/\.png$/i.test(fileName)) {
-      contentType = "image/png";
-    }
+    // Only PDF and image formats are suitable for inline browser preview.
+    const canPreviewInline =
+      contentType === "application/pdf" ||
+      contentType.startsWith("image/");
+
+    const safeFileName = fileName.replace(/["\r\n]/g, "_");
 
     return new Response(cloudinaryResponse.body, {
       status: 200,
       headers: {
         "Content-Type": contentType,
-        "Content-Disposition": `inline; filename="${fileName.replace(/"/g, "")}"`,
-        "Cache-Control": "private, no-cache, no-store, must-revalidate",
+        "Content-Disposition":
+          `${canPreviewInline ? "inline" : "attachment"}; filename="${safeFileName}"`,
+        "Cache-Control":
+          "private, no-cache, no-store, must-revalidate",
         "X-Content-Type-Options": "nosniff",
       },
     });

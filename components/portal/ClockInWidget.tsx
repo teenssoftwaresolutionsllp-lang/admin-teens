@@ -10,6 +10,8 @@ import {
   Loader2,
   ArrowUpRight,
   CalendarDays,
+  Building2,
+  Home,
 } from "lucide-react";
 import Link from "next/link";
 import { AttendanceLog, Project } from "@/lib/types";
@@ -21,6 +23,12 @@ export interface SelectedAttendance {
   clockOut?: string;
   worked?: string;
 }
+
+type WorkMode = "WFO" | "WFH";
+
+type AttendanceLogWithMode = AttendanceLog & {
+  work_mode?: WorkMode | null;
+};
 
 interface AttendanceRegularizationRequest {
   id: string;
@@ -66,6 +74,7 @@ export default function ClockInWidget({
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, "0");
     const day = String(now.getDate()).padStart(2, "0");
+
     return `${year}-${month}-${day}`;
   };
 
@@ -79,14 +88,20 @@ export default function ClockInWidget({
 
     const loadRegularizations = async () => {
       try {
-        const response = await fetch("/api/attendance/regularization", {
-          cache: "no-store",
-          headers: { Accept: "application/json" },
-        });
+        const response = await fetch(
+          "/api/attendance/regularization",
+          {
+            cache: "no-store",
+            headers: {
+              Accept: "application/json",
+            },
+          }
+        );
 
         if (!response.ok) return;
 
         const data = await response.json();
+
         const requests = Array.isArray(data)
           ? data
           : Array.isArray(data?.requests)
@@ -99,7 +114,10 @@ export default function ClockInWidget({
           setRegularizationRequests(requests);
         }
       } catch (error) {
-        console.error("Unable to load attendance regularizations:", error);
+        console.error(
+          "Unable to load attendance regularizations:",
+          error
+        );
       }
     };
 
@@ -127,7 +145,7 @@ export default function ClockInWidget({
     }
   }, [initialLog, activeDate, isToday]);
 
-  // Update the worked-time display every second.
+  // Update worked time every second.
   useEffect(() => {
     const update = () => {
       const now = new Date();
@@ -148,13 +166,20 @@ export default function ClockInWidget({
 
         if (log.check_in_time) {
           const start = new Date(log.check_in_time);
-          const end = log.check_out_time ? new Date(log.check_out_time) : now;
+          const end = log.check_out_time
+            ? new Date(log.check_out_time)
+            : now;
 
-          const sessionMinutes = Math.max(0,Math.floor((end.getTime() - start.getTime()) / 60000));
+          const sessionMinutes = Math.max(
+            0,
+            Math.floor(
+              (end.getTime() - start.getTime()) / 60000
+            )
+          );
 
-          // total_hours already represents the saved session when
-          // checked out, so don't add that same session twice.
-          const totalMinutes = log.check_out_time ? previousMinutes : previousMinutes + sessionMinutes;
+          const totalMinutes = log.check_out_time
+            ? previousMinutes
+            : previousMinutes + sessionMinutes;
 
           setWorkedMinutes(totalMinutes);
         } else {
@@ -166,12 +191,14 @@ export default function ClockInWidget({
     };
 
     update();
+
     const timer = window.setInterval(update, 1000);
 
     return () => window.clearInterval(timer);
   }, [log, isToday]);
 
-  // Only a button click sends an attendance punch.
+  // Work mode is determined by the server using HR approval.
+  // Never allow the employee to submit their own work mode.
   const handlePunch = async (action: "in" | "out") => {
     if (!isToday || loading) return;
 
@@ -203,7 +230,6 @@ export default function ClockInWidget({
           data?.message ||
           `Attendance punch failed (${response.status})`;
 
-        // Show the actual API error if your component supports it.
         alert(message);
         return;
       }
@@ -214,6 +240,7 @@ export default function ClockInWidget({
       }
     } catch (error) {
       console.error("Punch error:", error);
+      alert("Unable to process attendance. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -249,8 +276,6 @@ export default function ClockInWidget({
     ? new Date(latestRegularization.reviewed_at).getTime()
     : 0;
 
-  // Only an approval for a request created after the checkout
-  // can allow another login.
   const regularizationApproved =
     latestRegularization?.status === "approved" &&
     requestCreatedTimestamp > checkoutTimestamp &&
@@ -280,6 +305,9 @@ export default function ClockInWidget({
   const previousClockOut = selectedAttendance?.clockOut;
   const previousWorked = selectedAttendance?.worked;
 
+  const savedWorkMode =
+    ((log as AttendanceLogWithMode | null)?.work_mode || "WFO") as WorkMode;
+
   const formatSelectedDate = (date: string) => {
     if (!date) return "";
 
@@ -292,6 +320,55 @@ export default function ClockInWidget({
       day: "numeric",
       year: "numeric",
     });
+  };
+
+  const renderWorkMode = (mode: WorkMode) => {
+    const isWFH = mode === "WFH";
+
+    return (
+      <div
+        className={`flex items-center justify-between p-3 rounded-xl border ${
+          isWFH
+            ? "bg-indigo-50 border-indigo-100"
+            : "bg-emerald-50 border-emerald-100"
+        }`}
+      >
+        <div className="flex items-center gap-2">
+          <div
+            className={`p-2 rounded-lg ${
+              isWFH
+                ? "bg-indigo-100 text-indigo-600"
+                : "bg-emerald-100 text-emerald-600"
+            }`}
+          >
+            {isWFH ? (
+              <Home className="w-4 h-4" />
+            ) : (
+              <Building2 className="w-4 h-4" />
+            )}
+          </div>
+
+          <div>
+            <p className="text-[10px] uppercase tracking-wider font-bold text-slate-500">
+              Work Location
+            </p>
+            <p className="text-sm font-bold text-slate-900">
+              {isWFH ? "Work From Home" : "Work From Office"}
+            </p>
+          </div>
+        </div>
+
+        <span
+          className={`text-[11px] font-bold px-3 py-1 rounded-full ${
+            isWFH
+              ? "bg-indigo-100 text-indigo-700"
+              : "bg-emerald-100 text-emerald-700"
+          }`}
+        >
+          {mode}
+        </span>
+      </div>
+    );
   };
 
   const renderPreviousStatus = () => {
@@ -331,7 +408,9 @@ export default function ClockInWidget({
   return (
     <div
       className={`${
-        compact ? "p-4 sm:p-5 space-y-4" : "p-6 sm:p-7 space-y-6"
+        compact
+          ? "p-4 sm:p-5 space-y-4"
+          : "p-6 sm:p-7 space-y-6"
       } bg-white rounded-2xl border border-slate-200/90 shadow-sm flex flex-col justify-between`}
     >
       <div>
@@ -443,6 +522,12 @@ export default function ClockInWidget({
           </div>
         ) : (
           <div className="space-y-4">
+            {renderWorkMode(
+              isCheckedIn || isCheckedOut
+                ? savedWorkMode
+                : "WFO"
+            )}
+
             <div className="flex items-center justify-between text-xs bg-slate-50/80 p-3 rounded-xl border border-slate-200/70">
               <span className="text-slate-600 font-semibold">
                 Today&apos;s Status:
@@ -488,7 +573,7 @@ export default function ClockInWidget({
 
                 <div className="p-3 bg-slate-50/90 rounded-xl border border-slate-200/70">
                   <span className="block text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-0.5">
-                    LogOut
+                    Logout
                   </span>
                   <span className="font-bold text-slate-900 text-sm font-mono">
                     {log?.check_out_time
@@ -502,7 +587,8 @@ export default function ClockInWidget({
                     Time Worked
                   </span>
                   <span className="font-bold text-indigo-700 text-lg font-mono">
-                    {Math.floor(workedMinutes / 60)}h {workedMinutes % 60}m
+                    {Math.floor(workedMinutes / 60)}h{" "}
+                    {workedMinutes % 60}m
                   </span>
                 </div>
 
@@ -572,6 +658,14 @@ export default function ClockInWidget({
             <p className="text-center text-[11px] font-medium text-rose-600">
               You have approved leave for today. Login is disabled.
             </p>
+          ) : regularizationPending ? (
+            <p className="text-center text-[11px] font-medium text-amber-600">
+              Your regularization request is pending HR approval.
+            </p>
+          ) : isCheckedOut && !regularizationApproved ? (
+            <p className="text-center text-[11px] font-medium text-slate-500">
+              Attendance is completed for today.
+            </p>
           ) : !isCheckedIn && !isCheckedOut ? (
             <p className="text-center text-[11px] font-medium text-slate-500">
               Click Login to start your attendance.
@@ -596,9 +690,7 @@ export default function ClockInWidget({
               onClick={onRequestRegularization}
               className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold inline-flex items-center gap-1 transition-colors"
             >
-              <span>
-                Missed punch? Request Regularization
-              </span>
+              <span>Missed punch? Request Regularization</span>
               <ArrowUpRight className="w-3.5 h-3.5" />
             </button>
           </div>

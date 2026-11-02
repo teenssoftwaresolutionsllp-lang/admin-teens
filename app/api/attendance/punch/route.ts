@@ -1,11 +1,6 @@
 import { NextResponse } from "next/server";
 import { DataStore } from "@/lib/data-store";
-import {
-  createClient,
-  createAdminClient,
-} from "@/lib/supabase-server";
-
-
+import { createClient, createAdminClient} from "@/lib/supabase-server";
 
 export async function POST(request: Request) {
   try {
@@ -24,7 +19,10 @@ export async function POST(request: Request) {
 
     const { employeeId, action } = await request.json();
 
-    if (!employeeId || !["in", "out"].includes(action)) {
+    if (
+      !employeeId ||
+      !["in", "out"].includes(action)
+    ) {
       return NextResponse.json(
         { error: "Invalid employeeId or action" },
         { status: 400 }
@@ -57,7 +55,7 @@ export async function POST(request: Request) {
 
     const { data: attendance, error: attendanceError } = await admin
       .from("attendance_logs")
-      .select("id, check_in_time, check_out_time")
+      .select("id, check_in_time, check_out_time, work_mode")
       .eq("employee_id", employee.id)
       .eq("attendance_date", today)
       .maybeSingle();
@@ -102,7 +100,11 @@ export async function POST(request: Request) {
 
       const log = await DataStore.clockIn(employee.id);
 
-      return NextResponse.json({ success: true, log });
+      return NextResponse.json({
+        success: true,
+        log,
+        workMode: log.work_mode ?? "WFO",
+      });
     }
 
     if (!attendance?.check_in_time || attendance?.check_out_time) {
@@ -114,7 +116,11 @@ export async function POST(request: Request) {
 
     const log = await DataStore.clockOut(employee.id);
 
-    return NextResponse.json({ success: true, log });
+    return NextResponse.json({
+      success: true,
+      log,
+      workMode: log.work_mode ?? "WFO",
+    });
   } catch (error: any) {
     console.error("Punch API error:", error);
 

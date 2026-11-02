@@ -27,29 +27,30 @@ async function authorizeHr() {
 
   if (error) {
     console.error("Document role check failed:", error.message);
-
-    return {
-      error: "Unable to verify access",
-      status: 500 as const,
-    };
+    return { error: "Unable to verify access", status: 500 as const };
   }
 
   if (profile?.role !== "hr") {
-    return {
-      error: "HR access required",
-      status: 403 as const,
-    };
+    return { error: "HR access required", status: 403 as const };
   }
 
   return { admin };
 }
+
+const allowedDocuments = [
+  "offer_letter",
+  "joining_letter",
+  "resume",
+  "experience_document",
+];
+
+const allowedExtensions = ["pdf", "doc", "docx"];
 
 export async function GET(
   _request: Request,
   context: { params: Promise<{ documentId: string }> }
 ) {
   try {
-    // 1. Authenticate and authorize HR.
     const auth = await authorizeHr();
 
     if ("error" in auth) {
@@ -59,7 +60,6 @@ export async function GET(
       );
     }
 
-    // 2. Validate document ID.
     const { documentId } = await context.params;
 
     const uuidPattern =
@@ -72,17 +72,16 @@ export async function GET(
       );
     }
 
-    // 3. Fetch either an offer letter or a joining letter.
     const { data: record, error } = await auth.admin
       .from("joining_documents")
-      .select("id, candidate_id, document_type, storage_path, version")
+      .select(
+        "id, candidate_id, document_type, storage_path, version, file_name, mime_type"
+      )
       .eq("id", documentId)
-      .in("document_type", ["offer_letter", "joining_letter"])
+      .in("document_type", allowedDocuments)
       .maybeSingle();
 
-    if (error) {
-      throw error;
-    }
+    if (error) throw error;
 
     if (!record) {
       return NextResponse.json(
@@ -92,21 +91,42 @@ export async function GET(
     }
 
     if (!record.storage_path) {
-      console.error("Joining document has no Cloudinary asset ID.", {
-        documentId,
-        documentType: record.document_type,
-      });
-
       return NextResponse.json(
-        { error: "PDF is not available for this document." },
+        { error: "Document file is not available." },
         { status: 404 }
       );
     }
 
-    // 4. Generate a short-lived private download URL.
+    const defaultNames: Record<string, string> = {
+      offer_letter: `offer-${record.candidate_id}-v${record.version}.pdf`,
+      joining_letter: `joining-letter-${record.candidate_id}-v${record.version}.pdf`,
+      resume: "Resume.pdf",
+      experience_document: "Experience-Document.pdf",
+    };
+
+    const fileName = record.file_name || defaultNames[record.document_type];
+
+    const extension = fileName.split(".").pop()?.toLowerCase() || "pdf";
+
+    if (!allowedExtensions.includes(extension)) {
+      return NextResponse.json(
+        { error: "Unsupported document format." },
+        { status: 400 }
+      );
+    }
+
+    const mimeTypes: Record<string, string> = {
+      pdf: "application/pdf",
+      doc: "application/msword",
+      docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    };
+
+    const contentType =
+      record.mime_type || mimeTypes[extension] || "application/octet-stream";
+
     const signedUrl = cloudinary.utils.private_download_url(
       record.storage_path,
-      "pdf",
+      extension,
       {
         resource_type: "raw",
         type: "authenticated",
@@ -114,7 +134,6 @@ export async function GET(
       }
     );
 
-    // 5. Retrieve the PDF on the server.
     const response = await fetch(signedUrl, {
       cache: "no-store",
       signal: AbortSignal.timeout(20000),
@@ -126,30 +145,28 @@ export async function GET(
       console.error("[Joining Document] Cloudinary download failed:", {
         status: response.status,
         response: responseText.slice(0, 500),
-        candidateId: record.candidate_id,
+        documentId,
         documentType: record.document_type,
-        version: record.version,
       });
 
       return NextResponse.json(
-        { error: "Unable to retrieve the PDF." },
+        { error: "Unable to retrieve the document." },
         { status: 502 }
       );
     }
 
-    // 6. Select a filename based on document type.
-    const prefix =
-      record.document_type === "joining_letter"
-        ? "joining-letter"
-        : "offer";
+    const safeFileName = fileName.replace(/["\r\n]/g, "_");
+    const encodedFileName = encodeURIComponent(safeFileName);
 
-    // 7. Stream the PDF to the authorized HR user.
+    // PDFs can be previewed in the browser. Word files download.
+    const disposition = extension === "pdf" ? "inline" : "attachment";
+
     return new Response(response.body, {
       status: 200,
       headers: {
-        "Content-Type": "application/pdf",
+        "Content-Type": contentType,
         "Content-Disposition":
-          `inline; filename="${prefix}-${record.candidate_id}-v${record.version}.pdf"`,
+          `${disposition}; filename="${safeFileName}"; filename*=UTF-8''${encodedFileName}`,
         "Cache-Control": "private, no-store, max-age=0",
         "X-Content-Type-Options": "nosniff",
       },

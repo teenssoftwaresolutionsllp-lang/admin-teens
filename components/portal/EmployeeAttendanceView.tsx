@@ -29,6 +29,7 @@ import {
   Plus,
   X,
   AlertCircle,
+  House,
 } from "lucide-react";
 
 import ClockInWidget from "./ClockInWidget";
@@ -704,6 +705,20 @@ export default function EmployeeAttendanceView({
       reason: "",
     });
 
+
+  /* ============================================================
+    WFH REQUEST STATE
+  ============================================================ */
+
+  const [wfhRequests, setWfhRequests] = useState<any[]>([]);
+  const [loadingWfh, setLoadingWfh] = useState(false);
+  const [showWfhModal, setShowWfhModal] = useState(false);
+  const [submittingWfh, setSubmittingWfh] = useState(false);
+  const [wfhError, setWfhError] = useState<string | null>(null);
+  const [wfhSuccess, setWfhSuccess] = useState<string | null>(null);
+
+  const [wfhForm, setWfhForm] = useState({requestDate: "",reason: "",});
+
   /* ============================================================
      REGULARIZATION STATE
   ============================================================ */
@@ -750,8 +765,7 @@ export default function EmployeeAttendanceView({
      LOAD LEAVE DATA
   ============================================================ */
 
-  const refreshLeaveData =
-    useCallback(async () => {
+  const refreshLeaveData = useCallback(async () => {
       try {
         setLoadingLeaves(true);
 
@@ -860,8 +874,7 @@ export default function EmployeeAttendanceView({
       }
     }, [employee.id]);
 
-  useEffect(() => {
-    refreshLeaveData();
+  useEffect(() => {refreshLeaveData();
 
     const interval =
       setInterval(() => {
@@ -872,6 +885,50 @@ export default function EmployeeAttendanceView({
       clearInterval(interval);
     };
   }, [refreshLeaveData]);
+
+
+  /* ============================================================
+    LOAD WFH REQUESTS
+  ============================================================ */
+
+  const refreshWfhRequests = useCallback(async () => {
+    try {
+      setLoadingWfh(true);
+
+      const response = await fetch("/api/wfh", {
+        method: "GET",
+        cache: "no-store",
+      });
+
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(
+          data?.error || "Failed to load WFH requests."
+        );
+      }
+
+      const requests =
+        data?.requests ??
+        data?.wfhRequests ??
+        data?.data ??
+        [];
+
+      setWfhRequests(Array.isArray(requests) ? requests : []);
+    } catch (error) {
+      console.error("WFH loading error:", error);
+    } finally {
+      setLoadingWfh(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshWfhRequests();
+
+    const interval = setInterval(refreshWfhRequests, 30000);
+
+    return () => clearInterval(interval);
+  }, [refreshWfhRequests]);
 
   /* ============================================================
      CURRENT ATTENDANCE
@@ -1913,6 +1970,107 @@ const leaveBalance = useMemo(
     };
 
   /* ============================================================
+    WFH REQUEST HANDLERS
+  ============================================================ */
+
+  const getIndiaToday = () => {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Kolkata",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date());
+  };
+
+  const openWfhModal = () => {
+    setWfhError(null);
+    setWfhSuccess(null);
+
+    setWfhForm({
+      requestDate: getIndiaToday(),
+      reason: "",
+    });
+
+    setShowWfhModal(true);
+  };
+
+  const closeWfhModal = () => {
+    if (submittingWfh) return;
+
+    setShowWfhModal(false);
+    setWfhError(null);
+  };
+
+  const handleWfhSubmit = async (
+    e: FormEvent<HTMLFormElement>
+  ) => {
+    e.preventDefault();
+
+    setWfhError(null);
+    setWfhSuccess(null);
+
+    if (!wfhForm.requestDate) {
+      setWfhError("Please select a WFH date.");
+      return;
+    }
+
+    if (wfhForm.requestDate < getIndiaToday()) {
+      setWfhError("Past dates are not allowed.");
+      return;
+    }
+
+    if (wfhForm.reason.trim().length < 5) {
+      setWfhError("Please enter a reason with at least 5 characters.");
+      return;
+    }
+
+    try {
+      setSubmittingWfh(true);
+
+      const response = await fetch("/api/wfh", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          request_date: wfhForm.requestDate,
+          reason: wfhForm.reason.trim(),
+        }),
+      });
+
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(
+          data?.error || data?.message || "Failed to submit WFH request."
+        );
+      }
+
+      await refreshWfhRequests();
+
+      setWfhSuccess("WFH request submitted successfully.");
+
+      setWfhForm({
+        requestDate: "",
+        reason: "",
+      });
+
+      setTimeout(() => {
+        setShowWfhModal(false);
+        setWfhSuccess(null);
+      }, 1000);
+    } catch (error) {
+      setWfhError(
+        error instanceof Error
+          ? error.message
+          : "Failed to submit WFH request."
+      );
+    } finally {
+      setSubmittingWfh(false);
+    }
+  };
+
+  /* ============================================================
      RENDER
   ============================================================ */
 
@@ -1943,6 +2101,15 @@ const leaveBalance = useMemo(
           >
             <FileCheck className="h-4 w-4" />
             Request Regularization
+          </button>
+
+          <button
+            type="button"
+            onClick={openWfhModal}
+            className="inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2.5 text-sm font-semibold text-indigo-700 transition hover:bg-indigo-100"
+          >
+            <House className="h-4 w-4" />
+            Request WFH
           </button>
 
           <button
@@ -2608,8 +2775,101 @@ const leaveBalance = useMemo(
 
       </div>
 
-      {/* LEAVE MANAGEMENT */}
+      {/* WFH REQUEST MANAGEMENT */}
+      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex items-center justify-between gap-4 border-b border-slate-200 p-5">
+          <div>
+            <h2 className="text-lg font-bold text-slate-900">
+              Work From Home Requests
+            </h2>
+            <p className="mt-1 text-sm text-slate-500">
+              View and track your WFH requests.
+            </p>
+          </div>
 
+          {loadingWfh && (
+            <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
+          )}
+        </div>
+
+        <div className="p-5">
+          {wfhRequests.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center">
+              <House className="mx-auto h-8 w-8 text-slate-300" />
+              <p className="mt-3 text-sm font-medium text-slate-600">
+                No WFH requests found.
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[700px]">
+                <thead>
+                  <tr className="border-b border-slate-200 text-left">
+                    <th className="px-4 py-3 text-xs font-semibold uppercase text-slate-500">
+                      Requested Date
+                    </th>
+                    <th className="px-4 py-3 text-xs font-semibold uppercase text-slate-500">
+                      Reason
+                    </th>
+                    <th className="px-4 py-3 text-xs font-semibold uppercase text-slate-500">
+                      Status
+                    </th>
+                    <th className="px-4 py-3 text-xs font-semibold uppercase text-slate-500">
+                      HR Remarks
+                    </th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {wfhRequests.map((request: any) => {
+                    const status = String(
+                      request.status || "pending"
+                    ).toLowerCase();
+
+                    return (
+                      <tr
+                        key={request.id}
+                        className="border-b border-slate-100 last:border-0"
+                      >
+                        <td className="px-4 py-4 text-sm font-medium text-slate-800">
+                          {formatDateForDisplay(
+                            String(request.request_date).slice(0, 10)
+                          )}
+                        </td>
+
+                        <td className="max-w-xs px-4 py-4 text-sm text-slate-600">
+                          {request.reason || "--"}
+                        </td>
+
+                        <td className="px-4 py-4">
+                          <span
+                            className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+                              status === "approved"
+                                ? "bg-emerald-100 text-emerald-700"
+                                : status === "rejected"
+                                ? "bg-red-100 text-red-700"
+                                : "bg-yellow-100 text-yellow-700"
+                            }`}
+                          >
+                            {status.charAt(0).toUpperCase() +
+                              status.slice(1)}
+                          </span>
+                        </td>
+
+                        <td className="max-w-xs px-4 py-4 text-sm text-slate-600">
+                          {request.rejection_reason || "--"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* LEAVE MANAGEMENT */}
       <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
 
         <div className="border-b border-slate-200 p-5">
@@ -3342,6 +3602,130 @@ const leaveBalance = useMemo(
         </div>
       )}
 
+      {/* ======================================================
+          WFH REQUEST POPUP
+      ====================================================== */}
+
+      {showWfhModal && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/45 p-4"
+          onMouseDown={(e) => {
+            if (
+              e.target === e.currentTarget &&
+              !submittingWfh
+            ) {
+              closeWfhModal();
+            }
+          }}
+        >
+          <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5">
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">
+                  Request Work From Home
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Submit your WFH request for HR approval.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={closeWfhModal}
+                disabled={submittingWfh}
+                className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleWfhSubmit}>
+              <div className="space-y-4 px-6 py-5">
+                <div>
+                  <label className="mb-2 block text-sm font-semibold text-slate-700">
+                    WFH Date
+                  </label>
+
+                  <input
+                    type="date"
+                    min={getIndiaToday()}
+                    value={wfhForm.requestDate}
+                    onChange={(e) =>
+                      setWfhForm((prev) => ({
+                        ...prev,
+                        requestDate: e.target.value,
+                      }))
+                    }
+                    required
+                    className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-semibold text-slate-700">
+                    Reason
+                  </label>
+
+                  <textarea
+                    rows={4}
+                    maxLength={1000}
+                    value={wfhForm.reason}
+                    onChange={(e) =>
+                      setWfhForm((prev) => ({
+                        ...prev,
+                        reason: e.target.value,
+                      }))
+                    }
+                    required
+                    placeholder="Explain why you need to work from home..."
+                    className="w-full resize-none rounded-lg border border-slate-300 px-3 py-3 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                  />
+
+                  <p className="mt-1 text-right text-xs text-slate-400">
+                    {wfhForm.reason.length}/1000
+                  </p>
+                </div>
+
+                {wfhError && (
+                  <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-3 text-sm text-red-700">
+                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                    {wfhError}
+                  </div>
+                )}
+
+                {wfhSuccess && (
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-3 text-sm text-emerald-700">
+                    {wfhSuccess}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-end gap-3 border-t border-slate-200 bg-slate-50 px-6 py-4">
+                <button
+                  type="button"
+                  onClick={closeWfhModal}
+                  disabled={submittingWfh}
+                  className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={submittingWfh}
+                  className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-60"
+                >
+                  {submittingWfh && (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  )}
+                  {submittingWfh ? "Submitting..." : "Submit Request"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      
     </div>
   );
 }

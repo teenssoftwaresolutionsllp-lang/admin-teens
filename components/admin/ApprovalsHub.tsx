@@ -6,6 +6,7 @@ import {
   LeaveRequest,
   AttendanceRegularization,
   ResignationRequest,
+  WfhRequest,
 } from "@/lib/types";
 import {
   CheckSquare,
@@ -19,7 +20,8 @@ import {
   AlertCircle,
   ArrowRight,
   CheckCircle2,
-  RotateCcw
+  RotateCcw,
+  House,
 } from "lucide-react";
 
 interface ApprovalsHubProps {
@@ -27,6 +29,7 @@ interface ApprovalsHubProps {
   initialLeaveRequests: LeaveRequest[];
   initialRegularizations: AttendanceRegularization[];
   initialResignationRequests: ResignationRequest[];
+  initialWfhRequests: WfhRequest[];
 }
 
 type Feedback = {
@@ -39,21 +42,20 @@ export default function ApprovalsHub({
   initialLeaveRequests,
   initialRegularizations,
   initialResignationRequests,
+  initialWfhRequests,
 }: ApprovalsHubProps) {
   const searchParams = useSearchParams();
   const requestedView = (searchParams.get("status") ?? "pending").toLowerCase();
   const isHistoryView = requestedView === "history";
-  const [activeTab, setActiveTab] = useState<"profile" | "leaves" | "attendance" | "documents" | "resignations" | "revert_resignations">("profile");
+  const [activeTab, setActiveTab] = useState<"profile" | "leaves" | "attendance" | "documents" | "resignations" | "revert_resignations" | "wfh">("profile");
 
   const [profileRequests, setProfileRequests] = useState<ProfileChangeRequest[]>(initialProfileRequests);
-
   const [profileStatusFilter, setProfileStatusFilter] = useState("all");
   const [profileEmployeeSearch, setProfileEmployeeSearch] = useState("");
   const [profileRequestTypeFilter, setProfileRequestTypeFilter] = useState("all");
   const [profileFromDate, setProfileFromDate] = useState("");
   const [profileToDate, setProfileToDate] = useState("");
-  const [leaveRequests, setLeaveRequests] =
-    useState<LeaveRequest[]>(initialLeaveRequests);
+  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>(initialLeaveRequests);
   const [leaveDepartmentFilter, setLeaveDepartmentFilter] = useState("all");
   const [leaveDurationFilter, setLeaveDurationFilter] = useState("all");
   const [leaveEmployeeSearch, setLeaveEmployeeSearch] = useState("");
@@ -65,12 +67,13 @@ export default function ApprovalsHub({
   const [resignationEmployeeSearch, setResignationEmployeeSearch] = useState("");
   const [resignationFromDate, setResignationFromDate] = useState("");
   const [resignationToDate, setResignationToDate] = useState("");
-
   const [regularizations, setRegularizations] = useState<AttendanceRegularization[]>(initialRegularizations);
   const [resignationRequests, setResignationRequests] = useState<ResignationRequest[]>(initialResignationRequests);
   const [noticePeriodValue, setNoticePeriodValue] = useState("30");
   const [noticePeriodUnit, setNoticePeriodUnit] = useState<"days" | "months">("days");
   const [temporaryLoginDays, setTemporaryLoginDays] = useState("0");
+  const [wfhRequests, setWfhRequests] = useState<WfhRequest[]>(initialWfhRequests);
+
 
 
   const allRevertRequests = resignationRequests.flatMap((request) =>
@@ -86,7 +89,7 @@ export default function ApprovalsHub({
 
   const [rejectingRequest, setRejectingRequest] = useState<{
     id: string;
-    type: "profile" | "attendance" | "leave" | "resignation" | "resignation_revert";
+    type: "profile" | "attendance" | "leave" | "resignation" | "resignation_revert" | "wfh";
   } | null>(null);
 
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -211,6 +214,11 @@ export default function ApprovalsHub({
     setRejectingRequest({ id, type: "attendance" });
   };
 
+  const openWfhRejectionDialog = (id: string) => {
+    setFeedback(null);
+    setProfileRejectionReason("");
+    setRejectingRequest({ id, type: "wfh" });
+  };
 
   const closeProfileRejectionDialog = () => {
     if (rejectingRequest && actionLoading === rejectingRequest.id) {
@@ -220,6 +228,8 @@ export default function ApprovalsHub({
     setRejectingRequest(null);
     setProfileRejectionReason("");
   };
+
+
 
   // Leave Request Approval/Rejection.
 
@@ -588,6 +598,78 @@ export default function ApprovalsHub({
     }
   };
 
+  const handleWfhReview = async ( id: string, status: "approved" | "rejected", rejectionReason?: string ) => 
+  {
+    if (isHistoryView) return;
+
+    const reason = rejectionReason?.trim() ?? "";
+
+    if (status === "rejected" && !reason) {
+      setFeedback({
+        msg: "Please provide a reason for rejecting this WFH request.",
+        type: "error",
+      });
+      return;
+    }
+
+    setActionLoading(id);
+    setFeedback(null);
+
+    try {
+      const response = await fetch(`/api/wfh/${id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          status,
+          rejection_reason: status === "rejected" ? reason : null,
+        }),
+      });
+
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(data?.error || "Failed to review WFH request.");
+      }
+
+      setWfhRequests((previous) =>
+        previous.map((request) =>
+          request.id === id
+            ? {
+                ...request,
+                status,
+                rejection_reason: status === "rejected" ? reason : null,
+                reviewed_at: new Date().toISOString(),
+              }
+            : request
+        )
+      );
+
+      setFeedback({
+        msg:
+          status === "approved"
+            ? "WFH request approved successfully."
+            : "WFH request rejected successfully.",
+        type: "success",
+      });
+
+      setRejectingRequest(null);
+      setProfileRejectionReason("");
+    } catch (error) {
+      setFeedback({
+        msg:
+          error instanceof Error
+            ? error.message
+            : "Failed to review WFH request.",
+        type: "error",
+      });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
 
   const filteredProfileRequests = profileRequests.filter((request) => {
   const requestStatus = String(request.status ?? "").toLowerCase();
@@ -834,9 +916,10 @@ export default function ApprovalsHub({
 
 
   const pendingRevertCount = pendingRevertRequests.length;
+  const pendingWfhCount = wfhRequests.filter((request) => request.status === "pending").length;
 
 
-  const totalPending = pendingProfileCount + pendingLeaveCount + pendingRegCount + pendingResignationCount + pendingRevertCount;
+  const totalPending = pendingProfileCount + pendingLeaveCount + pendingRegCount + pendingResignationCount + pendingRevertCount + pendingWfhCount;
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -861,8 +944,8 @@ export default function ApprovalsHub({
 
           <p className="mt-1.5 pl-12 text-xs leading-relaxed text-slate-500">
             {isHistoryView
-              ? "View approved and rejected profile-change requests and leave applications."
-              : "Review pending employee profile changes, leave applications, attendance regularizations, and resignations."}
+              ? "View completed profile changes, leave applications, resignations, and WFH requests."
+              : "Review pending profile changes, leave applications, attendance regularizations, resignations, and WFH requests."}
           </p>
         </div>
       </div>
@@ -887,7 +970,7 @@ export default function ApprovalsHub({
       )}
 
       {/* Shared filters: the same area adapts to the selected request tab */}
-      {activeTab !== "attendance" && activeTab !== "documents" && (
+      {activeTab !== "attendance" && activeTab !== "documents" && activeTab !== "wfh" &&(
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
             <h3 className="text-sm font-bold text-slate-800">
@@ -1160,6 +1243,25 @@ export default function ApprovalsHub({
             {!isHistoryView && pendingResignationCount > 0 && (
               <span className="rounded-full border border-amber-200 bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-900">
                 {pendingResignationCount}
+              </span>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab("wfh")}
+            className={`flex items-center gap-2.5 whitespace-nowrap border-b-2 px-6 py-4 text-xs font-bold transition-all ${
+              activeTab === "wfh"
+                ? "border-indigo-600 bg-white text-indigo-600"
+                : "border-transparent text-slate-500 hover:bg-slate-100/50 hover:text-slate-900"
+            }`}
+          >
+            <House className="h-4 w-4" />
+            <span>{isHistoryView ? "WFH History" : "WFH Requests"}</span>
+
+            {!isHistoryView && pendingWfhCount > 0 && (
+              <span className="rounded-full border border-amber-200 bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-900">
+                {pendingWfhCount}
               </span>
             )}
           </button>
@@ -2031,6 +2133,155 @@ export default function ApprovalsHub({
           </div>
         )}
 
+
+        {/* WFH Requests and WFH History */}
+        {activeTab === "wfh" && (
+          <div className="p-6">
+            {wfhRequests.filter((request) =>
+              isHistoryView
+                ? request.status === "approved" || request.status === "rejected"
+                : request.status === "pending"
+            ).length === 0 ? (
+              <p className="py-12 text-center text-xs font-medium text-slate-400">
+                {isHistoryView
+                  ? "No completed WFH requests found."
+                  : "No pending WFH requests awaiting review."}
+              </p>
+            ) : (
+              <div className="overflow-x-auto rounded-xl border border-slate-100">
+                <table className="w-full text-left text-xs text-slate-600">
+                  <thead className="border-b bg-slate-50 text-[11px] font-bold uppercase text-slate-700">
+                    <tr>
+                      <th className="px-4 py-3">Employee</th>
+                      <th className="px-4 py-3">Employee ID</th>
+                      <th className="px-4 py-3">Department</th>
+                      <th className="px-4 py-3">WFH Date</th>
+                      <th className="px-4 py-3">Reason</th>
+                      <th className="px-4 py-3">Status</th>
+
+                      {isHistoryView && (
+                        <>
+                          <th className="px-4 py-3">Reviewer</th>
+                          <th className="px-4 py-3">Reviewed At</th>
+                          <th className="px-4 py-3">Rejection Reason</th>
+                        </>
+                      )}
+
+                      {!isHistoryView && (
+                        <th className="px-4 py-3 text-right">Actions</th>
+                      )}
+                    </tr>
+                  </thead>
+
+                  <tbody className="divide-y divide-slate-100">
+                    {wfhRequests
+                      .filter((request) =>
+                        isHistoryView
+                          ? request.status === "approved" ||
+                            request.status === "rejected"
+                          : request.status === "pending"
+                      )
+                      .map((request) => {
+                        const employee = request.employee;
+
+                        return (
+                          <tr key={request.id} className="hover:bg-slate-50">
+                            <td className="px-4 py-3 font-semibold text-slate-900">
+                              {employee
+                                ? `${employee.first_name} ${employee.last_name}`
+                                : "Unknown Employee"}
+                            </td>
+
+                            <td className="px-4 py-3 font-mono">
+                              {employee?.employee_id ?? "—"}
+                            </td>
+
+                            <td className="px-4 py-3">
+                              {employee?.department?.name ?? "Not specified"}
+                            </td>
+
+                            <td className="px-4 py-3 font-mono">
+                              {request.request_date}
+                            </td>
+
+                            <td className="max-w-xs whitespace-pre-wrap px-4 py-3">
+                              {request.reason}
+                            </td>
+
+                            <td className="px-4 py-3">
+                              <span
+                                className={`rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase ${
+                                  request.status === "approved"
+                                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                    : request.status === "rejected"
+                                      ? "border-rose-200 bg-rose-50 text-rose-700"
+                                      : "border-amber-200 bg-amber-50 text-amber-700"
+                                }`}
+                              >
+                                {request.status}
+                              </span>
+                            </td>
+
+                            {isHistoryView && (
+                              <>
+                                <td className="px-4 py-3">
+                                  {request.reviewer?.full_name ?? "—"}
+                                </td>
+
+                                <td className="px-4 py-3">
+                                  {request.reviewed_at
+                                    ? new Date(request.reviewed_at).toLocaleString(
+                                        "en-IN",
+                                        { timeZone: "Asia/Kolkata" }
+                                      )
+                                    : "—"}
+                                </td>
+
+                                <td className="max-w-xs whitespace-pre-wrap px-4 py-3 text-rose-700">
+                                  {request.rejection_reason || "—"}
+                                </td>
+                              </>
+                            )}
+
+                            {!isHistoryView && (
+                              <td className="px-4 py-3">
+                                <div className="flex justify-end gap-2">
+                                  <button
+                                    type="button"
+                                    disabled={actionLoading === request.id}
+                                    onClick={() =>
+                                      void handleWfhReview(request.id, "approved")
+                                    }
+                                    className="rounded-lg bg-emerald-600 px-3 py-2 font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                                  >
+                                    {actionLoading === request.id
+                                      ? "Processing..."
+                                      : "Approve"}
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    disabled={actionLoading === request.id}
+                                    onClick={() =>
+                                      openWfhRejectionDialog(request.id)
+                                    }
+                                    className="rounded-lg bg-rose-600 px-3 py-2 font-semibold text-white hover:bg-rose-700 disabled:opacity-50"
+                                  >
+                                    Reject
+                                  </button>
+                                </div>
+                              </td>
+                            )}
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Revert Resignation */}
         {activeTab === "revert_resignations" && (
           <div className="p-6">
@@ -2203,7 +2454,9 @@ export default function ApprovalsHub({
                         ? "Reject resignation request"
                         : rejectingRequest.type === "resignation_revert"
                           ? "Reject resignation reversal request"
-                          : "Reject leave request"}
+                           : rejectingRequest.type === "wfh"
+                              ? "Reject WFH request"
+                              : "Reject leave request"}
                 </h3>
 
                 <p className="mt-1 text-xs leading-relaxed text-slate-500">
@@ -2268,6 +2521,21 @@ export default function ApprovalsHub({
                       </p>
                     );
                 })()}
+
+                {rejectingRequest.type === "wfh" &&(() => {
+                    const request = wfhRequests.find(
+                      (item) => item.id === rejectingRequest.id
+                    );
+
+                    return (
+                      <p className="mt-2 text-xs font-semibold text-slate-700">
+                        Employee:{" "}
+                        {request?.employee
+                          ? `${request.employee.first_name} ${request.employee.last_name}`
+                          : "Unknown Employee"}
+                      </p>
+                    );
+                  })()}
               </div>
             </div>
 
@@ -2320,7 +2588,10 @@ export default function ApprovalsHub({
                     "rejected",
                     reason
                   );
-                } else {
+                }
+                else if (rejectingRequest.type === "wfh") {
+                  void handleWfhReview(rejectingRequest.id,"rejected",reason);
+                }else {
                   void handleLeaveReview(
                     rejectingRequest.id,
                     "rejected",
@@ -2358,7 +2629,9 @@ export default function ApprovalsHub({
                           ? "Explain why this resignation request is being rejected..."
                           : rejectingRequest.type === "resignation_revert"
                             ? "Explain why this resignation reversal request is being rejected..."
-                            : "Explain why this leave request is being rejected..."
+                            : rejectingRequest.type === "wfh"
+                              ? "Explain why this WFH request is being rejected..."
+                              : "Explain why this leave request is being rejected..."
                   }
 
                   className="w-full resize-y rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-700 outline-none focus:border-rose-400 focus:ring-2 focus:ring-rose-100"

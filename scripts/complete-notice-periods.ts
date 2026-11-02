@@ -1,4 +1,3 @@
-
 import { createClient } from "@supabase/supabase-js";
 import "dotenv/config";
 
@@ -137,7 +136,7 @@ async function main() {
     .select(
       "id, user_id, first_name, last_name, status, notice_status, planned_last_working_date, exit_date, temporary_login_days"
     )
-    .eq("status", "on_notice")
+    .in("status", ["on_notice", "resigned"])
     .eq("notice_status", "notice_period")
     .not("planned_last_working_date", "is", null)
     .lte("planned_last_working_date", today)
@@ -153,24 +152,19 @@ async function main() {
   }
 
 
+
   for (const employee of employees) {
     const name = [employee.first_name, employee.last_name]
       .filter(Boolean)
       .join(" ");
 
-    const loginDays = employee.temporary_login_days;
+    const loginDays = employee.temporary_login_days ?? 0;
+
 
     // Validate login duration before dry-run or execution.
-    if (
-      loginDays === null ||
-      loginDays === undefined ||
-      !Number.isInteger(loginDays) ||
-      loginDays < 0 ||
-      loginDays > 45
-    ) {
-      console.log(
-        `SKIP: ${name} needs temporary_login_days configured to a whole number from 0 to 45.`
-      );
+    if (!Number.isInteger(loginDays) || loginDays < 0 || loginDays > 45) 
+    {
+      console.log(`SKIP: ${name} has invalid temporary_login_days: ${loginDays}.`);
       continue;
     }
 
@@ -183,14 +177,13 @@ async function main() {
       continue;
     }
 
+
     const update: Record<string, unknown> = {
       status: "resigned",
       notice_status: "notice_completed",
       exit_date: plannedDate,
-      temporary_login_expires_at: expiryFromExitDate(
-        plannedDate,
-        loginDays
-      ),
+      temporary_login_days: loginDays,
+      temporary_login_expires_at: expiryFromExitDate(plannedDate,loginDays),
     };
 
     // Recheck eligibility when updating the employee.
@@ -198,7 +191,7 @@ async function main() {
       .from("employees")
       .update(update)
       .eq("id", employee.id)
-      .eq("status", "on_notice")
+      .in("status", ["on_notice", "resigned"])
       .eq("notice_status", "notice_period")
       .lte("planned_last_working_date", today)
       .select("id");
@@ -219,6 +212,28 @@ async function main() {
 
 
   console.log("Notice-period job finished.");
+
+  // Retry missing notifications for employees whose notice is already completed.
+  if (execute) {
+    const { data: completedEmployees, error: completedError } =
+      await supabase
+        .from("employees")
+        .select("id, user_id, first_name, last_name")
+        .eq("status", "resigned")
+        .eq("notice_status", "notice_completed")
+        .not("planned_last_working_date", "is", null)
+        .lte("planned_last_working_date", today);
+
+    if (completedError) {
+      throw new Error(
+        `Could not fetch completed employees: ${completedError.message}`
+      );
+    }
+
+    for (const employee of completedEmployees ?? []) {
+      await sendNotifications(employee);
+    }
+  }
 }
 
 main().catch((error: unknown) => {
