@@ -1401,7 +1401,7 @@ VALUES
     (
         'Sick Leave',
         'SL',
-        10,
+        12,
         true,
         true,
         'Paid sick leave for medical recovery'
@@ -1409,10 +1409,10 @@ VALUES
     (
         'Earned Leave',
         'EL',
-        15,
+        20,
         true,
         true,
-        'Paid privilege/earned leave'
+        'Paid earned leave for eligible employees'
     ),
     (
         'Loss of Pay',
@@ -1423,6 +1423,23 @@ VALUES
         'Unpaid leave that triggers per-day salary deduction'
     )
 ON CONFLICT (code) DO NOTHING;
+
+INSERT INTO public.leave_types
+  (name, code, annual_quota, is_paid, is_active, description)
+VALUES
+  ('Maternity Leave', 'ML', 182, true, true,
+   'Maternity leave for eligible female employees'),
+  ('Paternity Leave', 'PL', 28, true, true,
+   'Paternity leave for eligible male employees')
+ON CONFLICT (code)
+DO UPDATE SET
+  name = EXCLUDED.name,
+  annual_quota = EXCLUDED.annual_quota,
+  is_paid = EXCLUDED.is_paid,
+  is_active = true,
+  description = EXCLUDED.description;
+
+
 
 
 -- ==========================================================

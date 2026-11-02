@@ -71,14 +71,12 @@ export default async function EmployeeAttendancePage() {
     historyLogs,
     allRegs,
     leaveRequests,
-    leaveBalances,
     leaveTypes,
   ] = await Promise.all([
     DataStore.getTodayAttendance(employee.id),
     DataStore.getAttendanceLogs(employee.id),
     DataStore.getAttendanceRegularizations(),
     DataStore.getLeaveRequests(employee.id),
-    DataStore.getLeaveBalances(employee.id),
     DataStore.getLeaveTypes(),
   ]);
 
@@ -94,7 +92,6 @@ export default async function EmployeeAttendancePage() {
       historyLogs={historyLogs}
       regularizations={regularizations}
       leaveRequests={leaveRequests}
-      leaveBalances={leaveBalances}
       leaveTypes={leaveTypes}
     />
   );

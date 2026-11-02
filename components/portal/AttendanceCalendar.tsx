@@ -16,6 +16,9 @@ import {
 export type DayState =
   | "present"
   | "half_day"
+  | "late"
+  | "work_from_home"
+  | "holiday"
   | "leave"
   | "absent"
   | "empty";
@@ -31,9 +34,16 @@ export interface SelectedAttendance {
 interface AttendanceCalendarProps {
   logs: AttendanceLog[];
   leaveRequests: LeaveRequest[];
+  holidays?: Array<{
+    holiday_date: string;
+    title?: string;
+    is_working_day?: boolean;
+  }>;
   year?: number;
   month?: number;
   employeeJoiningDate?: string | null;
+  compact?: boolean;
+  selectedDate?: string;
   onMonthChange?: (year: number, month: number) => void;
   onDateSelect?: (attendance: SelectedAttendance) => void;
   onSelectedDateChange?: (date: string) => void;
@@ -148,16 +158,40 @@ function getJoiningDateOnly(
   return /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null;
 }
 
-/* =========================================================
-   COMPONENT
+   function isWorkFromHome(log: AttendanceLog): boolean {
+     const values = log as AttendanceLog & Record<string, unknown>;
+     const mode = [
+       values.work_mode,
+       values.work_location,
+       values.location_mode,
+       values.attendance_mode,
+       values.mode,
+       log.status,
+     ]
+       .filter((value): value is string => typeof value === "string")
+       .join(" ")
+       .toLowerCase()
+       .replaceAll("-", "_")
+       .replaceAll(" ", "_");
+
+     return ["work_from_home", "wfh", "remote", "home"].some((value) =>
+       mode.includes(value)
+     );
+   }
+
+   /* =========================================================
+      COMPONENT
    ========================================================= */
 
 export default function AttendanceCalendar({
   logs,
   leaveRequests,
+  holidays = [],
   year: initialYear,
   month: initialMonth,
   employeeJoiningDate,
+  compact = false,
+  selectedDate: initialSelectedDate,
   onDateSelect,
   onSelectedDateChange,
   onMonthChange,
@@ -190,6 +224,13 @@ export default function AttendanceCalendar({
   );
 
   const [selectedDate, setSelectedDate] = useState<string>(() => {
+    if (
+      initialSelectedDate?.startsWith(startingMonth) &&
+      (!joiningDate || initialSelectedDate >= joiningDate)
+    ) {
+      return initialSelectedDate;
+    }
+
     const currentMonthValue = `${today.getFullYear()}-${String(
       today.getMonth() + 1
     ).padStart(2, "0")}`;
@@ -208,7 +249,7 @@ export default function AttendanceCalendar({
      CALENDAR DAYS
      ======================================================= */
 
-  const { days, firstDay } = useMemo(() => {
+  const { days, firstDay, totalCells } = useMemo(() => {
     const totalDays = new Date(year, month + 1, 0).getDate();
     const firstDayOfMonth = new Date(year, month, 1).getDay();
 
@@ -218,6 +259,9 @@ export default function AttendanceCalendar({
         (_, index) => index + 1
       ),
       firstDay: firstDayOfMonth,
+      totalDays,
+      totalCells:
+        Math.ceil((firstDayOfMonth + totalDays) / 7) * 7,
     };
   }, [year, month]);
 
@@ -266,6 +310,23 @@ export default function AttendanceCalendar({
     return dates;
   }, [leaveRequests, joiningDate]);
 
+  const holidaysByDate = useMemo(() => {
+    const map = new Map<string, string>();
+
+    holidays.forEach((holiday) => {
+      const date = holiday.holiday_date.slice(0, 10);
+
+      if (
+        /^\d{4}-\d{2}-\d{2}$/.test(date) &&
+        holiday.is_working_day !== true
+      ) {
+        map.set(date, holiday.title || "Holiday");
+      }
+    });
+
+    return map;
+  }, [holidays]);
+
   /* =======================================================
      ATTENDANCE LOGS BY DATE
      ======================================================= */
@@ -307,6 +368,12 @@ export default function AttendanceCalendar({
     //   return dummyAttendance[date].status;
     // }
 
+    // A configured non-working holiday keeps its holiday color, even if a
+    // leave or attendance row also exists for that date.
+    if (holidaysByDate.has(date)) {
+      return "holiday";
+    }
+
     // Approved leave takes priority over missing attendance.
     if (leaveDates.has(date)) {
       return "leave";
@@ -319,6 +386,14 @@ export default function AttendanceCalendar({
 
       if (status === "on_leave" || status === "leave") {
         return "leave";
+      }
+
+      if (isWorkFromHome(log)) {
+        return "work_from_home";
+      }
+
+      if (status === "late" || log.is_late) {
+        return "late";
       }
 
       if (status === "half_day") {
@@ -370,6 +445,7 @@ export default function AttendanceCalendar({
 
     if (
       state === "leave" ||
+      state === "holiday" ||
       state === "absent" ||
       state === "empty"
     ) {
@@ -413,8 +489,16 @@ export default function AttendanceCalendar({
 
     setYear(newYear);
     setMonth(newMonth);
-    setSelectedDate("");
-    onSelectedDateChange?.("");
+    const firstDate = `${newYear}-${String(newMonth + 1).padStart(
+      2,
+      "0"
+    )}-01`;
+    const nextSelectedDate =
+      joiningDate && firstDate < joiningDate
+        ? joiningDate
+        : firstDate;
+    setSelectedDate(nextSelectedDate);
+    onSelectedDateChange?.(nextSelectedDate);
     onMonthChange?.(newYear, newMonth);
   };
 
@@ -479,31 +563,38 @@ export default function AttendanceCalendar({
     isBeforeJoiningDate: boolean
   ) => {
     const base =
-      "h-11 sm:h-12 rounded-xl border flex items-center justify-center transition-all duration-150";
-
-    const selected = isSelected
-      ? " ring-2 ring-indigo-500 ring-offset-1"
-      : "";
+      "mx-auto flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold transition-colors duration-150";
 
     if (isBeforeJoiningDate) {
-      return `${base} bg-slate-50 border-slate-200 text-slate-300 opacity-40 cursor-not-allowed`;
+      return `${base} cursor-not-allowed text-slate-300 opacity-50`;
     }
+
+    const selectedRing = isSelected
+      ? " ring-2 ring-slate-900 ring-offset-1"
+      : "";
 
     switch (state) {
       case "present":
-        return `${base} bg-emerald-100 border-emerald-300 text-emerald-900 hover:bg-emerald-200${selected}`;
+        return `${base} bg-emerald-100 text-emerald-800 hover:bg-emerald-200${selectedRing}`;
 
       case "half_day":
-        return `${base} bg-yellow-100 border-yellow-300 text-yellow-900 hover:bg-yellow-200${selected}`;
+      case "late":
+        return `${base} bg-amber-100 text-amber-800 hover:bg-amber-200${selectedRing}`;
 
       case "leave":
-        return `${base} bg-rose-100 border-rose-300 text-rose-900 hover:bg-rose-200${selected}`;
-
       case "absent":
-        return `${base} bg-red-500 border-red-600 text-white hover:bg-red-600${selected}`;
+        return `${base} bg-rose-100 text-rose-800 hover:bg-rose-200${selectedRing}`;
+
+      case "work_from_home":
+        return `${base} bg-blue-100 text-blue-800 hover:bg-blue-200${selectedRing}`;
+
+      case "holiday":
+        return `${base} bg-[#94a3b8] text-white hover:bg-[#64748b]${selectedRing}`;
 
       default:
-        return `${base} bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100${selected}`;
+        return isSelected
+          ? `${base} bg-blue-600 text-white shadow-sm ring-2 ring-blue-100`
+          : `${base} text-slate-700 hover:bg-slate-100`;
     }
   };
 
@@ -512,30 +603,34 @@ export default function AttendanceCalendar({
      ======================================================= */
 
   return (
-    <section className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+    <section
+      className={`rounded-xl border border-slate-200 bg-white shadow-sm ${
+        compact ? "p-3" : "p-5"
+      }`}
+    >
       {/* HEADER */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-5">
-        <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-xl bg-indigo-50 flex items-center justify-center">
-            <CalendarDays
-              size={20}
-              className="text-indigo-600"
-            />
+      <div className="mb-2 flex items-center justify-between gap-2">
+        {!compact && (
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50">
+              <CalendarDays size={20} className="text-indigo-600" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-slate-900">
+                Attendance Calendar
+              </h2>
+              <p className="mt-1 text-xs text-slate-500">
+                Click a date to view attendance
+              </p>
+            </div>
           </div>
+        )}
 
-          <div>
-            <h2 className="text-lg font-bold text-slate-900">
-              Attendance Calendar
-            </h2>
-
-            <p className="text-xs text-slate-500 mt-1">
-              Click a date to view attendance
-            </p>
-          </div>
-        </div>
-
-        {/* MONTH AND YEAR SELECTOR */}
-        <div className="flex items-center gap-2">
+        <div
+          className={`flex items-center gap-2 ${
+            compact ? "w-full justify-between" : ""
+          }`}
+        >
           <button
             type="button"
             onClick={goToPreviousMonth}
@@ -543,51 +638,33 @@ export default function AttendanceCalendar({
             disabled={
               !!joiningMonth && selectedMonth <= joiningMonth
             }
-            className="h-9 w-9 rounded-lg border border-slate-200 flex items-center justify-center hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+            className="flex h-7 w-7 items-center justify-center rounded-md text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            <ChevronLeft size={18} />
+            <ChevronLeft size={16} />
           </button>
 
-          <input
-            type="month"
-            aria-label="Select attendance month and year"
-            value={selectedMonth}
-            min={joiningMonth}
-            onChange={(event) => {
-              if (!event.target.value) return;
-
-              const [newYear, newMonth] = event.target.value
-                .split("-")
-                .map(Number);
-
-              changeMonth(newYear, newMonth - 1);
-            }}
-            className="w-40 rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500"
-          />
+          <span className="text-center text-sm font-bold text-slate-900">
+            {monthLabel}
+          </span>
 
           <button
             type="button"
             onClick={goToNextMonth}
             aria-label="Next month"
-            className="h-9 w-9 rounded-lg border border-slate-200 flex items-center justify-center hover:bg-slate-50"
+            className="flex h-7 w-7 items-center justify-center rounded-md text-slate-700 transition hover:bg-slate-100"
           >
-            <ChevronRight size={18} />
+            <ChevronRight size={16} />
           </button>
         </div>
       </div>
 
-      {/* CURRENT MONTH LABEL */}
-      <p className="text-sm font-semibold text-slate-700 mb-4">
-        {monthLabel}
-      </p>
-
       {/* WEEK DAYS */}
-      <div className="grid grid-cols-7 gap-2 mb-2">
+      <div className="mb-1 grid grid-cols-7">
         {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(
           (day) => (
             <div
               key={day}
-              className="text-center text-xs font-bold text-slate-500 py-2"
+              className="py-1 text-center text-[10px] font-medium text-slate-500"
             >
               {day}
             </div>
@@ -596,15 +673,28 @@ export default function AttendanceCalendar({
       </div>
 
       {/* CALENDAR */}
-      <div className="grid grid-cols-7 gap-2">
-        {Array.from({ length: firstDay }).map((_, index) => (
-          <div
-            key={`empty-${index}`}
-            className="h-11 sm:h-12"
-          />
-        ))}
+      <div className="grid grid-cols-7 gap-y-1">
+        {Array.from({ length: totalCells }, (_, index) => {
+          const day = index - firstDay + 1;
+          const isOutsideMonth = day < 1 || day > days.length;
 
-        {days.map((day) => {
+          if (isOutsideMonth) {
+            const outsideDay =
+              day < 1
+                ? new Date(year, month, 0).getDate() + day
+                : day - days.length;
+
+            return (
+              <div
+                key={`outside-${index}`}
+                className="flex h-8 items-center justify-center text-xs text-slate-300"
+                aria-hidden="true"
+              >
+                {outsideDay}
+              </div>
+            );
+          }
+
           const date = `${year}-${String(month + 1).padStart(
             2,
             "0"
@@ -627,6 +717,7 @@ export default function AttendanceCalendar({
                   ? "before joining date"
                   : state.replace("_", " ")
               }`}
+              title={holidaysByDate.get(date)}
               aria-pressed={isSelected}
               className={getDayClass(
                 state,
@@ -634,20 +725,19 @@ export default function AttendanceCalendar({
                 isBeforeJoiningDate
               )}
             >
-              <span className="text-sm font-extrabold">
-                {day}
-              </span>
+              {day}
             </button>
           );
         })}
       </div>
 
       {/* LEGEND */}
-      <div className="flex flex-wrap gap-4 mt-5 pt-4 border-t border-slate-100">
-        <Legend color="bg-emerald-400" label="Present" />
-        <Legend color="bg-yellow-400" label="Half Day" />
-        <Legend color="bg-rose-400" label="Leave" />
-        <Legend color="bg-red-500" label="Absent" />
+      <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 border-t border-slate-100 pt-2">
+        <Legend color="bg-emerald-500" label="Present" />
+        <Legend color="bg-rose-500" label="Absent" />
+        <Legend color="bg-amber-400" label="Late" />
+        <Legend color="bg-blue-500" label="Work From Home" />
+        <Legend color="bg-[#94a3b8]" label="Holiday" />
       </div>
     </section>
   );

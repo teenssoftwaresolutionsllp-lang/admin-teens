@@ -1,7 +1,8 @@
+
 "use client";
 
-import { useMemo, useState } from "react";
-
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
 import {
   Employee,
   EmployeeLeaveBalance,
@@ -9,15 +10,22 @@ import {
   LeaveType,
   Project,
 } from "@/lib/types";
-
 import {
   Calendar,
+  CalendarDays,
+  Baby,
+  BriefcaseBusiness,
+  ChevronLeft,
+  ChevronRight,
+  Eye,
+  HeartPulse,
   Plus,
   CheckCircle2,
   AlertTriangle,
   Loader2,
   XCircle,
-  Globe,
+  FileUp,
+  X,
 } from "lucide-react";
 
 interface EmployeeLeavesViewProps {
@@ -26,7 +34,23 @@ interface EmployeeLeavesViewProps {
   leaveBalances: EmployeeLeaveBalance[];
   leaveRequests: LeaveRequest[];
   leaveTypes: LeaveType[];
+  mode?: "apply" | "my-leaves";
 }
+
+type LeaveOption = {
+  label: string;
+  id: string;
+  code: string;
+  special: boolean;
+};
+
+const MAX_DOCUMENT_SIZE = 5 * 1024 * 1024;
+
+const ALLOWED_DOCUMENT_TYPES = [
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+];
 
 export default function EmployeeLeavesView({
   employee,
@@ -34,337 +58,600 @@ export default function EmployeeLeavesView({
   leaveBalances: initialBalances,
   leaveRequests: initialRequests,
   leaveTypes,
+  mode = "my-leaves",
 }: EmployeeLeavesViewProps) {
-  /* ============================================================
-     STATE
-  ============================================================ */
+  const [balances] = useState<EmployeeLeaveBalance[]>(
+    initialBalances ?? []
+  );
 
-  const [balances] =
-    useState<EmployeeLeaveBalance[]>(
-      initialBalances ?? []
+  const [requests, setRequests] = useState<LeaveRequest[]>(
+    initialRequests ?? []
+  );
+
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [alertMessage, setAlertMessage] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [monthFilter, setMonthFilter] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  });
+  const pageSize = 10;
+
+  const [supportingDocument, setSupportingDocument] =
+    useState<File | null>(null);
+
+  const filteredRequests = useMemo(
+    () =>
+      requests.filter((request) => {
+        const status = String(request.status).toLowerCase();
+        const appliedMonth = String(
+          request.created_at || request.start_date || ""
+        ).slice(0, 7);
+
+        return (
+          (statusFilter === "all" || status === statusFilter) &&
+          (!monthFilter || appliedMonth === monthFilter)
+        );
+      }),
+    [requests, statusFilter, monthFilter]
+  );
+  const pageCount = Math.max(1, Math.ceil(filteredRequests.length / pageSize));
+  const paginatedRequests = filteredRequests.slice(
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize
+  );
+  const formatLeaveDate = (value?: string | null) => {
+    if (!value) return "--";
+
+    const date = new Date(`${value.slice(0, 10)}T00:00:00`);
+    return Number.isNaN(date.getTime())
+      ? value
+      : date.toLocaleDateString("en-GB", {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+        });
+  };
+
+  const getLocalToday = () => {
+    const now = new Date();
+
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+
+    return `${year}-${month}-${day}`;
+  };
+
+  const today = getLocalToday();
+
+  const employeeRecord = employee as unknown as Record<string, unknown>;
+
+  const rawJoiningDate =
+    employeeRecord.joining_date ??
+    employeeRecord.joiningDate ??
+    employeeRecord.date_of_joining ??
+    employeeRecord.dateOfJoining ??
+    employeeRecord.join_date ??
+    employeeRecord.joinDate;
+
+  const joiningDate =
+    rawJoiningDate instanceof Date
+      ? [
+          rawJoiningDate.getFullYear(),
+          String(rawJoiningDate.getMonth() + 1).padStart(2, "0"),
+          String(rawJoiningDate.getDate()).padStart(2, "0"),
+        ].join("-")
+      : typeof rawJoiningDate === "string"
+        ? rawJoiningDate.slice(0, 10)
+        : "";
+
+  const defaultLeaveDate =
+    joiningDate && joiningDate > today ? joiningDate : today;
+
+  const employeeGender = String(employee.gender ?? "")
+    .trim()
+    .toLowerCase();
+
+  const isFemale = ["female", "f"].includes(employeeGender);
+  const isMale = ["male", "m"].includes(employeeGender);
+
+  const visibleBalances = useMemo(() => {
+    const specialCode = isFemale ? "ML" : isMale ? "PL" : null;
+    const order = ["CL", "SL", "EL", specialCode].filter(
+      (code): code is string => Boolean(code)
     );
 
-  const [requests, setRequests] =
-    useState<LeaveRequest[]>(
-      initialRequests ?? []
-    );
-
-  const [isModalOpen, setIsModalOpen] =
-    useState(false);
-
-  const [submitting, setSubmitting] =
-    useState(false);
-
-  const [successMsg, setSuccessMsg] =
-    useState<string | null>(null);
-
-  /* ============================================================
-     TODAY
-  ============================================================ */
-
- const today = new Date()
-  .toISOString()
-  .split("T")[0];
-
-const joiningDate = employee.joining_date
-  ? String(employee.joining_date).split("T")[0]
-  : "";
-
-const hasValidJoiningDate =
-  /^\d{4}-\d{2}-\d{2}$/.test(joiningDate);
-
-  /* ============================================================
-     GET REAL LEAVE TYPE ID
-     Uses database records - no fake IDs
-  ============================================================ */
-
-  const getLeaveTypeId = (
-    ...names: string[]
-  ) => {
-    const found = leaveTypes.find((type) =>
-      names.some(
-        (name) =>
-          type.name
-            ?.toLowerCase()
-            .trim() ===
-          name.toLowerCase().trim()
+    return balances
+      .filter((balance) =>
+        order.includes(
+          String(balance.leave_type?.code ?? "").toUpperCase()
+        )
       )
-    );
+      .sort(
+        (left, right) =>
+          order.indexOf(
+            String(left.leave_type?.code ?? "").toUpperCase()
+          ) -
+          order.indexOf(
+            String(right.leave_type?.code ?? "").toUpperCase()
+          )
+      );
+  }, [balances, isFemale, isMale]);
+
+  const genderLoading = false;
+
+  const getLeaveTypeId = (...namesOrCodes: string[]) => {
+    const found = leaveTypes.find((type) => {
+      const typeName = type.name?.trim().toLowerCase();
+      const typeCode = type.code?.trim().toLowerCase();
+
+      return namesOrCodes.some((value) => {
+        const searchValue = value.trim().toLowerCase();
+
+        return (
+          typeName === searchValue ||
+          typeCode === searchValue ||
+          typeName?.includes(searchValue)
+        );
+      });
+    });
 
     return found?.id ?? "";
   };
 
-  /* ============================================================
-     ALLOWED LEAVE TYPES
-  ============================================================ */
-
-  const leaveTypeOptions = useMemo(() => {
-    return [
+  const leaveTypeOptions = useMemo<LeaveOption[]>(() => {
+    const options: LeaveOption[] = [
       {
-        label: "Sick Leave",
-        id: getLeaveTypeId("Sick Leave"),
+        label: "Casual Leave (CL)",
+        id: getLeaveTypeId("CL", "Casual Leave"),
+        code: "CL",
+        special: false,
       },
       {
-        label: "Casual Leave",
-        id: getLeaveTypeId("Casual Leave"),
+        label: "Sick Leave (SL)",
+        id: getLeaveTypeId("SL", "Sick Leave"),
+        code: "SL",
+        special: false,
       },
       {
-        label: "Earned Leave",
-        id: getLeaveTypeId("Earned Leave"),
+        label: "Earned Leave (EL)",
+        id: getLeaveTypeId("EL", "Earned Leave"),
+        code: "EL",
+        special: false,
       },
       {
         label: "Loss of Pay (LOP)",
-        id: getLeaveTypeId(
-          "Loss of Pay",
-          "LOP",
-          "Loss of Pay (LOP)"
-        ),
+        id: getLeaveTypeId("LOP", "Loss of Pay"),
+        code: "LOP",
+        special: false,
       },
-    ].filter((option) => option.id);
-  }, [leaveTypes]);
+    ];
 
-  /* ============================================================
-     INITIAL LEAVE TYPE
-  ============================================================ */
+    if (isFemale) {
+      options.push({
+        label: "Maternity Leave (ML)",
+        id: getLeaveTypeId("ML", "Maternity Leave"),
+        code: "ML",
+        special: true,
+      });
+    }
 
-  const getDefaultLeaveTypeId = () => {
-    return (
-      getLeaveTypeId("Sick Leave") ||
-      leaveTypeOptions[0]?.id ||
-      ""
-    );
+    if (isMale) {
+      options.push({
+        label: "Paternity Leave (PL)",
+        id: getLeaveTypeId("PL", "Paternity Leave"),
+        code: "PL",
+        special: true,
+      });
+    }
+
+    return options.filter((option) => Boolean(option.id));
+  }, [leaveTypes, isFemale, isMale]);
+
+  const getDefaultLeaveTypeId = () =>
+    getLeaveTypeId("SL", "Sick Leave") ||
+    leaveTypeOptions[0]?.id ||
+    "";
+
+  const [formData, setFormData] = useState({
+    leaveTypeId: "",
+    startDate: defaultLeaveDate,
+    endDate: defaultLeaveDate,
+    isHalfDay: false,
+    reason: "",
+    specialLeaveDuration: "",
+  });
+
+  useEffect(() => {
+    setFormData((previous) => {
+      const selectedOptionExists = leaveTypeOptions.some(
+        (option) => option.id === previous.leaveTypeId
+      );
+
+      if (selectedOptionExists) {
+        return previous;
+      }
+
+      return {
+        ...previous,
+        leaveTypeId: getDefaultLeaveTypeId(),
+        specialLeaveDuration: "",
+        isHalfDay: false,
+        endDate: previous.startDate,
+      };
+    });
+  }, [leaveTypeOptions]);
+
+  const selectedType = useMemo(
+    () => leaveTypes.find((type) => type.id === formData.leaveTypeId),
+    [leaveTypes, formData.leaveTypeId]
+  );
+
+  const selectedLeaveOption = leaveTypeOptions.find(
+    (option) => option.id === formData.leaveTypeId
+  );
+
+  const selectedLeaveCode =
+    selectedLeaveOption?.code?.toUpperCase() ||
+    selectedType?.code?.toUpperCase() ||
+    "";
+
+  const isMaternityLeave = selectedLeaveCode === "ML";
+  const isPaternityLeave = selectedLeaveCode === "PL";
+  const isSpecialLeave = isMaternityLeave || isPaternityLeave;
+
+  const getSpecialDurationOptions = () => {
+    if (isMaternityLeave) {
+      return [
+        { label: "26 Weeks (182 Days)", value: "182" },
+      ];
+    }
+
+    if (isPaternityLeave) {
+      return [
+        { label: "2 Days", value: "2" },
+        { label: "1 Week (7 Days)", value: "7" },
+        { label: "2 Weeks (14 Days)", value: "14" },
+        { label: "3 Weeks (21 Days)", value: "21" },
+        { label: "4 Weeks (28 Days)", value: "28" },
+      ];
+    }
+
+    return [];
   };
 
-  /* ============================================================
-     FORM
-  ============================================================ */
+  const calculateEndDate = (startDate: string, duration: number) => {
+    if (!startDate || duration <= 0) return startDate;
 
-  const [formData, setFormData] =
-    useState({
-      leaveTypeId: getDefaultLeaveTypeId(),
-      startDate: today,
-      endDate: today,
-      isHalfDay: false,
-      reason: "",
-    });
+    const date = new Date(`${startDate}T00:00:00`);
 
-  /* ============================================================
-     SELECTED TYPE
-  ============================================================ */
+    if (Number.isNaN(date.getTime())) return startDate;
 
-  const selectedType = useMemo(() => {
-    return leaveTypes.find(
-      (lt) =>
-        lt.id ===
-        formData.leaveTypeId
-    );
-  }, [
-    leaveTypes,
-    formData.leaveTypeId,
-  ]);
+    date.setDate(date.getDate() + duration - 1);
 
-  /* ============================================================
-     CALCULATE LEAVE DAYS
-  ============================================================ */
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+
+    return `${year}-${month}-${day}`;
+  };
 
   const calculateDays = () => {
-    if (
-      !formData.startDate ||
-      !formData.endDate
-    ) {
-      return 0;
-    }
+    if (!formData.startDate || !formData.endDate) return 0;
 
-    if (formData.isHalfDay) {
-      return 0.5;
-    }
+    if (formData.isHalfDay) return 0.5;
 
-    const start = new Date(
-      `${formData.startDate}T00:00:00`
-    );
-
-    const end = new Date(
-      `${formData.endDate}T00:00:00`
-    );
+    const start = new Date(`${formData.startDate}T00:00:00`);
+    const end = new Date(`${formData.endDate}T00:00:00`);
 
     if (
       Number.isNaN(start.getTime()) ||
-      Number.isNaN(end.getTime())
+      Number.isNaN(end.getTime()) ||
+      end < start
     ) {
       return 0;
     }
 
-    if (end < start) {
-      return 0;
-    }
-
-    const diff =
+    return (
       Math.floor(
-        (end.getTime() -
-          start.getTime()) /
+        (end.getTime() - start.getTime()) /
           (1000 * 60 * 60 * 24)
-      ) + 1;
-
-    return diff;
+      ) + 1
+    );
   };
-
-  /* ============================================================
-     OPEN MODAL
-  ============================================================ */
 
   const openLeaveModal = () => {
     setSuccessMsg(null);
+    setAlertMessage(null);
+    setSupportingDocument(null);
 
     setFormData({
       leaveTypeId: getDefaultLeaveTypeId(),
-      startDate: today,
-      endDate: today,
+      startDate: defaultLeaveDate,
+      endDate: defaultLeaveDate,
       isHalfDay: false,
       reason: "",
+      specialLeaveDuration: "",
     });
 
     setIsModalOpen(true);
   };
 
-  /* ============================================================
-     CLOSE MODAL
-  ============================================================ */
-
   const closeLeaveModal = () => {
-    if (submitting) {
+    if (submitting) return;
+
+    setIsModalOpen(false);
+    setAlertMessage(null);
+    setSupportingDocument(null);
+  };
+
+  const handleLeaveTypeChange = (leaveTypeId: string) => {
+    setAlertMessage(null);
+    setSupportingDocument(null);
+
+    setFormData((previous) => {
+      const selectedOption = leaveTypeOptions.find(
+        (option) => option.id === leaveTypeId
+      );
+
+      const special = Boolean(selectedOption?.special);
+
+      return {
+        ...previous,
+        leaveTypeId,
+        endDate: special
+          ? previous.startDate
+          : previous.endDate < previous.startDate
+            ? previous.startDate
+            : previous.endDate,
+        isHalfDay: special ? false : previous.isHalfDay,
+        specialLeaveDuration: "",
+      };
+    });
+  };
+
+  const handleStartDateChange = (startDate: string) => {
+    setFormData((previous) => {
+      const duration = Number(previous.specialLeaveDuration);
+
+      return {
+        ...previous,
+        startDate,
+        endDate:
+          isSpecialLeave && duration > 0
+            ? calculateEndDate(startDate, duration)
+            : previous.endDate < startDate
+              ? startDate
+              : previous.endDate,
+      };
+    });
+  };
+
+  const handleSpecialDurationChange = (durationValue: string) => {
+    setFormData((previous) => {
+      const duration = Number(durationValue);
+
+      return {
+        ...previous,
+        specialLeaveDuration: durationValue,
+        endDate:
+          duration > 0
+            ? calculateEndDate(previous.startDate, duration)
+            : previous.startDate,
+      };
+    });
+  };
+
+  // Supporting document upload for all leave types.
+  const handleDocumentChange = (file: File | null) => {
+    setAlertMessage(null);
+
+    if (!file) {
+      setSupportingDocument(null);
       return;
     }
 
-    setIsModalOpen(false);
+    if (!ALLOWED_DOCUMENT_TYPES.includes(file.type)) {
+      setAlertMessage(
+        "Please upload a PDF, JPG, JPEG or PNG document."
+      );
+
+      setSupportingDocument(null);
+      return;
+    }
+
+    if (file.size <= 0 || file.size > MAX_DOCUMENT_SIZE) {
+      setAlertMessage(
+        "The supporting document must be smaller than 5 MB."
+      );
+
+      setSupportingDocument(null);
+      return;
+    }
+
+    setSupportingDocument(file);
   };
 
-  /* ============================================================
-     SUBMIT LEAVE APPLICATION
-  ============================================================ */
-
   const handleApplySubmit = async (
-    e: React.FormEvent
+    e: React.FormEvent<HTMLFormElement>
   ) => {
     e.preventDefault();
 
     setSuccessMsg(null);
+    setAlertMessage(null);
 
-    /* ----------------------------------------------------------
-       VALIDATE LEAVE TYPE
-    ---------------------------------------------------------- */
+    if (genderLoading) {
+      setAlertMessage("Please wait while employee details are loading.");
+      return;
+    }
 
     if (!formData.leaveTypeId) {
-      alert(
-        "Please select a leave type."
-      );
+      setAlertMessage("Please select a leave type.");
       return;
     }
 
-    /* ----------------------------------------------------------
-       VALIDATE DATES
-    ---------------------------------------------------------- */
+    if (!formData.startDate || !formData.endDate) {
+      setAlertMessage("Please select both From Date and To Date.");
+      return;
+    }
 
-    if (
-      !formData.startDate ||
-      !formData.endDate
-    ) {
-      alert(
-        "Please select both From Date and To Date."
-      );
+    if (formData.endDate < formData.startDate) {
+      setAlertMessage("To Date cannot be before From Date.");
       return;
     }
 
     if (
-      formData.endDate <
-      formData.startDate
+      joiningDate &&
+      (formData.startDate < joiningDate ||
+        formData.endDate < joiningDate)
     ) {
-      alert(
-        "To Date cannot be before From Date."
+      setAlertMessage(
+        `You cannot apply for leave before your joining date (${joiningDate}). Please select dates on or after your joining date.`
       );
+
       return;
     }
-    /* ----------------------------------------------------------
-   VALIDATE EMPLOYEE JOINING DATE
----------------------------------------------------------- */
-
-if (!hasValidJoiningDate) {
-  alert(
-    "Your joining date is not available. Please contact HR."
-  );
-  return;
-}
-
-if (formData.startDate < joiningDate) {
-  alert(
-    `You cannot apply for leave before your joining date (${joiningDate}).`
-  );
-  return;
-}
-
-    /* ----------------------------------------------------------
-       VALIDATE REASON
-    ---------------------------------------------------------- */
 
     if (!formData.reason.trim()) {
-      alert(
-        "Please enter a reason for leave."
+      setAlertMessage("Please enter a reason for leave.");
+      return;
+    }
+
+    if (isMaternityLeave && !isFemale) {
+      setAlertMessage(
+        "Maternity Leave is available only for female employees."
+      );
+
+      return;
+    }
+
+    if (isPaternityLeave && !isMale) {
+      setAlertMessage(
+        "Paternity Leave is available only for male employees."
+      );
+
+      return;
+    }
+
+    if (isSpecialLeave) {
+      if (!formData.specialLeaveDuration) {
+        setAlertMessage(
+          `Please select the duration for ${
+            isMaternityLeave ? "Maternity Leave" : "Paternity Leave"
+          }.`
+        );
+
+        return;
+      }
+
+      const allowedDurations = isMaternityLeave
+        ? [182]
+        : [2, 7, 14, 21, 28];
+
+      const selectedDuration = Number(
+        formData.specialLeaveDuration
+      );
+
+      if (!allowedDurations.includes(selectedDuration)) {
+        setAlertMessage(
+          "Please select a valid special leave duration."
+        );
+
+        return;
+      }
+
+      const expectedEndDate = calculateEndDate(
+        formData.startDate,
+        selectedDuration
+      );
+
+      if (formData.endDate !== expectedEndDate) {
+        setAlertMessage(
+          "The leave end date does not match the selected duration. Please select the duration again."
+        );
+
+        return;
+      }
+    }
+
+    if (isSpecialLeave && formData.isHalfDay) {
+      setAlertMessage(
+        "Maternity Leave and Paternity Leave cannot be applied as half-day leave."
+      );
+
+      return;
+    }
+
+    if (isSpecialLeave && !supportingDocument) {
+      setAlertMessage(
+        "Please upload a supporting document for maternity or paternity leave."
       );
       return;
     }
 
-    const totalDays =
-      calculateDays();
+    const totalDays = calculateDays();
 
     if (totalDays <= 0) {
-      alert(
-        "Please select a valid leave duration."
+      setAlertMessage("Please select a valid leave duration.");
+      return;
+    }
+
+    if (
+      isPaternityLeave &&
+      totalDays !== Number(formData.specialLeaveDuration)
+    ) {
+      setAlertMessage(
+        "The total leave days do not match the selected paternity leave duration."
       );
+
       return;
     }
 
     try {
       setSubmitting(true);
 
-      const res = await fetch(
-        "/api/leaves",
-        {
-          method: "POST",
+      const requestBody = new FormData();
 
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
+      requestBody.append("employeeId", employee.id);
+      requestBody.append("leaveTypeId", formData.leaveTypeId);
+      requestBody.append("startDate", formData.startDate);
+      requestBody.append("endDate", formData.endDate);
+      requestBody.append("totalDays", String(totalDays));
+      requestBody.append("isHalfDay", String(formData.isHalfDay));
+      requestBody.append("reason", formData.reason.trim());
 
-          body: JSON.stringify({
-            employeeId:
-              employee.id,
+      if (isMaternityLeave) {
+        requestBody.append(
+          "maternityDays",
+          formData.specialLeaveDuration
+        );
+      }
 
-            leaveTypeId:
-              formData.leaveTypeId,
+      if (isPaternityLeave) {
+        requestBody.append(
+          "specialLeaveDuration",
+          formData.specialLeaveDuration
+        );
+      }
 
-            startDate:
-              formData.startDate,
+      if (supportingDocument) {
+        requestBody.append(
+          "supportingDocument",
+          supportingDocument
+        );
+      }
 
-            endDate:
-              formData.endDate,
+      const res = await fetch("/api/leaves", {
+        method: "POST",
+        body: requestBody,
+      });
 
-            totalDays,
-
-            isHalfDay:
-              formData.isHalfDay,
-
-            reason:
-              formData.reason.trim(),
-          }),
-        }
-      );
-
-      const data =
-        await res.json();
-
-      /* --------------------------------------------------------
-         API ERROR
-      -------------------------------------------------------- */
+      const data = await res.json();
 
       if (!res.ok) {
         throw new Error(
@@ -374,13 +661,7 @@ if (formData.startDate < joiningDate) {
         );
       }
 
-      /* --------------------------------------------------------
-         GET CREATED REQUEST
-      -------------------------------------------------------- */
-
-      const newRequest =
-        data?.leaveRequest ||
-        data?.request;
+      const newRequest = data?.leaveRequest || data?.request;
 
       if (!newRequest) {
         throw new Error(
@@ -388,54 +669,30 @@ if (formData.startDate < joiningDate) {
         );
       }
 
-      /* --------------------------------------------------------
-         ADD NEW REQUEST TO TABLE
-      -------------------------------------------------------- */
-
-      setRequests((prev) => [
-        newRequest,
-        ...prev,
-      ]);
-
-      /* --------------------------------------------------------
-         CLOSE MODAL
-      -------------------------------------------------------- */
+      setRequests((previous) => [newRequest, ...previous]);
 
       setIsModalOpen(false);
-
-      /* --------------------------------------------------------
-         SUCCESS MESSAGE
-      -------------------------------------------------------- */
+      setCurrentPage(1);
+      setSupportingDocument(null);
 
       setSuccessMsg(
         "Leave application successfully submitted to HR for approval."
       );
 
-      /* --------------------------------------------------------
-         RESET FORM
-      -------------------------------------------------------- */
-
       setFormData({
-        leaveTypeId:
-          getDefaultLeaveTypeId(),
-
-        startDate: today,
-
-        endDate: today,
-
+        leaveTypeId: getDefaultLeaveTypeId(),
+        startDate: defaultLeaveDate,
+        endDate: defaultLeaveDate,
         isHalfDay: false,
-
         reason: "",
+        specialLeaveDuration: "",
       });
-    } catch (err) {
-      console.error(
-        "Leave submission API error:",
-        err
-      );
+    } catch (error) {
+      console.error("Leave submission API error:", error);
 
-      alert(
-        err instanceof Error
-          ? err.message
+      setAlertMessage(
+        error instanceof Error
+          ? error.message
           : "Failed to submit leave application."
       );
     } finally {
@@ -443,444 +700,784 @@ if (formData.startDate < joiningDate) {
     }
   };
 
-  /* ============================================================
-     RENDER
-  ============================================================ */
-
-  return (
-    <div className="space-y-6 max-w-6xl mx-auto">
-
-      {/* ========================================================
-          TOP BAR
-      ======================================================== */}
-
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 sm:p-7 rounded-2xl border border-slate-200/90 shadow-sm">
-
-        <div className="space-y-1">
-
-          <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
-            Leave Management & Balances
-          </h2>
-
-          <p className="text-xs sm:text-sm text-slate-500">
-            Track allocated paid leaves, submit leave requests, and see project-specific holiday schedules.
-          </p>
-
+  if (mode === "apply") {
+    return (
+      <div className="mx-auto max-w-5xl space-y-5 pb-8">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+              Apply Leave
+            </h1>
+            <p className="mt-1 text-sm text-slate-500">
+              Submit a new leave request to your manager.
+            </p>
+          </div>
+          <nav
+            aria-label="Leave pages"
+            className="inline-flex w-fit rounded-lg border border-slate-200 bg-white p-1"
+          >
+            <Link
+              href="/portal/leaves?view=apply"
+              aria-current="page"
+              className="rounded-md bg-blue-600 px-4 py-2 text-xs font-semibold text-white"
+            >
+              Apply Leave
+            </Link>
+            <Link
+              href="/portal/leaves"
+              className="rounded-md px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+            >
+              My Leaves
+            </Link>
+          </nav>
         </div>
 
-        <button
-          type="button"
-          onClick={openLeaveModal}
-          className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 rounded-xl shadow-sm hover:shadow transition-all shrink-0 cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-
-          <span>
-            Apply for Leave
-          </span>
-        </button>
-
-      </div>
-
-      {/* ========================================================
-          SUCCESS MESSAGE
-      ======================================================== */}
-
-      {successMsg && (
-        <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl text-xs font-semibold flex items-center gap-2">
-
-          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-
-          <span>
-            {successMsg}
-          </span>
-
-          <button
-            type="button"
-            onClick={() =>
-              setSuccessMsg(null)
-            }
-            className="ml-auto text-emerald-500 hover:text-emerald-700"
+        {alertMessage && (
+          <div
+            role="alert"
+            className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"
           >
-            <XCircle className="w-4 h-4" />
-          </button>
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+            <p className="flex-1">{alertMessage}</p>
+            <button
+              type="button"
+              onClick={() => setAlertMessage(null)}
+              className="font-semibold text-amber-800 hover:text-amber-950"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
 
+        {successMsg && (
+          <div
+            role="status"
+            className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-800"
+          >
+            <CheckCircle2 className="h-5 w-5 shrink-0" />
+            <span>{successMsg}</span>
+          </div>
+        )}
+
+        <div className="grid items-start gap-5">
+          <section className="max-w-3xl overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div className="flex items-start justify-between border-b border-slate-200 px-5 pb-3 pt-4">
+              <div>
+                <h1 className="text-base font-bold text-slate-900">
+                  Apply for Leave
+                </h1>
+                <p className="mt-1 text-[10px] text-slate-500">
+                  Submit a new leave application.
+                </p>
+              </div>
+              <Link
+                href="/portal/leaves"
+                aria-label="Close leave application"
+                className="rounded-full p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+              >
+                <X className="h-4 w-4" />
+              </Link>
+            </div>
+            <div className="px-5 py-4">
+            <form onSubmit={handleApplySubmit} className="space-y-4">
+              <div>
+                <label
+                  htmlFor="leave-type"
+                  className="mb-1 block text-xs font-medium text-slate-700"
+                >
+                  Leave Type
+                </label>
+                <select
+                  id="leave-type"
+                  value={formData.leaveTypeId}
+                  onChange={(event) =>
+                    handleLeaveTypeChange(event.target.value)
+                  }
+                  disabled={genderLoading}
+                  required
+                  className="h-9 w-full rounded-lg border border-slate-300 bg-white px-3 text-xs text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100"
+                >
+                  <option value="">
+                    {genderLoading
+                      ? "Loading leave types..."
+                      : "Select leave type"}
+                  </option>
+                  {leaveTypeOptions.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                {!genderLoading && !isFemale && !isMale && (
+                  <p className="mt-1.5 text-[10px] text-amber-700">
+                    Contact HR to update your profile if you need
+                    maternity or paternity leave options.
+                  </p>
+                )}
+              </div>
+
+              {isSpecialLeave && (
+                <div>
+                  <label
+                    htmlFor="special-leave-duration"
+                    className="mb-1 block text-xs font-medium text-slate-700"
+                  >
+                    {isMaternityLeave
+                      ? "Maternity Leave Duration"
+                      : "Paternity Leave Duration"}
+                  </label>
+                  <select
+                    id="special-leave-duration"
+                    value={formData.specialLeaveDuration}
+                    onChange={(event) =>
+                      handleSpecialDurationChange(event.target.value)
+                    }
+                    required
+                    className="h-9 w-full rounded-lg border border-slate-300 bg-white px-3 text-xs text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                  >
+                    <option value="">Select duration</option>
+                    {getSpecialDurationOptions().map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label
+                    htmlFor="leave-start-date"
+                    className="mb-1 block text-xs font-medium text-slate-700"
+                  >
+                    From Date
+                  </label>
+                  <input
+                    id="leave-start-date"
+                    type="date"
+                    required
+                    min={joiningDate || undefined}
+                    value={formData.startDate}
+                    onChange={(event) =>
+                      handleStartDateChange(event.target.value)
+                    }
+                    className="h-9 w-full rounded-lg border border-slate-300 px-3 text-xs text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                  />
+                </div>
+                <div>
+                  <label
+                    htmlFor="leave-end-date"
+                    className="mb-1 block text-xs font-medium text-slate-700"
+                  >
+                    To Date
+                  </label>
+                  <input
+                    id="leave-end-date"
+                    type="date"
+                    required
+                    min={formData.startDate || joiningDate || undefined}
+                    value={formData.endDate}
+                    readOnly={isSpecialLeave}
+                    onChange={(event) =>
+                      setFormData((previous) => ({
+                        ...previous,
+                        endDate: event.target.value,
+                      }))
+                    }
+                    className={`h-9 w-full rounded-lg border border-slate-300 px-3 text-xs text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100 ${
+                      isSpecialLeave ? "bg-slate-100" : "bg-white"
+                    }`}
+                  />
+                </div>
+              </div>
+
+              <label className="flex items-center gap-2 text-xs text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={formData.isHalfDay}
+                  disabled={isSpecialLeave}
+                  onChange={(event) =>
+                    setFormData((previous) => ({
+                      ...previous,
+                      isHalfDay: event.target.checked,
+                    }))
+                  }
+                  className="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 disabled:opacity-50"
+                />
+                Applying for Half Day (0.5 day)
+              </label>
+
+              <div>
+                <label
+                  htmlFor="supporting-document"
+                  className="mb-1 flex items-center gap-2 text-xs font-medium text-indigo-900"
+                >
+                  <FileUp className="h-3.5 w-3.5 text-indigo-600" />
+                  Supporting Document {isSpecialLeave ? "(Required)" : "(Optional)"}
+                </label>
+                <input
+                  id="supporting-document"
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png"
+                  required={isSpecialLeave && !supportingDocument}
+                  disabled={submitting}
+                  onChange={(event) =>
+                    handleDocumentChange(event.target.files?.[0] || null)
+                  }
+                  className="w-full rounded-lg border border-slate-300 px-2.5 py-2 text-xs file:mr-2 file:border-0 file:bg-transparent file:p-0 file:text-xs"
+                />
+                <p className="mt-1 text-[10px] leading-4 text-slate-500">
+                  Upload a PDF, JPG, JPEG or PNG. Maximum size: 5 MB.
+                  {isSpecialLeave
+                    ? " Required for maternity and paternity leave."
+                    : " Optional."}
+                </p>
+                {supportingDocument && (
+                  <div className="mt-2 flex items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+                    <span className="truncate">{supportingDocument.name}</span>
+                    <button
+                      type="button"
+                      disabled={submitting}
+                      onClick={() => setSupportingDocument(null)}
+                      className="shrink-0 font-semibold text-rose-700 hover:text-rose-900"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label
+                  htmlFor="leave-reason"
+                  className="mb-1 block text-xs font-medium text-slate-700"
+                >
+                  Reason for Leave
+                </label>
+                <textarea
+                  id="leave-reason"
+                  required
+                  rows={3}
+                  maxLength={500}
+                  value={formData.reason}
+                  onChange={(event) =>
+                    setFormData((previous) => ({
+                      ...previous,
+                      reason: event.target.value,
+                    }))
+                  }
+                  placeholder="Explain the reason for leave"
+                  className="w-full resize-y rounded-lg border border-slate-300 px-3 py-2.5 text-xs text-slate-800 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                />
+              </div>
+
+              <div className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-3 text-xs">
+                <span className="font-semibold text-slate-700">
+                  Total Duration:
+                </span>
+                <span className="font-bold text-indigo-700">
+                  {calculateDays()} {calculateDays() === 1 ? "day" : "days"}
+                </span>
+              </div>
+
+              <div className="flex justify-end border-t border-slate-900 pt-3">
+                <button
+                  type="submit"
+                  disabled={submitting || genderLoading}
+                  className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-5 py-2.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
+                  {submitting ? "Submitting..." : "Submit Application"}
+                </button>
+              </div>
+            </form>
+            </div>
+          </section>
+
+          <aside className="hidden">
+            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <h2 className="text-lg font-bold text-slate-900">
+                Leave Balance
+              </h2>
+              <div className="mt-3 divide-y divide-slate-100">
+                {balances.length === 0 ? (
+                  <p className="py-4 text-sm text-slate-500">
+                    No leave balances are available.
+                  </p>
+                ) : (
+                  balances.map((balance) => (
+                    <div
+                      key={balance.id}
+                      className="flex items-center justify-between gap-3 py-3"
+                    >
+                      <div className="flex min-w-0 items-center gap-2">
+                        <Calendar className="h-4 w-4 shrink-0 text-blue-600" />
+                        <span className="truncate text-sm font-medium text-slate-700">
+                          {balance.leave_type?.name || "Leave"}
+                        </span>
+                      </div>
+                      <span className="whitespace-nowrap text-sm font-semibold text-slate-900">
+                        {balance.balance_days} / {balance.allocated_days} days
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </section>
+
+            <section className="rounded-2xl border border-blue-100 bg-blue-50/70 p-5">
+              <h2 className="text-sm font-bold text-slate-900">
+                Important Notes
+              </h2>
+              <ul className="mt-3 list-disc space-y-2 pl-4 text-sm leading-5 text-slate-600">
+                <li>Your request will be sent to your manager for approval.</li>
+                <li>You will be notified when it is approved or rejected.</li>
+                <li>Please provide a valid reason for your leave.</li>
+              </ul>
+              <p className="mt-4 border-t border-blue-100 pt-3 text-xs text-slate-500">
+                Project calendar: {project.name} ({project.client_country})
+              </p>
+            </section>
+
+            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="flex items-center justify-between">
+                <h2 className="text-base font-bold text-slate-900">
+                  Recent Leave Requests
+                </h2>
+                <Link
+                  href="/portal/leaves"
+                  className="text-xs font-semibold text-blue-600 hover:text-blue-800"
+                >
+                  View All
+                </Link>
+              </div>
+              {requests.length === 0 ? (
+                <p className="mt-4 text-sm text-slate-500">
+                  No leave requests yet.
+                </p>
+              ) : (
+                <div className="mt-3 divide-y divide-slate-100">
+                  {requests.slice(0, 4).map((request) => (
+                    <div
+                      key={request.id}
+                      className="flex items-center justify-between gap-3 py-3"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-slate-800">
+                          {request.leave_type?.name || "Leave"}
+                        </p>
+                        <p className="mt-0.5 text-xs text-slate-500">
+                          {request.start_date} · {request.total_days} days
+                        </p>
+                      </div>
+                      <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-semibold capitalize text-amber-800">
+                        {request.status}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          </aside>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto max-w-7xl space-y-5 pb-8">
+      {alertMessage && (
+        <div className="fixed left-0 right-0 top-20 z-[9999] flex justify-center px-4">
+          <div
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="leave-alert-title"
+            className="flex w-full max-w-lg items-start gap-3 rounded-xl border border-amber-300 bg-white p-4 shadow-2xl"
+          >
+            <AlertTriangle className="mt-0.5 h-6 w-6 shrink-0 text-amber-600" />
+
+            <div className="flex-1">
+              <h3
+                id="leave-alert-title"
+                className="font-semibold text-slate-900"
+              >
+                Leave Application
+              </h3>
+
+              <p className="mt-1 text-sm leading-5 text-slate-600">
+                {alertMessage}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setAlertMessage(null)}
+              className="rounded-md px-3 py-1 text-sm font-semibold text-indigo-600 hover:bg-indigo-50"
+            >
+              OK
+            </button>
+          </div>
         </div>
       )}
 
-      {/* ========================================================
-          LEAVE BALANCES GRID
-      ======================================================== */}
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
-
-        {balances.map((b) => (
-
-          <div
-            key={b.id}
-            className="bg-white rounded-2xl border border-slate-200/90 p-5 sm:p-6 shadow-sm hover:shadow-md transition-all space-y-4"
+      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+            My Leaves
+          </h1>
+          <p className="mt-1 text-xs text-slate-500">
+            View and track all your leave requests.
+          </p>
+        </div>
+        <nav aria-label="Breadcrumb">
+          <Link
+            href="/portal"
+            className="text-xs text-slate-500 transition hover:text-blue-600"
           >
-
-            <div className="flex items-center justify-between">
-
-              <span className="text-xs font-bold text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-100">
-                {b.leave_type?.code ||
-                  "LV"}
-              </span>
-
-              <span className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider">
-                Year 2026
-              </span>
-
-            </div>
-
-            <div>
-
-              <h3 className="text-sm font-bold text-slate-900">
-                {b.leave_type?.name}
-              </h3>
-
-              <p className="text-[11px] text-slate-400 mt-0.5 line-clamp-1">
-                {b.leave_type?.description ||
-                  "Annual quota"}
-              </p>
-
-            </div>
-
-            <div className="flex items-baseline justify-between border-t border-slate-100 pt-3">
-
-              <div>
-
-                <span className="text-3xl font-black text-slate-900 font-mono">
-                  {b.balance_days}
-                </span>
-
-                <span className="text-xs text-slate-500 font-medium ml-1.5">
-                  days left
-                </span>
-
-              </div>
-
-              <div className="text-right text-xs text-slate-500 font-medium">
-
-                <span>
-                  Used:{" "}
-                  <strong className="text-slate-800">
-                    {b.used_days}
-                  </strong>{" "}
-                  /{" "}
-                </span>
-
-                <span className="font-bold text-slate-700">
-                  {b.allocated_days}
-                </span>
-
-              </div>
-
-            </div>
-
-          </div>
-
-        ))}
-
+            Home
+          </Link>
+        </nav>
       </div>
 
-      {/* ========================================================
-          LOP + COUNTRY HOLIDAY INFO
-      ======================================================== */}
+      {successMsg && (
+        <div className="flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-xs font-semibold text-emerald-800">
+          <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <span>{successMsg}</span>
 
-        {/* LOP */}
-
-        <div className="p-5 bg-gradient-to-br from-amber-50 to-orange-50/50 rounded-2xl border border-amber-200/80 text-xs text-amber-900 flex items-start gap-3.5 shadow-xs">
-
-          <div className="p-2 bg-amber-100 rounded-xl text-amber-700 shrink-0">
-
-            <AlertTriangle className="w-5 h-5" />
-
-          </div>
-
-          <div className="space-y-1">
-
-            <h4 className="font-bold text-amber-950 text-sm">
-              Loss of Pay (LOP) Policy
-            </h4>
-
-            <p className="leading-relaxed text-amber-800">
-
-              Leaves taken beyond your allocated balance or marked as Loss of Pay will directly deduct
-              from your monthly salary based on the formula:{" "}
-
-              <code className="font-mono font-bold bg-amber-100/90 text-amber-900 px-1.5 py-0.5 rounded">
-                (Monthly CTC / Days in Month) × LOP Days
-              </code>
-
-              .
-
-            </p>
-
-          </div>
-
+          <button
+            type="button"
+            onClick={() => setSuccessMsg(null)}
+            className="ml-auto text-emerald-500 hover:text-emerald-700"
+            aria-label="Close success message"
+          >
+            <XCircle className="h-4 w-4" />
+          </button>
         </div>
+      )}
 
-        {/* COUNTRY CALENDAR */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {visibleBalances.map((balance) => {
+          const code = String(balance.leave_type?.code ?? "").toUpperCase();
+          const remainingDays = Number(balance.balance_days) || 0;
+          const usedDays = Number(balance.used_days) || 0;
+          const allocatedDays = Number(balance.allocated_days) || 0;
+          const themes: Record<string, { card: string; icon: string; badge: string }> = {
+            CL: {
+              card: "border-emerald-100 bg-emerald-50/50",
+              icon: "bg-emerald-100 text-emerald-600",
+              badge: "text-emerald-700",
+            },
+            SL: {
+              card: "border-violet-100 bg-violet-50/50",
+              icon: "bg-violet-100 text-violet-600",
+              badge: "text-violet-700",
+            },
+            EL: {
+              card: "border-orange-100 bg-orange-50/50",
+              icon: "bg-orange-100 text-orange-600",
+              badge: "text-orange-700",
+            },
+            ML: {
+              card: "border-sky-100 bg-sky-50/50",
+              icon: "bg-sky-100 text-sky-600",
+              badge: "text-sky-700",
+            },
+            PL: {
+              card: "border-sky-100 bg-sky-50/50",
+              icon: "bg-sky-100 text-sky-600",
+              badge: "text-sky-700",
+            },
+          };
+          const theme = themes[code] ?? themes.CL;
+          const Icon =
+            code === "SL"
+              ? HeartPulse
+              : code === "EL"
+                ? BriefcaseBusiness
+                : code === "ML" || code === "PL"
+                  ? Baby
+                  : CalendarDays;
 
-        <div className="p-5 bg-gradient-to-br from-purple-50 to-indigo-50/50 rounded-2xl border border-purple-200/80 text-xs text-purple-900 flex items-start gap-3.5 shadow-xs">
-
-          <div className="p-2 bg-purple-100 rounded-xl text-purple-700 shrink-0">
-
-            <Globe className="w-5 h-5" />
-
-          </div>
-
-          <div className="space-y-1">
-
-            <h4 className="font-bold text-purple-950 text-sm">
-              Project Country Calendar (
-              {project.client_country}
-              )
-            </h4>
-
-            <p className="leading-relaxed text-purple-800">
-
-              Your holidays are mapped to your active client project{" "}
-
-              <strong className="text-purple-950">
-                {project.name}
-              </strong>
-
-              . Teams assigned to US or India clients follow their
-              respective client timelines and official country gazetted holidays.
-
-            </p>
-
-          </div>
-
-        </div>
-
+          return (
+            <section
+              key={balance.id}
+              className={`rounded-xl border p-3 sm:p-4 ${theme.card}`}
+            >
+              <div className="flex items-center gap-2.5">
+                <span className={`rounded-lg p-2 ${theme.icon}`}>
+                  <Icon className="h-4 w-4" />
+                </span>
+                <div className="min-w-0">
+                  <p className={`truncate text-[10px] font-semibold ${theme.badge}`}>
+                    {balance.leave_type?.name}
+                  </p>
+                  <p className="mt-1 text-lg font-bold leading-5 text-slate-900">
+                    {remainingDays}
+                  </p>
+                  <p className="mt-0.5 text-[9px] text-slate-500">
+                    days remaining
+                  </p>
+                  <p className="mt-1 text-[9px] text-slate-500">
+                    {usedDays} used of {allocatedDays} days
+                  </p>
+                </div>
+              </div>
+            </section>
+          );
+        })}
       </div>
 
-      {/* ========================================================
-          LEAVE APPLICATION HISTORY
-      ======================================================== */}
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-3">
+          <div className="flex flex-wrap gap-1">
+            {[
+              { key: "all", label: "All Requests" },
+              { key: "pending", label: "Pending" },
+              { key: "approved", label: "Approved" },
+              { key: "rejected", label: "Rejected" },
+            ].map(({ key, label }) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => {
+                  setStatusFilter(key);
+                  setCurrentPage(1);
+                }}
+                aria-pressed={statusFilter === key}
+                className={`rounded-md px-3 py-2 text-[10px] font-semibold transition ${
+                  statusFilter === key
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
 
-      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden">
-
-        <div className="p-5 border-b border-slate-100 flex items-center justify-between">
-
-          <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-
-            <Calendar className="w-4 h-4 text-indigo-600" />
-
-            <span>
-              My Leave Applications
-            </span>
-
-          </h3>
-
-          <span className="text-xs font-semibold text-slate-400">
-            Past & Upcoming Requests
-          </span>
-
+          <label className="flex items-center gap-2 text-[10px] font-medium text-slate-500">
+            <CalendarDays className="h-3.5 w-3.5" />
+            <input
+              type="month"
+              value={monthFilter}
+              aria-label="Filter leave requests by month applied"
+              onChange={(event) => {
+                setMonthFilter(event.target.value);
+                setCurrentPage(1);
+              }}
+              className="rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[10px] text-slate-700 outline-none focus:border-blue-500"
+            />
+          </label>
         </div>
 
         <div className="overflow-x-auto">
-
-          <table className="w-full text-left text-xs text-slate-600">
-
-            <thead className="bg-slate-50/80 text-slate-500 font-bold border-b border-slate-200/80 uppercase text-[11px] tracking-wider">
-
+          <table className="w-full min-w-[820px] text-left text-[10px] text-slate-600">
+            <thead className="border-b border-slate-200 bg-slate-50/70 text-[9px] font-bold uppercase tracking-wide text-slate-500">
               <tr>
-
-                <th className="py-3.5 px-5">
-                  Leave Type
-                </th>
-
-                <th className="py-3.5 px-5">
-                  From
-                </th>
-
-                <th className="py-3.5 px-5">
-                  To
-                </th>
-
-                <th className="py-3.5 px-5">
-                  Duration
-                </th>
-
-                <th className="py-3.5 px-5">
-                  Reason
-                </th>
-
-                <th className="py-3.5 px-5">
-                  Status
-                </th>
-
+                <th className="w-8 px-3 py-2.5">#</th>
+                <th className="px-3 py-2.5">Leave Type</th>
+                <th className="px-3 py-2.5">From Date</th>
+                <th className="px-3 py-2.5">To Date</th>
+                <th className="px-3 py-2.5">Days</th>
+                <th className="px-3 py-2.5">Reason</th>
+                <th className="px-3 py-2.5">Status</th>
+                <th className="px-3 py-2.5">Applied On</th>
+                <th className="px-3 py-2.5">Actions</th>
               </tr>
-
             </thead>
 
             <tbody className="divide-y divide-slate-100">
-
-              {/* ==================================================
-                  EMPTY TABLE
-              ================================================== */}
-
-              {requests.length === 0 ? (
-
+              {paginatedRequests.length === 0 ? (
                 <tr>
+                  <td colSpan={9} className="px-5 py-12 text-center">
+                    <Calendar className="mx-auto h-8 w-8 text-slate-300" />
 
-                  <td
-                    colSpan={6}
-                    className="py-10 px-5 text-center"
-                  >
+                    <p className="mt-3 text-xs font-semibold text-slate-500">
+                      No leave requests found
+                    </p>
 
-                    <div className="flex flex-col items-center justify-center">
-
-                      <Calendar className="w-8 h-8 text-slate-300" />
-
-                      <p className="mt-3 text-sm font-semibold text-slate-500">
-                        No leave requests yet
-                      </p>
-
-                      <p className="mt-1 text-xs text-slate-400">
-                        Apply for leave to see your request here.
-                      </p>
-
-                    </div>
-
+                    <p className="mt-1 text-[10px] text-slate-400">
+                      Adjust the filters or apply for leave to see requests here.
+                    </p>
                   </td>
-
                 </tr>
-
               ) : (
+                paginatedRequests.map((request, index) => {
+                  const status = String(request.status).toLowerCase();
+                  const leaveCode = String(
+                    request.leave_type?.code ?? ""
+                  ).toUpperCase();
+                  const leaveIcon =
+                    leaveCode === "SL"
+                      ? HeartPulse
+                      : leaveCode === "EL"
+                        ? BriefcaseBusiness
+                        : leaveCode === "ML" || leaveCode === "PL"
+                          ? Baby
+                          : CalendarDays;
+                  const LeaveIcon = leaveIcon;
 
-                /* ==================================================
-                   REQUEST ROWS
-                ================================================== */
-
-                requests.map((r) => (
-
-                  <tr
-                    key={r.id}
-                    className="hover:bg-slate-50/80 transition-colors"
-                  >
-
-                    {/* Leave Type */}
-
-                    <td className="py-3.5 px-5 font-bold text-slate-900">
-
-                      <div className="flex items-center gap-2">
-
-                        <div className="p-1.5 bg-indigo-50 rounded-lg">
-
-                          <Calendar className="w-3.5 h-3.5 text-indigo-600" />
-
-                        </div>
-
-                        <div>
-
-                          <span>
-                            {r.leave_type?.name ||
-                              "Leave"}
+                  return (
+                    <tr
+                      key={request.id}
+                      className="transition-colors hover:bg-slate-50/80"
+                    >
+                      <td className="px-3 py-2.5 text-slate-400">
+                        {(currentPage - 1) * pageSize + index + 1}
+                      </td>
+                      <td className="px-3 py-2.5 font-medium text-slate-800">
+                        <div className="flex items-center gap-2 whitespace-nowrap">
+                          <span className="rounded-md bg-blue-50 p-1 text-blue-700">
+                            <LeaveIcon className="h-3 w-3" />
                           </span>
-
-                          {r.is_half_day && (
-                            <p className="mt-0.5 text-[10px] font-medium text-slate-400">
-                              Half Day
-                            </p>
-                          )}
-
+                          {request.leave_type?.name || "Leave"}
                         </div>
-
-                      </div>
-
-                    </td>
-
-                    {/* From */}
-
-                    <td className="py-3.5 px-5 font-mono text-slate-700 whitespace-nowrap">
-                      {r.start_date}
-                    </td>
-
-                    {/* To */}
-
-                    <td className="py-3.5 px-5 font-mono text-slate-700 whitespace-nowrap">
-                      {r.end_date}
-                    </td>
-
-                    {/* Duration */}
-
-                    <td className="py-3.5 px-5 font-bold text-slate-800 whitespace-nowrap">
-
-                      {r.total_days}{" "}
-
-                      {r.total_days === 1
-                        ? "day"
-                        : "days"}
-
-                      {r.is_half_day &&
-                        " (Half Day)"}
-
-                    </td>
-
-                    {/* Reason */}
-
-                    <td className="py-3.5 px-5 text-slate-600 max-w-xs truncate">
-                      {r.reason || "-"}
-                    </td>
-
-                    {/* Status */}
-
-                    <td className="py-3.5 px-5">
-
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-2.5">
+                        {formatLeaveDate(request.start_date)}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-2.5">
+                        {formatLeaveDate(request.end_date)}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-2.5 font-semibold text-slate-700">
+                        {request.total_days}
+                        {request.is_half_day ? " (½)" : ""}
+                      </td>
+                      <td
+                        className="max-w-36 truncate px-3 py-2.5"
+                        title={request.reason || ""}
+                      >
+                        {request.reason || "--"}
+                      </td>
+                      <td className="px-3 py-2.5">
                       <span
-                        className={`text-[10px] font-bold px-3 py-1 rounded-full uppercase ${
-                          r.status ===
-                          "approved"
+                        className={`rounded-md px-2 py-1 text-[9px] font-semibold capitalize ${
+                          status === "approved"
                             ? "bg-emerald-100 text-emerald-800"
-                            : r.status ===
-                              "rejected"
-                            ? "bg-red-100 text-red-800"
-                            : "bg-amber-100 text-amber-800"
+                            : status === "rejected"
+                              ? "bg-red-100 text-red-800"
+                              : status === "cancelled"
+                                ? "bg-slate-100 text-slate-700"
+                                : "bg-amber-100 text-amber-800"
                         }`}
                       >
-                        {r.status}
+                        {status}
                       </span>
-
-                    </td>
-
-                  </tr>
-
-                ))
-
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-2.5">
+                        {formatLeaveDate(request.created_at)}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <details className="relative">
+                          <summary
+                            aria-label={`View details for ${request.leave_type?.name || "leave"} request`}
+                            className="flex h-7 w-7 cursor-pointer list-none items-center justify-center rounded-md text-slate-500 hover:bg-blue-50 hover:text-blue-700"
+                          >
+                            <Eye className="h-3.5 w-3.5" />
+                          </summary>
+                          <div className="absolute right-0 top-full z-10 mt-1 w-52 rounded-lg border border-slate-200 bg-white p-3 text-[10px] font-normal text-slate-600 shadow-lg">
+                            <p className="font-semibold text-slate-800">
+                              {request.reason || "No reason provided"}
+                            </p>
+                            {request.rejection_reason && (
+                              <p className="mt-2 border-t border-slate-100 pt-2">
+                                HR note: {request.rejection_reason}
+                              </p>
+                            )}
+                          </div>
+                        </details>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
-
             </tbody>
-
           </table>
-
         </div>
 
+        <div className="flex flex-col gap-3 border-t border-slate-100 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-[9px] text-slate-500">
+            Showing{" "}
+            {filteredRequests.length === 0
+              ? 0
+              : (currentPage - 1) * pageSize + 1}{" "}
+            to {Math.min(currentPage * pageSize, filteredRequests.length)} of{" "}
+            {filteredRequests.length} entries
+          </p>
+          <nav aria-label="Leave request pages" className="flex items-center gap-1">
+            <button
+              type="button"
+              aria-label="Previous page"
+              disabled={currentPage === 1}
+              onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+              className="rounded-md border border-slate-200 p-1.5 text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" />
+            </button>
+            {Array.from({ length: pageCount }, (_, index) => index + 1).map(
+              (page) => (
+                <button
+                  key={page}
+                  type="button"
+                  aria-current={currentPage === page ? "page" : undefined}
+                  onClick={() => setCurrentPage(page)}
+                  className={`min-w-7 rounded-md px-2 py-1.5 text-[10px] font-semibold ${
+                    currentPage === page
+                      ? "bg-blue-600 text-white"
+                      : "text-slate-600 hover:bg-slate-100"
+                  }`}
+                >
+                  {page}
+                </button>
+              )
+            )}
+            <button
+              type="button"
+              aria-label="Next page"
+              disabled={currentPage === pageCount}
+              onClick={() =>
+                setCurrentPage((page) => Math.min(pageCount, page + 1))
+              }
+              className="rounded-md border border-slate-200 p-1.5 text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <ChevronRight className="h-3.5 w-3.5" />
+            </button>
+          </nav>
+        </div>
       </div>
 
-      {/* ========================================================
-          APPLY LEAVE MODAL
-      ======================================================== */}
+      <div className="flex flex-col items-start justify-between gap-3 rounded-xl border border-sky-100 bg-sky-50 px-4 py-3 sm:flex-row sm:items-center">
+        <div className="flex items-start gap-2.5 text-[10px] text-slate-600">
+          <span className="mt-0.5 rounded-full bg-blue-100 p-1 text-blue-600">
+            <CalendarDays className="h-3.5 w-3.5" />
+          </span>
+          <p>
+            You can apply for leave from the{" "}
+            <Link
+              href="/portal/leaves?view=apply"
+              className="font-semibold text-blue-700 underline underline-offset-2 hover:text-blue-900"
+            >
+              Apply Leave
+            </Link>{" "}
+            page. All leave requests are subject to manager approval.
+          </p>
+        </div>
+        <Link
+          href="/portal/leaves?view=apply"
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-blue-600 px-3 py-2 text-[10px] font-semibold text-white hover:bg-blue-700"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          Apply Leave
+        </Link>
+      </div>
 
       {isModalOpen && (
-
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
-
-          <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl border border-slate-200 animate-in fade-in zoom-in-95">
-
-            {/* Modal Header */}
-
-            <div className="flex items-center justify-between pb-3 border-b border-slate-200">
-
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm">
+          <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl border border-slate-200 bg-white p-6 shadow-xl">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
               <div>
-
                 <h3 className="text-base font-bold text-slate-900">
                   Apply for Leave
                 </h3>
@@ -888,7 +1485,6 @@ if (formData.startDate < joiningDate) {
                 <p className="mt-1 text-[11px] text-slate-400">
                   Submit a new leave application.
                 </p>
-
               </div>
 
               <button
@@ -896,93 +1492,97 @@ if (formData.startDate < joiningDate) {
                 onClick={closeLeaveModal}
                 disabled={submitting}
                 className="text-slate-400 hover:text-slate-600 disabled:opacity-50"
+                aria-label="Close leave application"
               >
-
-                <XCircle className="w-5 h-5" />
-
+                <XCircle className="h-5 w-5" />
               </button>
-
             </div>
 
-            {/* Modal Form */}
-
             <form
-              onSubmit={
-                handleApplySubmit
-              }
+              onSubmit={handleApplySubmit}
               className="mt-4 space-y-4 text-xs"
             >
-
-              {/* ==================================================
-                  LEAVE TYPE
-              ================================================== */}
-
               <div>
-
                 <label
                   htmlFor="leave-type"
-                  className="font-semibold text-slate-700 block mb-1"
+                  className="mb-1 block font-semibold text-slate-700"
                 >
                   Leave Type
                 </label>
 
                 <select
                   id="leave-type"
-                  value={
-                    formData.leaveTypeId
-                  }
+                  value={formData.leaveTypeId}
                   onChange={(e) =>
-                    setFormData(
-                      (prev) => ({
-                        ...prev,
-                        leaveTypeId:
-                          e.target.value,
-                      })
-                    )
+                    handleLeaveTypeChange(e.target.value)
                   }
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+                  disabled={genderLoading}
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:bg-slate-100"
                   required
                 >
-
                   <option value="">
-                    Select Leave Type
+                    {genderLoading
+                      ? "Loading leave types..."
+                      : "Select Leave Type"}
                   </option>
 
-                  {leaveTypeOptions.map(
-                    (option) => (
-                      <option
-                        key={option.id}
-                        value={option.id}
-                      >
-                        {option.label}
-                      </option>
-                    )
-                  )}
-
+                  {leaveTypeOptions.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
                 </select>
 
-                {selectedType &&
-                  !selectedType.is_paid && (
-
-                    <p className="text-[11px] text-amber-600 mt-1 font-medium">
-                      ⚠️ Note: LOP leave directly reduces your monthly net salary.
-                    </p>
-
-                  )}
-
+                {!genderLoading && !isFemale && !isMale && (
+                  <p className="mt-1 text-[11px] text-amber-600">
+                    Your gender could not be identified. Please contact
+                    HR to update your employee profile if you need ML or
+                    PL options.
+                  </p>
+                )}
               </div>
 
-              {/* ==================================================
-                  DATE RANGE
-              ================================================== */}
+              {isSpecialLeave && (
+                <div>
+                  <label
+                    htmlFor="special-leave-duration"
+                    className="mb-1 block font-semibold text-slate-700"
+                  >
+                    {isMaternityLeave
+                      ? "Maternity Leave Duration"
+                      : "Paternity Leave Duration"}
+                  </label>
+
+                  <select
+                    id="special-leave-duration"
+                    value={formData.specialLeaveDuration}
+                    onChange={(e) =>
+                      handleSpecialDurationChange(e.target.value)
+                    }
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    required
+                  >
+                    <option value="">Select Duration</option>
+
+                    {getSpecialDurationOptions().map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+
+                  <p className="mt-1 text-[11px] text-slate-500">
+                    The To Date will be calculated automatically based
+                    on the selected duration.
+                  </p>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-3">
-
                 <div>
-
                   <label
                     htmlFor="leave-start-date"
-                    className="font-semibold text-slate-700 block mb-1"
+                    className="mb-1 block font-semibold text-slate-700"
                   >
                     From Date
                   </label>
@@ -991,33 +1591,19 @@ if (formData.startDate < joiningDate) {
                     id="leave-start-date"
                     type="date"
                     required
-                    value={
-                      formData.startDate
-                    }
+                    min={joiningDate || undefined}
+                    value={formData.startDate}
                     onChange={(e) =>
-                      setFormData(
-                        (prev) => ({
-                          ...prev,
-                          startDate:
-                            e.target.value,
-                          endDate:
-                            prev.endDate <
-                            e.target.value
-                              ? e.target.value
-                              : prev.endDate,
-                        })
-                      )
+                      handleStartDateChange(e.target.value)
                     }
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                   />
-
                 </div>
 
                 <div>
-
                   <label
                     htmlFor="leave-end-date"
-                    className="font-semibold text-slate-700 block mb-1"
+                    className="mb-1 block font-semibold text-slate-700"
                   >
                     To Date
                   </label>
@@ -1026,71 +1612,97 @@ if (formData.startDate < joiningDate) {
                     id="leave-end-date"
                     type="date"
                     required
-                    min={
-                      formData.startDate
-                    }
-                    value={
-                      formData.endDate
-                    }
+                    min={formData.startDate || joiningDate || undefined}
+                    value={formData.endDate}
+                    readOnly={isSpecialLeave}
                     onChange={(e) =>
-                      setFormData(
-                        (prev) => ({
-                          ...prev,
-                          endDate:
-                            e.target.value,
-                        })
-                      )
+                      setFormData((previous) => ({
+                        ...previous,
+                        endDate: e.target.value,
+                      }))
                     }
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+                    className={`w-full rounded-lg border border-slate-300 px-3 py-2 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 ${
+                      isSpecialLeave ? "bg-slate-100" : "bg-white"
+                    }`}
                   />
-
                 </div>
-
               </div>
 
-              {/* ==================================================
-                  HALF DAY
-              ================================================== */}
-
               <div className="flex items-center gap-2 pt-1">
-
                 <input
                   type="checkbox"
                   id="halfDay"
-                  checked={
-                    formData.isHalfDay
-                  }
+                  checked={formData.isHalfDay}
+                  disabled={isSpecialLeave}
                   onChange={(e) =>
-                    setFormData(
-                      (prev) => ({
-                        ...prev,
-                        isHalfDay:
-                          e.target.checked,
-                      })
-                    )
+                    setFormData((previous) => ({
+                      ...previous,
+                      isHalfDay: e.target.checked,
+                    }))
                   }
-                  className="rounded text-indigo-600 focus:ring-indigo-500"
+                  className="rounded text-indigo-600 focus:ring-indigo-500 disabled:opacity-50"
                 />
 
                 <label
                   htmlFor="halfDay"
-                  className="text-slate-700 font-medium"
+                  className={`font-medium text-slate-700 ${
+                    isSpecialLeave ? "opacity-50" : ""
+                  }`}
                 >
-                  Applying for Half Day
-                  (0.5 day)
+                  Applying for Half Day (0.5 day)
                 </label>
-
               </div>
 
-              {/* ==================================================
-                  REASON
-              ================================================== */}
+              <div>
+                <label
+                  htmlFor="supporting-document"
+                  className="mb-1 flex items-center gap-2 font-semibold text-slate-700"
+                >
+                  <FileUp className="h-4 w-4 text-indigo-600" />
+                  Supporting Document {isSpecialLeave ? "(Required)" : "(Optional)"}
+                </label>
+
+                <input
+                  id="supporting-document"
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png"
+                  required={isSpecialLeave && !supportingDocument}
+                  disabled={submitting}
+                  onChange={(e) =>
+                    handleDocumentChange(e.target.files?.[0] || null)
+                  }
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2"
+                />
+
+                <p className="mt-1 text-[11px] text-slate-500">
+                  Upload a PDF, JPG, JPEG or PNG. Maximum size: 5 MB.
+                  {isSpecialLeave
+                    ? " Required for maternity and paternity leave."
+                    : " Optional."}
+                </p>
+
+                {supportingDocument && (
+                  <div className="mt-2 flex items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-2">
+                    <span className="break-all text-xs font-medium text-emerald-700">
+                      Selected: {supportingDocument.name}
+                    </span>
+
+                    <button
+                      type="button"
+                      disabled={submitting}
+                      onClick={() => setSupportingDocument(null)}
+                      className="shrink-0 font-semibold text-red-600 hover:text-red-700"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                )}
+              </div>
 
               <div>
-
                 <label
                   htmlFor="leave-reason"
-                  className="font-semibold text-slate-700 block mb-1"
+                  className="mb-1 block font-semibold text-slate-700"
                 >
                   Reason for Leave
                 </label>
@@ -1099,72 +1711,44 @@ if (formData.startDate < joiningDate) {
                   id="leave-reason"
                   required
                   rows={3}
-                  value={
-                    formData.reason
-                  }
+                  value={formData.reason}
                   onChange={(e) =>
-                    setFormData(
-                      (prev) => ({
-                        ...prev,
-                        reason:
-                          e.target.value,
-                      })
-                    )
+                    setFormData((previous) => ({
+                      ...previous,
+                      reason: e.target.value,
+                    }))
                   }
                   placeholder="Explain the reason for leave"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 />
-
               </div>
 
-              {/* ==================================================
-                  TOTAL DURATION
-              ================================================== */}
+              <div className="flex items-center justify-between rounded-lg bg-slate-50 p-3 text-slate-700">
+                <span className="font-medium">Total Duration:</span>
 
-              <div className="p-3 bg-slate-50 rounded-lg flex items-center justify-between text-slate-700">
-
-                <span className="font-medium">
-                  Total Duration:
-                </span>
-
-                <span className="font-bold text-sm text-indigo-700">
-
+                <span className="text-sm font-bold text-indigo-700">
                   {calculateDays()}{" "}
-
-                  {calculateDays() ===
-                  1
-                    ? "day"
-                    : "days"}
-
+                  {calculateDays() === 1 ? "day" : "days"}
                 </span>
-
               </div>
 
-              {/* ==================================================
-                  BUTTONS
-              ================================================== */}
-
-              <div className="flex items-center justify-end gap-2 pt-3 border-t">
-
+              <div className="flex items-center justify-end gap-2 border-t pt-3">
                 <button
                   type="button"
-                  onClick={
-                    closeLeaveModal
-                  }
+                  onClick={closeLeaveModal}
                   disabled={submitting}
-                  className="px-3 py-1.5 font-semibold text-slate-600 hover:bg-slate-100 rounded disabled:opacity-50"
+                  className="rounded px-3 py-1.5 font-semibold text-slate-600 hover:bg-slate-100 disabled:opacity-50"
                 >
                   Cancel
                 </button>
 
                 <button
                   type="submit"
-                  disabled={submitting}
-                  className="px-4 py-2 font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg flex items-center gap-1.5 disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={submitting || genderLoading}
+                  className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-
                   {submitting && (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   )}
 
                   <span>
@@ -1172,19 +1756,12 @@ if (formData.startDate < joiningDate) {
                       ? "Submitting..."
                       : "Submit Application"}
                   </span>
-
                 </button>
-
               </div>
-
             </form>
-
           </div>
-
         </div>
-
       )}
-
     </div>
   );
 }

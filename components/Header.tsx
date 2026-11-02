@@ -2,7 +2,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Bell,
   LogOut,
@@ -33,6 +33,7 @@ interface NotificationItem {
 export default function Header({ profile }: HeaderProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -86,10 +87,14 @@ export default function Header({ profile }: HeaderProps) {
     if (pathname === "/portal/profile") return "My Employee Profile";
 
     if (pathname === "/portal/attendance") {
-      return "My Attendance & Check-In";
+      return "Attendance";
     }
 
-    if (pathname === "/portal/leaves") return "My Leaves & Holidays";
+    if (pathname === "/portal/leaves") {
+      return searchParams.get("view") === "apply"
+        ? "Apply Leave"
+        : "My Leaves";
+    }
 
     if (pathname === "/portal/payslips") return "My Salary & Payslips";
 

@@ -1,48 +1,67 @@
-import { createClient } from "@/lib/supabase-server";
-import { connection } from "next/server";
-import { DataStore } from "@/lib/data-store";
-import EmployeeLeavesView from "@/components/portal/EmployeeLeavesView";
 import { redirect } from "next/navigation";
-  
-export default async function EmployeeLeavesPage() {
-  await connection();
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
 
-  if (!user) redirect("/login");
+import EmployeeLeavesView from "@/components/portal/EmployeeLeavesView";
+import { DataStore } from "@/lib/data-store";
+import { createClient } from "@/lib/supabase-server";
+
+interface EmployeeLeavesPageProps {
+  searchParams: Promise<{ view?: string | string[] }>;
+}
+
+export default async function EmployeeLeavesPage({
+  searchParams,
+}: EmployeeLeavesPageProps) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect("/login");
+  }
 
   let employee = await DataStore.getEmployeeByUserId(user.id);
 
   if (!employee && user.email) {
-    const all = await DataStore.getEmployees();
-    employee = all.find((e) => e.email?.trim().toLowerCase() === user.email!.trim().toLowerCase()) ?? null;
-  }
+    const employees = await DataStore.getEmployees();
+    const loginEmail = user.email.trim().toLowerCase();
 
+    employee =
+      employees.find(
+        (item) => item.email?.trim().toLowerCase() === loginEmail
+      ) || null;
+  }
 
   if (!employee) {
     return (
-      <div className="p-8 text-center text-slate-500">
-        Employee record not found. Please contact HR.
+      <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-slate-500">
+        Employee not found. Please contact HR to link your account.
       </div>
     );
   }
 
-  const project = employee.project || (await DataStore.getProjects())[0];
-  const leaveBalances = await DataStore.getLeaveBalances(employee.id);
-  console.log("PORTAL LEAVE DEBUG:", {
-    loggedInUser: user.email,
-    employeeId: employee.id,
-    employeeCode: employee.employee_id,
-    balances: leaveBalances.map((b) => ({
-      year: b.year,
-      leaveType: b.leave_type?.code,
-      allocated: b.allocated_days,
-      used: b.used_days,
-      remaining: b.balance_days,
-    })),
-  });
-  const leaveRequests = await DataStore.getLeaveRequests(employee.id);
-  const leaveTypes = await DataStore.getLeaveTypes();
+  const [projects, leaveBalances, leaveRequests, leaveTypes] =
+    await Promise.all([
+      DataStore.getProjects(),
+      DataStore.getLeaveBalances(employee.id),
+      DataStore.getLeaveRequests(employee.id),
+      DataStore.getLeaveTypes(),
+    ]);
+
+  const project =
+    employee.project ||
+    projects.find((item) => item.id === employee.project_id) ||
+    projects[0];
+
+  if (!project) {
+    return (
+      <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-slate-500">
+        No project is configured for your account.
+      </div>
+    );
+  }
+
+  const { view } = await searchParams;
 
   return (
     <EmployeeLeavesView
@@ -51,6 +70,7 @@ export default async function EmployeeLeavesPage() {
       leaveBalances={leaveBalances}
       leaveRequests={leaveRequests}
       leaveTypes={leaveTypes}
+      mode={view === "apply" ? "apply" : "my-leaves"}
     />
   );
 }

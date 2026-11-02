@@ -696,8 +696,6 @@ export class DataStore {
   // ==========================================
 
   static async getProfileChangeRequests(): Promise<ProfileChangeRequest[]> {
-    const cache = getCache();
-
     try {
       const supabase = await createAdminClient();
 
@@ -743,12 +741,7 @@ export class DataStore {
       })) as ProfileChangeRequest[];
     } catch (error) {
       console.error("Failed to load profile change requests:", error);
-
-      return [...cache.changeRequests].sort(
-        (a, b) =>
-          new Date(b.created_at).getTime() -
-          new Date(a.created_at).getTime()
-      );
+      throw error;
     }
   }
 
@@ -814,9 +807,6 @@ export class DataStore {
     "pan_number",
     "passport_number",
   ] as const;
-
-
-
 
   static async reviewProfileChangeRequest({
     requestId,
@@ -1352,159 +1342,255 @@ export class DataStore {
 }
 
 
-  static async clockIn(employeeId: string): Promise<AttendanceLog> {
-    const supabase = await createAdminClient();
-    const now = new Date();
-    const todayStr = now.toISOString().split("T")[0];
+static async clockIn(employeeId: string): Promise<AttendanceLog> {
+  const supabase = await createAdminClient();
+  const now = new Date();
 
-    const employee = await this.getEmployeeById(employeeId);
-    if (!employee) throw new Error("Employee not found");
+  // Get today's date in India Standard Time
+  const dateParts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
 
-    const project = employee.project;
-    if (!project) throw new Error("Employee project not found");
+  const year = dateParts.find((part) => part.type === "year")?.value;
+  const month = dateParts.find((part) => part.type === "month")?.value;
+  const day = dateParts.find((part) => part.type === "day")?.value;
 
-    const evaluation = evaluateAttendancePunch(
-      now,
-      project.shift_start_time,
-      project.grace_period_minutes,
-      project.half_day_cutoff_minutes
+  if (!year || !month || !day) {
+    throw new Error("Unable to determine today's attendance date.");
+  }
+
+  const todayStr = `${year}-${month}-${day}`;
+
+  // Get employee
+  const employee = await this.getEmployeeById(employeeId);
+
+  if (!employee) {
+    throw new Error("Employee not found.");
+  }
+
+  const project = employee.project;
+
+  if (!project) {
+    throw new Error("Employee project not found.");
+  }
+
+  // Evaluate attendance using existing project rules
+  const evaluation = evaluateAttendancePunch(
+    now,
+    project.shift_start_time,
+    project.grace_period_minutes,
+    project.half_day_cutoff_minutes
+  );
+
+  // Find today's attendance record
+  const {
+    data: existingLog,
+    error: findError,
+  } = await supabase
+    .from("attendance_logs")
+    .select("*")
+    .eq("employee_id", employee.id)
+    .eq("attendance_date", todayStr)
+    .maybeSingle();
+
+  if (findError) {
+    throw new Error(
+      `Unable to retrieve attendance: ${findError.message}`
     );
+  }
 
-    const { data: existingLog, error: findError } = await supabase
-      .from("attendance_logs")
-      .select("*")
-      .eq("employee_id", employee.id)
-      .eq("attendance_date", todayStr)
-      .maybeSingle();
+  // Prevent duplicate clock-in during an active session
+  if (
+    existingLog?.check_in_time &&
+    existingLog?.check_out_time == null
+  ) {
+    throw new Error("You are already checked in. Please check out first.");
+  }
 
-    if (findError) throw new Error(findError.message);
-
-    if (existingLog) {
-      // Prevent a second clock-in while a session is still active.
-      if (
-        existingLog.check_out_time == null &&
-        existingLog.check_in_time != null
-      ) {
-        throw new Error("You are already checked in. Please check out first.");
-      }
-
-      const { data, error } = await supabase
-        .from("attendance_logs")
-        .update({
-          // Keep the original first clock-in for the day.
-          check_in_time: existingLog.check_in_time ?? now.toISOString(),
-
-          // Start tracking the new session independently.
-          session_check_in_time: now.toISOString(),
-          check_out_time: null,
-
-          // Preserve previously accumulated hours and attendance status.
-          total_hours: Number(existingLog.total_hours ?? 0),
-          status: existingLog.status,
-          is_late: existingLog.is_late || evaluation.isLate,
-        })
-        .eq("id", existingLog.id)
-        .select()
-        .single();
-
-      if (error) throw new Error(error.message);
-      return data as AttendanceLog;
-    }
-
+  // If a record exists, start another session
+  if (existingLog) {
     const { data, error } = await supabase
       .from("attendance_logs")
-      .insert({
-        employee_id: employee.id,
-        attendance_date: todayStr,
-        check_in_time: now.toISOString(),
+      .update({
+        // Preserve the original first clock-in
+        check_in_time:
+          existingLog.check_in_time ?? now.toISOString(),
+
+        // Start the new session
         session_check_in_time: now.toISOString(),
         check_out_time: null,
-        total_hours: 0,
-        status: evaluation.status,
-        is_late: evaluation.isLate,
-        is_regularized: false,
+
+        // Preserve previously accumulated hours
+        total_hours: Number(existingLog.total_hours ?? 0),
+
+        // Preserve existing attendance status
+        status: existingLog.status,
+
+        is_late: existingLog.is_late || evaluation.isLate,
       })
+      .eq("id", existingLog.id)
       .select()
       .single();
 
-    if (error) throw new Error(error.message);
+    if (error) {
+      throw new Error(`Clock-in failed: ${error.message}`);
+    }
+
     return data as AttendanceLog;
   }
 
+  // Create a new attendance record
+  const { data, error } = await supabase
+    .from("attendance_logs")
+    .insert({
+      employee_id: employee.id,
+      attendance_date: todayStr,
+      check_in_time: now.toISOString(),
+      session_check_in_time: now.toISOString(),
+      check_out_time: null,
+      total_hours: 0,
+      status: evaluation.status,
+      is_late: evaluation.isLate,
+      is_regularized: false,
+    })
+    .select()
+    .single();
 
-  static async clockOut(employeeId: string): Promise<AttendanceLog> {
-    const supabase = await createAdminClient();
-    const now = new Date();
-    const todayStr = now.toISOString().split("T")[0];
-
-    const employee = await this.getEmployeeById(employeeId);
-    if (!employee) throw new Error("Employee not found");
-
-    const { data: log, error: findError } = await supabase
-      .from("attendance_logs")
-      .select("*")
-      .eq("employee_id", employee.id)
-      .eq("attendance_date", todayStr)
-      .maybeSingle();
-
-    if (findError) throw new Error(findError.message);
-
-    if (!log) {
-      throw new Error("You are not checked in.");
-    }
-
-    // A non-null session start with no checkout indicates an active session.
-    // Fall back to check_in_time for legacy records created before this column.
-    if (log.check_out_time != null) {
-      throw new Error("You are not currently checked in.");
-    }
-
-    const sessionStartValue =
-      log.session_check_in_time ?? log.check_in_time;
-
-    if (!sessionStartValue) {
-      throw new Error("Check-in time is missing.");
-    }
-
-    const sessionStart = new Date(sessionStartValue);
-    const sessionHours = Math.max(
-      0,
-      (now.getTime() - sessionStart.getTime()) / (1000 * 60 * 60)
-    );
-
-    const previousHours = Number(log.total_hours ?? 0);
-    const hours = Number((previousHours + sessionHours).toFixed(2));
-
-    // Keep the existing half-day rule for short attendance.
-    // If a later session brings total hours to 4.5 or more,
-    // restore "present" unless HR has regularized the record.
-    let status = log.status;
-
-    if (!log.is_regularized) {
-      if (hours < 4.5 && status === "present") {
-        status = "half_day";
-      } else if (hours >= 4.5 && status === "half_day") {
-        status = "present";
-      }
-    }
-
-    const { data: updatedLog, error: updateError } = await supabase
-      .from("attendance_logs")
-      .update({
-        // Preserve the first clock-in and record the latest clock-out.
-        check_out_time: now.toISOString(),
-        session_check_in_time: null,
-        total_hours: hours,
-        status,
-      })
-      .eq("id", log.id)
-      .select()
-      .single();
-
-    if (updateError) throw new Error(updateError.message);
-
-    return updatedLog as AttendanceLog;
+  if (error) {
+    throw new Error(`Clock-in failed: ${error.message}`);
   }
+
+  return data as AttendanceLog;
+}
+
+
+static async clockOut(employeeId: string): Promise<AttendanceLog> {
+  const supabase = await createAdminClient();
+  const now = new Date();
+
+  // Get today's date in India Standard Time
+  const dateParts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+
+  const year = dateParts.find((part) => part.type === "year")?.value;
+  const month = dateParts.find((part) => part.type === "month")?.value;
+  const day = dateParts.find((part) => part.type === "day")?.value;
+
+  if (!year || !month || !day) {
+    throw new Error("Unable to determine today's attendance date.");
+  }
+
+  const todayStr = `${year}-${month}-${day}`;
+
+  // Get employee
+  const employee = await this.getEmployeeById(employeeId);
+
+  if (!employee) {
+    throw new Error("Employee not found.");
+  }
+
+  // Find today's attendance record
+  const {
+    data: log,
+    error: findError,
+  } = await supabase
+    .from("attendance_logs")
+    .select("*")
+    .eq("employee_id", employee.id)
+    .eq("attendance_date", todayStr)
+    .maybeSingle();
+
+  if (findError) {
+    throw new Error(
+      `Unable to retrieve attendance: ${findError.message}`
+    );
+  }
+
+  if (!log) {
+    throw new Error("You are not checked in.");
+  }
+
+  // Prevent duplicate clock-out
+  if (log.check_out_time != null) {
+    throw new Error("You are not currently checked in.");
+  }
+
+  // Get current session start time
+  // Fallback supports older attendance records
+  const sessionStartValue =
+    log.session_check_in_time ?? log.check_in_time;
+
+  if (!sessionStartValue) {
+    throw new Error("Check-in time is missing.");
+  }
+
+  const sessionStart = new Date(sessionStartValue);
+
+  if (Number.isNaN(sessionStart.getTime())) {
+    throw new Error("Invalid check-in time.");
+  }
+
+  // Calculate current session hours
+  const sessionHours = Math.max(
+    0,
+    (now.getTime() - sessionStart.getTime()) /
+      (1000 * 60 * 60)
+  );
+
+  // Add previously accumulated session hours
+  const previousHours = Number(log.total_hours ?? 0);
+
+  const hours = Number(
+    (previousHours + sessionHours).toFixed(2)
+  );
+
+  // Preserve existing half-day calculation
+  let status = log.status;
+
+  if (!log.is_regularized) {
+    if (hours < 4.5 && status === "present") {
+      status = "half_day";
+    } else if (hours >= 4.5 && status === "half_day") {
+      status = "present";
+    }
+  }
+
+  // Update attendance record
+  const {
+    data: updatedLog,
+    error: updateError,
+  } = await supabase
+    .from("attendance_logs")
+    .update({
+      // Preserve first clock-in
+      check_in_time: log.check_in_time ?? sessionStartValue,
+
+      // Record latest clock-out
+      check_out_time: now.toISOString(),
+
+      // Clear active session
+      session_check_in_time: null,
+
+      total_hours: hours,
+      status,
+    })
+    .eq("id", log.id)
+    .select()
+    .single();
+
+  if (updateError) {
+    throw new Error(`Clock-out failed: ${updateError.message}`);
+  }
+
+  return updatedLog as AttendanceLog;
+}
 
 
   // ==========================================
@@ -1736,84 +1822,51 @@ export class DataStore {
   // ==========================================
   // LEAVE MANAGEMENT
   // ==========================================
-  static async getLeaveTypes(): Promise<LeaveType[]> {
-    const cache = getCache();
+static async getLeaveTypes(): Promise<LeaveType[]> {
+  const cache = getCache();
 
-    try {
-      const supabase = await createAdminClient();
+  try {
+    const supabase = await createAdminClient();
 
-      const { data, error } = await supabase
-        .from("leave_types")
-        .select("*")
-        .in("code", ["CL", "SL"])
-        .eq("is_active", true)
-        .order("name");
+    const { data, error } = await supabase
+      .from("leave_types")
+      .select("*")
+      .in("code", ["CL", "SL", "EL", "LOP", "ML", "PL"])
+      .eq("is_active", true)
+      .order("name");
 
-      if (error) {
-        throw error;
-      }
-
-      // Existing DB leave types already have real UUIDs.
-      if (data && data.length > 0) {
-        cache.leaveTypes = data as LeaveType[];
-        return cache.leaveTypes;
-      }
-
-      // No CL/SL records exist, so create them.
-      const defaults = [
-        {
-          name: "Casual Leave",
-          code: "CL",
-          annual_quota: 12,
-          is_paid: true,
-          is_active: true,
-          description: "For personal emergencies and errands",
-        },
-        {
-          name: "Sick Leave",
-          code: "SL",
-          annual_quota: 10,
-          is_paid: true,
-          is_active: true,
-          description: "For medical recovery with prescription",
-        },
-      ];
-
-      const { data: created, error: insertError } = await supabase
-        .from("leave_types")
-        .insert(defaults)
-        .select("*");
-
-      if (insertError) {
-        throw insertError;
-      }
-
-      if (!created || created.length === 0) {
-        throw new Error("Leave types were not created");
-      }
-
-      // IMPORTANT:
-      // Use the UUIDs generated by Supabase.
-      cache.leaveTypes = created as LeaveType[];
-
-      return cache.leaveTypes;
-    } catch (error) {
-      console.error("getLeaveTypes failed:", error);
-
-      /*
-      * Do NOT return DEFAULT_LEAVE_TYPES here because their IDs
-      * are "lt-cl" and "lt-sl", which are not valid UUIDs.
-      *
-      * Returning them could cause:
-      * invalid input syntax for type uuid: "lt-cl"
-      */
-      throw new Error(
-        error instanceof Error
-          ? error.message
-          : "Failed to load leave types"
-      );
+    if (error) {
+      throw error;
     }
+
+    console.log(
+      "ACTIVE LEAVE TYPES:",
+      data?.map((type) => ({
+        id: type.id,
+        name: type.name,
+        code: type.code,
+        is_active: type.is_active,
+      }))
+    );
+
+    if (data && data.length > 0) {
+      cache.leaveTypes = data as LeaveType[];
+      return cache.leaveTypes;
+    }
+
+    throw new Error(
+      "No active leave types found. Please check the leave_types table in Supabase."
+    );
+  } catch (error) {
+    console.error("getLeaveTypes failed:", error);
+
+    throw new Error(
+      error instanceof Error
+        ? error.message
+        : "Failed to load leave types"
+    );
   }
+}
 
 
   static async updateLeaveType(
@@ -1934,119 +1987,257 @@ export class DataStore {
     return updatedLeaveType as LeaveType;
   }
 
-  static async getLeaveBalances(
-      employeeId: string,
-      year: number = new Date().getFullYear()
-    ): Promise<EmployeeLeaveBalance[]> {
-      const cache = getCache();
+static async getLeaveBalances(
+  employeeId: string,
+  year: number = new Date().getFullYear()
+): Promise<EmployeeLeaveBalance[]> {
+  const cache = getCache();
 
-      const employee = await this.getEmployeeById(employeeId);
+  const employee = await this.getEmployeeById(employeeId);
+  if (!employee) return [];
 
-      if (!employee) {
-        return [];
-      }
+  const supabase = await createAdminClient();
+  const employeeUuid = employee.id;
 
-      const employeeUuid = employee.id;
+  const joiningDateString = employee.joining_date
+    ? String(employee.joining_date).split("T")[0]
+    : "";
 
-      const supabase = await createAdminClient();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(joiningDateString)) {
+    throw new Error("Employee joining date is missing or invalid.");
+  }
 
-      // Get existing balances from Supabase
-      const { data: dbBalances, error } = await supabase
-        .from("employee_leave_balances")
-        .select("*,leave_type:leave_types(*)")
-        .eq("employee_id", employeeUuid)
-        .eq("year", year);
+  const joiningDate = new Date(`${joiningDateString}T00:00:00`);
 
-      if (error) {
-        throw new Error(error.message);
-      }
+  if (Number.isNaN(joiningDate.getTime())) {
+    throw new Error("Employee joining date is missing or invalid.");
+  }
 
-      let balances: EmployeeLeaveBalance[] = (dbBalances || [])
-        .filter(
-          (balance: any) =>
-            balance.leave_type?.is_active &&
-            (balance.leave_type?.code === "CL" ||
-              balance.leave_type?.code === "SL")
-        )
-        .map((balance: any) => ({
-          ...balance,
-          leave_type: balance.leave_type,
-        })) as EmployeeLeaveBalance[];
+  const joiningYear = joiningDate.getFullYear();
+  const joiningMonth = joiningDate.getMonth();
+  const joiningDay = joiningDate.getDate();
 
-      const activeLeaveTypes = (await this.getLeaveTypes()).filter(
-        (lt) =>
-          lt.is_active &&
-          (lt.code === "CL" || lt.code === "SL")
-      );
+  // Fetch active standard and gender-specific leave types.
+  const leaveTypes = (await this.getLeaveTypes()).filter((type) => {
+    const code = String(type.code ?? "").trim().toUpperCase();
 
-      const existingBalanceTypeIds = new Set(
-        balances.map((balance) => balance.leave_type_id)
-      );
+    return (
+      type.is_active &&
+      ["CL", "SL", "EL", "ML", "PL"].includes(code)
+    );
+  });
 
-      const missingLeaveTypes = activeLeaveTypes.filter(
-        (lt) => !existingBalanceTypeIds.has(lt.id)
-      );
+  if (year < joiningYear) {
+    return leaveTypes.map((leaveType) => ({
+      id: `${employeeUuid}-${leaveType.id}-${year}`,
+      employee_id: employeeUuid,
+      leave_type_id: leaveType.id,
+      year,
+      allocated_days: 0,
+      used_days: 0,
+      balance_days: 0,
+      leave_type: leaveType,
+    } as EmployeeLeaveBalance));
+  }
 
-      const rows = missingLeaveTypes.map((lt) => ({
-        employee_id: employeeUuid,
-        leave_type_id: lt.id,
-        year,
-        allocated_days: lt.annual_quota,
-        used_days: 0,
-        balance_days: lt.annual_quota,
-      }));
+  // Fetch approved leave requests.
+  const { data: requests, error } = await supabase
+    .from("leave_requests")
+    .select(
+      "employee_id, leave_type_id, start_date, end_date, total_days, status"
+    )
+    .eq("employee_id", employeeUuid)
+    .eq("status", "approved")
+    .gte("end_date", `${joiningYear}-01-01`)
+    .lte("start_date", `${year}-12-31`);
 
-      if (rows.length > 0) {
-        const { data: createdBalances, error: insertError } = await supabase
-          .from("employee_leave_balances")
-          .upsert(rows, {
-            onConflict: "employee_id,leave_type_id,year",
-          })
-          .select();
+  if (error) {
+    throw new Error(error.message);
+  }
 
-        if (insertError) {
-          throw new Error(insertError.message);
-        }
+  type LeaveRequest = {
+    employee_id: string;
+    leave_type_id: string;
+    start_date: string;
+    end_date: string;
+    total_days: number | string | null;
+    status: string;
+  };
 
-        const createdWithLeaveTypes = (createdBalances || []).map(
-          (balance: any) => ({
-            ...balance,
-            leave_type: activeLeaveTypes.find(
-              (lt) => lt.id === balance.leave_type_id
-            ),
-          })
-        );
+  const approvedRequests = (requests ?? []) as LeaveRequest[];
 
-        balances = [
-          ...balances,
-          ...createdWithLeaveTypes,
-        ] as EmployeeLeaveBalance[];
-      }
+  // CL and SL accrue monthly from the month after joining.
+  // Joining after the 25th defers the first credit by one more month.
+  const getAnnualCredits = (selectedYear: number): number => {
+    if (selectedYear < joiningYear) return 0;
+    if (selectedYear > joiningYear) return 12;
 
-      // Add leave type information
-      balances = balances.map((balance: any) => ({
-        ...balance,
-        leave_type:
-          balance.leave_type ||
-          activeLeaveTypes.find(
-            (lt) => lt.id === balance.leave_type_id
-          ),
-      }));
+    const firstCreditMonth =
+      joiningMonth + (joiningDay > 25 ? 2 : 1);
 
-      // Keep cache synchronized
-      cache.leaveBalances = [
-        ...cache.leaveBalances.filter(
-          (b) =>
-            !(
-              b.employee_id === employeeUuid &&
-              b.year === year
-            )
-        ),
-        ...balances,
-      ];
+    return Math.max(0, 12 - firstCreditMonth);
+  };
 
-      return balances;
-    }
+  // Calculate leave used within a selected year.
+  const getDaysInPeriod = (
+    request: LeaveRequest,
+    periodStart: Date,
+    periodEnd: Date
+  ): number => {
+    const start = new Date(`${request.start_date}T00:00:00`);
+    const end = new Date(`${request.end_date}T00:00:00`);
+
+    if (
+      Number.isNaN(start.getTime()) ||
+      Number.isNaN(end.getTime()) ||
+      end < start
+    ) {
+      return 0;
+    }
+
+    const overlapStart = Math.max(
+      start.getTime(),
+      periodStart.getTime()
+    );
+
+    const overlapEnd = Math.min(
+      end.getTime(),
+      periodEnd.getTime()
+    );
+
+    if (overlapEnd < overlapStart) return 0;
+
+    const totalCalendarDays =
+      Math.floor((end.getTime() - start.getTime()) / 86400000) + 1;
+
+    const overlappingDays =
+      Math.floor((overlapEnd - overlapStart) / 86400000) + 1;
+
+    const totalDays = Number(request.total_days ?? 0);
+
+    if (totalCalendarDays <= 0 || totalDays <= 0) return 0;
+
+    return (totalDays * overlappingDays) / totalCalendarDays;
+  };
+
+  const getYearlyUsedDays = (
+    leaveTypeId: string,
+    selectedYear: number
+  ): number => {
+    const periodStart = new Date(selectedYear, 0, 1, 0, 0, 0, 0);
+    const periodEnd = new Date(
+      selectedYear,
+      11,
+      31,
+      23,
+      59,
+      59,
+      999
+    );
+
+    return approvedRequests
+      .filter(
+        (request) =>
+          String(request.leave_type_id) === String(leaveTypeId)
+      )
+      .reduce(
+        (total, request) =>
+          total + getDaysInPeriod(request, periodStart, periodEnd),
+        0
+      );
+  };
+
+  const balances: EmployeeLeaveBalance[] = [];
+
+  for (const leaveType of leaveTypes) {
+    const code = String(leaveType.code ?? "").trim().toUpperCase();
+
+    const usedDays = getYearlyUsedDays(leaveType.id, year);
+
+    let annualEntitlement = 0;
+    let balanceDays = 0;
+
+    if (code === "CL") {
+      annualEntitlement = getAnnualCredits(year);
+
+      balanceDays = Math.max(
+        0,
+        annualEntitlement - usedDays
+      );
+    } else if (code === "SL") {
+      annualEntitlement = getAnnualCredits(year);
+
+      balanceDays = Math.max(
+        0,
+        annualEntitlement - usedDays
+      );
+    } else if (code === "EL") {
+      annualEntitlement = Math.max(
+        0,
+        Number(leaveType.annual_quota ?? 0)
+      );
+
+      balanceDays = Math.max(
+        0,
+        annualEntitlement - usedDays
+      );
+    } else if (code === "ML") {
+      annualEntitlement = Math.max(
+        0,
+        Number(leaveType.annual_quota ?? 0)
+      );
+
+      balanceDays = Math.max(
+        0,
+        annualEntitlement - usedDays
+      );
+    } else if (code === "PL") {
+      annualEntitlement = Math.max(
+        0,
+        Number(leaveType.annual_quota ?? 0)
+      );
+
+      balanceDays = Math.max(
+        0,
+        annualEntitlement - usedDays
+      );
+    }
+
+    const existing = cache.leaveBalances.find(
+      (balance) =>
+        balance.employee_id === employeeUuid &&
+        balance.leave_type_id === leaveType.id &&
+        balance.year === year
+    );
+
+    balances.push({
+      ...(existing ?? {
+        id: `${employeeUuid}-${leaveType.id}-${year}`,
+      }),
+      employee_id: employeeUuid,
+      leave_type_id: leaveType.id,
+      year,
+      allocated_days: annualEntitlement,
+      used_days: Number(usedDays.toFixed(2)),
+      balance_days: Number(balanceDays.toFixed(2)),
+      leave_type: leaveType,
+    } as EmployeeLeaveBalance);
+  }
+
+  // Update cache.
+  cache.leaveBalances = [
+    ...cache.leaveBalances.filter(
+      (balance) =>
+        !(
+          balance.employee_id === employeeUuid &&
+          balance.year === year
+        )
+    ),
+    ...balances,
+  ];
+
+  return balances;
+}
 
   static async getLeaveRequests(employeeId?: string): Promise<LeaveRequest[]> {
     const cache = getCache();
@@ -2080,7 +2271,9 @@ export class DataStore {
             first_name,
             last_name,
             profile_photo_url
-        )`)
+          ),
+          leave_type:leave_types (*)
+        `)
         .order("created_at", { ascending: false });
 
       if (employeeUuid) {
@@ -2103,83 +2296,194 @@ export class DataStore {
     return requests;
   }
 
-  static async createLeaveRequest({
-    employeeId,
-    leaveTypeId,
-    startDate,
-    endDate,
-    totalDays,
-    isHalfDay = false,
-    reason,
-  }: {
-    employeeId: string;
-    leaveTypeId: string;
-    startDate: string;
-    endDate: string;
-    totalDays: number;
-    isHalfDay?: boolean;
-    reason: string;
-  }): Promise<LeaveRequest> {
-    const cache = getCache();
-    const supabase = await createAdminClient();
+ static async createLeaveRequest({
+  employeeId,
+  leaveTypeId,
+  startDate,
+  endDate,
+  totalDays,
+  isHalfDay = false,
+  reason,
+  supportingDocumentUrl,
+  leaveDuration,
+  leaveDurationUnit,
+}: {
+  employeeId: string;
+  leaveTypeId: string;
+  startDate: string;
+  endDate: string;
+  totalDays: number;
+  isHalfDay?: boolean;
+  reason: string;
+  supportingDocumentUrl?: string;
+  leaveDuration?: number;
+  leaveDurationUnit?: "days";
+}): Promise<LeaveRequest> {
+  const cache = getCache();
+  const supabase = await createAdminClient();
 
-    const employee = await this.getEmployeeById(employeeId);
+  const employee = await this.getEmployeeById(employeeId);
 
-    if (!employee) {
-      throw new Error("Employee not found");
-    }
+  if (!employee) {
+    throw new Error("Employee not found");
+  }
 
-    const employeeUuid = employee.id;
+  const supabaseEmployeeId = employee.id;
 
-    const { data: leaveType, error: leaveTypeError } = await supabase
+  const { data: leaveType, error: leaveTypeError } = await supabase
     .from("leave_types")
     .select("*")
     .eq("id", leaveTypeId)
     .maybeSingle();
 
-    if (leaveTypeError) {
-      throw new Error(leaveTypeError.message);
-    }
-    if (!leaveType ||  !leaveType.is_active ||  (leaveType.code !== "CL" && leaveType.code !== "SL")) {
-      throw new Error("Only CL and SL leave types are allowed");
-    }
-
-    const newRequest: LeaveRequest = {
-      id: "lr-" + Date.now(),
-      employee_id: employeeUuid,
-      leave_type_id: leaveTypeId,
-      start_date: startDate,
-      end_date: endDate,
-      total_days: totalDays,
-      is_half_day: isHalfDay,
-      reason,
-      status: "pending",
-      created_at: new Date().toISOString(),
-      employee: employee || undefined,
-      leave_type: leaveType,
-    };
-
-    const { data, error } = await supabase
-      .from("leave_requests")
-      .insert({
-        employee_id: employeeUuid,
-        leave_type_id: leaveTypeId,
-        start_date: startDate,
-        end_date: endDate,
-        total_days: totalDays,
-        is_half_day: isHalfDay,
-        reason,
-        status: "pending",
-      })
-      .select("*, employee:employees(*), leave_type:leave_types(*)")
-      .single();
-    if (error) throw error;
-    if (!data) throw new Error("Leave request was not returned after insert");
-    const createdRequest = data as LeaveRequest;
-
-    cache.leaveRequests.unshift(createdRequest);
-    return data as LeaveRequest;
+  if (leaveTypeError) {
+    throw new Error(leaveTypeError.message);
   }
+
+  const allowedLeaveCodes = ["CL", "SL", "EL", "LOP", "ML", "PL"];
+
+  if (
+    !leaveType ||
+    !leaveType.is_active ||
+    !allowedLeaveCodes.includes(leaveType.code)
+  ) {
+    throw new Error("Invalid or inactive leave type");
+  }
+
+  const code = String(leaveType.code).toUpperCase();
+
+  if (
+    !startDate ||
+    !endDate ||
+    Number.isNaN(Date.parse(startDate)) ||
+    Number.isNaN(Date.parse(endDate)) ||
+    endDate < startDate
+  ) {
+    throw new Error("Please provide valid leave dates");
+  }
+
+  if (!reason?.trim()) {
+    throw new Error("Please provide a reason for leave");
+  }
+
+  let validatedTotalDays = totalDays;
+  const duration = leaveDuration ?? null;
+  const durationUnit = leaveDurationUnit ?? null;
+
+  // Special leave validation
+  if (code === "ML" || code === "PL") {
+    const gender = String(
+      (employee as { gender?: string }).gender ?? ""
+    )
+      .trim()
+      .toLowerCase();
+
+    if (code === "ML" && !["female", "f"].includes(gender)) {
+      throw new Error(
+        "Maternity Leave is available only for female employees"
+      );
+    }
+
+    if (code === "PL" && !["male", "m"].includes(gender)) {
+      throw new Error(
+        "Paternity Leave is available only for male employees"
+      );
+    }
+
+    if (!supportingDocumentUrl?.trim()) {
+      throw new Error(
+        "Please upload the supporting document before applying"
+      );
+    }
+
+    if (!Number.isInteger(duration)) {
+      throw new Error("Please select a valid leave duration");
+    }
+
+    const start = new Date(`${startDate}T00:00:00.000Z`);
+    const suppliedEnd = new Date(`${endDate}T00:00:00.000Z`);
+
+    const expectedEnd = new Date(start);
+
+    if (code === "ML") {
+      if (durationUnit !== "days" || duration !== 182) {
+        throw new Error(
+          "Maternity Leave duration must be 26 weeks (182 days)"
+        );
+      }
+
+      expectedEnd.setUTCDate(
+        expectedEnd.getUTCDate() + duration - 1
+      );
+    } else {
+      if (
+        durationUnit !== "days" ||
+        ![2, 7, 14, 21, 28].includes(duration!)
+      ) {
+        throw new Error(
+          "Paternity Leave duration must be 2 days, 1, 2, 3, or 4 weeks"
+        );
+      }
+
+      expectedEnd.setUTCDate(
+        expectedEnd.getUTCDate() + duration! - 1
+      );
+    }
+
+    const expectedEndString = expectedEnd.toISOString().slice(0, 10);
+
+    if (suppliedEnd.toISOString().slice(0, 10) !== expectedEndString) {
+      throw new Error(
+        `End date does not match the selected leave duration. Expected ${expectedEndString}`
+      );
+    }
+
+    // Special leave durations are calendar days, including weekends.
+    validatedTotalDays =
+      Math.round(
+        (expectedEnd.getTime() - start.getTime()) /
+          (24 * 60 * 60 * 1000)
+      ) + 1;
+  }
+
+  const insertPayload: Record<string, unknown> = {
+    employee_id: supabaseEmployeeId,
+    leave_type_id: leaveTypeId,
+    start_date: startDate,
+    end_date: endDate,
+    total_days: validatedTotalDays,
+    is_half_day: isHalfDay,
+    reason: reason.trim(),
+    status: "pending",
+  };
+
+  if (code === "ML" || code === "PL") {
+    insertPayload.supporting_document_url =
+      supportingDocumentUrl!.trim();
+    insertPayload.leave_duration = duration;
+    insertPayload.leave_duration_unit = durationUnit;
+  }
+
+  const { data, error } = await supabase
+    .from("leave_requests")
+    .insert(insertPayload)
+    .select("*, employee:employees(*), leave_type:leave_types(*)")
+    .single();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  if (!data) {
+    throw new Error("Leave request was not returned after insert");
+  }
+
+  const createdRequest = data as LeaveRequest;
+
+  cache.leaveRequests.unshift(createdRequest);
+
+  return createdRequest;
+}
 
   static async reviewLeaveRequest({
     requestId,

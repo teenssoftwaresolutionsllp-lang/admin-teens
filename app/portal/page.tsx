@@ -1,240 +1,444 @@
+
 import { createClient } from "@/lib/supabase-server";
 import { DataStore } from "@/lib/data-store";
-import ProfileProgressBar from "@/components/portal/ProfileProgressBar";
 import ClockInWidget from "@/components/portal/ClockInWidget";
-import AttendanceCalendar from "@/components/portal/AttendanceCalendar";
 import Link from "next/link";
-import { Calendar, FileText, ArrowRight, Globe, AlertCircle, Briefcase } from "lucide-react";
+import {
+  CalendarDays,
+  CalendarCheck,
+  CalendarPlus,
+  Clock,
+  FileText,
+  UserRoundPen,
+  Bell,
+  PartyPopper,
+  Calendar,
+  ArrowRight,
+  Sun,
+} from "lucide-react";
+
+export const dynamic = "force-dynamic";
 
 export default async function EmployeePortalPage() {
   const supabase = await createClient();
+
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Find employee corresponding to this user
   let employee = null;
+
   if (user) {
     employee = await DataStore.getEmployeeByUserId(user.id);
   }
 
-  // Fallback to sample employee if not linked yet
   if (!employee) {
     const all = await DataStore.getEmployees();
     employee = all.find((e) => e.email === user?.email) || all[0] || null;
   }
 
   const employeeId = employee?.id;
-  const todayAttendance = employeeId ? await DataStore.getTodayAttendance(employeeId):null;
-  const attendanceLogs = employeeId ? await DataStore.getAttendanceLogs(employeeId):[];
-  const leaveRequests = employeeId ? await DataStore.getLeaveRequests(employeeId): [];
-  const leaveBalances = employeeId ? await DataStore.getLeaveBalances(employeeId):[];
-  const payslips = employeeId ? await DataStore.getPayslips(employeeId):[] ;
-  const latestPayslip = payslips[0] || null;
-  const project = employee?.project || (await DataStore.getProjects())[0];
+
+  const todayAttendance = employeeId
+    ? await DataStore.getTodayAttendance(employeeId)
+    : null;
+
+  const attendanceLogs = employeeId
+    ? await DataStore.getAttendanceLogs(employeeId)
+    : [];
+
+  const leaveRequests = employeeId
+    ? await DataStore.getLeaveRequests(employeeId)
+    : [];
+
+  const leaveBalances = employeeId
+    ? await DataStore.getLeaveBalances(employeeId)
+    : [];
+
+  const projects = await DataStore.getProjects();
+
+  const project =
+    employee?.project ||
+    projects.find((p) => p.id === employee?.project_id) ||
+    projects[0] ||
+    null;
+
+  const now = new Date();
+  const currentMonth = now.getMonth();
+  const currentYear = now.getFullYear();
+
+  const presentThisMonth = attendanceLogs.filter((item: any) => {
+    const rawDate =
+      item.attendance_date || item.date || item.created_at;
+
+    if (!rawDate) return false;
+
+    const date = new Date(rawDate);
+
+    return (
+      !Number.isNaN(date.getTime()) &&
+      date.getMonth() === currentMonth &&
+      date.getFullYear() === currentYear &&
+      ["present", "half_day"].includes(
+        String(item.status || "").toLowerCase()
+      )
+    );
+  }).length;
+
+  const remainingLeaves = leaveBalances
+    .filter((item) =>
+      ["CL", "SL"].includes(
+        String(item.leave_type?.code ?? "").trim().toUpperCase()
+      )
+    )
+    .reduce((total, item) => {
+      const availableDays = Number(item.balance_days) || 0;
+      const annualAllocation = Number(item.allocated_days) || 0;
+
+      return total + Math.min(availableDays, annualAllocation);
+    }, 0);
+
+  const pendingRequests = leaveRequests.filter((item: any) =>
+    ["pending", "submitted", "under_review"].includes(
+      String(item.status || "").toLowerCase()
+    )
+  ).length;
+
+  const holidays = [
+    {
+      name: "Diwali",
+      date: "08 November 2026",
+      day: "Sunday",
+    },
+  ];
+
+  const shiftStart = project?.shift_start_time || "09:00";
+  const shiftEnd = project?.shift_end_time || "18:00";
+
+  const formatShiftTime = (time: string) => {
+    if (!time) return "--";
+
+    const [hours, minutes] = time.split(":");
+    const hour = Number(hours);
+
+    if (Number.isNaN(hour)) return time;
+
+    const period = hour >= 12 ? "PM" : "AM";
+    const formattedHour = hour % 12 || 12;
+
+    return `${String(formattedHour).padStart(2, "0")}:${minutes || "00"} ${period}`;
+  };
+
+  const gracePeriod =
+    (project as any)?.grace_period_minutes ??
+    (project as any)?.grace_period ??
+    30;
+
+  const cardClass =
+    "rounded-2xl border border-slate-100 bg-white shadow-[0_3px_14px_rgba(15,23,42,0.04)]";
+
+  const actionClass =
+    "group flex min-h-[105px] flex-col items-center justify-center gap-3 rounded-xl border border-slate-100 bg-slate-50/50 p-3 text-center transition-all duration-200 hover:-translate-y-1 hover:bg-white hover:shadow-md";
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
-      {/* Compact welcome line and primary actions */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-1">
+    <div className="mx-auto max-w-7xl space-y-5 pb-6">
+
+      {/* Compact Welcome */}
+      <div className="flex items-center justify-between rounded-2xl border border-indigo-100 bg-[#f5f5ff] px-5 py-3.5">
         <div>
-          <h1 className="text-xl font-bold text-slate-900 tracking-tight">
-            Welcome back, {employee?.first_name || "Colleague"}
+          <h1 className="text-lg font-bold text-slate-800">
+            Good Morning, {employee?.first_name || "Employee"}!
           </h1>
-          <p className="text-xs text-slate-500 mt-1">
-            {employee?.designation || "Software Engineer"} &bull; ID:{" "}
-            <span className="font-mono font-medium text-slate-700">{employee?.employee_id || "TSS001"}</span>
-            {" "}&bull; {employee?.employment_type || "Full-time"}
+
+          <p className="mt-1 text-xs text-slate-500">
+            Welcome back! Here's your overview for today.
+          </p>
+
+          <p className="mt-1 text-[11px] text-indigo-500">
+            {employee?.designation || "Employee"}
+            {employee?.employee_id
+              ? ` • ID: ${employee.employee_id}`
+              : ""}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Link href="/portal/profile" className="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg shadow-sm transition-colors">
-            View My Profile
-          </Link>
-          <Link href="/portal/leaves" className="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg shadow-sm transition-colors">
-            Apply Leave
-          </Link>
+
+        <div className="rounded-xl bg-white p-3 text-indigo-500 shadow-sm">
+          <Sun className="h-6 w-6" />
         </div>
       </div>
-      
 
-      {/* Attendance calendar replaces the large welcome card */}
-      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_430px] gap-5 items-stretch">
-        <AttendanceCalendar
-          logs={attendanceLogs}
-          leaveRequests={leaveRequests}
-          year={new Date().getFullYear()}
-          month={new Date().getMonth()}
-        />
-        <ClockInWidget employeeId={employeeId} initialLog={todayAttendance} project={project} compact />
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+
+        {/* Present */}
+        <div className={`${cardClass} overflow-hidden`}>
+          <div className="flex items-center justify-between p-4">
+            <div>
+              <p className="text-xs font-medium text-slate-500">
+                Present This Month
+              </p>
+              <p className="mt-2 text-3xl font-bold text-slate-800">
+                {presentThisMonth}
+              </p>
+              <p className="mt-1 text-[11px] text-emerald-600">
+                Attendance days
+              </p>
+            </div>
+
+            <div className="rounded-2xl bg-[#e8f8ef] p-3 text-emerald-600">
+              <CalendarCheck className="h-6 w-6" />
+            </div>
+          </div>
+          <div className="h-1 bg-emerald-100" />
+        </div>
+
+        {/* Holidays */}
+        <div className={`${cardClass} overflow-hidden`}>
+          <div className="flex items-center justify-between p-4">
+            <div>
+              <p className="text-xs font-medium text-slate-500">
+                Upcoming Holidays
+              </p>
+              <p className="mt-2 text-3xl font-bold text-slate-800">
+                {holidays.length}
+              </p>
+              <p className="mt-1 text-[11px] text-violet-600">
+                Upcoming dates
+              </p>
+            </div>
+
+            <div className="rounded-2xl bg-[#f2edff] p-3 text-violet-600">
+              <CalendarDays className="h-6 w-6" />
+            </div>
+          </div>
+          <div className="h-1 bg-violet-100" />
+        </div>
+
+        {/* Leaves */}
+        <div className={`${cardClass} overflow-hidden`}>
+          <div className="flex items-center justify-between p-4">
+            <div>
+              <p className="text-xs font-medium text-slate-500">
+                Remaining Leaves
+              </p>
+              <p className="mt-2 text-3xl font-bold text-slate-800">
+                {remainingLeaves}
+              </p>
+              <p className="mt-1 text-[11px] text-sky-600">
+                Available balance
+              </p>
+            </div>
+
+            <div className="rounded-2xl bg-[#eaf5ff] p-3 text-sky-600">
+              <Calendar className="h-6 w-6" />
+            </div>
+          </div>
+          <div className="h-1 bg-sky-100" />
+        </div>
+
+        {/* Requests */}
+        <div className={`${cardClass} overflow-hidden`}>
+          <div className="flex items-center justify-between p-4">
+            <div>
+              <p className="text-xs font-medium text-slate-500">
+                Pending Requests
+              </p>
+              <p className="mt-2 text-3xl font-bold text-slate-800">
+                {pendingRequests}
+              </p>
+              <p className="mt-1 text-[11px] text-orange-600">
+                Awaiting approval
+              </p>
+            </div>
+
+            <div className="rounded-2xl bg-[#fff3e6] p-3 text-orange-500">
+              <Bell className="h-6 w-6" />
+            </div>
+          </div>
+          <div className="h-1 bg-orange-100" />
+        </div>
       </div>
 
-      {/* 1. Dynamic Profile Completion Bar (Turns full green at 100%) */}
-      <ProfileProgressBar employee={employee} />
+      {/* Attendance, Schedule and Quick Actions */}
+      <div className="grid grid-cols-1 items-stretch gap-4 xl:grid-cols-3">
 
-      {/* 2. Grid: Attendance Punch + Leave Balance + Project Timezone */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Leave Balances Card */}
-        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
-              <div className="flex items-center gap-2">
-                <div className="p-2 bg-emerald-50 text-emerald-600 rounded-lg">
-                  <Calendar className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-slate-900 text-sm">Leave Balances (2026)</h3>
-                  <p className="text-xs text-slate-500">Allocated by HR Policy</p>
-                </div>
-              </div>
-              <Link
-                href="/portal/leaves"
-                className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold"
-              >
-                View History
-              </Link>
+        {/* Today's Attendance */}
+        <section className={cardClass}>
+          <div className="flex items-center justify-between border-b border-slate-100 px-4 py-4">
+            <div>
+              <h2 className="text-sm font-bold text-slate-800">
+                Today's Attendance
+              </h2>
+              <p className="mt-1 text-[11px] text-slate-400">
+                Daily login and logout
+              </p>
             </div>
 
-            <div className="grid grid-cols-3 gap-3">
-              {leaveBalances
-                .filter((b) => b.leave_type?.code !== "LOP")
-                .map((b) => (
-                  <div
-                    key={b.id}
-                    className="bg-slate-50 border border-slate-100 rounded-lg p-3 text-center"
-                  >
-                    <span className="text-[11px] font-bold text-slate-500 block uppercase">
-                      {b.leave_type?.code}
-                    </span>
-                    <span className="text-xl font-bold text-slate-900 block my-1">
-                      {b.balance_days}
-                    </span>
-                    <span className="text-[10px] text-slate-400 block">
-                      of {b.allocated_days} days
-                    </span>
-                  </div>
-                ))}
-            </div>
-
-            <div className="mt-4 p-3 bg-amber-50 rounded-lg border border-amber-200 flex items-start gap-2 text-xs text-amber-800">
-              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-              <span>
-                <strong>Note on Unpaid Leaves:</strong> Any leaves beyond balance or marked as
-                Loss of Pay (LOP) will automatically deduct your per-day salary in the monthly payslip.
-              </span>
+            <div className="rounded-xl bg-[#e8f8ef] p-2.5 text-emerald-600">
+              <Clock className="h-5 w-5" />
             </div>
           </div>
 
-          <div className="mt-4 pt-3 border-t border-slate-100">
-            <Link
-              href="/portal/leaves"
-              className="w-full flex items-center justify-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-800 py-1"
-            >
-              <span>Apply for Planned or Sick Leave</span>
-              <ArrowRight className="w-3.5 h-3.5" />
+          <div className="p-4">
+            {employeeId ? (
+              <ClockInWidget
+                employeeId={employeeId}
+                initialLog={todayAttendance}
+                project={project}
+                compact
+              />
+            ) : (
+              <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-700">
+                Employee account is not linked. Please contact HR.
+              </p>
+            )}
+          </div>
+        </section>
+
+        {/* Work Schedule */}
+        <section className={cardClass}>
+          <div className="flex items-center justify-between border-b border-slate-100 px-4 py-4">
+            <div>
+              <h2 className="text-sm font-bold text-slate-800">
+                Work Schedule
+              </h2>
+              <p className="mt-1 text-[11px] text-slate-400">
+                Your assigned working hours
+              </p>
+            </div>
+
+            <div className="rounded-xl bg-[#eaf5ff] p-2.5 text-sky-600">
+              <CalendarDays className="h-5 w-5" />
+            </div>
+          </div>
+
+          <div className="space-y-4 p-4">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-slate-500">
+                Working Days
+              </span>
+              <span className="rounded-lg bg-sky-50 px-3 py-1.5 text-xs font-semibold text-sky-600">
+                Monday – Friday
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-slate-500">
+                Login Time
+              </span>
+              <span className="text-xs font-semibold text-emerald-600">
+                {formatShiftTime(shiftStart)}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-slate-500">
+                Logout Time
+              </span>
+              <span className="text-xs font-semibold text-rose-500">
+                {formatShiftTime(shiftEnd)}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between border-t border-slate-100 pt-3">
+              <span className="text-xs text-slate-500">
+                Grace Period
+              </span>
+              <span className="rounded-lg bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-600">
+                {gracePeriod} Minutes
+              </span>
+            </div>
+          </div>
+        </section>
+
+        {/* Quick Actions */}
+        <section className={cardClass}>
+          <div className="flex items-center justify-between border-b border-slate-100 px-4 py-4">
+            <div>
+              <h2 className="text-sm font-bold text-slate-800">
+                Quick Actions
+              </h2>
+              <p className="mt-1 text-[11px] text-slate-400">
+                Quickly access your services
+              </p>
+            </div>
+
+            <div className="rounded-xl bg-[#f2edff] p-2.5 text-violet-600">
+              <ArrowRight className="h-5 w-5" />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 p-4">
+            <Link href="/portal/leaves" className={actionClass}>
+              <span className="rounded-xl bg-[#e8f8ef] p-3 text-emerald-600 group-hover:bg-emerald-100">
+                <CalendarPlus className="h-5 w-5" />
+              </span>
+              <span className="text-xs font-semibold text-slate-600">
+                Apply Leave
+              </span>
+            </Link>
+
+            <Link href="/portal/payslips" className={actionClass}>
+              <span className="rounded-xl bg-[#fff0f0] p-3 text-rose-500 group-hover:bg-rose-100">
+                <FileText className="h-5 w-5" />
+              </span>
+              <span className="text-xs font-semibold text-slate-600">
+                View Payslip
+              </span>
+            </Link>
+
+            <Link href="/portal/profile" className={actionClass}>
+              <span className="rounded-xl bg-[#eaf5ff] p-3 text-sky-600 group-hover:bg-sky-100">
+                <UserRoundPen className="h-5 w-5" />
+              </span>
+              <span className="text-xs font-semibold text-slate-600">
+                Update Profile
+              </span>
+            </Link>
+
+            <Link href="/portal/attendance" className={actionClass}>
+              <span className="rounded-xl bg-[#e8f8f5] p-3 text-teal-600 group-hover:bg-teal-100">
+                <CalendarCheck className="h-5 w-5" />
+              </span>
+              <span className="text-xs font-semibold text-slate-600">
+                Attendance
+              </span>
             </Link>
           </div>
-        </div>
-
-        {/* Project, Timezone & Country Calendar Widget */}
-        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
-              <div className="flex items-center gap-2">
-                <div className="p-2 bg-purple-50 text-purple-600 rounded-lg">
-                  <Globe className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-slate-900 text-sm">Assigned Project & Calendar</h3>
-                  <p className="text-xs text-slate-500">Timeline & Country Holidays</p>
-                </div>
-              </div>
-              <span className="text-[10px] font-bold px-2 py-0.5 bg-purple-100 text-purple-800 rounded-full">
-                {project.client_country}
-              </span>
-            </div>
-
-            <div className="space-y-3 text-xs">
-              <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
-                <div className="flex items-center gap-1.5 text-slate-500 mb-1">
-                  <Briefcase className="w-3.5 h-3.5 text-slate-400" />
-                  <span className="font-medium">Active Project:</span>
-                </div>
-                <p className="text-sm font-bold text-slate-900">{project.name}</p>
-                <p className="text-slate-500 text-[11px] mt-0.5">
-                  Timezone: {project.timezone} &bull; Shift: {project.shift_start_time} -{" "}
-                  {project.shift_end_time}
-                </p>
-              </div>
-
-              <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
-                <span className="text-slate-500 font-medium block mb-1">
-                  Upcoming Country Holiday:
-                </span>
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-slate-800">Gandhi Jayanti</span>
-                  <span className="text-slate-500 text-[11px] font-mono">2026-10-02</span>
-                </div>
-                <span className="text-[10px] text-slate-400 block mt-1">
-                  (Based on {project.client_country} project holiday calendar)
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-4 pt-3 border-t border-slate-100 text-center">
-            <span className="text-[11px] text-slate-500 font-medium">
-              Teams on different timelines follow assigned country holiday calendars.
-            </span>
-          </div>
-        </div>
+        </section>
       </div>
 
-      {/* 3. Latest Payslip Snapshot Banner */}
-      <div className="bg-gradient-to-r from-slate-900 to-indigo-950 rounded-xl p-6 text-white shadow-md flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div className="flex items-center gap-4">
-          <div className="p-3 bg-white/10 rounded-xl shrink-0">
-            <FileText className="w-7 h-7 text-indigo-300" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h3 className="text-lg font-bold text-white">
-                Latest Payslip: {latestPayslip?.month_name || "Current Month"}{" "}
-                {latestPayslip?.payroll_year || 2026}
-              </h3>
-              <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full">
-                {latestPayslip?.payment_status || "Processed"}
-              </span>
+      {/* Upcoming Holiday */}
+      <section className="rounded-2xl border border-[#eee8ff] bg-[#faf8ff] px-5 py-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="rounded-xl bg-white p-3 text-violet-500 shadow-sm">
+              <PartyPopper className="h-5 w-5" />
             </div>
-            <p className="text-xs text-slate-300 mt-1">
-              Monthly CTC: ₹{(latestPayslip?.gross_salary || employee?.salary || 75000).toLocaleString("en-IN")}{" "}
-              {latestPayslip && latestPayslip.lop_days > 0 && (
-                <span className="text-amber-300 font-semibold ml-1">
-                  &bull; {latestPayslip.lop_days} day(s) LOP deduction (-₹
-                  {latestPayslip.lop_deduction.toLocaleString("en-IN")})
-                </span>
-              )}
+
+            <div>
+              <h2 className="text-sm font-bold text-slate-800">
+                Upcoming Holiday
+              </h2>
+              <p className="text-[11px] text-slate-400">
+                {project?.client_country
+                  ? `Holiday calendar • ${project.client_country}`
+                  : "Holiday calendar"}
+              </p>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-[#eee8ff] bg-white px-4 py-3">
+            <p className="text-xs font-bold text-violet-600">
+              {holidays[0].name}
+            </p>
+            <p className="mt-1 text-[11px] text-slate-500">
+              {holidays[0].date} • {holidays[0].day}
             </p>
           </div>
         </div>
+      </section>
 
-        <div className="flex items-center gap-6">
-          <div className="text-right">
-            <span className="text-xs text-slate-400 block">Take-Home Net Salary</span>
-            <span className="text-2xl font-bold font-mono text-emerald-400">
-              ₹{(latestPayslip?.net_salary || 64800).toLocaleString("en-IN")}
-            </span>
-          </div>
-
-          <Link
-            href="/portal/payslips"
-            className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-white text-slate-900 hover:bg-slate-100 rounded-lg font-semibold text-xs transition-colors shrink-0 shadow-sm"
-          >
-            <span>View & Download</span>
-            <ArrowRight className="w-4 h-4" />
-          </Link>
-        </div>
-      </div>
     </div>
   );
 }

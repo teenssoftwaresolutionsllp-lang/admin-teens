@@ -272,7 +272,7 @@ export interface AttendanceRegularization {
 export interface LeaveType {
   id: string;
   name: string;
-  code: string; // CL, SL, EL, LOP
+  code: string; // CL, SL, EL, ML, PL
   annual_quota: number;
   is_paid: boolean;
   is_active: boolean;
@@ -307,7 +307,6 @@ export interface LeaveRequest {
   leave_type?: LeaveType;
   employee?: Employee;
 }
-
 export type SalaryComponentType = 'earning' | 'deduction';
 export type CalculationType = 'fixed' | 'percentage_of_basic' | 'percentage_of_gross';
 

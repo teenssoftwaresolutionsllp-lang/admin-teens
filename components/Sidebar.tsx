@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import Image from "next/image";
 
@@ -19,9 +19,7 @@ import {
   LogOut,
   PanelLeftClose,
   PanelLeftOpen,
-  UploadCloud,
   Award,
-  Loader2,
   ShieldCheck,
 } from "lucide-react";
 
@@ -30,28 +28,16 @@ import { UserRole } from "@/lib/types";
 interface SidebarProps {
   role: UserRole;
   currentPath?: string;
-  avatarUrl?: string | null;
-}
-
-interface PhotoApiResponse {
-  success?: boolean;
-  avatarUrl?: string | null;
-  error?: string;
-  message?: string;
 }
 
 export default function Sidebar({
   role,
-  avatarUrl,
 }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [profileImage, setProfileImage] = useState<string | null>(
-    avatarUrl || null
-  );
-  const [uploading, setUploading] = useState(false);
 
   // SIDEBAR COLLAPSE STATE
   useEffect(() => {
@@ -77,125 +63,6 @@ export default function Sidebar({
     });
   };
 
-  // Keep the client avatar synchronized with server-provided profile data.
-  useEffect(() => {
-    if (avatarUrl === undefined) return;
-
-    setProfileImage(avatarUrl || null);
-
-    try {
-      if (avatarUrl) {
-        window.localStorage.setItem("profile-avatar-url", avatarUrl);
-      } else {
-        window.localStorage.removeItem("profile-avatar-url");
-      }
-    } catch (error) {
-      console.error("Unable to synchronize profile photo:", error);
-    }
-  }, [avatarUrl]);
-
-  // Fetch the persisted photo so cleared or updated photos stay in sync.
-  useEffect(() => {
-    if (role !== "employee") return;
-
-    let cancelled = false;
-
-    const loadProfilePhoto = async () => {
-      try {
-        const response = await fetch("/api/profile/photo", {
-          method: "GET",
-          credentials: "include",
-          cache: "no-store",
-          headers: {
-            Accept: "application/json",
-          },
-        });
-
-        if (!response.ok) {
-          console.error(
-            "Unable to load profile photo:",
-            response.status
-          );
-          return;
-        }
-
-        const data: PhotoApiResponse = await response.json();
-
-        if (cancelled) return;
-
-        if (data.avatarUrl) {
-          setProfileImage(data.avatarUrl);
-
-          try {
-            window.localStorage.setItem(
-              "profile-avatar-url",
-              data.avatarUrl
-            );
-          } catch (error) {
-            console.error("Unable to save profile photo locally:", error);
-          }
-        } else {
-          setProfileImage(null);
-
-          try {
-            window.localStorage.removeItem("profile-avatar-url");
-          } catch (error) {
-            console.error("Unable to clear old profile photo:", error);
-          }
-        }
-      } catch (error) {
-        console.error("Failed to load profile photo:", error);
-      }
-    };
-
-    void loadProfilePhoto();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [role]);
-
-  // Listen to both events used by the profile-photo upload surfaces.
-  useEffect(() => {
-    const handlePhotoUpdate = (event: Event) => {
-      const customEvent = event as CustomEvent<{
-        avatarUrl?: string | null;
-      }>;
-
-      const newAvatar = customEvent.detail?.avatarUrl;
-
-      if (!newAvatar) return;
-
-      setProfileImage(newAvatar);
-
-      try {
-        window.localStorage.setItem(
-          "profile-avatar-url",
-          newAvatar
-        );
-      } catch (error) {
-        console.error("Unable to save updated profile photo:", error);
-      }
-    };
-
-    window.addEventListener("profile-photo-updated", handlePhotoUpdate);
-    window.addEventListener(
-      "employee-profile-photo-updated",
-      handlePhotoUpdate
-    );
-
-    return () => {
-      window.removeEventListener(
-        "profile-photo-updated",
-        handlePhotoUpdate
-      );
-      window.removeEventListener(
-        "employee-profile-photo-updated",
-        handlePhotoUpdate
-      );
-    };
-  }, []);
-
   // LOGOUT
   const handleLogout = async () => {
     try {
@@ -210,7 +77,6 @@ export default function Sidebar({
         console.error("Unable to clear local profile photo:", error);
       }
 
-      setProfileImage(null);
       router.push("/login");
       router.refresh();
     } catch (error) {
@@ -218,133 +84,10 @@ export default function Sidebar({
     }
   };
 
-  // PARSE UPLOAD RESPONSE SAFELY
-  const parseUploadResponse = async (
-    response: Response
-  ): Promise<PhotoApiResponse> => {
-    const responseText = await response.text();
-
-    if (!responseText) return {};
-
-    try {
-      return JSON.parse(responseText) as PhotoApiResponse;
-    } catch {
-      return {
-        error: responseText || "Invalid server response.",
-      };
-    }
-  };
-
-  // PROFILE PHOTO UPLOAD
-  const handlePhotoUpload = async (
-    event: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    const file = event.target.files?.[0];
-
-    if (!file) return;
-
-    if (!file.type.startsWith("image/")) {
-      alert("Please select an image file.");
-      event.target.value = "";
-      return;
-    }
-
-    const maxSize = 5 * 1024 * 1024;
-
-    if (file.size > maxSize) {
-      alert("Image size must be less than 5 MB.");
-      event.target.value = "";
-      return;
-    }
-
-    let localPreview: string | null = null;
-    const previousImage = profileImage;
-
-    try {
-      setUploading(true);
-
-      // SHOW PREVIEW WHILE UPLOADING
-      localPreview = URL.createObjectURL(file);
-      setProfileImage(localPreview);
-
-      const formData = new FormData();
-      formData.append("file", file);
-
-      const response = await fetch("/api/profile/photo", {
-        method: "POST",
-        body: formData,
-        credentials: "include",
-      });
-
-      const data = await parseUploadResponse(response);
-
-      if (!response.ok) {
-        throw new Error(
-          data.error ||
-            data.message ||
-            `Photo upload failed (${response.status}).`
-        );
-      }
-
-      const newAvatarUrl =
-        typeof data.avatarUrl === "string" ? data.avatarUrl : null;
-
-      if (!newAvatarUrl) {
-        throw new Error(
-          "Photo uploaded, but the server did not return a photo URL."
-        );
-      }
-
-      // UPDATE SIDEBAR WITH SAVED CLOUDINARY URL
-      setProfileImage(newAvatarUrl);
-
-      try {
-        window.localStorage.setItem(
-          "profile-avatar-url",
-          newAvatarUrl
-        );
-      } catch (error) {
-        console.error("Unable to save photo locally:", error);
-      }
-
-      // NOTIFY OTHER COMPONENTS
-      window.dispatchEvent(
-        new CustomEvent("profile-photo-updated", {
-          detail: { avatarUrl: newAvatarUrl },
-        })
-      );
-
-      window.dispatchEvent(
-        new CustomEvent("employee-profile-photo-updated", {
-          detail: { avatarUrl: newAvatarUrl },
-        })
-      );
-
-      router.refresh();
-    } catch (error) {
-      console.error("Photo upload failed:", error);
-
-      setProfileImage(previousImage || null);
-
-      alert(
-        error instanceof Error
-          ? error.message
-          : "Failed to upload photo."
-      );
-    } finally {
-      if (localPreview) {
-        URL.revokeObjectURL(localPreview);
-      }
-
-      setUploading(false);
-      event.target.value = "";
-    }
-  };
-
   // ADMIN NAVIGATION
   const adminNavItems = [
     {
-      name: "Overview",
+      name: "Dashboard",
       href: "/dashboard",
       icon: LayoutDashboard,
       roles: ["ceo", "hr"],
@@ -401,6 +144,12 @@ export default function Sidebar({
 
   // EMPLOYEE NAVIGATION
   const employeeNavItems = [
+     {
+      name: "Dashboard",
+      href: "/portal",
+      icon: UserCheck,
+      roles: ["employee"],
+    },
     {
       name: "My Profile",
       href: "/portal/profile",
@@ -408,9 +157,21 @@ export default function Sidebar({
       roles: ["employee"],
     },
     {
-      name: "My Attendance & Leaves",
+      name: "Attendance",
       href: "/portal/attendance",
       icon: Clock,
+      roles: ["employee"],
+    },
+    {
+      name: "My Leaves",
+      href: "/portal/leaves",
+      icon: CalendarDays,
+      roles: ["employee"],
+    },
+    {
+      name: "Apply Leave",
+      href: "/portal/leaves?view=apply",
+      icon: CalendarDays,
       roles: ["employee"],
     },
     {
@@ -450,9 +211,23 @@ export default function Sidebar({
   // ACTIVE NAVIGATION
   const activeItem = visibleItems
     .filter(
-      (item) =>
-        pathname === item.href ||
-        pathname.startsWith(`${item.href}/`)
+      (item) => {
+        if (item.href.startsWith("/portal/leaves")) {
+          const isApplyPage = item.href.includes("view=apply");
+
+          return (
+            pathname === "/portal/leaves" &&
+            (isApplyPage
+              ? searchParams.get("view") === "apply"
+              : searchParams.get("view") !== "apply")
+          );
+        }
+
+        return (
+          pathname === item.href ||
+          pathname.startsWith(`${item.href}/`)
+        );
+      }
     )
     .sort((a, b) => b.href.length - a.href.length)[0];
 
@@ -495,75 +270,6 @@ export default function Sidebar({
 
       {/* CONTENT */}
       <div className="flex-1 px-3 py-4 overflow-y-auto">
-        {/* PHOTO UPLOAD */}
-        {role === "employee" && (
-          <div className="mb-5">
-            <input
-              id="sidebar-photo-upload"
-              type="file"
-              accept="image/jpeg,image/jpg,image/png,image/webp"
-              className="hidden"
-              onChange={handlePhotoUpload}
-              disabled={uploading}
-            />
-
-            <label
-              htmlFor="sidebar-photo-upload"
-              title={isCollapsed ? "Upload Photo" : undefined}
-              className={`group relative flex items-center justify-center overflow-hidden rounded-xl border border-indigo-500/70 bg-slate-800/80 hover:bg-slate-800 hover:border-indigo-400 cursor-pointer transition-all duration-200 ${
-                isCollapsed
-                  ? "mx-auto h-12 w-12"
-                  : "mx-auto h-[88px] w-[88px]"
-              } ${uploading ? "pointer-events-none opacity-80" : ""}`}
-            >
-              {profileImage ? (
-                <Image
-                  src={profileImage}
-                  alt="Profile"
-                  fill
-                  sizes="88px"
-                  className="object-cover"
-                  unoptimized
-                />
-              ) : (
-                <div className="flex flex-col items-center justify-center gap-1.5">
-                  {uploading ? (
-                    <Loader2 className="h-7 w-7 text-indigo-300 animate-spin" />
-                  ) : (
-                    <UploadCloud
-                      className={`text-indigo-300 group-hover:text-white transition-colors ${
-                        isCollapsed ? "h-5 w-5" : "h-7 w-7"
-                      }`}
-                    />
-                  )}
-
-                  {!isCollapsed && !uploading && (
-                    <span className="text-[10px] font-semibold text-slate-200 group-hover:text-white">
-                      Upload Photo
-                    </span>
-                  )}
-
-                  {uploading && !isCollapsed && (
-                    <span className="text-[10px] font-semibold text-slate-200">
-                      Uploading...
-                    </span>
-                  )}
-                </div>
-              )}
-
-              {profileImage && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity">
-                  {uploading ? (
-                    <Loader2 className="h-6 w-6 text-white animate-spin" />
-                  ) : (
-                    <UploadCloud className="h-6 w-6 text-white" />
-                  )}
-                </div>
-              )}
-            </label>
-          </div>
-        )}
-
         {/* NAVIGATION */}
         <div className="space-y-1">
           {visibleItems.map((item) => {

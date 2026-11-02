@@ -36,6 +36,28 @@ export async function GET() {
       );
     }
 
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    if (profileError || !profile) {
+      return NextResponse.json(
+        { error: 'Unable to verify user permissions.' },
+        { status: 403 },
+      );
+    }
+
+    const role = String(profile.role ?? '').trim().toLowerCase();
+
+    if (!['hr', 'ceo'].includes(role)) {
+      return NextResponse.json(
+        { error: 'Only HR and CEO can view profile change requests.' },
+        { status: 403 },
+      );
+    }
+
     const requests = await DataStore.getProfileChangeRequests();
     return NextResponse.json(requests);
   } catch (error: any) {
@@ -95,6 +117,20 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { error: 'Invalid sensitiveDocumentIds.' },
         { status: 400 },
+      );
+    }
+
+    const employeeRecord =
+      (await DataStore.getEmployeeByUserId(user.id)) ??
+      (user.email ? await DataStore.getEmployeeByEmail(user.email) : null);
+
+    if (
+      !employeeRecord ||
+      String(employeeRecord.id) !== String(employeeId)
+    ) {
+      return NextResponse.json(
+        { error: 'The profile change request does not match your employee account.' },
+        { status: 403 },
       );
     }
 

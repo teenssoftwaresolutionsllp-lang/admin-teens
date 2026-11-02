@@ -12,7 +12,6 @@ import {
   AttendanceLog,
   AttendanceRegularization,
   Employee,
-  EmployeeLeaveBalance,
   LeaveRequest,
   LeaveType,
   Project,
@@ -22,13 +21,14 @@ import {
   Clock,
   CheckCircle2,
   XCircle,
+  Home,
   FileCheck,
   Loader2,
   Calendar,
   CalendarOff,
-  Plus,
   X,
   AlertCircle,
+  MoreHorizontal,
 } from "lucide-react";
 
 import ClockInWidget from "./ClockInWidget";
@@ -43,7 +43,6 @@ interface EmployeeAttendanceViewProps {
   todayLog: AttendanceLog | null;
   historyLogs: AttendanceLog[];
   regularizations: AttendanceRegularization[];
-  leaveBalances?: EmployeeLeaveBalance[];
   leaveRequests?: LeaveRequest[];
   leaveTypes?: LeaveType[];
   
@@ -456,8 +455,64 @@ function calculateWorkingHours(
   return `${hours}h ${minutes}m`;
 }
 
+function formatTotalHours(totalHours: number | null) {
+  if (totalHours === null || !Number.isFinite(totalHours)) {
+    return "--";
+  }
+
+  const totalMinutes = Math.round(totalHours * 60);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+
+  return `${hours}h ${String(minutes).padStart(2, "0")}m`;
+}
+
+function getAttendanceMode(log: AttendanceLog): string {
+  if (isWorkFromHome(log)) {
+    return "Work From Home";
+  }
+
+  const values = log as AttendanceLog & Record<string, unknown>;
+  const mode = [
+    values.work_mode,
+    values.work_location,
+    values.location_mode,
+    values.attendance_mode,
+    values.mode,
+  ].find((value) => typeof value === "string" && value.trim());
+
+  if (typeof mode === "string") {
+    return mode.trim().replaceAll("_", " ");
+  }
+
+  return normalizeAttendanceStatus(log.status) === "work_from_home"
+    ? "Work From Home"
+    : "—";
+}
+
+function isWorkFromHome(log: AttendanceLog): boolean {
+  const values = log as AttendanceLog & Record<string, unknown>;
+  const mode = [
+    values.work_mode,
+    values.work_location,
+    values.location_mode,
+    values.attendance_mode,
+    values.mode,
+    log.status,
+  ]
+    .filter((value): value is string => typeof value === "string")
+    .join(" ")
+    .toLowerCase()
+    .replaceAll("-", "_")
+    .replaceAll(" ", "_");
+
+  return ["work_from_home", "wfh", "remote", "home"].some((value) =>
+    mode.includes(value)
+  );
+}
+
 /* ============================================================
-   LEAVE BALANCE HELPERS
+   LEAVE TYPE HELPERS
 ============================================================ */
 
 function getLeaveTypeCode(
@@ -478,27 +533,6 @@ function getLeaveTypeCode(
   )
     .trim()
     .toUpperCase();
-}
-
-function getBalanceValue(
-  balance: any
-) {
-  const value =
-    balance?.balance_days ??
-    balance?.balanceDays ??
-    balance?.available ??
-    balance?.available_days ??
-    balance?.availableDays ??
-    balance?.remaining ??
-    balance?.remaining_days ??
-    balance?.remainingDays ??
-    0;
-
-  const number = Number(value);
-
-  return Number.isFinite(number)
-    ? number
-    : 0;
 }
 
 /* ============================================================
@@ -527,55 +561,6 @@ function getLeaveRequestStatus(
     .trim()
     .toLowerCase()
     .replace(/[\s-]+/g, "_");
-}
-
-function getLeaveRequestDays(
-  request: any
-) {
-  const isHalfDay =
-    request?.is_half_day ??
-    request?.isHalfDay ??
-    false;
-
-  if (Boolean(isHalfDay)) {
-    return 0.5;
-  }
-
-  const totalDays =
-    request?.total_days ??
-    request?.totalDays ??
-    request?.days ??
-    0;
-
-  const days = Number(
-    totalDays
-  );
-
-  if (
-    Number.isFinite(days) &&
-    days > 0
-  ) {
-    return days;
-  }
-
-  const startDate =
-    request?.start_date ??
-    request?.startDate ??
-    "";
-
-  const endDate =
-    request?.end_date ??
-    request?.endDate ??
-    "";
-
-  if (startDate && endDate) {
-    return calculateDaysBetween(
-      String(startDate).slice(0, 10),
-      String(endDate).slice(0, 10)
-    );
-  }
-
-  return 0;
 }
 
 /* ============================================================
@@ -615,7 +600,6 @@ export default function EmployeeAttendanceView({
   todayLog,
   historyLogs,
   regularizations,
-  leaveBalances: initialLeaveBalances = [],
   leaveRequests: initialLeaveRequests = [],
   leaveTypes: initialLeaveTypes = [],
 }: EmployeeAttendanceViewProps) {
@@ -629,6 +613,9 @@ export default function EmployeeAttendanceView({
 
   const [selectedCalendarMonth, setSelectedCalendarMonth] =
     useState(() => new Date().getMonth());
+
+  const [showAllAttendanceLogs, setShowAllAttendanceLogs] =
+    useState(false);
 
   const [
     currentTodayLog,
@@ -661,13 +648,6 @@ export default function EmployeeAttendanceView({
     setLeaveRequests,
   ] = useState<LeaveRequest[]>(
     initialLeaveRequests ?? []
-  );
-
-  const [
-    leaveBalances,
-    setLeaveBalances,
-  ] = useState<EmployeeLeaveBalance[]>(
-    initialLeaveBalances ?? []
   );
 
   const [leaveTypes, setLeaveTypes] =
@@ -789,17 +769,6 @@ export default function EmployeeAttendanceView({
             ? data.requests
             : [];
 
-        const balances =
-          Array.isArray(
-            data?.leaveBalances
-          )
-            ? data.leaveBalances
-            : Array.isArray(
-                data?.balances
-              )
-            ? data.balances
-            : [];
-
         const types =
           Array.isArray(
             data?.leaveTypes
@@ -814,41 +783,7 @@ export default function EmployeeAttendanceView({
         setLeaveRequests(
           requests
         );
-        setLeaveBalances(
-          balances
-        );
         setLeaveTypes(types);
-
-
-        console.log("[Leave Debug] Employee ID:", employee.id);
-
-        console.table(
-          balances.map((item: any) => ({
-            code:
-              item.leave_type?.code ??
-              item.leaveType?.code ??
-              item.leave_type_code ??
-              item.leaveTypeCode ??
-              item.code,
-            name:
-              item.leave_type?.name ??
-              item.leaveType?.name ??
-              item.name,
-            allocated: item.allocated_days,
-            used: item.used_days,
-            balance: item.balance_days,
-            year: item.year,
-          }))
-        );
-
-        console.table(
-          types.map((item: any) => ({
-            code: item.code,
-            name: item.name,
-            annualQuota: item.annual_quota,
-            active: item.is_active,
-          }))
-        );
 
       } catch (error) {
         console.error(
@@ -971,7 +906,11 @@ export default function EmployeeAttendanceView({
 
       if (status === "half_day") return total + 0.5;
 
-      if (status === "present" || Boolean(rawLog.is_late)) {
+      if (
+        status === "present" &&
+        !Boolean(rawLog.is_late) &&
+        !isWorkFromHome(log)
+      ) {
         return total + 1;
       }
 
@@ -1151,82 +1090,88 @@ export default function EmployeeAttendanceView({
   ]);
 
 
-  const leaveCount = useMemo(
-    () => {
-      return leaveRequests.reduce(
-        (
-          total,
-          request: any
-        ) => {
-          const status =
-            getLeaveRequestStatus(
-              request
-            );
-
-          if (
-            status !== "approved"
-          ) {
-            return total;
-          }
-
-          return (
-            total +
-            getLeaveRequestDays(
-              request
-            )
-          );
-        },
-        0
+const selectedMonthLogs = useMemo(
+  () =>
+    logs.filter((log) => {
+      const date = getLogDate(log);
+      return date.startsWith(
+        `${selectedCalendarYear}-${String(
+          selectedCalendarMonth + 1
+        ).padStart(2, "0")}`
       );
-    },
-    [leaveRequests]
-  );
+    }),
+  [logs, selectedCalendarYear, selectedCalendarMonth]
+);
 
+const lateCount = selectedMonthLogs.filter(
+  (log) =>
+    Boolean(log.is_late) ||
+    normalizeAttendanceStatus(log.status) === "late"
+).length;
 
+const workFromHomeCount = selectedMonthLogs.filter(isWorkFromHome).length;
 
-const getRemainingLeave = (code: "CL" | "SL"): number => {
-  const balance = leaveBalances.find(
-    (item: any) =>
-      String(
-        item.leave_type?.code ??
-        item.leaveType?.code ??
-        item.leave_type_code ??
-        item.code ??
-        ""
+const totalWorkingDays = useMemo(() => {
+  const holidays = (project.calendar?.holidays || []) as Array<{
+    holiday_date?: string;
+    is_optional?: boolean;
+    is_working_day?: boolean;
+  }>;
+  const joiningDate = employee.joining_date?.slice(0, 10);
+  const firstDay =
+    joiningDate?.startsWith(
+      `${selectedCalendarYear}-${String(
+        selectedCalendarMonth + 1
+      ).padStart(2, "0")}`
+    )
+      ? Number(joiningDate.slice(8, 10))
+      : 1;
+  const daysInMonth = new Date(
+    selectedCalendarYear,
+    selectedCalendarMonth + 1,
+    0
+  ).getDate();
+
+  let count = 0;
+
+  for (let day = firstDay; day <= daysInMonth; day++) {
+    const date = `${selectedCalendarYear}-${String(
+      selectedCalendarMonth + 1
+    ).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    const weekday = new Date(
+      selectedCalendarYear,
+      selectedCalendarMonth,
+      day
+    ).getDay();
+    const dateHolidays = holidays.filter(
+      (holiday) => holiday.holiday_date?.slice(0, 10) === date
+    );
+    const isWorkingSaturday =
+      weekday === 6 &&
+      dateHolidays.some((holiday) => holiday.is_working_day === true);
+
+    if (
+      weekday === 0 ||
+      (weekday === 6 && !isWorkingSaturday) ||
+      dateHolidays.some(
+        (holiday) =>
+          holiday.is_working_day !== true &&
+          holiday.is_optional !== true
       )
-        .trim()
-        .toUpperCase() === code
-  );
+    ) {
+      continue;
+    }
 
-  if (balance) {
-    const remaining = Number(balance.balance_days ?? 0);
-    return Number.isFinite(remaining) ? Math.max(0, remaining) : 0;
+    count++;
   }
 
-  const leaveType = leaveTypes.find(
-    (type: any) =>
-      String(type.code ?? "").trim().toUpperCase() === code
-  );
-
-  const quota = Number(leaveType?.annual_quota ?? 0);
-  return Number.isFinite(quota) ? Math.max(0, quota) : 0;
-};
-
-const sickLeaveRemaining = useMemo(
-  () => getRemainingLeave("SL"),
-  [leaveBalances, leaveTypes]
-);
-
-const casualLeaveRemaining = useMemo(
-  () => getRemainingLeave("CL"),
-  [leaveBalances, leaveTypes]
-);
-
-const leaveBalance = useMemo(
-  () => sickLeaveRemaining + casualLeaveRemaining,
-  [sickLeaveRemaining, casualLeaveRemaining]
-);
-
+  return count;
+}, [
+  employee.joining_date,
+  project.calendar?.holidays,
+  selectedCalendarYear,
+  selectedCalendarMonth,
+]);
 
   const visibleLeaveTypes =
     useMemo(() => {
@@ -1764,7 +1709,13 @@ const leaveBalance = useMemo(
   ============================================================ */
 
   const activeDate =
-    selectedDate || todayString;
+    selectedDate ||
+    (selectedCalendarYear === new Date().getFullYear() &&
+    selectedCalendarMonth === new Date().getMonth()
+      ? todayString
+      : `${selectedCalendarYear}-${String(
+          selectedCalendarMonth + 1
+        ).padStart(2, "0")}-01`);
     
 
   const selectedLog = useMemo(() => {
@@ -1914,41 +1865,55 @@ const leaveBalance = useMemo(
   ============================================================ */
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
 
       {/* HEADER */}
 
-      <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">
-            Attendance & Leaves
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+            Attendance
           </h1>
 
-          <p className="mt-1 text-sm text-slate-500">
-            Manage your attendance, leave requests
-            and attendance regularization.
+          <p className="mt-0.5 text-sm text-slate-500">
+            Track your attendance, work hours and logs.
           </p>
         </div>
 
         <div className="flex flex-wrap gap-3">
-          <button
-            type="button"
-            onClick={
-              openRegularization
-            }
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-          >
-            <FileCheck className="h-4 w-4" />
-            Request Regularization
-          </button>
+          <label className="relative">
+            <span className="sr-only">Select attendance month</span>
+            <Calendar className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+            <input
+              type="month"
+              aria-label="Select attendance month"
+              value={`${selectedCalendarYear}-${String(
+                selectedCalendarMonth + 1
+              ).padStart(2, "0")}`}
+              min={employee.joining_date?.slice(0, 7)}
+              onChange={(event) => {
+                if (!event.target.value) return;
+
+                const [year, month] = event.target.value
+                  .split("-")
+                  .map(Number);
+                setSelectedCalendarYear(year);
+                setSelectedCalendarMonth(month - 1);
+                setSelectedDate(`${event.target.value}-01`);
+                setSelectedAttendance(null);
+                setShowAllAttendanceLogs(false);
+              }}
+              className="w-40 rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-xs font-semibold text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            />
+          </label>
 
           <button
             type="button"
-            onClick={openLeaveModal}
-            className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
+            onClick={openRegularization}
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-xs font-semibold text-white shadow-sm transition hover:bg-blue-700"
           >
-            <Plus className="h-4 w-4" />
-            Apply for Leave
+            <FileCheck className="h-4 w-4" />
+            Regularization Request
           </button>
         </div>
       </div>
@@ -1967,143 +1932,229 @@ const leaveBalance = useMemo(
 
       {/* SUMMARY CARDS */}
 
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 xl:grid-cols-5">
+        {[
+          {
+            label: "Present",
+            value: presentCount,
+            icon: CheckCircle2,
+            border: "border-emerald-100",
+            iconColor: "bg-emerald-50 text-emerald-600",
+          },
+          {
+            label: "Absent",
+            value: absentCount,
+            icon: XCircle,
+            border: "border-rose-100",
+            iconColor: "bg-rose-50 text-rose-600",
+          },
+          {
+            label: "Late",
+            value: lateCount,
+            icon: Clock,
+            border: "border-amber-100",
+            iconColor: "bg-amber-50 text-amber-600",
+          },
+          {
+            label: "Work From Home",
+            value: workFromHomeCount,
+            icon: Home,
+            border: "border-blue-100",
+            iconColor: "bg-blue-50 text-blue-600",
+          },
+          {
+            label: "Total Working Days",
+            value: totalWorkingDays,
+            icon: Calendar,
+            border: "border-purple-100",
+            iconColor: "bg-purple-50 text-purple-600",
+          },
+        ].map((item) => {
+          const Icon = item.icon;
 
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-slate-500">
-              Present
-            </p>
-            <CheckCircle2 className="h-5 w-5 text-emerald-500" />
-          </div>
-
-          <p className="mt-2 text-2xl font-bold text-slate-900">
-            {presentCount}
-          </p>
-        </div>
-
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-slate-500">
-              Absent
-            </p>
-            <XCircle className="h-5 w-5 text-red-500" />
-          </div>
-
-          <p className="mt-2 text-2xl font-bold text-slate-900">
-            {absentCount}
-          </p>
-        </div>
-
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-slate-500">
-              Leave
-            </p>
-            <CalendarOff className="h-5 w-5 text-yellow-500" />
-          </div>
-
-          <p className="mt-2 text-2xl font-bold text-slate-900">
-            {leaveCount}
-          </p>
-        </div>
-
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-slate-500">
-              Yearly Leaves
-            </p>
-
-            <Calendar className="h-5 w-5 text-slate-500" />
-          </div>
-
-          <div className="mt-3 grid grid-cols-2">
-            <div className="text-center">
-              <p className="text-2xl font-bold text-slate-900">
-                {sickLeaveRemaining}
-              </p>
-
-              <p className="mt-1 text-xs font-bold text-slate-600">
-                SL
-              </p>
-
-              <p className="text-[11px] text-slate-400">
-                Sick Leave
-              </p>
-            </div>
-
-            <div className="border-l border-slate-200 text-center">
-              <p className="text-2xl font-bold text-slate-900">
-                {casualLeaveRemaining}
-              </p>
-
-              <p className="mt-1 text-xs font-bold text-slate-600">
-                CL
-              </p>
-
-              <p className="text-[11px] text-slate-400">
-                Casual Leave
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-slate-500">
-              Leave Balance
-            </p>
-
-            <Calendar className="h-5 w-5 text-blue-500" />
-          </div>
-
-          <p className="mt-2 text-2xl font-bold text-slate-900">
-            {leaveBalance}
-          </p>
-
-          <p className="mt-1 text-xs text-slate-400">
-            SL + CL remaining
-          </p>
-        </div>
-
+          return (
+            <section
+              key={item.label}
+              className={`flex min-h-[72px] items-center gap-3 rounded-lg border bg-white px-3 py-2.5 shadow-sm ${item.border}`}
+            >
+              <span className={`shrink-0 rounded-lg p-2 ${item.iconColor}`}>
+                <Icon className="h-5 w-5" />
+              </span>
+              <div className="min-w-0">
+                <p className="truncate text-[11px] font-medium text-slate-500">
+                  {item.label}
+                </p>
+                <p className="mt-0.5 text-lg font-bold leading-5 text-slate-900">
+                  {item.value}
+                  {item.label === "Total Working Days" ? " days" : ""}
+                </p>
+              </div>
+            </section>
+          );
+        })}
       </div>
 
       {/* CALENDAR + CLOCK */}
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <div className="grid grid-cols-1 items-start gap-2.5 xl:grid-cols-[minmax(215px,0.36fr)_minmax(0,1fr)]">
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="mb-4">
-            <h2 className="text-lg font-bold text-slate-900">
-              Attendance Calendar
-            </h2>
-
-            <p className="text-sm text-slate-500">
-              Select a date to view attendance details.
-            </p>
-          </div>
-
+        <div>
           <AttendanceCalendar
             logs={logs}
             leaveRequests={leaveRequests}
+            holidays={project.calendar?.holidays}
             employeeJoiningDate={employee.joining_date}
+            selectedDate={selectedDate}
+            compact
             onDateSelect={handleCalendarDateSelect}
             onSelectedDateChange={(date) => {
               setSelectedDate(date);
-
-              if (!date) {
-                setSelectedAttendance(null);
-              }
+              setSelectedAttendance(null);
             }}
             onMonthChange={(year, month) => {
               setSelectedCalendarYear(year);
               setSelectedCalendarMonth(month);
+              setShowAllAttendanceLogs(false);
             }}
           />
 
         </div>
 
-        <div>
+        <div className="space-y-5">
+          <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">
+                  Attendance Logs
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() =>
+                  setShowAllAttendanceLogs((previous) => !previous)
+                }
+                className="text-xs font-semibold text-blue-600 hover:text-blue-800"
+              >
+                {showAllAttendanceLogs ? "Show Less" : "View All"}
+              </button>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[670px] text-left">
+                <thead className="bg-slate-50 text-[10px] font-semibold text-slate-600">
+                  <tr>
+                    <th className="px-4 py-3">Date</th>
+                    <th className="px-4 py-3">Day</th>
+                    <th className="px-4 py-3">Check In</th>
+                    <th className="px-4 py-3">Check Out</th>
+                    <th className="px-4 py-3">Work Hours</th>
+                    <th className="px-4 py-3">Location / Mode</th>
+                    <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-xs">
+                  {selectedMonthLogs.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={8}
+                        className="px-4 py-10 text-center text-slate-500"
+                      >
+                        No attendance records for this month.
+                      </td>
+                    </tr>
+                  ) : (
+                    selectedMonthLogs
+                      .slice(
+                        0,
+                        showAllAttendanceLogs
+                          ? selectedMonthLogs.length
+                          : 8
+                      )
+                      .map((log) => {
+                      const date = getLogDate(log);
+                      const status = normalizeAttendanceStatus(log.status);
+                      const isLate =
+                        Boolean(log.is_late) || status === "late";
+                      const workFromHome = isWorkFromHome(log);
+
+                      return (
+                        <tr key={log.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
+                          <td className="whitespace-nowrap px-4 py-2.5 font-medium text-slate-800">
+                            {formatDateForDisplay(date)}
+                          </td>
+                          <td className="whitespace-nowrap px-4 py-2.5 text-slate-600">
+                            {new Date(`${date}T00:00:00`).toLocaleDateString(
+                              "en-US",
+                              { weekday: "short" }
+                            )}
+                          </td>
+                          <td className="whitespace-nowrap px-4 py-2.5 text-slate-600">
+                            {formatAttendanceTime(log.check_in_time)}
+                          </td>
+                          <td className="whitespace-nowrap px-4 py-2.5 text-slate-600">
+                            {formatAttendanceTime(log.check_out_time)}
+                          </td>
+                          <td className="whitespace-nowrap px-4 py-2.5 font-medium text-slate-700">
+                            {log.total_hours !== null &&
+                            log.total_hours !== undefined
+                              ? formatTotalHours(log.total_hours)
+                              : calculateWorkingHours(
+                                  log.check_in_time,
+                                  log.check_out_time
+                                )}
+                          </td>
+                          <td className="whitespace-nowrap px-4 py-2.5 text-slate-600">
+                            {getAttendanceMode(log)}
+                          </td>
+                          <td className="px-4 py-2.5">
+                            <span
+                              className={`rounded-full px-2.5 py-1 text-[10px] font-semibold capitalize ${
+                                workFromHome
+                                  ? "bg-blue-100 text-blue-800"
+                                  : isLate
+                                  ? "bg-amber-100 text-amber-800"
+                                  : status === "present"
+                                    ? "bg-emerald-100 text-emerald-800"
+                                    : status === "absent"
+                                      ? "bg-rose-100 text-rose-800"
+                                      : "bg-slate-100 text-slate-700"
+                              }`}
+                            >
+                              {workFromHome
+                                ? "Present"
+                                : isLate
+                                  ? "Late"
+                                  : status.replaceAll("_", " ")}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2.5">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedDate(date);
+                                setSelectedAttendance(null);
+                              }}
+                              aria-label={`View attendance for ${date}`}
+                              className="rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-blue-700"
+                            >
+                              <MoreHorizontal className="h-4 w-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          {false && (
+          <details className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+            <summary className="cursor-pointer list-none text-sm font-semibold text-slate-700">
+              Clock In / Out
+            </summary>
+            <div className="mt-3">
           <ClockInWidget
             employeeId={String(
               employee.id
@@ -2199,6 +2250,8 @@ const leaveBalance = useMemo(
               let selectedStatus:
                 | "present"
                 | "half_day"
+                | "late"
+                | "work_from_home"
                 | "leave"
                 | "empty" =
                 "present";
@@ -2209,6 +2262,10 @@ const leaveBalance = useMemo(
               ) {
                 selectedStatus =
                   "half_day";
+              } else if (status === "late") {
+                selectedStatus = "late";
+              } else if (isWorkFromHome(updatedLog)) {
+                selectedStatus = "work_from_home";
               } else if (
                 status ===
                   "on_leave" ||
@@ -2270,8 +2327,72 @@ const leaveBalance = useMemo(
               );
             }}
           />
+            </div>
+          </details>
+          )}
         </div>
       </div>
+
+      {false && (
+      <>
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="mb-4">
+          <h2 className="text-lg font-bold text-slate-900">
+            Attendance Summary
+          </h2>
+          <p className="mt-1 text-sm text-slate-500">
+            {new Date(
+              selectedCalendarYear,
+              selectedCalendarMonth
+            ).toLocaleDateString("en-US", {
+              month: "long",
+              year: "numeric",
+            })}
+          </p>
+        </div>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {[
+            {
+              label: "Working Days",
+              value: totalWorkingDays,
+              color: "text-blue-700",
+              background: "bg-blue-50",
+            },
+            {
+              label: "Present Days",
+              value: presentCount,
+              color: "text-emerald-700",
+              background: "bg-emerald-50",
+            },
+            {
+              label: "Absent Days",
+              value: absentCount,
+              color: "text-rose-700",
+              background: "bg-rose-50",
+            },
+            {
+              label: "Late Days",
+              value: lateCount,
+              color: "text-amber-700",
+              background: "bg-amber-50",
+            },
+          ].map((item) => (
+            <div
+              key={item.label}
+              className="rounded-xl border border-slate-100 p-4"
+            >
+              <span
+                className={`inline-flex rounded-lg px-2.5 py-1 text-xs font-semibold ${item.background} ${item.color}`}
+              >
+                {item.label}
+              </span>
+              <p className="mt-3 text-2xl font-bold text-slate-900">
+                {item.value}
+              </p>
+            </div>
+          ))}
+        </div>
+      </section>
 
       {/* ATTENDANCE DETAILS */}
 
@@ -2370,7 +2491,7 @@ const leaveBalance = useMemo(
                     {selectedAttendance?.date ===
                       activeDate &&
                     selectedAttendance?.worked
-                      ? selectedAttendance.worked
+                      ? selectedAttendance?.worked
                       : calculateWorkingHours(
                           selectedClockIn,
                           selectedClockOut
@@ -2382,7 +2503,7 @@ const leaveBalance = useMemo(
                       {selectedAttendance?.date ===
                         activeDate &&
                       selectedAttendance?.status
-                        ? selectedAttendance.status.replaceAll(
+                        ? selectedAttendance?.status?.replaceAll(
                             "_",
                             " "
                           )
@@ -2803,6 +2924,9 @@ const leaveBalance = useMemo(
 
         </div>
       </div>
+
+      </>
+      )}
 
       {/* ======================================================
           REGULARIZATION POPUP
