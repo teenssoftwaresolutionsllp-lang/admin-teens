@@ -24,6 +24,16 @@ export default function EmployeeDetail({ employee, documents, role }: EmployeeDe
   const [gratuityLoading, setGratuityLoading] = useState(false);
   const [gratuityProcessing, setGratuityProcessing] = useState(false);
   const [gratuityConfirm, setGratuityConfirm] = useState(false);
+  const [resignationDate, setResignationDate] = useState("");
+  const [noticePeriodDays, setNoticePeriodDays] = useState("30");
+
+  const [customNoticeDays, setCustomNoticeDays] = useState("120");
+  const effectiveNoticeDays = noticePeriodDays === "custom" ? Number(customNoticeDays) : Number(noticePeriodDays);
+
+  const [earlyReleaseDate, setEarlyReleaseDate] = useState("");
+  const [earlyReleaseReason, setEarlyReleaseReason] = useState("");
+  const [showEarlyReleaseForm, setShowEarlyReleaseForm] = useState(false);
+  const [showCompleteNoticeConfirm, setShowCompleteNoticeConfirm] = useState(false);
   const [gratuityMessage, setGratuityMessage] = useState<{
     type: "success" | "error";
     message: string;
@@ -110,28 +120,55 @@ export default function EmployeeDetail({ employee, documents, role }: EmployeeDe
     return new Date(dateStr).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
   };
 
+  const calculatePlannedLastWorkingDate = (date: string,days: number) => 
+  {
+    if (!date || !Number.isInteger(days) || days < 1) return "";
+
+    const result = new Date(`${date}T00:00:00`);
+    if (Number.isNaN(result.getTime())) return "";
+
+    result.setDate(result.getDate() + days);
+    return [
+      result.getFullYear(),
+      String(result.getMonth() + 1).padStart(2, "0"),
+      String(result.getDate()).padStart(2, "0"),
+    ].join("-");
+  };
+
+
+
+  const noticeEmployee = employee as Employee & {
+    resignation_date?: string | null;
+    notice_period_days?: number | null;
+    planned_last_working_date?: string | null;
+    notice_status?: string | null;
+    early_release_date?: string | null;
+    early_release_reason?: string | null;
+  };
+
+  const isOnNotice = employee.status?.toLowerCase() === "on_notice" || noticeEmployee.notice_status === "notice_period";
+
+  const plannedLastWorkingDate = noticeEmployee.planned_last_working_date || calculatePlannedLastWorkingDate(
+      noticeEmployee.resignation_date || resignationDate,
+      noticeEmployee.notice_period_days ?? effectiveNoticeDays,
+    );
+
+
+
   const loadGratuity = async () => {
     try {
       setGratuityLoading(true);
-
       const response = await fetch(
         `/api/employees/${employee.id}/gratuity`
       );
-
       const result = await response.json();
-
       if (!response.ok) {
-        throw new Error(
-          result.error || "Failed to load gratuity"
-        );
+        throw new Error(result.error || "Failed to load gratuity");
       }
-
       setGratuity(result);
     } catch (error: any) {
       console.error("Gratuity load error:", error);
-      toast.error(
-        error.message || "Failed to load gratuity"
-      );
+      toast.error(error.message || "Failed to load gratuity");
     } finally {
       setGratuityLoading(false);
     }
@@ -156,6 +193,32 @@ export default function EmployeeDetail({ employee, documents, role }: EmployeeDe
     }
   };
 
+
+  const getLastWorkingDate = (emp: Employee): string | null => {
+    const status = String(emp.status || "")
+      .trim()
+      .toLowerCase()
+      .replace(/[\s-]+/g, "_");
+
+    if (status === "on_notice") {
+      return emp.planned_last_working_date || null;
+    }
+
+    const exitStatuses = [
+      "resigned",
+      "resignation",
+      "terminated",
+      "laid_off",
+    ];
+
+    if (exitStatuses.includes(status)) {
+      return emp.exit_date || emp.planned_last_working_date || null;
+    }
+
+    return null;
+  };
+
+
   const handleConfirmExit = async () => {
     if (!exitAction) return;
 
@@ -169,7 +232,21 @@ export default function EmployeeDetail({ employee, documents, role }: EmployeeDe
       return;
     }
 
-    if (!exitDate) {
+    const isResignation = exitAction === "resigned";
+
+    if (isResignation) {
+      if (!resignationDate) {
+        toast.error("Please select the resignation date");
+        return;
+      }
+
+      const days = effectiveNoticeDays;
+
+      if (!Number.isInteger(days) || days < 1 || days > 365) {
+        toast.error("Notice period must be between 1 and 365 days");
+        return;
+      }
+    } else if (!exitDate) {
       toast.error("Please select the exit date");
       return;
     }
@@ -196,33 +273,70 @@ export default function EmployeeDetail({ employee, documents, role }: EmployeeDe
         throw new Error(uploadError.message);
       }
 
-      const response = await fetch(`/api/employees/${employee.id}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          status: exitAction,
-          exit_reason: exitReason.trim(),
-          exit_document_url: filePath,
-          exit_document_name: exitDocument.name,
-          exit_date: exitDate,
-          temporary_login_days: Number(exitLoginDays),
-        }),
-      });
+      let response: Response;
+
+      if (isResignation) {
+        // Submit a request only. Do not change the employee's status yet.
+        response = await fetch("/api/resignations", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            employee_id: employee.id,
+            resignation_date: resignationDate,
+            notice_period_days: effectiveNoticeDays,
+            planned_last_working_date: calculatePlannedLastWorkingDate(
+              resignationDate,
+              effectiveNoticeDays
+            ),
+            reason: exitReason.trim(),
+            document_url: filePath,
+            document_name: exitDocument.name,
+          }),
+        });
+      } else {
+        // Keep the existing termination / layoff behavior unchanged.
+        response = await fetch(`/api/employees/${employee.id}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            status: exitAction,
+            exit_reason: exitReason.trim(),
+            exit_document_url: filePath,
+            exit_document_name: exitDocument.name,
+            exit_date: exitDate,
+            temporary_login_days: Number(exitLoginDays),
+          }),
+        });
+      }
 
       const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(result.error || "Failed to update employee");
+        throw new Error(
+          result.error ||
+            (isResignation
+              ? "Failed to submit resignation request"
+              : "Failed to update employee")
+        );
       }
 
-      toast.success("Employee exit updated successfully");
+      toast.success(
+        isResignation
+          ? "Resignation submitted for HR approval"
+          : "Employee exit updated successfully"
+      );
 
       setExitAction(null);
       setShowExitMenu(false);
       setExitReason("");
       setExitDate("");
+      setResignationDate("");
+      setNoticePeriodDays("30");
+      setCustomNoticeDays("120");
       setExitDocument(null);
 
       router.refresh();
@@ -234,12 +348,114 @@ export default function EmployeeDetail({ employee, documents, role }: EmployeeDe
     }
   };
 
-const isExitStatus = [
-  "resigned",
-  "laid_off",
-  "terminated",
-  "inactive",
-].includes(employee.status?.toLowerCase());
+
+  const handleEarlyRelease = async () => {
+    if (!earlyReleaseDate) {
+      toast.error("Please select the actual release date");
+      return;
+    }
+
+    if (!earlyReleaseReason.trim()) {
+      toast.error("Early-release reason is required");
+      return;
+    }
+
+    if (!exitLoginDays.trim()) {
+      toast.error("Please enter temporary login access days");
+      return;
+    }
+
+    const loginDays = Number(exitLoginDays);
+
+    if (!Number.isInteger(loginDays) || loginDays < 0 || loginDays > 45) {
+      toast.error("Login access must be between 0 and 45 days");
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+
+      const response = await fetch(`/api/employees/${employee.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: "resigned",
+          notice_status: "early_release",
+          early_release_date: earlyReleaseDate,
+          early_release_reason: earlyReleaseReason.trim(),
+          exit_date: earlyReleaseDate,
+          temporary_login_days: loginDays,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to record early release");
+      }
+
+      toast.success("Early release recorded successfully");
+      setShowEarlyReleaseForm(false);
+      setEarlyReleaseDate("");
+      setEarlyReleaseReason("");
+      router.refresh();
+    } catch (error: any) {
+      toast.error(error.message || "Failed to record early release");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleCompleteNotice = async () => {
+    if (!plannedLastWorkingDate) {
+      toast.error("Planned last working date is missing");
+      return;
+    }
+
+    const loginDays = Number(exitLoginDays);
+
+    if ( !exitLoginDays.trim() || !Number.isInteger(loginDays) || loginDays < 0 || loginDays > 45)
+    {
+      toast.error("Login access must be between 0 and 45 days");
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      const response = await fetch(`/api/employees/${employee.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: "resigned",
+          notice_status: "notice_completed",
+          planned_last_working_date: plannedLastWorkingDate,
+          exit_date: plannedLastWorkingDate,
+          temporary_login_days: loginDays,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to complete notice period");
+      }
+
+      toast.success("Notice period completed successfully");
+      setShowCompleteNoticeConfirm(false);
+      router.refresh();
+    } catch (error: any) {
+      toast.error(error.message || "Failed to complete notice period");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const isExitStatus = [
+    "resigned",
+    "laid_off",
+    "terminated",
+    "inactive",
+  ].includes(employee.status?.toLowerCase());
 
   const tabs = [
     { name: "Personal", icon: User },
@@ -1013,18 +1229,187 @@ const isExitStatus = [
           {/* Delete */}
           {!isExitStatus && activeTab === 8 && (
             <div className="space-y-6">
+              {isOnNotice && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-5 space-y-4">
+                  <div>
+                    <h3 className="text-lg font-bold text-amber-900">
+                      Notice Period
+                    </h3>
+                    <p className="text-sm text-amber-800 mt-1">
+                      This employee is currently serving their notice period.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <DetailTile
+                      label="Resignation Date"
+                      value={formatDate(noticeEmployee.resignation_date)}
+                    />
+                    <DetailTile
+                      label="Notice Duration"
+                      value={
+                        noticeEmployee.notice_period_days
+                          ? `${noticeEmployee.notice_period_days} days`
+                          : "N/A"
+                      }
+                    />
+                    <DetailTile
+                      label="Planned Last Working Day"
+                      value={
+                        plannedLastWorkingDate
+                          ? formatDate(plannedLastWorkingDate)
+                          : "N/A"
+                      }
+                    />
+                  </div>
+
+                  <div className="flex flex-wrap gap-3">
+                    <button
+                      type="button"
+                      disabled={isLoading}
+                      onClick={() => setShowEarlyReleaseForm((value) => !value)}
+                      className="rounded-lg bg-amber-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-amber-700 disabled:opacity-50"
+                    >
+                      Early Release
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={isLoading}
+                      onClick={() => setShowCompleteNoticeConfirm(true)}
+                      className="rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                    >
+                      Complete Notice
+                    </button>
+                  </div>
+
+                  {showEarlyReleaseForm && (
+                    <div className="rounded-lg border border-amber-200 bg-white p-4 space-y-4">
+                      <h4 className="font-bold text-slate-900">
+                        Record Early Release
+                      </h4>
+
+                      <div>
+                        <label className="mb-1 block text-sm font-medium text-slate-700">
+                          Actual Release Date *
+                        </label>
+                        <input
+                          type="date"
+                          value={earlyReleaseDate}
+                          onChange={(e) => setEarlyReleaseDate(e.target.value)}
+                          max={noticeEmployee.planned_last_working_date || undefined}
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="mb-1 block text-sm font-medium text-slate-700">
+                          Reason for Early Release *
+                        </label>
+                        <textarea
+                          value={earlyReleaseReason}
+                          onChange={(e) => setEarlyReleaseReason(e.target.value)}
+                          rows={3}
+                          placeholder="Enter the reason for early release"
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="mb-1 block text-sm font-medium text-slate-700">
+                          Login Access After Exit (0–45 days) *
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          max={45}
+                          value={exitLoginDays}
+                          onChange={(e) => setExitLoginDays(e.target.value)}
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                        />
+                      </div>
+
+                      <div className="flex justify-end gap-3">
+                        <button
+                          type="button"
+                          disabled={isLoading}
+                          onClick={() => setShowEarlyReleaseForm(false)}
+                          className="rounded-lg border border-slate-300 px-4 py-2 text-sm"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isLoading}
+                          onClick={handleEarlyRelease}
+                          className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                        >
+                          {isLoading ? "Processing..." : "Confirm Early Release"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {showCompleteNoticeConfirm && (
+                    <div className="rounded-lg border border-emerald-200 bg-white p-4 space-y-4">
+                      <h4 className="font-bold text-slate-900">
+                        Complete Notice Period
+                      </h4>
+
+                      <p className="text-sm text-slate-600">
+                        The employee's final exit date will be{" "}
+                        <strong>{formatDate(plannedLastWorkingDate)}</strong>.
+                      </p>
+
+                      <div>
+                        <label className="mb-1 block text-sm font-medium text-slate-700">
+                          Login Access After Exit (0–45 days) *
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          max={45}
+                          value={exitLoginDays}
+                          onChange={(e) => setExitLoginDays(e.target.value)}
+                          className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                        />
+                      </div>
+
+                      <div className="flex justify-end gap-3">
+                        <button
+                          type="button"
+                          disabled={isLoading}
+                          onClick={() => setShowCompleteNoticeConfirm(false)}
+                          className="rounded-lg border border-slate-300 px-4 py-2 text-sm"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isLoading}
+                          onClick={handleCompleteNotice}
+                          className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                        >
+                          {isLoading ? "Processing..." : "Confirm Completion"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
               <div>
                 <h3 className="text-sm font-bold text-slate-900 mb-3 uppercase tracking-wider text-center text-slate-400"> Employee Exit </h3>
-
-                <div className="flex justify-center gap-3 mt-4">
-                  <button
-                    type="button"
-                    onClick={() => setShowExitMenu(true)}
-                    className="px-6 py-2.5 rounded-lg bg-[#4F46E5] text-white font-medium hover:bg-[#4338CA] disabled:opacity-50"
-                  >
-                    Employee Exit
-                  </button>
-                </div>
+                {!isOnNotice && (
+                  <div className="flex justify-center gap-3 mt-4">
+                    <button
+                      type="button"
+                      onClick={() => setShowExitMenu(true)}
+                      className="px-6 py-2.5 rounded-lg bg-[#4F46E5] text-white font-medium hover:bg-[#4338CA] disabled:opacity-50"
+                    >
+                      Employee Exit
+                    </button>
+                  </div>
+                )}
               </div>
 
               {showExitMenu && (
@@ -1034,7 +1419,7 @@ const isExitStatus = [
                   </h4>
 
                   <div className="flex justify-center gap-3 mt-4">
-                    <button
+                    {/* <button
                       type="button"
                       onClick={() => {
                         setExitAction("resigned");
@@ -1043,7 +1428,7 @@ const isExitStatus = [
                       className="px-4 py-2 rounded-lg border border-slate-300"
                     >
                       Resign
-                    </button>
+                    </button> */}
 
                     <button
                       type="button"
@@ -1070,135 +1455,64 @@ const isExitStatus = [
                 </div>
               )}
 
-              {exitAction && (
-                <div className="border rounded-xl p-5 bg-white shadow-sm space-y-5">
-                  <h4 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
-                    {exitAction === "resigned"
-                      ? "Resignation Details"
-                      : exitAction === "laid_off"
-                      ? "Lay Off Details"
-                      : "Termination Details"}
-                  </h4>
-
-                  {/* Reason */}
+              {exitAction === "resigned" && (
+                <>
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Reason <span className="text-red-500">*</span>
+                    <label className="mb-2 block text-sm font-medium text-slate-700">
+                      Resignation Date *
                     </label>
-
-                    <textarea
-                      value={exitReason}
-                      onChange={(e) => setExitReason(e.target.value)}
-                      placeholder="Enter reason"
-                      rows={4}
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-red-500"
+                    <input
+                      type="date"
+                      value={resignationDate}
+                      onChange={(e) => setResignationDate(e.target.value)}
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2"
                     />
                   </div>
 
-                  {/* Supporting Document */}
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Supporting Document <span className="text-red-500">*</span>
+                    <label className="mb-2 block text-sm font-medium text-slate-700">
+                      Notice Period *
                     </label>
-
-                    <input
-                      type="file"
-                      onChange={(e) => {
-                        setExitDocument(e.target.files?.[0] || null);
-                      }}
+                    <select
+                      value={noticePeriodDays}
+                      onChange={(e) => setNoticePeriodDays(e.target.value)}
                       className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                    />
+                    >
+                      <option value="30">30 days</option>
+                      <option value="60">60 days</option>
+                      <option value="90">90 days</option>
+                      <option value="custom">Custom</option>
+                    </select>
 
-                    {exitDocument && (
-                      <p className="mt-2 text-sm text-slate-500">
-                        Selected: {exitDocument.name}
-                      </p>
+                    {noticePeriodDays === "custom" && (
+                      <input
+                        type="number"
+                        min={1}
+                        max={365}
+                        placeholder="Enter custom notice period in days"
+                        value={customNoticeDays}
+                        onChange={(e) => setCustomNoticeDays(e.target.value)}
+                        className="mt-3 w-full rounded-lg border border-slate-300 px-3 py-2"
+                      />
                     )}
                   </div>
 
-                  {/* Exit Date */}
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Exit Date <span className="text-red-500">*</span>
+                    <label className="mb-2 block text-sm font-medium text-slate-700">
+                      Planned Last Working Day
                     </label>
-
                     <input
-                      type="date"
-                      value={exitDate}
-                      onChange={(e) => setExitDate(e.target.value)}
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-red-500"
+                      type="text"
+                      readOnly
+                      value={
+                        plannedLastWorkingDate
+                          ? formatDate(plannedLastWorkingDate)
+                          : ""
+                      }
+                      className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
                     />
                   </div>
-                  {/* Login Access Period */}
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Login Access After Exit <span className="text-red-500">*</span>
-                    </label>
-
-                    <div className="flex items-center gap-3">
-                      <input
-                        type="number"
-                        min="0"
-                        max="45"
-                        value={exitLoginDays}
-                        onChange={(e) => {
-                          const value = Number(e.target.value);
-                          if (value > 45) {
-                            setExitLoginDays("45");
-                            return;
-                          }
-                          else if(value < 0){
-                            setExitLoginDays("0");
-                            return;
-                          }
-                          setExitLoginDays(e.target.value);
-                        }}
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-red-500"
-                        placeholder="Enter number of days"
-                      />
-
-                      <span className="text-sm text-slate-500 whitespace-nowrap">
-                        days
-                      </span>
-                    </div>
-                      <p className="mt-1 text-xs text-slate-500">
-                        Maximum login access allowed is 45 days after exit.
-                      </p>
-                  </div>
-                  {/* Confirm */}
-                 <div className="flex justify-end gap-4 mt-4">
-                  <button
-                      type="button"
-                      onClick={() => {
-                        setExitAction(null);
-                        setExitReason("");
-                        setExitDate("");
-                        setExitDocument(null);
-                      }}
-                      disabled={isLoading}
-                      className="px-5 py-2 rounded-lg border border-gray-300 text-gray-700 font-medium hover:bg-gray-50 disabled:opacity-50"
-                    >
-                      Cancle
-                    </button>
-
-                  
-                    <button
-                      type="button"
-                      onClick={handleConfirmExit}
-                      disabled={isLoading}
-                      className="px-6 py-2.5 rounded-lg bg-[#4F46E5] text-white font-medium hover:bg-[#4338CA] disabled:opacity-50"
-                    >
-                      {isLoading
-                        ? "Processing..."
-                        : exitAction === "resigned"
-                        ? "Confirm Resignation"
-                        : exitAction === "laid_off"
-                        ?"Confirm Lay Off"
-                        :"Confirm Termination"
-                      }
-                    </button>
-                  </div>
-                </div>
+                </>
               )}
             </div>
           )}

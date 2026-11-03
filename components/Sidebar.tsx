@@ -1,49 +1,69 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import Image from "next/image";
+import type { ElementType } from "react";
 
 import {
-  LayoutDashboard,
-  Users,
-  UserPlus,
-  CheckSquare,
-  Clock,
-  CalendarDays,
+  Award,
   Banknote,
-  Globe,
-  UserCheck,
+  CalendarCheck,
+  CalendarClock,
+  CalendarDays,
+  CheckSquare,
+  ChevronDown,
+  ChevronRight,
+  Clock,
+  Database,
   FileText,
+  Globe,
+  LayoutDashboard,
+  ListChecks,
   LogOut,
   PanelLeftClose,
   PanelLeftOpen,
-  Award,
   ShieldCheck,
+  UserCheck,
+  UserMinus,
+  UserPlus,
+  UserRound,
+  UserX,
+  Users,
 } from "lucide-react";
 
-import { UserRole } from "@/lib/types";
+import type { UserRole } from "@/lib/types";
+
+type SidebarNavItem = {
+  name: string;
+  href?: string;
+  icon: ElementType;
+  roles: UserRole[];
+  children?: SidebarNavItem[];
+};
 
 interface SidebarProps {
   role: UserRole;
   currentPath?: string;
 }
 
-export default function Sidebar({
-  role,
-}: SidebarProps) {
+export default function Sidebar({ role }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
-
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [openMenus, setOpenMenus] = useState<string[]>([
+    "Employees",
+    "Approval Hub",
+    "Payroll",
+  ]);
 
-  // SIDEBAR COLLAPSE STATE
   useEffect(() => {
     try {
-      const saved = window.localStorage.getItem("sidebar-collapsed");
-      setIsCollapsed(saved === "true");
+      setIsCollapsed(
+        window.localStorage.getItem("sidebar-collapsed") === "true"
+      );
     } catch (error) {
       console.error("Unable to read sidebar state:", error);
     }
@@ -63,13 +83,24 @@ export default function Sidebar({
     });
   };
 
-  // LOGOUT
+  const toggleMenu = (name: string) => {
+    setOpenMenus((previous) =>
+      previous.includes(name)
+        ? previous.filter((item) => item !== name)
+        : [...previous, name]
+    );
+  };
+
   const handleLogout = async () => {
     try {
-      await fetch("/api/auth/logout", {
+      const response = await fetch("/api/auth/logout", {
         method: "POST",
         credentials: "include",
       });
+
+      if (!response.ok) {
+        throw new Error(`Logout failed with status ${response.status}.`);
+      }
 
       try {
         window.localStorage.removeItem("profile-avatar-url");
@@ -84,8 +115,7 @@ export default function Sidebar({
     }
   };
 
-  // ADMIN NAVIGATION
-  const adminNavItems = [
+  const adminNavItems: SidebarNavItem[] = [
     {
       name: "Dashboard",
       href: "/dashboard",
@@ -94,9 +124,59 @@ export default function Sidebar({
     },
     {
       name: "Employees",
-      href: "/dashboard/employees",
       icon: Users,
       roles: ["ceo", "hr"],
+      children: [
+        {
+          name: "All",
+          href: "/dashboard/employees",
+          icon: Users,
+          roles: ["ceo", "hr"],
+        },
+        {
+          name: "Joining",
+          href: "/dashboard/employees?status=joining",
+          icon: UserPlus,
+          roles: ["ceo", "hr"],
+        },
+        {
+          name: "Terminated",
+          href: "/dashboard/employees?status=terminated",
+          icon: UserX,
+          roles: ["ceo", "hr"],
+        },
+        {
+          name: "Layoff",
+          href: "/dashboard/employees?status=laid_off",
+          icon: UserMinus,
+          roles: ["ceo", "hr"],
+        },
+        {
+          name: "Resign",
+          icon: CalendarClock,
+          roles: ["ceo", "hr"],
+          children: [
+            {
+              name: "Notice Period",
+              href: "/dashboard/employees?status=notice_period",
+              icon: Clock,
+              roles: ["ceo", "hr"],
+            },
+            {
+              name: "Notice Completed",
+              href: "/dashboard/employees?status=notice_completed",
+              icon: CalendarCheck,
+              roles: ["ceo", "hr"],
+            },
+            {
+              name: "Early Release",
+              href: "/dashboard/employees?status=early_release",
+              icon: UserMinus,
+              roles: ["ceo", "hr"],
+            },
+          ],
+        },
+      ],
     },
     {
       name: "Add Employee",
@@ -105,10 +185,29 @@ export default function Sidebar({
       roles: ["hr"],
     },
     {
-      name: "Approvals Hub",
-      href: "/dashboard/approvals",
+      name: "Add Joining",
+      href: "/dashboard/joining",
+      icon: UserPlus,
+      roles: ["hr"],
+    },
+    {
+      name: "Approval Hub",
       icon: CheckSquare,
       roles: ["hr"],
+      children: [
+        {
+          name: "Approval",
+          href: "/dashboard/approvals?status=pending",
+          icon: CheckSquare,
+          roles: ["hr"],
+        },
+        {
+          name: "Approval History",
+          href: "/dashboard/approvals?status=history",
+          icon: ListChecks,
+          roles: ["hr"],
+        },
+      ],
     },
     {
       name: "Attendance & Shifts",
@@ -123,10 +222,23 @@ export default function Sidebar({
       roles: ["ceo", "hr"],
     },
     {
-      name: "Payroll & Payslips",
-      href: "/dashboard/payroll",
+      name: "Payroll",
       icon: Banknote,
       roles: ["ceo", "hr"],
+      children: [
+        {
+          name: "Master Data",
+          href: "/dashboard/payroll/master-data",
+          icon: Database,
+          roles: ["ceo", "hr"],
+        },
+        {
+          name: "Individual Data",
+          href: "/dashboard/payroll",
+          icon: UserRound,
+          roles: ["ceo", "hr"],
+        },
+      ],
     },
     {
       name: "Projects & Calendars",
@@ -142,9 +254,8 @@ export default function Sidebar({
     },
   ];
 
-  // EMPLOYEE NAVIGATION
-  const employeeNavItems = [
-     {
+  const employeeNavItems: SidebarNavItem[] = [
+    {
       name: "Dashboard",
       href: "/portal",
       icon: UserCheck,
@@ -198,53 +309,129 @@ export default function Sidebar({
       icon: UserCheck,
       roles: ["employee"],
     },
+    {
+      name: "My Resignation",
+      href: "/portal/resignation",
+      icon: FileText,
+      roles: ["employee"],
+    },
   ];
 
-  // SELECT NAVIGATION
-  const items =
-    role === "employee" ? employeeNavItems : adminNavItems;
+  const visibleItems = (
+    role === "employee" ? employeeNavItems : adminNavItems
+  ).filter((item) => item.roles.includes(role));
 
-  const visibleItems = items.filter((item) =>
-    item.roles.includes(role)
-  );
+  const isPathActive = (href?: string): boolean => {
+    if (!href) return false;
 
-  // ACTIVE NAVIGATION
-  const activeItem = visibleItems
-    .filter(
-      (item) => {
-        if (item.href.startsWith("/portal/leaves")) {
-          const isApplyPage = item.href.includes("view=apply");
+    const [path, query] = href.split("?");
+    if (pathname !== path) return false;
 
-          return (
-            pathname === "/portal/leaves" &&
-            (isApplyPage
-              ? searchParams.get("view") === "apply"
-              : searchParams.get("view") !== "apply")
-          );
-        }
-
-        return (
-          pathname === item.href ||
-          pathname.startsWith(`${item.href}/`)
-        );
+    if (!query) {
+      if (path === "/dashboard/employees" || path === "/dashboard/approvals") {
+        return !searchParams.has("status");
       }
-    )
-    .sort((a, b) => b.href.length - a.href.length)[0];
 
-  // SIDEBAR UI
+      return searchParams.toString() === "";
+    }
+
+    const expectedParams = new URLSearchParams(query);
+    for (const [key, value] of expectedParams.entries()) {
+      if (searchParams.get(key) !== value) return false;
+    }
+
+    return true;
+  };
+
+  const hasActiveChild = (item: SidebarNavItem): boolean =>
+    (item.href ? isPathActive(item.href) : false) ||
+    (item.children?.some(hasActiveChild) ?? false);
+
+  const renderNavItem = (item: SidebarNavItem, level = 0) => {
+    const children = item.children?.filter((child) =>
+      child.roles.includes(role)
+    ) ?? [];
+    const hasChildren = children.length > 0;
+    const isOpen = openMenus.includes(item.name);
+    const isActive = hasActiveChild(item);
+    const Icon = item.icon;
+
+    if (hasChildren) {
+      return (
+        <div key={`${level}-${item.name}`}>
+          <button
+            type="button"
+            onClick={() => {
+              if (isCollapsed) {
+                setIsCollapsed(false);
+                return;
+              }
+
+              toggleMenu(item.name);
+            }}
+            title={isCollapsed ? item.name : undefined}
+            aria-expanded={isOpen}
+            className={`flex w-full items-center rounded-lg py-2.5 transition-all ${
+              isCollapsed ? "justify-center px-2" : "gap-3 px-3"
+            } ${
+              isActive
+                ? "bg-slate-800 text-white"
+                : "text-slate-300 hover:bg-slate-800 hover:text-white"
+            }`}
+          >
+            <Icon className="h-4 w-4 shrink-0 text-slate-400" />
+            <span className={isCollapsed ? "sr-only" : "flex-1 text-left text-sm"}>
+              {item.name}
+            </span>
+            {!isCollapsed &&
+              (isOpen ? (
+                <ChevronDown className="h-4 w-4" />
+              ) : (
+                <ChevronRight className="h-4 w-4" />
+              ))}
+          </button>
+          {!isCollapsed && isOpen && (
+            <div className="ml-4 mt-1 space-y-1 border-l border-slate-700 pl-2">
+              {children.map((child) => renderNavItem(child, level + 1))}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    return (
+      <Link
+        key={`${level}-${item.name}`}
+        href={item.href ?? "#"}
+        title={isCollapsed ? item.name : undefined}
+        className={`flex w-full items-center rounded-lg py-2.5 transition-all ${
+          isCollapsed ? "justify-center px-2" : "gap-3 px-3"
+        } ${
+          isActive
+            ? "bg-indigo-600 text-white font-medium shadow-sm"
+            : "text-slate-300 hover:bg-slate-800 hover:text-white"
+        }`}
+      >
+        <Icon className="h-4 w-4 shrink-0" />
+        <span className={isCollapsed ? "sr-only" : "text-sm"}>
+          {item.name}
+        </span>
+      </Link>
+    );
+  };
+
   return (
     <aside
-      className={`relative flex flex-col w-full bg-slate-900 text-white flex-shrink-0 shadow-lg z-20 md:h-screen transition-[width] duration-200 ${
+      className={`relative z-20 flex h-full w-full flex-shrink-0 flex-col bg-slate-900 text-white shadow-lg transition-[width] duration-200 md:h-screen ${
         isCollapsed ? "md:w-[72px]" : "md:w-64"
       }`}
     >
-      {/* HEADER */}
       <div
-        className={`p-4 sm:p-5 flex items-center border-b border-slate-800 ${
+        className={`flex items-center border-b border-slate-800 p-4 sm:p-5 ${
           isCollapsed ? "justify-center" : "gap-3"
         }`}
       >
-        <div className="bg-white rounded-lg p-1 shrink-0">
+        <div className="shrink-0 rounded-lg bg-white p-1">
           <Image
             src="/logo.png"
             alt="Teens Software Solutions Logo"
@@ -254,13 +441,11 @@ export default function Sidebar({
             style={{ width: "30px", height: "auto" }}
           />
         </div>
-
         <div className={isCollapsed ? "hidden" : ""}>
-          <span className="font-semibold text-sm sm:text-base leading-tight block">
+          <span className="block text-sm font-semibold leading-tight sm:text-base">
             Teens Software
           </span>
-
-          <span className="text-[10px] text-slate-400 font-medium tracking-wide uppercase">
+          <span className="text-[10px] font-medium uppercase tracking-wide text-slate-400">
             {role === "employee"
               ? "Employee Portal"
               : `${role?.toUpperCase() || "USER"} Workspace`}
@@ -268,43 +453,11 @@ export default function Sidebar({
         </div>
       </div>
 
-      {/* CONTENT */}
-      <div className="flex-1 px-3 py-4 overflow-y-auto">
-        {/* NAVIGATION */}
-        <div className="space-y-1">
-          {visibleItems.map((item) => {
-            const isActive = activeItem?.href === item.href;
-
-            return (
-              <Link
-                key={item.name}
-                href={item.href}
-                title={isCollapsed ? item.name : undefined}
-                className={`flex w-full items-center rounded-lg py-2.5 text-left transition-all duration-200 ${
-                  isCollapsed ? "justify-center px-2" : "gap-3 px-3"
-                } ${
-                  isActive
-                    ? "bg-indigo-600 text-white font-medium shadow-sm"
-                    : "text-slate-300 hover:bg-slate-800 hover:text-white"
-                }`}
-              >
-                <item.icon
-                  className={`h-4 w-4 shrink-0 ${
-                    isActive ? "text-white" : "text-slate-400"
-                  }`}
-                />
-
-                <span className={isCollapsed ? "sr-only" : "text-sm"}>
-                  {item.name}
-                </span>
-              </Link>
-            );
-          })}
-        </div>
+      <div className="flex-1 overflow-y-auto px-3 py-4">
+        <div className="space-y-1">{visibleItems.map((item) => renderNavItem(item))}</div>
       </div>
 
-      {/* FOOTER */}
-      <div className="p-3 border-t border-slate-800">
+      <div className="border-t border-slate-800 p-3">
         <div
           className={`flex items-center ${
             isCollapsed ? "flex-col gap-2" : "gap-2"
@@ -315,7 +468,7 @@ export default function Sidebar({
             onClick={toggleSidebar}
             aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
             title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-            className="hidden md:inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white"
+            className="hidden h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white md:inline-flex"
           >
             {isCollapsed ? (
               <PanelLeftOpen className="h-4 w-4" />
@@ -323,7 +476,6 @@ export default function Sidebar({
               <PanelLeftClose className="h-4 w-4" />
             )}
           </button>
-
           <button
             type="button"
             onClick={handleLogout}
@@ -335,7 +487,6 @@ export default function Sidebar({
             }`}
           >
             <LogOut className="h-4 w-4 shrink-0 text-slate-400" />
-
             <span
               className={
                 isCollapsed

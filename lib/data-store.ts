@@ -2264,13 +2264,19 @@ static async getLeaveBalances(
 
       let query = supabase
         .from("leave_requests")
-        .select(`*, 
+        .select(`
+          *,
           employee:employees (
             id,
             employee_id,
             first_name,
             last_name,
-            profile_photo_url
+            profile_photo_url,
+            department_id,
+            department:departments (
+              id,
+              name
+            )
           ),
           leave_type:leave_types (*)
         `)
