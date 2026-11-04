@@ -146,7 +146,7 @@ export default function EmployeeDetail({ employee, documents, role }: EmployeeDe
     early_release_reason?: string | null;
   };
 
-  const isOnNotice = employee.status?.toLowerCase() === "on_notice" || noticeEmployee.notice_status === "notice_period";
+  const isOnNotice = noticeEmployee.notice_status === "notice_period" || employee.status?.toLowerCase() === "on_notice";
 
   const plannedLastWorkingDate = noticeEmployee.planned_last_working_date || calculatePlannedLastWorkingDate(
       noticeEmployee.resignation_date || resignationDate,
@@ -180,14 +180,46 @@ export default function EmployeeDetail({ employee, documents, role }: EmployeeDe
     }
   }, [activeTab]);
 
-  const getStatusBadge = (status: string) => {
+const getEmployeeStatusLabel = () => {
+  const status = String(employee.status || "").toLowerCase();
+  const noticeStatus = String(noticeEmployee.notice_status || "").toLowerCase();
+
+  if (status === "on_notice" || noticeStatus === "notice_period") {
+    return "On Notice";
+  }
+
+  if (noticeStatus === "notice_completed") {
+    return "Notice Completed";
+  }
+
+  if (noticeStatus === "early_release") {
+    return "Early Released";
+  }
+
+  return status.replace(/_/g, " ");
+};
+
+  const getStatusBadge = () => {
+    const status = String(employee.status || "").toLowerCase();
+    const noticeStatus = String(noticeEmployee.notice_status || "").toLowerCase();
+
+    if (status === "on_notice" || noticeStatus === "notice_period") {
+      return "bg-amber-50 text-amber-700 border-amber-200";
+    }
+
+    if (noticeStatus === "notice_completed") {
+      return "bg-blue-50 text-blue-700 border-blue-200";
+    }
+
+    if (noticeStatus === "early_release") {
+      return "bg-purple-50 text-purple-700 border-purple-200";
+    }
+
     switch (status) {
       case "active":
         return "bg-emerald-50 text-emerald-700 border-emerald-200";
       case "terminated":
         return "bg-rose-50 text-rose-700 border-rose-200";
-      case "on_notice":
-        return "bg-amber-50 text-amber-700 border-amber-200";
       default:
         return "bg-slate-50 text-slate-700 border-slate-200";
     }
@@ -195,13 +227,24 @@ export default function EmployeeDetail({ employee, documents, role }: EmployeeDe
 
 
   const getLastWorkingDate = (emp: Employee): string | null => {
+    const details = emp as Employee & {
+      notice_status?: string | null;
+      planned_last_working_date?: string | null;
+      exit_date?: string | null;
+    };
+
     const status = String(emp.status || "")
       .trim()
       .toLowerCase()
       .replace(/[\s-]+/g, "_");
 
-    if (status === "on_notice") {
-      return emp.planned_last_working_date || null;
+    const noticeStatus = String(details.notice_status || "").toLowerCase();
+
+    if (
+      status === "on_notice" ||
+      (status === "resigned" && noticeStatus === "notice_period")
+    ) {
+      return details.planned_last_working_date || null;
     }
 
     const exitStatuses = [
@@ -212,7 +255,7 @@ export default function EmployeeDetail({ employee, documents, role }: EmployeeDe
     ];
 
     if (exitStatuses.includes(status)) {
-      return emp.exit_date || emp.planned_last_working_date || null;
+      return details.exit_date || details.planned_last_working_date || null;
     }
 
     return null;
@@ -450,12 +493,12 @@ export default function EmployeeDetail({ employee, documents, role }: EmployeeDe
     }
   };
 
-  const isExitStatus = [
-    "resigned",
-    "laid_off",
-    "terminated",
-    "inactive",
-  ].includes(employee.status?.toLowerCase());
+  const currentStatus = String(employee.status || "").toLowerCase();
+  const currentNoticeStatus = String(noticeEmployee.notice_status || "").toLowerCase();
+
+  const isExitStatus =
+    ["laid_off", "terminated", "inactive"].includes(currentStatus) ||
+    (currentStatus === "resigned" && currentNoticeStatus !== "notice_period");
 
   const tabs = [
     { name: "Personal", icon: User },
@@ -572,9 +615,9 @@ export default function EmployeeDetail({ employee, documents, role }: EmployeeDe
 
             <div className="mt-3 flex items-center gap-2.5">
               <span
-                className={`px-2.5 py-0.5 rounded-full font-bold text-[10px] uppercase tracking-wider border ${getStatusBadge(employee.status)}`}
+                className={`px-2.5 py-0.5 rounded-full font-bold text-[10px] uppercase tracking-wider border ${getStatusBadge()}`}
               >
-                {employee.status.replace("_", " ")}
+                {getEmployeeStatusLabel()}
               </span>
 
               <span className="font-mono text-xs font-semibold px-2.5 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200">
@@ -583,15 +626,16 @@ export default function EmployeeDetail({ employee, documents, role }: EmployeeDe
             </div>
           </div>
         </div>
-        {role === "ceo" || role === "hr" &&  !["resigned", "laid_off", "terminated", "inactive"].includes(employee.status?.toLowerCase()) &&(
-          <Link
-            href={`/dashboard/employees/${employee.id}/edit`}
-            className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-sm hover:shadow transition-all"
-          >
-            <Edit className="w-4 h-4" />
-            <span>Edit Profile</span>
-          </Link>
-        )}
+        {(role === "ceo" || role === "hr") && !["resigned", "laid_off", "terminated", "inactive"].includes( employee.status?.toLowerCase() || "") &&
+         (
+            <Link
+              href={`/dashboard/employees/${employee.id}/edit`}
+              className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-sm hover:shadow transition-all"
+            >
+              <Edit className="w-4 h-4" />
+              <span>Edit Profile</span>
+            </Link>
+          )}
       </div>
 
       {/* Tabs Layout */}
@@ -642,6 +686,8 @@ export default function EmployeeDetail({ employee, documents, role }: EmployeeDe
               <DetailTile label="Joining Date" value={formatDate(employee.joining_date)} />
               <DetailTile label="Probation End Date" value={formatDate(employee.probation_end_date)} />
               <DetailTile label="Confirmation Date" value={formatDate(employee.confirmation_date)} />
+              <DetailTile label="Experience Level" value={employee.experience_level === "fresher" ? "Fresher" : employee.experience_level === "experienced" ? "Experienced": "Not provided"}/>
+              <DetailTile label="Total Experience" value={employee.experience_level === "fresher"? "0 Years, 0 Months" : employee.experience_level === "experienced" ? employee.total_experience_years == null && employee.total_experience_months == null ? "Not provided": `${employee.total_experience_years ?? 0} Years, ${employee.total_experience_months ?? 0} Months` : "Not provided"}/>
               <DetailTile label="Reporting Manager" value={employee.reporting_manager} />
               <DetailTile label="Work Location" value={employee.work_location} />
             </div>

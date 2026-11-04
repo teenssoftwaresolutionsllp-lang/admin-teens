@@ -93,7 +93,7 @@ export async function POST(request: Request) {
       error: attendanceError,
     } = await admin
       .from("attendance_logs")
-      .select("id, check_in_time, check_out_time")
+      .select("id, check_in_time, check_out_time, work_mode")
       .eq("employee_id", employee.id)
       .eq("attendance_date", today)
       .maybeSingle();
@@ -164,6 +164,7 @@ export async function POST(request: Request) {
         success: true,
         message: "Clock-in successful.",
         log,
+        workMode: log.work_mode ?? "WFO",
       });
     }
 

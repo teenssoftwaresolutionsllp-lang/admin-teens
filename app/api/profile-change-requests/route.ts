@@ -1,8 +1,8 @@
-
 import { NextResponse } from 'next/server';
 import { DataStore } from '@/lib/data-store';
-import { createClient } from '@/lib/supabase-server';
-import { createAdminClient } from '@/lib/supabase-server';
+import { createClient, createAdminClient } from '@/lib/supabase-server';
+
+export const dynamic = 'force-dynamic';
 
 const SENSITIVE_DOCUMENT_TYPES = [
   'aadhar card',
@@ -25,6 +25,7 @@ const SENSITIVE_PROFILE_FIELDS = [
 export async function GET() {
   try {
     const supabase = await createClient();
+
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -59,10 +60,18 @@ export async function GET() {
     }
 
     const requests = await DataStore.getProfileChangeRequests();
+
     return NextResponse.json(requests);
-  } catch (error: any) {
+  } catch (error: unknown) {
+    console.error('GET profile change requests error:', error);
+
     return NextResponse.json(
-      { error: error.message },
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : 'Unable to load profile change requests.',
+      },
       { status: 500 },
     );
   }
@@ -71,6 +80,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
+
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -104,7 +114,10 @@ export async function POST(request: Request) {
       Array.isArray(requestedChanges)
     ) {
       return NextResponse.json(
-        { error: 'Missing or invalid employeeId or requestedChanges.' },
+        {
+          error:
+            'Missing or invalid employeeId or requestedChanges.',
+        },
         { status: 400 },
       );
     }
@@ -120,16 +133,22 @@ export async function POST(request: Request) {
       );
     }
 
+    // Verify that this request belongs to the logged-in employee.
     const employeeRecord =
       (await DataStore.getEmployeeByUserId(user.id)) ??
-      (user.email ? await DataStore.getEmployeeByEmail(user.email) : null);
+      (user.email
+        ? await DataStore.getEmployeeByEmail(user.email)
+        : null);
 
     if (
       !employeeRecord ||
       String(employeeRecord.id) !== String(employeeId)
     ) {
       return NextResponse.json(
-        { error: 'The profile change request does not match your employee account.' },
+        {
+          error:
+            'The profile change request does not match your employee account.',
+        },
         { status: 403 },
       );
     }
@@ -138,10 +157,9 @@ export async function POST(request: Request) {
       (field) => SENSITIVE_PROFILE_FIELDS.includes(field),
     );
 
-    const documentEntries = Object.entries(sensitiveDocumentIds) as [
-      string,
-      string,
-    ][];
+    const documentEntries = Object.entries(
+      sensitiveDocumentIds,
+    ) as [string, string][];
 
     const normalizedDocuments = documentEntries.map(
       ([documentType, documentId]) => ({
@@ -199,7 +217,9 @@ export async function POST(request: Request) {
     for (const item of normalizedDocuments) {
       const { data: document, error: documentError } = await admin
         .from('employee_documents')
-        .select('id, employee_id, document_type, verification_status, profile_change_request_id')
+        .select(
+          'id, employee_id, document_type, verification_status, profile_change_request_id',
+        )
         .eq('id', item.documentId)
         .maybeSingle();
 
@@ -237,13 +257,17 @@ export async function POST(request: Request) {
       }
     }
 
+    // Create profile-change request.
     const newRequest = await DataStore.createProfileChangeRequest({
       employeeId,
       requestedChanges,
       previousValues,
     });
 
-    if (!newRequest?.id || String(newRequest.id).startsWith('pcr-')) {
+    if (
+      !newRequest?.id ||
+      String(newRequest.id).startsWith('pcr-')
+    ) {
       return NextResponse.json(
         {
           error:
@@ -253,7 +277,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // Link each submitted document to this exact profile-change request.
+    // Link each submitted document to this exact request.
     for (const item of normalizedDocuments) {
       const { data: linkedDocument, error: linkError } = await admin
         .from('employee_documents')
@@ -279,15 +303,77 @@ export async function POST(request: Request) {
       }
     }
 
-    return NextResponse.json(
-      { success: true, request: newRequest },
-      { status: 201 },
-    );
-  } catch (error: any) {
-    console.error('Profile-change request error:', error);
+    // --------------------------------------------------
+    // SEND NOTIFICATION TO HR USERS
+    // --------------------------------------------------
+    try {
+      // Get actual HR user IDs from profiles table.
+      const { data: hrProfiles, error: hrProfilesError } = await admin
+        .from('profiles')
+        .select('id, role')
+        .eq('role', 'hr');
+
+      if (hrProfilesError) {
+        throw new Error(hrProfilesError.message);
+      }
+
+      if (!hrProfiles || hrProfiles.length === 0) {
+        console.warn(
+          'No HR profiles found. Profile request notification was not created.',
+        );
+      } else {
+        const notificationRows = hrProfiles.map((hrProfile) => ({
+          recipient_user_id: hrProfile.id,
+          title: 'New Profile Change Request',
+          message: `An employee has submitted a profile change request. Request ID: ${newRequest.id}`,
+          type: 'profile_request',
+          is_read: false,
+        }));
+
+        const { data: insertedNotifications, error: notificationError } =
+          await admin
+            .from('notifications')
+            .insert(notificationRows)
+            .select('id, recipient_user_id, title, type');
+
+        if (notificationError) {
+          throw new Error(notificationError.message);
+        }
+
+        console.log(
+          'Profile request notifications successfully created:',
+          insertedNotifications,
+        );
+      }
+    } catch (notificationError: unknown) {
+      console.error(
+        'HR PROFILE REQUEST NOTIFICATION ERROR:',
+        notificationError instanceof Error
+          ? notificationError.message
+          : notificationError,
+      );
+    }
 
     return NextResponse.json(
-      { error: error.message || 'Unable to submit profile-change request.' },
+      {
+        success: true,
+        request: newRequest,
+      },
+      { status: 201 },
+    );
+  } catch (error: unknown) {
+    console.error(
+      'Profile-change request error:',
+      error,
+    );
+
+    return NextResponse.json(
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : 'Unable to submit profile-change request.',
+      },
       { status: 500 },
     );
   }

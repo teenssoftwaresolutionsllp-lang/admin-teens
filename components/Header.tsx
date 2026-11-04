@@ -154,7 +154,7 @@ export default function Header({ profile }: HeaderProps) {
     const syncAvatar = () => {
       try {
         const savedAvatar = localStorage.getItem("profile-avatar-url");
-        setAvatarUrl(savedAvatar || profile.avatar_url || "");
+        setAvatarUrl(profile.avatar_url || savedAvatar || "");
       } catch {
         setAvatarUrl(profile.avatar_url || "");
       }

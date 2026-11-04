@@ -13,19 +13,25 @@ export async function GET(
     const employee = await DataStore.getEmployeeById(id);
 
     if (!employee) {
-      return NextResponse.json({ error: 'Employee not found' }, { status: 404 });
+      return NextResponse.json(
+        { error: 'Employee not found' },
+        { status: 404 }
+      );
     }
 
     let documents: any[] = [];
+
     try {
       const supabase = await createAdminClient();
+
       const { data } = await supabase
         .from('employee_documents')
         .select('*')
         .eq('employee_id', id);
+
       documents = data || [];
     } catch {
-      // ignore
+      // Ignore document-fetch errors.
     }
 
     return NextResponse.json({
@@ -34,10 +40,13 @@ export async function GET(
     });
   } catch (error) {
     console.error('API Error in GET /api/employees/[id]:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
   }
 }
-
 
 export async function PUT(
   request: Request,
@@ -50,18 +59,18 @@ export async function PUT(
     const updateData: Record<string, any> = Object.fromEntries(
       Object.entries(rawBody).map(([field, value]) => [
         field,
-        typeof value === "string" && value.trim() === "" ? null : value,
+        typeof value === 'string' && value.trim() === '' ? null : value,
       ])
     );
 
     const adminClient = await createAdminClient();
 
-    // Validate department_id against the departments table
+    // Validate department_id against the departments table.
     if (updateData.department_id) {
       const { data: department, error: departmentError } = await adminClient
-        .from("departments")
-        .select("id")
-        .eq("id", updateData.department_id)
+        .from('departments')
+        .select('id')
+        .eq('id', updateData.department_id)
         .maybeSingle();
 
       if (departmentError) {
@@ -73,33 +82,140 @@ export async function PUT(
       if (!department) {
         return NextResponse.json(
           {
-            error: "Invalid department selected. Please select a valid department.",
+            error:
+              'Invalid department selected. Please select a valid department.',
           },
           { status: 400 }
         );
       }
     }
 
+    // Fetch the existing employee record.
     const { data: currentEmployee, error: currentEmployeeError } =
       await adminClient
-        .from("employees")
+        .from('employees')
         .select(
-          "id, user_id, first_name, last_name, status, temporary_login_days, temporary_login_expires_at, exit_date, resignation_date, notice_period_days, planned_last_working_date, notice_status"
-          )
-        .eq("id", id)
+          `
+            id,
+            user_id,
+            first_name,
+            last_name,
+            status,
+            temporary_login_days,
+            temporary_login_expires_at,
+            exit_date,
+            resignation_date,
+            notice_period_days,
+            planned_last_working_date,
+            notice_status,
+            early_release_date,
+            early_release_reason,
+            early_release_by,
+            early_release_recorded_at
+          `
+        )
+        .eq('id', id)
         .single();
 
     if (currentEmployeeError || !currentEmployee) {
       return NextResponse.json(
-        { error: "Employee not found" },
+        { error: 'Employee not found' },
         { status: 404 }
       );
     }
 
-    const oldStatus = String(currentEmployee.status ?? "").toLowerCase();
+    // ---------------------------------------------------------
+    // AUTHENTICATION AND AUTHORIZATION
+    // Only HR and CEO can modify resignation / exit details.
+    // Non-admin users can only update their own employee record.
+    // ---------------------------------------------------------
+
+    const supabase = await createClient();
+
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json(
+        { error: 'Unauthorized. Please log in.' },
+        { status: 401 }
+      );
+    }
+
+    const { data: profile, error: profileError } = await adminClient
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    if (profileError || !profile) {
+      console.error('Failed to verify user role:', profileError);
+
+      return NextResponse.json(
+        { error: 'Unable to verify user permissions.' },
+        { status: 403 }
+      );
+    }
+
+    const userRole = String(profile.role || '').toLowerCase();
+    const isAdmin = ['hr', 'ceo'].includes(userRole);
+
+    // Non-admin users can only update their own employee record.
+    if (!isAdmin && currentEmployee.user_id !== user.id) {
+      return NextResponse.json(
+        {
+          error: 'You are not authorized to update this employee record.',
+        },
+        { status: 403 }
+      );
+    }
+
+    // Fields that only HR and CEO can change.
+    const adminOnlyFields = [
+      'status',
+      'notice_status',
+      'resignation_date',
+      'notice_period_days',
+      'planned_last_working_date',
+      'early_release_date',
+      'early_release_reason',
+      'early_release_by',
+      'early_release_recorded_at',
+      'exit_date',
+      'temporary_login_days',
+      'temporary_login_expires_at',
+    ];
+
+    const currentValues =
+      currentEmployee as unknown as Record<string, unknown>;
+
+    const hasAdminOnlyChanges = adminOnlyFields.some((field) => {
+      if (!Object.prototype.hasOwnProperty.call(updateData, field)) {
+        return false;
+      }
+
+      const oldValue = currentValues[field];
+      const newValue = updateData[field];
+
+      return String(oldValue ?? '') !== String(newValue ?? '');
+    });
+
+    if (hasAdminOnlyChanges && !isAdmin) {
+      return NextResponse.json(
+        {
+          error:
+            'Only HR and CEO can update resignation, notice-period, and exit details.',
+        },
+        { status: 403 }
+      );
+    }
+
+    const oldStatus = String(currentEmployee.status ?? '').toLowerCase();
 
     let newStatus =
-      typeof updateData.status === "string"
+      typeof updateData.status === 'string'
         ? updateData.status.toLowerCase()
         : oldStatus;
 
@@ -112,15 +228,17 @@ export async function PUT(
       }
 
       date.setUTCDate(date.getUTCDate() + days);
+
       return date.toISOString().slice(0, 10);
     };
 
     // ---------------------------------------------------------
     // START RESIGNATION / NOTICE PERIOD
     // ---------------------------------------------------------
+
     if (
-      newStatus === "on_notice" ||
-      updateData.notice_status === "notice_period"
+      newStatus === 'on_notice' ||
+      updateData.notice_status === 'notice_period'
     ) {
       const resignationDate =
         updateData.resignation_date ??
@@ -140,7 +258,7 @@ export async function PUT(
         return NextResponse.json(
           {
             error:
-              "Provide a valid resignation date and notice period between 1 and 365 days.",
+              'Provide a valid resignation date and notice period between 1 and 365 days.',
           },
           { status: 400 }
         );
@@ -150,18 +268,18 @@ export async function PUT(
 
       if (!plannedDate) {
         return NextResponse.json(
-          { error: "Invalid resignation date." },
+          { error: 'Invalid resignation date.' },
           { status: 400 }
         );
       }
 
-      newStatus = "on_notice";
+      newStatus = 'resigned';
 
-      updateData.status = "on_notice";
+      updateData.status = 'resigned';
       updateData.resignation_date = resignationDate;
       updateData.notice_period_days = noticeDays;
       updateData.planned_last_working_date = plannedDate;
-      updateData.notice_status = "notice_period";
+      updateData.notice_status = 'notice_period';
 
       // The planned date is not the actual exit yet.
       updateData.exit_date = null;
@@ -175,56 +293,67 @@ export async function PUT(
     // EARLY RELEASE
     // The actual release date becomes the final exit date.
     // ---------------------------------------------------------
+
     if (
-      updateData.notice_status === "early_release" ||
+      updateData.notice_status === 'early_release' ||
       updateData.early_release_date
     ) {
       const releaseDate = updateData.early_release_date;
+
       const releaseReason = String(
-        updateData.early_release_reason ?? ""
+        updateData.early_release_reason ?? ''
       ).trim();
 
       if (!releaseDate) {
         return NextResponse.json(
-          { error: "Please provide the actual early-release date." },
+          { error: 'Please provide the actual early-release date.' },
           { status: 400 }
         );
       }
 
       if (!releaseReason) {
         return NextResponse.json(
-          { error: "A reason is required for early release." },
-          { status: 400 }
-        );
-      }
-
-      if (Number.isNaN(new Date(`${releaseDate}T00:00:00.000Z`).getTime())) {
-        return NextResponse.json(
-          { error: "Invalid early-release date." },
+          { error: 'A reason is required for early release.' },
           { status: 400 }
         );
       }
 
       if (
-        oldStatus !== "on_notice" &&
-        currentEmployee.notice_status !== "notice_period"
+        Number.isNaN(
+          new Date(`${releaseDate}T00:00:00.000Z`).getTime()
+        )
       ) {
         return NextResponse.json(
-          { error: "Only employees in a notice period can be released early." },
+          { error: 'Invalid early-release date.' },
           { status: 400 }
         );
       }
 
-      newStatus = "resigned";
+      if (
+        oldStatus !== 'on_notice' &&
+        currentEmployee.notice_status !== 'notice_period'
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              'Only employees in a notice period can be released early.',
+          },
+          { status: 400 }
+        );
+      }
 
-      updateData.status = "resigned";
-      updateData.notice_status = "early_release";
+      newStatus = 'resigned';
+
+      updateData.status = 'resigned';
+      updateData.notice_status = 'early_release';
       updateData.early_release_date = releaseDate;
       updateData.early_release_reason = releaseReason;
       updateData.exit_date = releaseDate;
+
       updateData.planned_last_working_date =
         updateData.planned_last_working_date ??
         currentEmployee.planned_last_working_date;
+
       updateData.early_release_recorded_at = new Date().toISOString();
 
       // Never allow an early release to use the planned date as exit_date.
@@ -233,31 +362,35 @@ export async function PUT(
     // ---------------------------------------------------------
     // COMPLETE NOTICE PERIOD
     // ---------------------------------------------------------
-    if (updateData.notice_status === "notice_completed") {
+
+    if (updateData.notice_status === 'notice_completed') {
       const plannedDate =
         updateData.planned_last_working_date ??
         currentEmployee.planned_last_working_date;
 
       if (!plannedDate) {
         return NextResponse.json(
-          { error: "The planned last working date is missing." },
+          { error: 'The planned last working date is missing.' },
           { status: 400 }
         );
       }
 
       if (
-        oldStatus !== "on_notice" &&
-        currentEmployee.notice_status !== "notice_period"
+        oldStatus !== 'on_notice' &&
+        currentEmployee.notice_status !== 'notice_period'
       ) {
         return NextResponse.json(
-          { error: "Only employees in a notice period can complete it." },
+          {
+            error: 'Only employees in a notice period can complete it.',
+          },
           { status: 400 }
         );
       }
 
-      newStatus = "resigned";
-      updateData.status = "resigned";
-      updateData.notice_status = "notice_completed";
+      newStatus = 'resigned';
+
+      updateData.status = 'resigned';
+      updateData.notice_status = 'notice_completed';
       updateData.exit_date = plannedDate;
     }
 
@@ -265,10 +398,24 @@ export async function PUT(
     // LEGACY RESIGNED / LAID OFF / TERMINATED
     // Keep existing exit and temporary-login behavior.
     // ---------------------------------------------------------
-    if (
-      ["resigned", "laid_off", "terminated"].includes(newStatus) &&
-      oldStatus !== newStatus
-    ) {
+
+    const isStartingNoticePeriod =
+      updateData.notice_status === 'notice_period' &&
+      currentEmployee.notice_status !== 'notice_period';
+
+    const isCompletingNoticePeriod =
+      ['notice_completed', 'early_release'].includes(
+        String(updateData.notice_status || '')
+      ) &&
+      currentEmployee.notice_status === 'notice_period';
+
+    const isLegacyExit =
+      ['resigned', 'laid_off', 'terminated'].includes(newStatus) &&
+      oldStatus !== newStatus &&
+      !isStartingNoticePeriod &&
+      !isCompletingNoticePeriod;
+
+    if (isLegacyExit || isCompletingNoticePeriod) {
       const loginDays = Number(updateData.temporary_login_days);
 
       if (
@@ -279,7 +426,7 @@ export async function PUT(
         return NextResponse.json(
           {
             error:
-              "Temporary login access must be between 0 and 45 days.",
+              'Temporary login access must be between 0 and 45 days.',
           },
           { status: 400 }
         );
@@ -293,7 +440,7 @@ export async function PUT(
 
       if (Number.isNaN(expiryDate.getTime())) {
         return NextResponse.json(
-          { error: "Invalid exit date." },
+          { error: 'Invalid exit date.' },
           { status: 400 }
         );
       }
@@ -306,38 +453,44 @@ export async function PUT(
     }
 
     // Active employees have permanent login access.
-    if (newStatus === "active") {
+    if (newStatus === 'active') {
       updateData.temporary_login_expires_at = null;
     }
 
+    // Update employee.
     const updated = await DataStore.updateEmployee(id, updateData);
 
     if (!updated) {
       return NextResponse.json(
-        { error: "Employee not found or update failed." },
+        { error: 'Employee not found or update failed.' },
         { status: 404 }
       );
     }
 
+    // ---------------------------------------------------------
+    // NOTIFICATIONS
+    // Notify employee and HR when notice period is completed.
+    // ---------------------------------------------------------
 
-    // Notify the employee and HR when the notice period is completed.
-    if ( updateData.notice_status === "notice_completed" && currentEmployee.notice_status !== "notice_completed") 
-    {
+    if (
+      updateData.notice_status === 'notice_completed' &&
+      currentEmployee.notice_status !== 'notice_completed'
+    ) {
       const employeeName = [
         currentEmployee.first_name,
         currentEmployee.last_name,
       ]
         .filter(Boolean)
-        .join(" ");
+        .join(' ');
 
       const { data: hrUsers, error: hrError } = await adminClient
-        .from("profiles")
-        .select("id")
-        .eq("role", "hr");
+        .from('profiles')
+        .select('id')
+        .eq('role', 'hr');
 
       if (hrError) {
         console.error(
-          "Failed to fetch HR recipients for notice completion:",
+          'Failed to fetch HR recipients for notice completion:',
           hrError
         );
       }
@@ -348,49 +501,52 @@ export async function PUT(
               {
                 employee_id: currentEmployee.id,
                 recipient_user_id: currentEmployee.user_id,
-                title: "Notice Period Completed",
-                message: "Your notice period has been completed.",
-                type: "resignation",
+                title: 'Notice Period Completed',
+                message: 'Your notice period has been completed.',
+                type: 'resignation',
                 is_read: false,
               },
             ]
           : []),
+
         ...(hrError
           ? []
           : (hrUsers ?? []).map((hr) => ({
               employee_id: currentEmployee.id,
               recipient_user_id: hr.id,
-              title: "Notice Period Completed",
-              message: `The notice period for ${employeeName || "an employee"} has been completed.`,
-              type: "resignation",
+              title: 'Notice Period Completed',
+              message: `The notice period for ${
+                employeeName || 'an employee'
+              } has been completed.`,
+              type: 'resignation',
               is_read: false,
             }))),
       ];
 
       if (notificationRows.length > 0) {
         const { error: notificationError } = await adminClient
-          .from("notifications")
+          .from('notifications')
           .insert(notificationRows);
 
         if (notificationError) {
           console.error(
-            "Failed to create notice-completion notifications:",
+            'Failed to create notice-completion notifications:',
             notificationError
           );
         }
       }
     }
+
     return NextResponse.json(updated);
   } catch (error: any) {
-    console.error("API Error in PUT /api/employees/[id]:", error);
+    console.error('API Error in PUT /api/employees/[id]:', error);
 
     return NextResponse.json(
-      { error: error?.message || "Internal server error" },
+      { error: error?.message || 'Internal server error' },
       { status: 500 }
     );
   }
 }
-
 
 export async function DELETE(
   request: Request,
@@ -400,10 +556,15 @@ export async function DELETE(
     const params = await props.params;
     const { id } = params;
 
-    return NextResponse.json({ message: 'Employee deleted successfully' });
+    return NextResponse.json({
+      message: 'Employee deleted successfully',
+    });
   } catch (error) {
     console.error('API Error in DELETE /api/employees/[id]:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
   }
 }
-

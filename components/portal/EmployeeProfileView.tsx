@@ -2060,16 +2060,16 @@ export default function EmployeeProfileView({
                     employeeData.phone || "Not specified",
                   ],
 
-                  [
-                    "Address",
-                    [
-                      employeeData.permanent_address,
-                      employeeData.permanent_city,
-                      employeeData.permanent_state,
-                    ]
-                      .filter(Boolean)
-                      .join(", ") || "Not specified",
-                  ],
+                  // [
+                  //   "Address",
+                  //   [
+                  //     employeeData.permanent_address,
+                  //     employeeData.permanent_city,
+                  //     employeeData.permanent_state,
+                  //   ]
+                  //     .filter(Boolean)
+                  //     .join(", ") || "Not specified",
+                  // ],
 
                   [
                     "Blood Group",
@@ -2642,6 +2642,14 @@ export default function EmployeeProfileView({
                     "Employment Type",
                     employeeData.employment_type,
                   ],
+                  [
+                  "Experience Level",
+                  employeeData.experience_level,
+                ],
+                [
+                  "Total Experience",
+                  employeeData.total_experience,
+                ],
 
                   [
                     "Employment Status",

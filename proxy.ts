@@ -29,7 +29,22 @@ export async function proxy(request: NextRequest) {
 
   const {
     data: { user },
+    error,
   } = await supabase.auth.getUser()
+
+  if (error) {
+    console.error("SUPABASE PROXY AUTH ERROR:", {
+      message: error.message,
+      status: error.status,
+      name: error.name,
+      path: request.nextUrl.pathname,
+    })
+  }
+
+  console.log("SUPABASE PROXY SESSION:", {
+    authenticated: !!user,
+    path: request.nextUrl.pathname,
+  })
 
   const path = request.nextUrl.pathname
   const isDashboardPath = path.startsWith('/dashboard')
@@ -54,5 +69,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*', '/portal/:path*', '/login'],
+  matcher: ['/dashboard/:path*', '/portal/:path*', '/login','/api/:path*',],
 }

@@ -116,6 +116,9 @@ export interface Employee {
   probation_end_date?: string | null;
   appointment_date?: string | null;
   confirmation_date?: string | null;
+  experience_level?: "fresher" | "experienced" | null;
+  total_experience_years?: number | null;
+  total_experience_months?: number | null;
 
   reporting_manager?: string | null;
 
@@ -253,6 +256,7 @@ export interface AttendanceLog {
   is_late: boolean;
   is_regularized: boolean;
   created_at: string;
+  work_mode: "WFO" | "WFH" | null;
 }
 
 export interface AttendanceRegularization {
@@ -271,6 +275,25 @@ export interface AttendanceRegularization {
   employee?: Employee;
 }
 
+export type WfhRequestStatus = "pending" | "approved" | "rejected";
+
+export interface WfhRequest {
+  id: string;
+  employee_id: string;
+  request_date: string;
+  reason: string;
+  status: WfhRequestStatus;
+  rejection_reason: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+
+  employee?: Employee;
+  reviewer?: {
+    id: string;
+    full_name: string;
+  } | null;
+}
 
 
 export interface LeaveType {

@@ -2,7 +2,7 @@ import { createClient, createAdminClient } from "@/lib/supabase-server";
 import { DataStore } from "@/lib/data-store";
 import ApprovalsHub from "@/components/admin/ApprovalsHub";
 import { redirect } from "next/navigation";
-import type { ResignationRequest, Employee } from "@/lib/types";
+import type { ResignationRequest, Employee , WfhRequest} from "@/lib/types";
 
 export default async function ApprovalsPage() {
   const supabase = await createClient();
@@ -91,8 +91,6 @@ export default async function ApprovalsPage() {
     employees = (employeeRows ?? []) as Employee[];
   }
 
-
-
   const { data: revertRows, error: revertError } = await admin
     .from("resignation_revert_requests")
     .select("*")
@@ -131,6 +129,89 @@ export default async function ApprovalsPage() {
     };
   }) as ResignationRequest[];
 
+  // Load WFH requests for the Approval Hub.
+  const { data: wfhRows, error: wfhError } = await admin
+    .from("wfh_requests")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (wfhError) {
+    console.error("Failed to load WFH requests:", wfhError);
+    throw new Error("Failed to load WFH requests.");
+  }
+
+  const wfhRequests = wfhRows ?? [];
+
+  // Load employees associated with WFH requests.
+  const wfhEmployeeIds = [
+    ...new Set(
+      wfhRequests
+        .map((request) => request.employee_id)
+        .filter((id): id is string => Boolean(id))
+    ),
+  ];
+
+  let wfhEmployees: Employee[] = [];
+
+  if (wfhEmployeeIds.length > 0) {
+    const { data: employeeRows, error: employeeError } = await admin
+      .from("employees")
+      .select(`
+        *,
+        department:departments (
+          id,
+          name
+        )
+      `)
+      .in("id", wfhEmployeeIds);
+
+    if (employeeError) {
+      console.error("Failed to load WFH employees:", employeeError);
+      throw new Error("Failed to load WFH employee details.");
+    }
+
+    wfhEmployees = (employeeRows ?? []) as Employee[];
+  }
+
+  // Load HR/CEO reviewers for WFH history.
+  const reviewerIds = [
+    ...new Set(
+      wfhRequests
+        .map((request) => request.reviewed_by)
+        .filter((id): id is string => Boolean(id))
+    ),
+  ];
+
+  let wfhReviewers: Array<{ id: string; full_name: string }> = [];
+
+  if (reviewerIds.length > 0) {
+    const { data: reviewerRows, error: reviewerError } = await admin
+      .from("profiles")
+      .select("id, full_name")
+      .in("id", reviewerIds);
+
+    if (reviewerError) {
+      console.error("Failed to load WFH reviewers:", reviewerError);
+      throw new Error("Failed to load WFH reviewer details.");
+    }
+
+    wfhReviewers = (reviewerRows ?? []) as Array<{
+      id: string;
+      full_name: string;
+    }>;
+  }
+
+  const initialWfhRequests = wfhRequests.map((request) => ({
+    ...request,
+    employee: wfhEmployees.find(
+      (employee) => employee.id === request.employee_id
+    ),
+    reviewer:
+      wfhReviewers.find(
+        (reviewer) => reviewer.id === request.reviewed_by
+      ) ?? null,
+  })) as WfhRequest[];
+
 
   return (
     <ApprovalsHub
@@ -138,6 +219,7 @@ export default async function ApprovalsPage() {
       initialLeaveRequests={leaveRequests}
       initialRegularizations={regularizations}
       initialResignationRequests={initialResignationRequests}
+      initialWfhRequests={initialWfhRequests}
     />
   );
 }

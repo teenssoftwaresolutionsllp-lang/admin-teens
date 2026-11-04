@@ -531,6 +531,16 @@ export async function POST(
         appointment_date: joiningDate,
         work_location: claimed.work_location || null,
         salary: annualCtcInRupees,
+
+        // Experience details from the joining candidate
+        experience_level: claimed.experience_level || "fresher",
+        total_experience_years: Number(
+          claimed.total_experience_years || 0
+        ),
+        total_experience_months: Number(
+          claimed.total_experience_months || 0
+        ),
+
         status: "active",
       } as any);
 
@@ -561,11 +571,17 @@ export async function POST(
       // Register the latest Offer Letter and Joining Letter
       // in employee_documents without duplicating Cloudinary files.
 
-      const { data: joiningDocuments, error: joiningDocumentsError } = await admin
+      const { data: joiningDocuments, error: joiningDocumentsError } =
+        await admin
           .from("joining_documents")
           .select("id, document_type, version")
           .eq("candidate_id", claimed.id)
-          .in("document_type", ["offer_letter", "joining_letter"])
+          .in("document_type", [
+            "offer_letter",
+            "joining_letter",
+            "resume",
+            "experience_document",
+          ])
           .order("version", { ascending: false });
 
       if (joiningDocumentsError) {
@@ -574,7 +590,78 @@ export async function POST(
         );
       }
 
-      const latestDocuments = new Map<string, (typeof joiningDocuments)[number]>();
+      const latestDocuments = new Map<
+        string,
+        (typeof joiningDocuments)[number]
+      >();
+
+      // Keep only the latest version of each document type.
+      for (const document of joiningDocuments ?? []) {
+        if (!latestDocuments.has(document.document_type)) {
+          latestDocuments.set(document.document_type, document);
+        }
+      }
+
+      const documentTypeMap: Record<
+        string,
+        { document_type: string; document_name: string }
+      > = {
+        offer_letter: {
+          document_type: "Offer Letter",
+          document_name: "Offer Letter.pdf",
+        },
+        joining_letter: {
+          document_type: "Joining Letter",
+          document_name: "Joining Letter.pdf",
+        },
+        resume: {
+          document_type: "Resume",
+          document_name: "Resume",
+        },
+        experience_document: {
+          document_type: "Experience Letter",
+          document_name: "Experience Letter",
+        },
+      };
+
+      for (const document of latestDocuments.values()) {
+        const mappedDocument = documentTypeMap[document.document_type];
+
+        if (!mappedDocument) continue;
+
+        const { data: existingDocument, error: existingError } =
+          await admin
+            .from("employee_documents")
+            .select("id")
+            .eq("source_joining_document_id", document.id)
+            .maybeSingle();
+
+        if (existingError) {
+          throw new Error(
+            `Unable to check existing employee document: ${existingError.message}`
+          );
+        }
+
+        if (existingDocument) continue;
+
+        const { error: insertError } = await admin
+          .from("employee_documents")
+          .insert({
+            employee_id: employee.id,
+            document_type: mappedDocument.document_type,
+            document_name: mappedDocument.document_name,
+            document_url: `joining-document://${document.id}`,
+            source_joining_document_id: document.id,
+            verification_status: "approved",
+          });
+
+        if (insertError && insertError.code !== "23505") {
+          throw new Error(
+            `Unable to register ${mappedDocument.document_type}: ${insertError.message}`
+          );
+        }
+      }
+
 
       for (const document of joiningDocuments ?? []) {
         if (!latestDocuments.has(document.document_type)) {

@@ -843,7 +843,6 @@ const handleSubmit = async (e: React.FormEvent) => {
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                 Employee ID
               </label>
-
               <input
                 required
                 type="text"
@@ -859,7 +858,6 @@ const handleSubmit = async (e: React.FormEvent) => {
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                 Department
               </label>
-
               <select
                 name="department_id"
                 value={formData.department_id || ""}
@@ -868,7 +866,6 @@ const handleSubmit = async (e: React.FormEvent) => {
                 className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
               >
                 <option value="">Select Department</option>
-
                 {departments.map((dept) => (
                   <option key={dept.id} value={dept.id}>
                     {dept.name}
@@ -882,7 +879,6 @@ const handleSubmit = async (e: React.FormEvent) => {
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                 Designation
               </label>
-
               <input
                 type="text"
                 name="designation"
@@ -898,7 +894,6 @@ const handleSubmit = async (e: React.FormEvent) => {
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                 Employment Type
               </label>
-
               <select
                 name="employment_type"
                 value={formData.employment_type || ""}
@@ -919,7 +914,6 @@ const handleSubmit = async (e: React.FormEvent) => {
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                 Joining Date
               </label>
-
               <input
                 type="date"
                 name="joining_date"
@@ -946,7 +940,6 @@ const handleSubmit = async (e: React.FormEvent) => {
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                 Probation Duration
               </label>
-
               <select
                 name="probation_duration"
                 value={formData.probation_duration || 6}
@@ -971,14 +964,12 @@ const handleSubmit = async (e: React.FormEvent) => {
                 <option value={12}>12 Months</option>
               </select>
             </div>
-            
 
             {/* Probation End Date */}
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                 Probation End Date
               </label>
-
               <input
                 type="date"
                 name="probation_end_date"
@@ -988,17 +979,129 @@ const handleSubmit = async (e: React.FormEvent) => {
               />
             </div>
 
+            {/* Experience Level */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                Experience Level
+              </label>
+              <select
+                name="experience_level"
+                value={formData.experience_level ?? ""}
+                onChange={(e) => {
+                  const selectedValue = e.target.value;
+                  const level =
+                    selectedValue === ""
+                      ? null
+                      : (selectedValue as "fresher" | "experienced");
+
+                  setFormData((prev) => ({
+                    ...prev,
+                    experience_level: level,
+                    total_experience_years:
+                      level === "fresher"
+                        ? 0
+                        : level === null
+                          ? null
+                          : prev.total_experience_years,
+                    total_experience_months:
+                      level === "fresher"
+                        ? 0
+                        : level === null
+                          ? null
+                          : prev.total_experience_months,
+                  }));
+                }}
+                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
+              >
+                <option value="">Not provided</option>
+                <option value="fresher">Fresher</option>
+                <option value="experienced">Experienced</option>
+              </select>
+            </div>
+
+            {/* Total Experience */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                Total Experience
+              </label>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <input
+                    type="number"
+                    min="0"
+                    max="50"
+                    name="total_experience_years"
+                    value={formData.total_experience_years ?? ""}
+                    disabled={
+                      !formData.experience_level ||
+                      formData.experience_level === "fresher"
+                    }
+                    onChange={(e) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        total_experience_years:
+                          e.target.value === "" ? null : Number(e.target.value),
+                      }))
+                    }
+                    placeholder="Years"
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                  />
+                  <span className="mt-1 block text-xs text-slate-500">
+                    Years
+                  </span>
+                </div>
+
+                <div>
+                  <input
+                    type="number"
+                    min="0"
+                    max="11"
+                    name="total_experience_months"
+                    value={formData.total_experience_months ?? ""}
+                    disabled={
+                      !formData.experience_level ||
+                      formData.experience_level === "fresher"
+                    }
+                    onChange={(e) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        total_experience_months:
+                          e.target.value === "" ? null : Number(e.target.value),
+                      }))
+                    }
+                    placeholder="Months"
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                  />
+                  <span className="mt-1 block text-xs text-slate-500">
+                    Months
+                  </span>
+                </div>
+              </div>
+
+              <p className="mt-2 text-xs text-slate-500">
+                {formData.experience_level === "fresher"
+                  ? "Fresher (0 Years, 0 Months)"
+                  : formData.experience_level === "experienced"
+                    ? formData.total_experience_years == null &&
+                      formData.total_experience_months == null
+                      ? "Experience value not provided"
+                      : `${formData.total_experience_years ?? 0} Years ${formData.total_experience_months ?? 0} Months`
+                    : "Experience details not provided"}
+              </p>
+            </div>
+
             {/* Appointment Date */}
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                 Appointment Date
               </label>
-
               <input
                 type="date"
                 name="appointment_date"
                 value={formData.appointment_date || ""}
-                onChange={(e) => setFormData((prev) => ({
+                onChange={(e) =>
+                  setFormData((prev) => ({
                     ...prev,
                     appointment_date: e.target.value,
                   }))
@@ -1012,7 +1115,6 @@ const handleSubmit = async (e: React.FormEvent) => {
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                 Reporting Manager
               </label>
-
               <input
                 type="text"
                 name="reporting_manager"
@@ -1027,18 +1129,17 @@ const handleSubmit = async (e: React.FormEvent) => {
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                 Work Location
               </label>
-
               <select
                 name="work_location"
                 value={formData.work_location || ""}
                 onChange={handleChange}
-                required 
+                required
                 className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
-                >
-                  <option value="">Select Work Location</option>
-                  <option value="Onsite">Onsite</option>
-                  <option value="Hybrid">Hybrid</option>
-                  <option value="Remote">Remote</option>
+              >
+                <option value="">Select Work Location</option>
+                <option value="On-site">On-site</option>
+                <option value="Hybrid">Hybrid</option>
+                <option value="Remote">Remote</option>
               </select>
             </div>
 
@@ -1047,46 +1148,45 @@ const handleSubmit = async (e: React.FormEvent) => {
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                 CTC (Lakhs / Year)
               </label>
-
               <input
                 type="number"
                 name="salary"
                 step="0.01"
                 min="0"
                 value={formData.salary ?? ""}
-                onChange={(e)=>{
+                onChange={(e) => {
                   const value = e.target.value;
 
                   setFormData((prev) => ({
                     ...prev,
                     salary: value === "" ? undefined : Number(value),
-                  }))
+                  }));
                 }}
                 required
                 placeholder="e.g. 5.5"
                 className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
               />
-              <p className="text-[11px] text-slate-500 mt-1.5">Enter annual CTC in lakhs. Example: 5.5 = ₹5.5 Lakhs per year. </p>
+              <p className="text-[11px] text-slate-500 mt-1.5">
+                Enter annual CTC in lakhs. Example: 5.5 = ₹5.5 Lakhs per year.
+              </p>
             </div>
 
-            
             {/* Client Type */}
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                 Client Type
               </label>
-
               <select
                 name="client_type"
                 value={formData.client_type || ""}
                 required
                 onChange={(e) => {
                   const value = e.target.value as "in-house" | "outsource";
+
                   setFormData((prev) => ({
                     ...prev,
                     client_type: value,
-                    project_id:
-                      value === "outsource" ? "" : prev.project_id,
+                    project_id: value === "outsource" ? "" : prev.project_id,
                   }));
                 }}
                 className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
@@ -1108,7 +1208,8 @@ const handleSubmit = async (e: React.FormEvent) => {
                   type="text"
                   name="company_name"
                   value={companySearch}
-                  onChange={(e) => {const value = e.target.value;
+                  onChange={(e) => {
+                    const value = e.target.value;
 
                     setCompanySearch(value);
 

@@ -1,4 +1,3 @@
-
 import { NextResponse } from "next/server";
 import { DataStore } from "@/lib/data-store";
 import { createClient, createAdminClient } from "@/lib/supabase-server";
@@ -206,10 +205,7 @@ export async function POST(request: Request) {
           .map(([key, value]) => [key, value])
       );
 
-      // New field name.
       const newFile = formData.get("supportingDocument");
-
-      // Old field name supported for compatibility.
       const oldFile = formData.get("medicalDocument");
 
       const fileValue = newFile || oldFile;
@@ -304,8 +300,6 @@ export async function POST(request: Request) {
 
     const role = profile?.role;
 
-    // FIX: Match Supabase Auth ID with employees.user_id.
-    // Do not compare user.id with employee.id.
     const isOwnEmployee =
       employee.id === employeeId &&
       employee.user_id === user.id;
@@ -542,6 +536,50 @@ export async function POST(request: Request) {
 
     if (!leaveRequestId) {
       throw new Error("Leave request ID was not returned.");
+    }
+
+    // Notify each HR user directly through their profile user ID.
+    // Notification failure must not undo a successfully created leave request.
+    try {
+      const { data: hrProfiles, error: hrProfilesError } = await admin
+        .from("profiles")
+        .select("id")
+        .eq("role", "hr");
+
+      if (hrProfilesError) {
+        throw new Error(hrProfilesError.message);
+      }
+
+      if (hrProfiles && hrProfiles.length > 0) {
+        const notificationRows = hrProfiles.map((hrProfile) => ({
+          recipient_user_id: hrProfile.id,
+          title: "New Leave Request",
+          message: `An employee has submitted a ${leaveType.name} leave request from ${startDate} to ${endDate}.`,
+          type: "leave",
+          is_read: false,
+        }));
+
+        const { error: notificationInsertError } = await admin
+          .from("notifications")
+          .insert(notificationRows);
+
+        if (notificationInsertError) {
+          throw new Error(notificationInsertError.message);
+        }
+
+        console.log(
+          `Created leave notifications for ${hrProfiles.length} HR user(s).`
+        );
+      } else {
+        console.warn(
+          "No profiles with role 'hr' were found. Leave notification was not created."
+        );
+      }
+    } catch (notificationError) {
+      console.error(
+        "HR leave notification creation failed:",
+        notificationError
+      );
     }
 
     // Save supporting document and special leave duration.

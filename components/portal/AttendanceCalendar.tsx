@@ -575,18 +575,18 @@ export default function AttendanceCalendar({
 
     switch (state) {
       case "present":
-        return `${base} bg-emerald-100 text-emerald-800 hover:bg-emerald-200${selectedRing}`;
+        return `${base} bg-emerald-200 text-emerald-900 hover:bg-emerald-300${selectedRing}`;
 
       case "half_day":
       case "late":
-        return `${base} bg-amber-100 text-amber-800 hover:bg-amber-200${selectedRing}`;
+        return `${base} bg-amber-200 text-amber-900 hover:bg-amber-300${selectedRing}`;
 
       case "leave":
       case "absent":
-        return `${base} bg-rose-100 text-rose-800 hover:bg-rose-200${selectedRing}`;
+        return `${base} bg-rose-200 text-rose-900 hover:bg-rose-300${selectedRing}`;
 
       case "work_from_home":
-        return `${base} bg-blue-100 text-blue-800 hover:bg-blue-200${selectedRing}`;
+        return `${base} bg-blue-200 text-blue-900 hover:bg-blue-300${selectedRing}`;
 
       case "holiday":
         return `${base} bg-[#94a3b8] text-white hover:bg-[#64748b]${selectedRing}`;

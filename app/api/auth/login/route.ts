@@ -1,4 +1,3 @@
-
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
 
@@ -53,13 +52,14 @@ export async function POST(request: Request) {
     const { data: employee, error: employeeError } = await supabase
       .from('employees')
       .select(
-        'id, status, user_id, temporary_login_expires_at, planned_last_working_date'
+        'id, status, notice_status, user_id, temporary_login_expires_at, planned_last_working_date'
       )
       .eq('user_id', authData.user.id)
       .maybeSingle();
 
     if (employeeError) {
       console.error('Employee lookup error:', employeeError);
+
       await supabase.auth.signOut();
 
       return NextResponse.json(
@@ -70,19 +70,28 @@ export async function POST(request: Request) {
 
     if (employee) {
       const employeeStatus = employee.status?.trim().toLowerCase();
+      const noticeStatus = employee.notice_status?.trim().toLowerCase();
 
       // Active employees retain permanent login access.
       if (employeeStatus === 'active') {
         // No expiry check required.
       }
 
-      // Employees on notice can log in through the end of
-      // their planned last working date.
-      else if (employeeStatus === 'on_notice') {
+      // Employees serving their notice period can log in
+      // until the end of their planned last working date.
+      // Supports both legacy on_notice and new resigned + notice_period.
+      else if (
+        employeeStatus === 'on_notice' ||
+        (
+          employeeStatus === 'resigned' &&
+          noticeStatus === 'notice_period'
+        )
+      ) {
         const lastWorkingDate = employee.planned_last_working_date;
 
+        // Interpret the planned last working date in IST.
         const expiry = lastWorkingDate
-          ? new Date(`${lastWorkingDate}T23:59:59.999Z`)
+          ? new Date(`${lastWorkingDate}T23:59:59.999+05:30`)
           : null;
 
         if (
@@ -102,7 +111,35 @@ export async function POST(request: Request) {
         }
       }
 
-      // Temporary login statuses require a valid expiry date.
+      // Resigned employees who completed notice or were
+      // released early must use temporary login expiry.
+      else if (
+        employeeStatus === 'resigned' &&
+        ['notice_completed', 'early_release'].includes(noticeStatus ?? '')
+      ) {
+        const expiry = employee.temporary_login_expires_at
+          ? new Date(employee.temporary_login_expires_at)
+          : null;
+
+        if (
+          !expiry ||
+          Number.isNaN(expiry.getTime()) ||
+          new Date() > expiry
+        ) {
+          await supabase.auth.signOut();
+
+          return NextResponse.json(
+            {
+              error:
+                'Your temporary login credentials have expired. Please contact HR.',
+            },
+            { status: 403 }
+          );
+        }
+      }
+
+      // Existing temporary login statuses.
+      // Also handles legacy resigned records without a recognized notice_status.
       else if (temporaryLoginStatuses.includes(employeeStatus ?? '')) {
         const expiry = employee.temporary_login_expires_at
           ? new Date(employee.temporary_login_expires_at)
@@ -139,11 +176,13 @@ export async function POST(request: Request) {
       }
     }
 
+    // Preserve existing role detection.
     const role =
       profile?.role ||
       authData.user.user_metadata?.role ||
       'employee';
 
+    // Preserve existing redirects.
     const redirectTo =
       role === 'employee' ? '/portal/profile' : '/dashboard';
 

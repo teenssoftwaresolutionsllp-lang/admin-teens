@@ -152,25 +152,25 @@ export default function Sidebar({ role }: SidebarProps) {
           roles: ["ceo", "hr"],
         },
         {
-          name: "Resign",
+          name: "Resignation",
           icon: CalendarClock,
           roles: ["ceo", "hr"],
           children: [
             {
-              name: "Notice Period",
-              href: "/dashboard/employees?status=notice_period",
+              name: "On Notice",
+              href: "/dashboard/employees?status=resigned&notice=notice_period",
               icon: Clock,
               roles: ["ceo", "hr"],
             },
             {
               name: "Notice Completed",
-              href: "/dashboard/employees?status=notice_completed",
+              href: "/dashboard/employees?status=resigned&notice=notice_completed",
               icon: CalendarCheck,
               roles: ["ceo", "hr"],
             },
             {
-              name: "Early Release",
-              href: "/dashboard/employees?status=early_release",
+              name: "Early Released",
+              href: "/dashboard/employees?status=resigned&notice=early_release",
               icon: UserMinus,
               roles: ["ceo", "hr"],
             },

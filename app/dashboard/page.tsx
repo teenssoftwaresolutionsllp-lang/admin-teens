@@ -2,8 +2,8 @@ import { createClient } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
 import DashboardStats from '@/components/DashboardStats';
 import Link from 'next/link';
+import DashboardKpiCards from '@/components/dashboard/DashboardKpiCards';
 import {
-  PlusCircle,
   TrendingUp,
   CheckSquare,
   Clock,
@@ -11,16 +11,78 @@ import {
   Globe,
   ArrowRight,
   ShieldAlert,
+  Users,
+  UserPlus,
+  CalendarDays,
+  UserCheck,
 } from 'lucide-react';
+
 import { DataStore } from '@/lib/data-store';
+import { Employee } from '@/lib/types';
 
-export default async function DashboardPage() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+import DashboardCharts from '@/components/dashboard/DashboardCharts';
+import LeaveRequestsWidget from '@/components/dashboard/LeaveRequestsWidget';
+import RecentJoiningsWidget from '@/components/dashboard/RecentJoiningsWidget';
+import UpcomingBirthdaysWidget from '@/components/dashboard/UpcomingBirthdaysWidget';
+import QuickActions from '@/components/dashboard/QuickActions';
 
-  if (!user) {
-    redirect('/login');
+function getIndiaDate(date = new Date()) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
+}
+
+function getDateOnly(value?: string | null) {
+  if (!value) return null;
+  const date = value.slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null;
+}
+
+function getNextBirthday(dateOfBirth: string, today: string) {
+  const dob = getDateOnly(dateOfBirth);
+  if (!dob) return null;
+
+  const [, month, day] = dob.split('-').map(Number);
+  const [year, todayMonth, todayDay] = today.split('-').map(Number);
+
+  let birthdayYear = year;
+  let birthday = `${birthdayYear}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+
+  if (birthday < today) {
+    birthdayYear += 1;
+    birthday = `${birthdayYear}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
   }
+
+  const todayUtc = Date.UTC(year, todayMonth - 1, todayDay);
+  const birthdayUtc = Date.UTC(birthdayYear, month - 1, day);
+  const daysUntil = Math.round((birthdayUtc - todayUtc) / 86400000);
+
+  return { date: birthday, daysUntil };
+}
+
+function formatDate(date: string) {
+  return new Date(`${date}T00:00:00`).toLocaleDateString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ attendanceDate?: string }>;
+}) {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) redirect('/login');
 
   const { data: profile } = await supabase
     .from('profiles')
@@ -28,21 +90,35 @@ export default async function DashboardPage() {
     .eq('id', user.id)
     .single();
 
-  const role = profile?.role || (user.user_metadata?.role) || 'hr';
+  const role = profile?.role || user.user_metadata?.role || 'hr';
 
-  // If employee role accidentally visits /dashboard, redirect to /portal
-  if (role === 'employee') {
-    redirect('/portal');
-  }
+  // Employees must use the employee portal, not the HR dashboard.
+  if (role === 'employee') redirect('/portal');
 
-    // Current date/month
   const now = new Date();
-  const currentMonth = now.getMonth();
-  const currentYear = now.getFullYear();
+  const todayIndia = getIndiaDate(now);
 
+  // Selected attendance date: today by default, or a valid past date.
+  const params = await searchParams;
+  const requestedDate = params.attendanceDate;
 
-  // Fetch dashboard data in parallel
-  const allEmployeesPromise = DataStore.getEmployees(false); // Fetch employees without project details for performance
+  const selectedAttendanceDate =
+    requestedDate &&
+    /^\d{4}-\d{2}-\d{2}$/.test(requestedDate) &&
+    requestedDate <= todayIndia
+      ? requestedDate
+      : todayIndia;
+
+  const currentMonth = Number(todayIndia.slice(5, 7)) - 1;
+  const currentYear = Number(todayIndia.slice(0, 4));
+
+  // Fetch shared and role-specific dashboard data.
+  const allEmployeesPromise = DataStore.getEmployees(false);
+
+  const todayAttendancePromise = supabase
+    .from('attendance_logs')
+    .select('employee_id, work_mode, status')
+    .eq('attendance_date', selectedAttendanceDate);
 
   const profileRequestsPromise =
     role === 'hr'
@@ -64,10 +140,10 @@ export default async function DashboardPage() {
       ? DataStore.getProjects()
       : Promise.resolve([]);
 
-  const payslipsPromise =
+  const payrollPromise =
     role === 'ceo'
-      ? DataStore.getMonthlyPayrollTotal(currentMonth + 1, currentYear
-      ): Promise.resolve([]);
+      ? DataStore.getMonthlyPayrollTotal(currentMonth + 1, currentYear)
+      : Promise.resolve(0);
 
   const [
     allEmployees,
@@ -76,242 +152,551 @@ export default async function DashboardPage() {
     regularizations,
     projects,
     monthlyPayrollTotal,
+    todayAttendanceResult,
   ] = await Promise.all([
     allEmployeesPromise,
     profileRequestsPromise,
     leaveRequestsPromise,
     regularizationsPromise,
     projectsPromise,
-    payslipsPromise,
+    payrollPromise,
+    todayAttendancePromise,
   ]);
 
+  const activeEmployeesList = allEmployees.filter(
+    (employee) => employee.status === 'active'
+  );
+
   const totalEmployees = allEmployees.length;
-  const activeEmployees = allEmployees.filter(
-    (e) => e.status === 'active'
-  ).length;
+  const activeEmployees = activeEmployeesList.length;
 
   const onNotice = allEmployees.filter(
-    (e) => e.status === 'on_notice'
+    (employee) =>
+      employee.status === 'on_notice' ||
+      (employee.status === 'resigned' &&
+        employee.notice_status === 'notice_period')
   ).length;
 
-  const recentEmployees = allEmployees.slice(0, 5);
+  const employeeById = new Map(
+    allEmployees.map((employee) => [employee.id, employee])
+  );
 
+  // Count each active employee once in the selected date's attendance.
+  const attendanceByEmployee = new Map<
+    string,
+    {
+      employeeId: string;
+      departmentId: string;
+      departmentName: string;
+      workMode: 'WFO' | 'WFH';
+    }
+  >();
+
+  for (const attendance of todayAttendanceResult.data ?? []) {
+    const employee = employeeById.get(attendance.employee_id);
+
+    if (!employee || employee.status !== 'active') continue;
+
+    const departmentId =
+      employee.department?.id ??
+      (employee as Employee & { department_id?: string }).department_id ??
+      'unassigned';
+
+    const departmentName =
+      employee.department?.name ?? 'Unassigned';
+
+    const existing = attendanceByEmployee.get(attendance.employee_id);
+
+    attendanceByEmployee.set(attendance.employee_id, {
+      employeeId: attendance.employee_id,
+      departmentId,
+      departmentName,
+      workMode:
+        existing?.workMode === 'WFH' || attendance.work_mode === 'WFH'
+          ? 'WFH'
+          : 'WFO',
+    });
+  }
+
+  const todayAttendance = Array.from(attendanceByEmployee.values());
+  const todayPresentCount = todayAttendance.length;
+
+  // Department-wise attendance, including departments with zero attendance.
+  const departmentAttendanceMap = new Map<
+    string,
+    {
+      departmentId: string;
+      departmentName: string;
+      present: number;
+      wfh: number;
+      wfo: number;
+    }
+  >();
+
+  // Add all departments represented by active employees first.
+  for (const employee of activeEmployeesList) {
+    const departmentId =
+      employee.department?.id ??
+      employee.department_id ??
+      'unassigned';
+
+    const departmentName =
+      employee.department?.name ?? 'Unassigned';
+
+    if (!departmentAttendanceMap.has(departmentId)) {
+      departmentAttendanceMap.set(departmentId, {
+        departmentId,
+        departmentName,
+        present: 0,
+        wfh: 0,
+        wfo: 0,
+      });
+    }
+  }
+
+  // Add selected date's attendance to the corresponding department.
+  for (const attendance of todayAttendance) {
+    const department = departmentAttendanceMap.get(
+      attendance.departmentId
+    );
+
+    if (!department) continue;
+
+    department.present += 1;
+
+    if (attendance.workMode === 'WFH') {
+      department.wfh += 1;
+    } else {
+      department.wfo += 1;
+    }
+  }
+
+  const departmentAttendanceData = Array.from(
+    departmentAttendanceMap.values()
+  ).sort((a, b) =>
+    a.departmentName.localeCompare(b.departmentName)
+  );
 
   const newHires = allEmployees.filter((employee) => {
-    if (!employee.joining_date) return false;
-
-    const joiningDate = new Date(employee.joining_date);
-
-    return (
-      joiningDate.getMonth() === currentMonth &&
-      joiningDate.getFullYear() === currentYear
-    );
+    const joiningDate = getDateOnly(employee.joining_date);
+    return joiningDate?.slice(0, 7) === todayIndia.slice(0, 7);
   }).length;
 
+  // Joining counts grouped by calendar year and month.
+  const joiningCountsMap = new Map<string, number>();
+
+  for (const employee of allEmployees) {
+    const joiningDate = getDateOnly(employee.joining_date);
+    if (!joiningDate) continue;
+
+    const period = joiningDate.slice(0, 7);
+
+    joiningCountsMap.set(
+      period,
+      (joiningCountsMap.get(period) || 0) + 1
+    );
+  }
+
+  const joiningCounts = Array.from(
+    joiningCountsMap,
+    ([period, count]) => {
+      const [year, month] = period.split('-').map(Number);
+
+      return { year, month, count };
+    }
+  ).sort(
+    (a, b) => a.year - b.year || a.month - b.month
+  );
+
+  const pendingProfileCount = profileRequests.filter(
+    (request) => request.status === 'pending'
+  ).length;
+
+  const pendingLeaveCount = leaveRequests.filter(
+    (request) => request.status === 'pending'
+  ).length;
+
+  const pendingRegCount = regularizations.filter(
+    (request) => request.status === 'pending'
+  ).length;
+
+  const totalPendingActions =
+    pendingProfileCount + pendingLeaveCount + pendingRegCount;
+
   const stats = {
-    totalEmployees: totalEmployees || 3,
-    activeEmployees: activeEmployees || 3,
-    departments: 7,
+    totalEmployees,
+    activeEmployees,
+    departments: new Set(
+      activeEmployeesList.map(
+        (employee) => employee.department?.id ?? employee.department_id ?? 'unassigned'
+      )
+    ).size,
     newHires,
-    onNotice: onNotice || 0,
-    recentEmployees: recentEmployees || [],
+    onNotice,
+    recentEmployees: allEmployees.slice(0, 5),
   };
 
+  // Monthly joining trend for the current year.
+  const monthlyData = Array.from({ length: 12 }, (_, monthIndex) => {
+    const month = String(monthIndex + 1).padStart(2, '0');
 
-  const pendingProfileCount = profileRequests.filter(r => r.status === 'pending').length;
-  const pendingLeaveCount = leaveRequests.filter(r => r.status === 'pending').length;
-  const pendingRegCount = regularizations.filter(r => r.status === 'pending').length;
-  const totalPendingActions = pendingProfileCount + pendingLeaveCount + pendingRegCount;
+    const employees = allEmployees.filter(
+      (employee) =>
+        getDateOnly(employee.joining_date)?.slice(0, 7) ===
+        `${currentYear}-${month}`
+    ).length;
 
+    return {
+      label: new Date(currentYear, monthIndex, 1).toLocaleDateString(
+        'en-IN',
+        { month: 'short' }
+      ),
+      employees,
+    };
+  });
+
+  // Yearly joining trend for the last five calendar years.
+  const yearlyData = Array.from({ length: 5 }, (_, index) => {
+    const year = currentYear - 4 + index;
+
+    return {
+      label: String(year),
+      employees: allEmployees.filter(
+        (employee) =>
+          getDateOnly(employee.joining_date)?.slice(0, 4) === String(year)
+      ).length,
+    };
+  });
+
+  // Department-wise active employee count.
+  const departmentCounts = new Map<string, number>();
+
+  for (const employee of activeEmployeesList) {
+    const departmentName = employee.department?.name || 'Unassigned';
+    departmentCounts.set(
+      departmentName,
+      (departmentCounts.get(departmentName) || 0) + 1
+    );
+  }
+
+  const departmentData = Array.from(
+    departmentCounts,
+    ([name, employees]) => ({ name, employees })
+  ).sort((a, b) => b.employees - a.employees);
+
+  // Calculate the current Monday-Sunday week using India-local dates.
+  const [todayYear, todayMonth, todayDay] = todayIndia
+    .split('-')
+    .map(Number);
+
+  const todayUtc = new Date(
+    Date.UTC(todayYear, todayMonth - 1, todayDay)
+  );
+
+  const dayOfWeek = todayUtc.getUTCDay();
+  const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+
+  const weekStartDate = new Date(
+    Date.UTC(todayYear, todayMonth - 1, todayDay + mondayOffset)
+  );
+
+  const weekEndDate = new Date(
+    Date.UTC(todayYear, todayMonth - 1, todayDay + mondayOffset + 6)
+  );
+
+  const weekStart = weekStartDate.toISOString().slice(0, 10);
+  const weekEnd = weekEndDate.toISOString().slice(0, 10);
+
+  const weeklyLeaveRequests = leaveRequests
+    .filter((request) => {
+      const starts = getDateOnly(request.start_date);
+      const ends = getDateOnly(request.end_date);
+
+      return Boolean(
+        starts &&
+          ends &&
+          starts <= weekEnd &&
+          ends >= weekStart
+      );
+    })
+    .slice(0, 6)
+    .map((request) => ({
+      id: request.id,
+      employeeName: request.employee
+        ? `${request.employee.first_name} ${request.employee.last_name}`.trim()
+        : 'Employee',
+      employeePhoto: request.employee?.profile_photo_url ?? null,
+      leaveType: request.leave_type?.name ?? 'Leave',
+      startDate: request.start_date,
+      endDate: request.end_date,
+      status: request.status,
+    }));
+
+  // Five most recent employee joinings.
+  const recentJoinings = allEmployees
+    .filter((employee) => getDateOnly(employee.joining_date))
+    .sort((a, b) =>
+      (getDateOnly(b.joining_date) || '').localeCompare(
+        getDateOnly(a.joining_date) || ''
+      )
+    )
+    .slice(0, 5)
+    .map((employee) => ({
+      id: employee.id,
+      employeeId: employee.employee_id,
+      name: `${employee.first_name} ${employee.last_name}`.trim(),
+      photo: employee.profile_photo_url ?? null,
+      designation: employee.designation || 'Not specified',
+      department: employee.department?.name || 'Unassigned',
+      joiningDate: employee.joining_date!,
+    }));
+
+  // Upcoming birthdays, sorted by days remaining.
+  const upcomingBirthdays = allEmployees
+    .filter(
+      (employee) =>
+        employee.status === 'active' && Boolean(employee.date_of_birth)
+    )
+    .map((employee) => {
+      const birthday = getNextBirthday(
+        employee.date_of_birth!,
+        todayIndia
+      );
+
+      if (!birthday) return null;
+
+      return {
+        id: employee.id,
+        name: `${employee.first_name} ${employee.last_name}`.trim(),
+        photo: employee.profile_photo_url ?? null,
+        designation: employee.designation || 'Employee',
+        dateOfBirth: employee.date_of_birth!,
+        nextBirthday: birthday.date,
+        daysUntil: birthday.daysUntil,
+      };
+    })
+    .filter(
+      (birthday): birthday is NonNullable<typeof birthday> =>
+        birthday !== null
+    )
+    .sort((a, b) => a.daysUntil - b.daysUntil)
+    .slice(0, 5);
+
+  const formattedToday = new Date(
+    `${todayIndia}T00:00:00`
+  ).toLocaleDateString('en-IN', {
+    weekday: 'long',
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+  });
 
   return (
-    <div className="flex-1 space-y-6 max-w-7xl mx-auto">
-      {/* Header Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-              {role === 'ceo' ? 'Executive CEO Command Center' : 'HR Operations Dashboard'}
-            </h1>
-            <span
-              className={`text-[11px] font-bold uppercase px-2.5 py-0.5 rounded-full ${
-                role === 'ceo' ? 'bg-purple-100 text-purple-800' : 'bg-indigo-100 text-indigo-800'
-              }`}
-            >
-              {role === 'ceo' ? 'CEO View' : 'HR Admin View'}
-            </span>
-          </div>
-          <p className="text-xs text-slate-500 mt-1">
-            {role === 'ceo'
-              ? 'Real-time organizational health, monthly payroll expenditures, and headcount telemetry.'
-              : 'Daily employee operations, pending maker-checker approvals, and payroll administration.'}
-          </p>
-        </div>
+    <div className="mx-auto w-full max-w-[1600px] flex-1 space-y-6">
+      {/* HR DASHBOARD */}
+      {role === 'hr' && (
+        <>
+          {/* Welcome header */}
+          <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="absolute right-0 top-0 h-36 w-36 rounded-full bg-indigo-50 blur-3xl" />
 
-        <div className="flex items-center gap-3">
-          {role === 'hr' && (
-            <>
-              <Link
-                href="/dashboard/approvals"
-                className="inline-flex items-center gap-1.5 rounded-lg bg-amber-50 border border-amber-200 px-3.5 py-2 text-xs font-semibold text-amber-800 hover:bg-amber-100 transition-colors"
-              >
-                <CheckSquare className="h-4 w-4" />
-                <span>Approvals ({totalPendingActions})</span>
-              </Link>
-              {/* <Link
-                href="/dashboard/employees/add"
-                className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-indigo-700 transition-colors"
-              >
-                <PlusCircle className="h-4 w-4" />
-                <span>Add Employee</span>
-              </Link> */}
-            </>
-          )}
-
-          {role === 'ceo' && (
-            <Link
-              href="/dashboard/payroll"
-              className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-indigo-700 transition-colors"
-            >
-              <Banknote className="h-4 w-4" />
-              <span>Review Payroll</span>
-            </Link>
-          )}
-        </div>
-      </div>
-
-      {/* CEO POV: Executive Business Metrics */}
-      {role === 'ceo' && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-          <div className="bg-gradient-to-br from-purple-900 to-indigo-950 text-white p-6 rounded-2xl shadow-md space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-purple-200 font-semibold uppercase tracking-wider">
-                Monthly Payroll Spend
-              </span>
-              <Banknote className="w-5 h-5 text-purple-300" />
-            </div>
-            <span className="text-3xl font-black font-mono block">
-              ₹{(monthlyPayrollTotal || 180000).toLocaleString('en-IN')}
-            </span>
-            <p className="text-[11px] text-purple-200">
-              Active company-wide net compensation disbursed for {new Date().toLocaleString('default', { month: 'long' })} {currentYear}.
-            </p>
-          </div>
-
-          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-slate-500 font-semibold uppercase tracking-wider">
-                Client Project Allocation
-              </span>
-              <Globe className="w-5 h-5 text-indigo-600" />
-            </div>
-            <span className="text-3xl font-black text-slate-900 block">
-              {projects.length} Projects
-            </span>
-            <p className="text-[11px] text-slate-500">
-              Active client delivery teams spanning India and US timelines following respective country holiday calendars.
-            </p>
-          </div>
-
-          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-slate-500 font-semibold uppercase tracking-wider">
-                Punctuality & Attendance Rate
-              </span>
-              <TrendingUp className="w-5 h-5 text-emerald-600" />
-            </div>
-            <span className="text-3xl font-black text-emerald-600 block">96.4%</span>
-            <p className="text-[11px] text-slate-500">
-              Overall monthly workforce attendance with automated LOP deductions for unapproved absences.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* HR POV: Action Center Banner if Pending Items Exist */}
-      {role === 'hr' && totalPendingActions > 0 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 shadow-sm">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 bg-amber-100 text-amber-800 rounded-lg">
-                <ShieldAlert className="w-6 h-6" />
-              </div>
+            <div className="relative flex flex-col justify-between gap-5 sm:flex-row sm:items-center">
               <div>
-                <h3 className="font-bold text-slate-900 text-sm">
-                  {totalPendingActions} Pending Request{totalPendingActions > 1 ? 's' : ''} Require HR Review
-                </h3>
-                <p className="text-xs text-slate-600 mt-0.5">
-                  {pendingProfileCount} Profile Edit Requests &bull; {pendingLeaveCount} Leave Applications &bull; {pendingRegCount} Attendance Regularizations
+                <p className="mb-2 text-xs font-bold uppercase tracking-[0.15em] text-indigo-600">
+                  HR Management Dashboard
+                </p>
+
+                <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+                  Welcome Back, {profile?.full_name || 'HR Admin'}!
+                </h1>
+
+                <p className="mt-2 max-w-xl text-sm text-slate-500">
+                  Here&apos;s your organization&apos;s workforce overview and the latest HR
+                  activities for today.
                 </p>
               </div>
+
+              <div className="flex shrink-0 items-center gap-3 rounded-xl border border-indigo-100 bg-indigo-50/70 px-4 py-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white text-indigo-600 shadow-sm">
+                  <CalendarDays className="h-5 w-5" />
+                </div>
+
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-indigo-500">
+                    Today
+                  </p>
+                  <p className="text-sm font-semibold text-slate-800">
+                    {formattedToday}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Pending Approval Alert */}
+          {totalPendingActions > 0 && (
+            <div className="flex flex-col justify-between gap-4 rounded-2xl border border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50 p-4 sm:flex-row sm:items-center sm:p-5">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
+                  <ShieldAlert className="h-5 w-5" />
+                </div>
+
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-slate-900">
+                    {totalPendingActions} pending request
+                    {totalPendingActions === 1 ? '' : 's'} require your review
+                  </p>
+
+                  <p className="mt-1 text-xs leading-5 text-slate-600">
+                    {pendingProfileCount} profile changes
+                    <span className="mx-2 text-amber-400">•</span>
+                    {pendingLeaveCount} leave requests
+                    <span className="mx-2 text-amber-400">•</span>
+                    {pendingRegCount} attendance regularizations
+                  </p>
+                </div>
+              </div>
+
+              <Link
+                href="/dashboard/approvals"
+                className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-amber-600 px-4 py-2.5 text-xs font-semibold text-white shadow-sm transition hover:bg-amber-700"
+              >
+                Review Requests
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </div>
+          )}
+
+          {/* Interactive KPI cards */}
+          <DashboardKpiCards
+            activeEmployees={activeEmployees}
+            pendingLeaveCount={pendingLeaveCount}
+            joiningCounts={joiningCounts}
+            departmentAttendanceData={departmentAttendanceData}
+            currentMonth={currentMonth + 1}
+            currentYear={currentYear}
+            selectedAttendanceDate={selectedAttendanceDate}
+            todayDate={todayIndia}
+          />
+
+          {/* Charts and weekly leave requests */}
+          <div className="grid grid-cols-1 items-stretch gap-5 xl:grid-cols-12">
+            <div className="min-w-0 xl:col-span-8">
+              <DashboardCharts
+                monthlyData={monthlyData}
+                yearlyData={yearlyData}
+                departmentData={departmentData}
+              />
+            </div>
+
+            <div className="min-w-0 xl:col-span-4 [&>section]:h-full">
+              <LeaveRequestsWidget requests={weeklyLeaveRequests} />
+            </div>
+          </div>
+
+          {/* Recent joinings, birthdays and quick actions */}
+          <div className="grid grid-cols-1 items-stretch gap-5 xl:grid-cols-12">
+            <div className="min-w-0 xl:col-span-5">
+              <RecentJoiningsWidget employees={recentJoinings} />
+            </div>
+
+            <div className="min-w-0 xl:col-span-3">
+              <UpcomingBirthdaysWidget birthdays={upcomingBirthdays} />
+            </div>
+
+            <div className="min-w-0 xl:col-span-4">
+              <QuickActions />
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* CEO DASHBOARD — preserve existing executive view */}
+      {role === 'ceo' && (
+        <>
+          <div className="flex flex-col justify-between gap-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm sm:flex-row sm:items-center">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+                  Executive CEO Command Center
+                </h1>
+                <span className="rounded-full bg-purple-100 px-2.5 py-0.5 text-[11px] font-bold uppercase text-purple-800">
+                  CEO View
+                </span>
+              </div>
+              <p className="mt-1 text-xs text-slate-500">
+                Real-time organizational health, monthly payroll expenditures,
+                and headcount telemetry.
+              </p>
             </div>
 
             <Link
-              href="/dashboard/approvals"
-              className="inline-flex items-center gap-1.5 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold shadow-sm transition-colors shrink-0"
+              href="/dashboard/payroll"
+              className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-indigo-700"
             >
-              <span>Open Approvals Hub</span>
-              <ArrowRight className="w-3.5 h-3.5" />
+              <Banknote className="h-4 w-4" />
+              Review Payroll
             </Link>
           </div>
-        </div>
+
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
+            <div className="space-y-3 rounded-2xl bg-gradient-to-br from-purple-900 to-indigo-950 p-6 text-white shadow-md">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold uppercase tracking-wider text-purple-200">
+                  Monthly Payroll Spend
+                </span>
+                <Banknote className="h-5 w-5 text-purple-300" />
+              </div>
+              <span className="block font-mono text-3xl font-black">
+                ₹{Number(monthlyPayrollTotal || 0).toLocaleString('en-IN')}
+              </span>
+              <p className="text-[11px] text-purple-200">
+                Payroll total for{' '}
+                {new Date(currentYear, currentMonth).toLocaleString('en-IN', {
+                  month: 'long',
+                })}{' '}
+                {currentYear}.
+              </p>
+            </div>
+
+            <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  Client Project Allocation
+                </span>
+                <Globe className="h-5 w-5 text-indigo-600" />
+              </div>
+              <span className="block text-3xl font-black text-slate-900">
+                {projects.length} Projects
+              </span>
+              <p className="text-[11px] text-slate-500">
+                Client delivery projects across the organization.
+              </p>
+            </div>
+
+            <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  Active Employees
+                </span>
+                <TrendingUp className="h-5 w-5 text-emerald-600" />
+              </div>
+              <span className="block text-3xl font-black text-emerald-600">
+                {activeEmployees}
+              </span>
+              <p className="text-[11px] text-slate-500">
+                Currently active employees in the organization.
+              </p>
+            </div>
+          </div>
+
+          <DashboardStats
+            stats={stats}
+            role={role}
+            todayAttendance={todayAttendance}
+          />
+        </>
       )}
-
-      {/* Quick Access Tiles for HR */}
-      {role === 'hr' && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <Link
-            href="/dashboard/attendance"
-            className="p-4 bg-white rounded-xl border border-slate-200 shadow-sm hover:border-indigo-300 hover:shadow-md transition-all flex items-center justify-between group"
-          >
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-lg group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                <Clock className="w-5 h-5" />
-              </div>
-              <div>
-                <h4 className="font-bold text-slate-900 text-xs">Attendance & Shifts</h4>
-                <p className="text-[11px] text-slate-500">Live check-in & late marks</p>
-              </div>
-            </div>
-            <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 transition-colors" />
-          </Link>
-
-          <Link
-            href="/dashboard/payroll"
-            className="p-4 bg-white rounded-xl border border-slate-200 shadow-sm hover:border-indigo-300 hover:shadow-md transition-all flex items-center justify-between group"
-          >
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-lg group-hover:bg-emerald-600 group-hover:text-white transition-colors">
-                <Banknote className="w-5 h-5" />
-              </div>
-              <div>
-                <h4 className="font-bold text-slate-900 text-xs">Monthly Payroll</h4>
-                <p className="text-[11px] text-slate-500">Calculate LOP & generate slips</p>
-              </div>
-            </div>
-            <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 transition-colors" />
-          </Link>
-
-          <Link
-            href="/dashboard/projects"
-            className="p-4 bg-white rounded-xl border border-slate-200 shadow-sm hover:border-indigo-300 hover:shadow-md transition-all flex items-center justify-between group"
-          >
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 bg-purple-50 text-purple-600 rounded-lg group-hover:bg-purple-600 group-hover:text-white transition-colors">
-                <Globe className="w-5 h-5" />
-              </div>
-              <div>
-                <h4 className="font-bold text-slate-900 text-xs">Client & Vendors</h4>
-                <p className="text-[11px] text-slate-500">Multi-country holidays & shifts</p>
-              </div>
-            </div>
-            <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 transition-colors" />
-          </Link>
-        </div>
-      )}
-
-      {/* Main Stats Grid & Employee Table */}
-      <DashboardStats stats={stats} role={role} />
     </div>
   );
 }

@@ -10,6 +10,8 @@ import {
   Loader2,
   ArrowUpRight,
   CalendarDays,
+  Building2,
+  Home,
 } from "lucide-react";
 import Link from "next/link";
 import { AttendanceLog, Project } from "@/lib/types";
@@ -29,6 +31,12 @@ export interface SelectedAttendance {
   clockOut?: string;
   worked?: string;
 }
+
+type WorkMode = "WFO" | "WFH";
+
+type AttendanceLogWithMode = AttendanceLog & {
+  work_mode?: WorkMode | null;
+};
 
 interface AttendanceRegularizationRequest {
   id: string;
@@ -150,7 +158,7 @@ export default function ClockInWidget({
     }
   }, [initialLog, activeDate, isToday]);
 
-  // Calculate worked time.
+  // Update worked time every second.
   useEffect(() => {
     const update = () => {
       const now = new Date();
@@ -161,8 +169,9 @@ export default function ClockInWidget({
         );
 
         if (log.check_in_time) {
-          const start = new Date(log.check_in_time);
-
+          const start = new Date(
+            log.session_check_in_time ?? log.check_in_time
+          );
           const end = log.check_out_time
             ? new Date(log.check_out_time)
             : now;
@@ -173,7 +182,6 @@ export default function ClockInWidget({
               (end.getTime() - start.getTime()) / 60000
             )
           );
-
           const totalMinutes = log.check_out_time
             ? previousMinutes
             : previousMinutes + sessionMinutes;
@@ -194,7 +202,8 @@ export default function ClockInWidget({
     return () => window.clearInterval(timer);
   }, [log, isToday]);
 
-  // Attendance punch API.
+  // Work mode is determined by the server using HR approval.
+  // Never allow the employee to submit their own work mode.
   const handlePunch = async (action: "in" | "out") => {
     if (!isToday || loading) return;
 
@@ -308,6 +317,9 @@ export default function ClockInWidget({
   const previousClockOut = selectedAttendance?.clockOut;
   const previousWorked = selectedAttendance?.worked;
 
+  const savedWorkMode =
+    ((log as AttendanceLogWithMode | null)?.work_mode || "WFO") as WorkMode;
+
   const formatSelectedDate = (date: string) => {
     if (!date) return "";
 
@@ -320,6 +332,55 @@ export default function ClockInWidget({
       day: "numeric",
       year: "numeric",
     });
+  };
+
+  const renderWorkMode = (mode: WorkMode) => {
+    const isWFH = mode === "WFH";
+
+    return (
+      <div
+        className={`flex items-center justify-between p-3 rounded-xl border ${
+          isWFH
+            ? "bg-indigo-50 border-indigo-100"
+            : "bg-emerald-50 border-emerald-100"
+        }`}
+      >
+        <div className="flex items-center gap-2">
+          <div
+            className={`p-2 rounded-lg ${
+              isWFH
+                ? "bg-indigo-100 text-indigo-600"
+                : "bg-emerald-100 text-emerald-600"
+            }`}
+          >
+            {isWFH ? (
+              <Home className="w-4 h-4" />
+            ) : (
+              <Building2 className="w-4 h-4" />
+            )}
+          </div>
+
+          <div>
+            <p className="text-[10px] uppercase tracking-wider font-bold text-slate-500">
+              Work Location
+            </p>
+            <p className="text-sm font-bold text-slate-900">
+              {isWFH ? "Work From Home" : "Work From Office"}
+            </p>
+          </div>
+        </div>
+
+        <span
+          className={`text-[11px] font-bold px-3 py-1 rounded-full ${
+            isWFH
+              ? "bg-indigo-100 text-indigo-700"
+              : "bg-emerald-100 text-emerald-700"
+          }`}
+        >
+          {mode}
+        </span>
+      </div>
+    );
   };
 
   const renderPreviousStatus = () => {
@@ -391,11 +452,11 @@ export default function ClockInWidget({
 
   return (
     <div
-      className={
+      className={`${
         compact
-          ? "space-y-3"
-          : "flex flex-col justify-between space-y-6 rounded-2xl border border-slate-200/90 bg-white p-6 shadow-sm sm:p-7"
-      }
+          ? "p-4 sm:p-5 space-y-4"
+          : "p-6 sm:p-7 space-y-6"
+      } flex flex-col justify-between rounded-2xl border border-slate-200/90 bg-white shadow-sm`}
     >
       {!compact && (
         <div className="flex items-center justify-between gap-4 border-b border-slate-100 pb-5">
@@ -439,7 +500,6 @@ export default function ClockInWidget({
               </p>
             </div>
           </div>
-
           <div className="flex items-center justify-between rounded-xl border border-slate-200/70 bg-slate-50/80 p-3 text-xs">
             <span className="font-semibold text-slate-600">
               Attendance:
@@ -502,10 +562,13 @@ export default function ClockInWidget({
         </div>
       ) : (
         <>
+          {(isCheckedIn || isCheckedOut) &&
+            renderWorkMode(savedWorkMode)}
+
           {/* Today's Attendance Status */}
           <div className="flex items-center justify-between gap-2">
             <span className="text-xs font-semibold text-slate-600">
-              Today's Status
+              Today&apos;s Status
             </span>
 
             {!isCheckedIn && !isCheckedOut ? (

@@ -147,7 +147,7 @@ export class DataStore {
         }
         const result = data.map((emp) => ({
           ...emp,
-          project: includeProject ? projects.find((p) => p.id === emp.project_id) || projects[0] : undefined,
+          project: includeProject ? projects.find((p) => p.id === emp.project_id)  || undefined : undefined,
         }));
         // Sync DB data into cache
         for (const emp of result) {
@@ -1342,7 +1342,7 @@ export class DataStore {
 }
 
 
-static async clockIn(employeeId: string): Promise<AttendanceLog> {
+  static async clockIn(employeeId: string): Promise<AttendanceLog> {
   const supabase = await createAdminClient();
   const now = new Date();
 
@@ -1410,6 +1410,22 @@ static async clockIn(employeeId: string): Promise<AttendanceLog> {
     throw new Error("You are already checked in. Please check out first.");
   }
 
+  const { data: wfhRequest, error: wfhError } = await supabase
+    .from("wfh_requests")
+    .select("id")
+    .eq("employee_id", employee.id)
+    .eq("request_date", todayStr)
+    .eq("status", "approved")
+    .maybeSingle();
+
+  if (wfhError) {
+    throw new Error(
+      `Unable to retrieve approved WFH request: ${wfhError.message}`
+    );
+  }
+
+  const workMode = wfhRequest ? "WFH" : "WFO";
+
   // If a record exists, start another session
   if (existingLog) {
     const { data, error } = await supabase
@@ -1422,7 +1438,6 @@ static async clockIn(employeeId: string): Promise<AttendanceLog> {
         // Start the new session
         session_check_in_time: now.toISOString(),
         check_out_time: null,
-
         // Preserve previously accumulated hours
         total_hours: Number(existingLog.total_hours ?? 0),
 
@@ -1430,6 +1445,7 @@ static async clockIn(employeeId: string): Promise<AttendanceLog> {
         status: existingLog.status,
 
         is_late: existingLog.is_late || evaluation.isLate,
+        work_mode: existingLog.work_mode ?? workMode,
       })
       .eq("id", existingLog.id)
       .select()
@@ -1455,6 +1471,7 @@ static async clockIn(employeeId: string): Promise<AttendanceLog> {
       status: evaluation.status,
       is_late: evaluation.isLate,
       is_regularized: false,
+      work_mode: workMode,
     })
     .select()
     .single();
@@ -1467,7 +1484,7 @@ static async clockIn(employeeId: string): Promise<AttendanceLog> {
 }
 
 
-static async clockOut(employeeId: string): Promise<AttendanceLog> {
+  static async clockOut(employeeId: string): Promise<AttendanceLog> {
   const supabase = await createAdminClient();
   const now = new Date();
 
@@ -1987,6 +2004,7 @@ static async getLeaveTypes(): Promise<LeaveType[]> {
     return updatedLeaveType as LeaveType;
   }
 
+
 static async getLeaveBalances(
   employeeId: string,
   year: number = new Date().getFullYear()
@@ -2017,7 +2035,11 @@ static async getLeaveBalances(
   const joiningMonth = joiningDate.getMonth();
   const joiningDay = joiningDate.getDate();
 
-  // Fetch active standard and gender-specific leave types.
+  if (year < joiningYear) {
+    return [];
+  }
+
+  // Get active leave types.
   const leaveTypes = (await this.getLeaveTypes()).filter((type) => {
     const code = String(type.code ?? "").trim().toUpperCase();
 
@@ -2027,21 +2049,8 @@ static async getLeaveBalances(
     );
   });
 
-  if (year < joiningYear) {
-    return leaveTypes.map((leaveType) => ({
-      id: `${employeeUuid}-${leaveType.id}-${year}`,
-      employee_id: employeeUuid,
-      leave_type_id: leaveType.id,
-      year,
-      allocated_days: 0,
-      used_days: 0,
-      balance_days: 0,
-      leave_type: leaveType,
-    } as EmployeeLeaveBalance));
-  }
-
-  // Fetch approved leave requests.
-  const { data: requests, error } = await supabase
+  // Get all approved leave requests needed for yearly calculations.
+  const { data: requests, error: requestError } = await supabase
     .from("leave_requests")
     .select(
       "employee_id, leave_type_id, start_date, end_date, total_days, status"
@@ -2051,11 +2060,13 @@ static async getLeaveBalances(
     .gte("end_date", `${joiningYear}-01-01`)
     .lte("start_date", `${year}-12-31`);
 
-  if (error) {
-    throw new Error(error.message);
+  if (requestError) {
+    throw new Error(
+      `Failed to load approved leave requests: ${requestError.message}`
+    );
   }
 
-  type LeaveRequest = {
+  type ApprovedLeaveRequest = {
     employee_id: string;
     leave_type_id: string;
     start_date: string;
@@ -2064,67 +2075,24 @@ static async getLeaveBalances(
     status: string;
   };
 
-  const approvedRequests = (requests ?? []) as LeaveRequest[];
+  const approvedRequests =
+    (requests ?? []) as ApprovedLeaveRequest[];
 
-  // CL and SL accrue monthly from the month after joining.
-  // Joining after the 25th defers the first credit by one more month.
-  const getAnnualCredits = (selectedYear: number): number => {
-    if (selectedYear < joiningYear) return 0;
-    if (selectedYear > joiningYear) return 12;
-
-    const firstCreditMonth =
-      joiningMonth + (joiningDay > 25 ? 2 : 1);
-
-    return Math.max(0, 12 - firstCreditMonth);
-  };
-
-  // Calculate leave used within a selected year.
-  const getDaysInPeriod = (
-    request: LeaveRequest,
-    periodStart: Date,
-    periodEnd: Date
-  ): number => {
-    const start = new Date(`${request.start_date}T00:00:00`);
-    const end = new Date(`${request.end_date}T00:00:00`);
-
-    if (
-      Number.isNaN(start.getTime()) ||
-      Number.isNaN(end.getTime()) ||
-      end < start
-    ) {
-      return 0;
-    }
-
-    const overlapStart = Math.max(
-      start.getTime(),
-      periodStart.getTime()
-    );
-
-    const overlapEnd = Math.min(
-      end.getTime(),
-      periodEnd.getTime()
-    );
-
-    if (overlapEnd < overlapStart) return 0;
-
-    const totalCalendarDays =
-      Math.floor((end.getTime() - start.getTime()) / 86400000) + 1;
-
-    const overlappingDays =
-      Math.floor((overlapEnd - overlapStart) / 86400000) + 1;
-
-    const totalDays = Number(request.total_days ?? 0);
-
-    if (totalCalendarDays <= 0 || totalDays <= 0) return 0;
-
-    return (totalDays * overlappingDays) / totalCalendarDays;
-  };
-
+  // Calculate the approved leave used in a selected year.
   const getYearlyUsedDays = (
     leaveTypeId: string,
     selectedYear: number
   ): number => {
-    const periodStart = new Date(selectedYear, 0, 1, 0, 0, 0, 0);
+    const periodStart = new Date(
+      selectedYear,
+      0,
+      1,
+      0,
+      0,
+      0,
+      0
+    );
+
     const periodEnd = new Date(
       selectedYear,
       11,
@@ -2138,106 +2106,227 @@ static async getLeaveBalances(
     return approvedRequests
       .filter(
         (request) =>
-          String(request.leave_type_id) === String(leaveTypeId)
+          request.leave_type_id === leaveTypeId
       )
-      .reduce(
-        (total, request) =>
-          total + getDaysInPeriod(request, periodStart, periodEnd),
-        0
-      );
+      .reduce((total, request) => {
+        const start = new Date(
+          `${request.start_date}T00:00:00`
+        );
+
+        const end = new Date(
+          `${request.end_date}T00:00:00`
+        );
+
+        if (
+          Number.isNaN(start.getTime()) ||
+          Number.isNaN(end.getTime()) ||
+          end < start
+        ) {
+          return total;
+        }
+
+        const overlapStart = Math.max(
+          start.getTime(),
+          periodStart.getTime()
+        );
+
+        const overlapEnd = Math.min(
+          end.getTime(),
+          periodEnd.getTime()
+        );
+
+        if (overlapEnd < overlapStart) {
+          return total;
+        }
+
+        const totalCalendarDays =
+          Math.floor(
+            (end.getTime() - start.getTime()) / 86400000
+          ) + 1;
+
+        const overlappingDays =
+          Math.floor(
+            (overlapEnd - overlapStart) / 86400000
+          ) + 1;
+
+        const requestedDays = Number(
+          request.total_days ?? 0
+        );
+
+        if (
+          totalCalendarDays <= 0 ||
+          requestedDays <= 0
+        ) {
+          return total;
+        }
+
+        return (
+          total +
+          (requestedDays * overlappingDays) /
+            totalCalendarDays
+        );
+      }, 0);
   };
 
-  const balances: EmployeeLeaveBalance[] = [];
+  // Joining-year CL accrues from the joining month.
+  // Joining-year SL starts in the joining month only
+  // when the employee joins on or before the 15th.
+  const getAnnualCredits = (
+    code: string,
+    selectedYear: number
+  ): number => {
+    if (selectedYear < joiningYear) return 0;
+
+    if (selectedYear > joiningYear) {
+      return 12;
+    }
+
+    const joiningMonthCredits =
+      code === "SL" && joiningDay > 15 ? 0 : 1;
+
+    const remainingMonths = 11 - joiningMonth;
+
+    return joiningMonthCredits + remainingMonths;
+  };
+
+  const balancesToSave: Array<{
+    employee_id: string;
+    leave_type_id: string;
+    year: number;
+    allocated_days: number;
+    used_days: number;
+    balance_days: number;
+  }> = [];
 
   for (const leaveType of leaveTypes) {
-    const code = String(leaveType.code ?? "").trim().toUpperCase();
+    const code = String(leaveType.code ?? "")
+      .trim()
+      .toUpperCase();
 
-    const usedDays = getYearlyUsedDays(leaveType.id, year);
+    const usedDays = getYearlyUsedDays(
+      leaveType.id,
+      year
+    );
 
-    let annualEntitlement = 0;
-    let balanceDays = 0;
+    let allocatedDays = 0;
 
     if (code === "CL") {
-      annualEntitlement = getAnnualCredits(year);
+      // Calculate CL carry-forward year by year.
+      let carryForward = 0;
 
-      balanceDays = Math.max(
-        0,
-        annualEntitlement - usedDays
-      );
+      for (
+        let selectedYear = joiningYear;
+        selectedYear < year;
+        selectedYear++
+      ) {
+        const previousAllocation =
+          getAnnualCredits("CL", selectedYear) +
+          carryForward;
+
+        const previousUsed = getYearlyUsedDays(
+          leaveType.id,
+          selectedYear
+        );
+
+        const previousBalance = Math.max(
+          0,
+          previousAllocation - previousUsed
+        );
+
+        // Carry forward 50% of unused CL.
+        carryForward = Number(
+          (previousBalance * 0.5).toFixed(2)
+        );
+      }
+
+      allocatedDays =
+        getAnnualCredits("CL", year) +
+        carryForward;
     } else if (code === "SL") {
-      annualEntitlement = getAnnualCredits(year);
-
-      balanceDays = Math.max(
-        0,
-        annualEntitlement - usedDays
-      );
-    } else if (code === "EL") {
-      annualEntitlement = Math.max(
-        0,
-        Number(leaveType.annual_quota ?? 0)
-      );
-
-      balanceDays = Math.max(
-        0,
-        annualEntitlement - usedDays
-      );
-    } else if (code === "ML") {
-      annualEntitlement = Math.max(
+      // SL does not carry forward.
+      allocatedDays = getAnnualCredits("SL", year);
+    } else if (
+      code === "EL" ||
+      code === "ML" ||
+      code === "PL"
+    ) {
+      allocatedDays = Math.max(
         0,
         Number(leaveType.annual_quota ?? 0)
-      );
-
-      balanceDays = Math.max(
-        0,
-        annualEntitlement - usedDays
-      );
-    } else if (code === "PL") {
-      annualEntitlement = Math.max(
-        0,
-        Number(leaveType.annual_quota ?? 0)
-      );
-
-      balanceDays = Math.max(
-        0,
-        annualEntitlement - usedDays
       );
     }
 
-    const existing = cache.leaveBalances.find(
-      (balance) =>
-        balance.employee_id === employeeUuid &&
-        balance.leave_type_id === leaveType.id &&
-        balance.year === year
+    const balanceDays = Math.max(
+      0,
+      allocatedDays - usedDays
     );
 
-    balances.push({
-      ...(existing ?? {
-        id: `${employeeUuid}-${leaveType.id}-${year}`,
-      }),
+    balancesToSave.push({
       employee_id: employeeUuid,
       leave_type_id: leaveType.id,
       year,
-      allocated_days: annualEntitlement,
+      allocated_days: Number(
+        allocatedDays.toFixed(2)
+      ),
       used_days: Number(usedDays.toFixed(2)),
       balance_days: Number(balanceDays.toFixed(2)),
-      leave_type: leaveType,
-    } as EmployeeLeaveBalance);
+    });
   }
 
-  // Update cache.
-  cache.leaveBalances = [
-    ...cache.leaveBalances.filter(
-      (balance) =>
-        !(
-          balance.employee_id === employeeUuid &&
-          balance.year === year
-        )
-    ),
-    ...balances,
-  ];
+  // IMPORTANT:
+  // Save balances in Supabase, not only in the cache.
+  // The unique constraint prevents duplicate employee/year/type records.
+  if (balancesToSave.length > 0) {
+    const { data: savedBalances, error: saveError } =
+      await supabase
+        .from("employee_leave_balances")
+        .upsert(balancesToSave, {
+          onConflict: "employee_id,leave_type_id,year",
+        })
+        .select("*");
 
-  return balances;
+    if (saveError) {
+      throw new Error(
+        `Failed to initialize employee leave balances: ${saveError.message}`
+      );
+    }
+
+    if (!savedBalances) {
+      throw new Error(
+        "Leave balances were not returned after saving."
+      );
+    }
+
+    // Attach leave type information to saved records.
+    const result = savedBalances.map((balance) => {
+      const leaveType = leaveTypes.find(
+        (type) => type.id === balance.leave_type_id
+      );
+
+      return {
+        ...balance,
+        leave_type: leaveType,
+      } as EmployeeLeaveBalance;
+    });
+
+    // Update cache using actual database records.
+    cache.leaveBalances = [
+      ...cache.leaveBalances.filter(
+        (balance) =>
+          !(
+            balance.employee_id === employeeUuid &&
+            balance.year === year
+          )
+      ),
+      ...result,
+    ];
+
+    return result;
+  }
+
+  return [];
 }
+
 
   static async getLeaveRequests(employeeId?: string): Promise<LeaveRequest[]> {
     const cache = getCache();
@@ -2278,7 +2367,9 @@ static async getLeaveBalances(
               name
             )
           ),
-          leave_type:leave_types (*)
+          leave_type:leave_types (
+            *
+          )
         `)
         .order("created_at", { ascending: false });
 
@@ -2491,132 +2582,255 @@ static async getLeaveBalances(
   return createdRequest;
 }
 
-  static async reviewLeaveRequest({
-    requestId,
-    status,
-    reviewerId,
-    rejectionReason,
-  }: {
-    requestId: string;
-    status: "approved" | "rejected";
-    reviewerId: string;
-    rejectionReason?: string;
-  }): Promise<boolean> {
-    const cache = getCache();
+ 
 
-    const supabase = await createAdminClient();
+static async reviewLeaveRequest({
+  requestId,
+  status,
+  reviewerId,
+  rejectionReason,
+}: {
+  requestId: string;
+  status: "approved" | "rejected";
+  reviewerId: string;
+  rejectionReason?: string;
+}): Promise<boolean> {
+  const cache = getCache();
+  const supabase = await createAdminClient();
 
-    const { data: dbReq, error: requestError } = await supabase
-      .from("leave_requests")
-      .select("*")
-      .eq("id", requestId)
-      .single();
+  // 1. Fetch leave request
+  const { data: dbReq, error: requestError } = await supabase
+    .from("leave_requests")
+    .select("*")
+    .eq("id", requestId)
+    .single();
 
-    if (requestError) {
-      throw new Error(requestError.message);
-    }
+  if (requestError) {
+    throw new Error(requestError.message);
+  }
 
-    if (!dbReq) {
-      return false;
-    }
+  if (!dbReq) {
+    return false;
+  }
 
-    if (dbReq.status !== "pending") {
-      throw new Error(`Leave request has already been ${dbReq.status}`)
-    }
-
-    const reviewedAt = new Date().toISOString();
-
-    // Keep cache in sync
-    const req = dbReq as LeaveRequest;
-
-    req.status = status;
-    req.reviewed_by = reviewerId;
-    req.reviewed_at = reviewedAt;
-    req.rejection_reason = rejectionReason || null;
-
-    const cachedRequest = cache.leaveRequests.find(
-      (r) => r.id === requestId
+  if (dbReq.status !== "pending") {
+    throw new Error(
+      `Leave request has already been ${dbReq.status}`
     );
+  }
 
-    if (cachedRequest) {
-      cachedRequest.status = status;
-      cachedRequest.reviewed_by = reviewerId;
-      cachedRequest.reviewed_at = reviewedAt;
-      cachedRequest.rejection_reason = rejectionReason || null;
-    }
+  const req = dbReq as LeaveRequest;
+  const reviewedAt = new Date().toISOString();
+  const year = Number(req.start_date.substring(0, 4));
 
-    // If approved and not LOP, deduct from balance
-    if (status === "approved") {
-      const year = new Date(req.start_date).getFullYear();
+  if (!Number.isInteger(year) || year < 1900) {
+    throw new Error("Invalid leave request start date.");
+  }
 
-      const { data: dbBalance, error: balanceError } = await supabase
-        .from("employee_leave_balances")
-        .select("*")
-        .eq("employee_id", req.employee_id)
-        .eq("leave_type_id", req.leave_type_id)
-        .eq("year", year)
+  // 2. Deduct balance only when approving.
+  if (status === "approved") {
+    const { data: leaveType, error: leaveTypeError } =
+      await supabase
+        .from("leave_types")
+        .select("id, name, code")
+        .eq("id", req.leave_type_id)
         .maybeSingle();
 
-      if (balanceError) {
-        throw new Error(balanceError.message);
-      }
-
-        if (!dbBalance) {
-          throw new Error("Leave balance not found for this employee and leave type");
-        }
-
-        const availableDays = dbBalance.balance_days;
-        if (availableDays < req.total_days) {
-          throw new Error(`Insufficient leave balance. Available: ${availableDays}, Requested: ${req.total_days}`);
-        }
-
-
-        const usedDays = dbBalance.used_days + req.total_days;
-        const balanceDays = dbBalance.allocated_days - usedDays;
-        const { error: balanceUpdateError } = await supabase
-          .from("employee_leave_balances")
-          .update({
-            used_days: usedDays,
-            balance_days: balanceDays,
-          })
-          .eq("employee_id", req.employee_id)
-          .eq("leave_type_id", req.leave_type_id)
-          .eq("year", year);
-
-        if (balanceUpdateError) {
-          throw new Error(balanceUpdateError.message);
-        }
-
-        // Keep cache synchronized
-        const cacheBalance = cache.leaveBalances.find(
-          (b) =>
-            b.employee_id === req.employee_id &&
-            b.leave_type_id === req.leave_type_id &&
-            b.year === year
-        );
-
-        if (cacheBalance) {
-          cacheBalance.used_days = usedDays;
-          cacheBalance.balance_days = balanceDays;
-        }
+    if (leaveTypeError) {
+      throw new Error(leaveTypeError.message);
     }
 
-    const { error: updateError } = await supabase
+    if (!leaveType) {
+      throw new Error("Leave type not found.");
+    }
+
+    const isLOP =
+      String(leaveType.code ?? "").toUpperCase() === "LOP" ||
+      String(leaveType.name ?? "")
+        .toLowerCase()
+        .includes("loss of pay");
+
+    if (!isLOP) {
+      // 3. First check whether the employee balance exists.
+      let { data: dbBalance, error: balanceError } =
+        await supabase
+          .from("employee_leave_balances")
+          .select("*")
+          .eq("employee_id", req.employee_id)
+          .eq("leave_type_id", req.leave_type_id)
+          .eq("year", year)
+          .maybeSingle();
+
+      if (balanceError) {
+        throw new Error(
+          `Failed to check leave balance: ${balanceError.message}`
+        );
+      }
+
+      // 4. If missing, automatically initialize balances.
+      if (!dbBalance) {
+        console.log(
+          `Initializing missing leave balances for employee ${req.employee_id}, year ${year}`
+        );
+
+        await DataStore.getLeaveBalances(
+          req.employee_id,
+          year
+        );
+
+        // Fetch the newly created balance from Supabase.
+        const { data: generatedBalance, error: generatedError } =
+          await supabase
+            .from("employee_leave_balances")
+            .select("*")
+            .eq("employee_id", req.employee_id)
+            .eq("leave_type_id", req.leave_type_id)
+            .eq("year", year)
+            .maybeSingle();
+
+        if (generatedError) {
+          throw new Error(
+            `Failed to fetch initialized leave balance: ${generatedError.message}`
+          );
+        }
+
+        dbBalance = generatedBalance;
+      }
+
+      // 5. Confirm balance exists.
+      if (!dbBalance) {
+        throw new Error(
+          `Unable to initialize leave balance for employee ${req.employee_id}, leave type ${leaveType.name}, year ${year}.`
+        );
+      }
+
+      const availableDays = Number(
+        dbBalance.balance_days ?? 0
+      );
+
+      const requestedDays = Number(
+        req.total_days ?? 0
+      );
+
+      const currentUsedDays = Number(
+        dbBalance.used_days ?? 0
+      );
+
+      const allocatedDays = Number(
+        dbBalance.allocated_days ?? 0
+      );
+
+      if (requestedDays <= 0) {
+        throw new Error("Invalid leave duration.");
+      }
+
+      if (availableDays < requestedDays) {
+        throw new Error(
+          `Insufficient leave balance. Available: ${availableDays}, Requested: ${requestedDays}`
+        );
+      }
+
+      // 6. Calculate updated balance.
+      const newUsedDays = Number(
+        (currentUsedDays + requestedDays).toFixed(2)
+      );
+
+      const newBalanceDays = Number(
+        (allocatedDays - newUsedDays).toFixed(2)
+      );
+
+      if (newBalanceDays < 0) {
+        throw new Error("Leave balance cannot become negative.");
+      }
+
+      // 7. Update employee leave balance.
+      const { data: updatedBalance, error: balanceUpdateError } =
+        await supabase
+          .from("employee_leave_balances")
+          .update({
+            used_days: newUsedDays,
+            balance_days: newBalanceDays,
+          })
+          .eq("id", dbBalance.id)
+          .select("*")
+          .single();
+
+      if (balanceUpdateError) {
+        throw new Error(
+          `Failed to update leave balance: ${balanceUpdateError.message}`
+        );
+      }
+
+      // 8. Synchronize balance cache.
+      const cacheIndex = cache.leaveBalances.findIndex(
+        (balance) =>
+          balance.employee_id === req.employee_id &&
+          balance.leave_type_id === req.leave_type_id &&
+          balance.year === year
+      );
+
+      const cacheBalance = {
+        ...updatedBalance,
+        leave_type: leaveType,
+      } as EmployeeLeaveBalance;
+
+      if (cacheIndex >= 0) {
+        cache.leaveBalances[cacheIndex] = cacheBalance;
+      } else {
+        cache.leaveBalances.push(cacheBalance);
+      }
+    }
+  }
+
+  // 9. Update leave request status.
+  const { data: updatedRequest, error: updateError } =
+    await supabase
       .from("leave_requests")
       .update({
         status,
         reviewed_by: reviewerId,
         reviewed_at: reviewedAt,
-        rejection_reason: rejectionReason || null,
+        rejection_reason:
+          status === "rejected"
+            ? rejectionReason || null
+            : null,
       })
-      .eq("id", requestId);
+      .eq("id", requestId)
+      .eq("status", "pending")
+      .select("id")
+      .maybeSingle();
 
-    if (updateError) {
-      throw new Error(updateError.message);
-    }
-
-    return true;
+  if (updateError) {
+    throw new Error(updateError.message);
   }
+
+  if (!updatedRequest) {
+    throw new Error("Leave request was already reviewed.");
+  }
+
+  // 10. Synchronize request cache.
+  req.status = status;
+  req.reviewed_by = reviewerId;
+  req.reviewed_at = reviewedAt;
+  req.rejection_reason =
+    status === "rejected"
+      ? rejectionReason || null
+      : null;
+
+  const cachedRequest = cache.leaveRequests.find(
+    (request) => request.id === requestId
+  );
+
+  if (cachedRequest) {
+    cachedRequest.status = status;
+    cachedRequest.reviewed_by = reviewerId;
+    cachedRequest.reviewed_at = reviewedAt;
+    cachedRequest.rejection_reason = req.rejection_reason;
+  }
+
+  return true;
+}
+
 
   // ==========================================
   // SALARY COMPONENTS & PAYROLL ENGINE
