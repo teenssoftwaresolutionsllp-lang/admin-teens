@@ -7,6 +7,14 @@ export async function GET() {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single();
+    if (profileError || !profile || profile.role !== 'hr') {
+      return NextResponse.json({ error: 'Only HR can view master salary components.' }, { status: 403 });
+    }
 
     const components = await DataStore.getSalaryComponents();
     return NextResponse.json(components);
@@ -24,6 +32,19 @@ export async function PATCH(request: Request) {
       return NextResponse.json(
         { error: "Unauthorized" },
         { status: 401 }
+      );
+    }
+
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single();
+
+    if (profileError || !profile || profile.role !== "hr") {
+      return NextResponse.json(
+        { error: "Only HR can update master salary components." },
+        { status: 403 }
       );
     }
 
@@ -100,11 +121,25 @@ export async function PATCH(request: Request) {
     }
 
     if (affects_lop !== undefined) {
-      updates.affects_lop = Boolean(affects_lop);
+      if (typeof affects_lop !== "boolean") {
+        return NextResponse.json(
+          { error: "affects_lop must be a boolean." },
+          { status: 400 }
+        );
+      }
+
+      updates.affects_lop = affects_lop;
     }
 
     if (is_active !== undefined) {
-      updates.is_active = Boolean(is_active);
+      if (typeof is_active !== "boolean") {
+        return NextResponse.json(
+          { error: "is_active must be a boolean." },
+          { status: 400 }
+        );
+      }
+
+      updates.is_active = is_active;
     }
 
     if (description !== undefined) {

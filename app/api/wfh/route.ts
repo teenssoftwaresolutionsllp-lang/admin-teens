@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase-server";
+import {getAuthFailureStatus,getAuthFailureMessage} from "@/lib/supabase-auth-error";
 
 function getIndiaToday(): string {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -25,7 +26,12 @@ async function getAuthenticatedEmployee() {
   } = await supabase.auth.getUser();
 
   if (authError || !user) {
-    return { error: "Unauthorized", status: 401 as const };
+    const status = getAuthFailureStatus(authError);
+
+    return {
+      error: getAuthFailureMessage(status),
+      status,
+    };
   }
 
   const admin = await createAdminClient();
@@ -39,7 +45,11 @@ async function getAuthenticatedEmployee() {
 
   if (error) {
     console.error("WFH employee lookup failed:", error);
-    return { error: "Unable to verify employee account.", status: 500 as const };
+
+    return {
+      error: "Unable to verify employee account.",
+      status: 500 as const,
+    };
   }
 
   if (!employee) {

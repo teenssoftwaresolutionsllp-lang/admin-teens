@@ -702,6 +702,7 @@ export default function EmployeeAttendanceView({
       endDate: "",
       totalDays: 1,
       isHalfDay: false,
+      leaveDuration: "" as "" | "first_half" | "second_half",
       reason: "",
     });
 
@@ -1365,6 +1366,7 @@ const leaveBalance = useMemo(
       endDate: "",
       totalDays: 1,
       isHalfDay: false,
+      leaveDuration: "",
       reason: "",
     });
 
@@ -1446,6 +1448,23 @@ const leaveBalance = useMemo(
         return;
       }
 
+      if (leaveForm.isHalfDay) {
+        if (leaveForm.startDate !== leaveForm.endDate) {
+          setLeaveError("Half-day leave must be for a single date.");
+          return;
+        }
+
+        if (leaveForm.totalDays !== 0.5) {
+          setLeaveError("Half-day leave must be 0.5 days.");
+          return;
+        }
+
+        if (!leaveForm.leaveDuration) {
+          setLeaveError("Please select First Half or Second Half.");
+          return;
+        }
+      }
+
       if (
         leaveForm.totalDays <= 0
       ) {
@@ -1477,20 +1496,14 @@ const leaveBalance = useMemo(
                   "application/json",
               },
               body: JSON.stringify({
-                employeeId:
-                  employee.id,
-                leaveTypeId:
-                  leaveForm.leaveTypeId,
-                startDate:
-                  leaveForm.startDate,
-                endDate:
-                  leaveForm.endDate,
-                totalDays:
-                  leaveForm.totalDays,
-                isHalfDay:
-                  leaveForm.isHalfDay,
-                reason:
-                  leaveForm.reason.trim(),
+                employeeId:employee.id,
+                leaveTypeId:leaveForm.leaveTypeId,
+                startDate:leaveForm.startDate,
+                endDate:leaveForm.endDate,
+                totalDays:leaveForm.totalDays,
+                isHalfDay:leaveForm.isHalfDay,
+                leaveDuration: leaveForm.isHalfDay ? leaveForm.leaveDuration: null,
+                reason:leaveForm.reason.trim(),
               }),
             }
           );
@@ -1531,6 +1544,7 @@ const leaveBalance = useMemo(
           endDate: "",
           totalDays: 1,
           isHalfDay: false,
+          leaveDuration: "",
           reason: "",
         });
 
@@ -3451,27 +3465,22 @@ const leaveBalance = useMemo(
                     checked={
                       leaveForm.isHalfDay
                     }
-                    onChange={(e) =>
-                      setLeaveForm(
-                        (prev) => ({
+                      onChange={(e) =>
+                        setLeaveForm((prev) => ({
                           ...prev,
-                          isHalfDay:
-                            e.target
-                              .checked,
-                          totalDays:
-                            e.target
-                              .checked
-                              ? 0.5
-                              : Math.max(
-                                  calculateDaysBetween(
-                                    prev.startDate,
-                                    prev.endDate
-                                  ),
-                                  1
+                          isHalfDay: e.target.checked,
+                          leaveDuration: "",
+                          totalDays: e.target.checked
+                            ? 0.5
+                            : Math.max(
+                                calculateDaysBetween(
+                                  prev.startDate,
+                                  prev.endDate
                                 ),
-                        })
-                      )
-                    }
+                                1
+                              ),
+                        }))
+                      }
                     className="h-4 w-4 rounded border-slate-300"
                   />
 
@@ -3480,6 +3489,46 @@ const leaveBalance = useMemo(
                   </span>
 
                 </label>
+
+                {leaveForm.isHalfDay && (
+                  <div className="space-y-2">
+                    <label className="block text-sm font-semibold text-slate-700">
+                      Select Half-Day Leave
+                    </label>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      {(
+                        [
+                          ["first_half", "First Half"],
+                          ["second_half", "Second Half"],
+                        ] as const
+                      ).map(([value, label]) => (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() =>
+                            setLeaveForm((prev) => ({
+                              ...prev,
+                              leaveDuration: value,
+                            }))
+                          }
+                          className={`rounded-lg border px-3 py-2 text-sm font-semibold ${
+                            leaveForm.leaveDuration === value
+                              ? "border-indigo-600 bg-indigo-50 text-indigo-700"
+                              : "border-slate-300 text-slate-700"
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+
+                    <p className="text-xs text-slate-500">
+                      First Half Leave: You work the second half of your shift.
+                      Second Half Leave: You work the first half of your shift.
+                    </p>
+                  </div>
+                )}
 
                 <div>
 

@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { DataStore } from "@/lib/data-store";
-import { createClient, createAdminClient} from "@/lib/supabase-server";
+import {
+  createClient,
+  createAdminClient,
+} from "@/lib/supabase-server";
 
 export async function POST(request: Request) {
   try {
@@ -55,7 +58,9 @@ export async function POST(request: Request) {
 
     const { data: attendance, error: attendanceError } = await admin
       .from("attendance_logs")
-      .select("id, check_in_time, check_out_time, work_mode")
+      .select(
+        "id, check_in_time, check_out_time, work_mode, hr_decision_by, hr_decision_at, hr_decision_reason"
+      )
       .eq("employee_id", employee.id)
       .eq("attendance_date", today)
       .maybeSingle();
@@ -65,6 +70,22 @@ export async function POST(request: Request) {
     }
 
     if (action === "in") {
+      // Never allow a punch to overwrite an HR-approved decision.
+      if (attendance?.hr_decision_by) {
+        return NextResponse.json(
+          {
+            error:
+              "HR has already recorded your attendance decision for today. Contact HR if you believe it needs correction.",
+            hrDecision: {
+              saved: true,
+              reason: attendance.hr_decision_reason,
+              reviewedAt: attendance.hr_decision_at,
+            },
+          },
+          { status: 403 }
+        );
+      }
+
       if (attendance?.check_in_time && !attendance?.check_out_time) {
         return NextResponse.json(
           { error: "You are already logged in." },

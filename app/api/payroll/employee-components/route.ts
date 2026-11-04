@@ -1,20 +1,60 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase-server";
 
-export async function GET(request: Request) {
-  try {
-    console.log("EMPLOYEE COMPONENTS AUTH CHECK");
-    const supabase = await createClient();
+// =============================================================
+// HELPER - VERIFY HR ACCESS
+// =============================================================
 
-    const {data: { user }} = await supabase.auth.getUser();
+async function verifyHRAccess(supabase: Awaited<ReturnType<typeof createClient>>) {
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
 
-    console.log("EMPLOYEE COMPONENTS USER:", user?.id);
-
-    if (!user) {
-      return NextResponse.json(
+  if (authError || !user) {
+    return {
+      user: null,
+      response: NextResponse.json(
         { error: "Unauthorized" },
         { status: 401 }
-      );
+      ),
+    };
+  }
+
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+
+  if (profileError || !profile || profile.role !== "hr") {
+    return {
+      user: null,
+      response: NextResponse.json(
+        { error: "Only HR can access employee salary components." },
+        { status: 403 }
+      ),
+    };
+  }
+
+  return {
+    user,
+    response: null,
+  };
+}
+
+// =============================================================
+// GET - EMPLOYEE-SPECIFIC SALARY COMPONENTS
+// =============================================================
+
+export async function GET(request: Request) {
+  try {
+    const supabase = await createClient();
+
+    const { response } = await verifyHRAccess(supabase);
+
+    if (response) {
+      return response;
     }
 
     const { searchParams } = new URL(request.url);
@@ -27,9 +67,7 @@ export async function GET(request: Request) {
       );
     }
 
-    // =========================================================
-    // GET EMPLOYEE-SPECIFIC SALARY COMPONENTS
-    // =========================================================
+    // GET EMPLOYEE COMPONENTS
 
     const {
       data: employeeComponents,
@@ -61,9 +99,7 @@ export async function GET(request: Request) {
       });
     }
 
-    // =========================================================
     // GET MASTER COMPONENT DETAILS
-    // =========================================================
 
     const componentIds = employeeComponents.map(
       (component) => component.salary_component_id
@@ -91,9 +127,7 @@ export async function GET(request: Request) {
       throw new Error(masterComponentsError.message);
     }
 
-    // =========================================================
     // MERGE EMPLOYEE + MASTER DATA
-    // =========================================================
 
     const components = employeeComponents
       .map((employeeComponent) => {
@@ -106,9 +140,7 @@ export async function GET(request: Request) {
           return null;
         }
 
-        // =====================================================
         // HIDE EMPLOYER PF AND GRATUITY
-        // =====================================================
 
         if (
           masterComponent.code === "GRATUITY" ||
@@ -133,10 +165,12 @@ export async function GET(request: Request) {
           // Employee-specific values
           calculation_type: employeeComponent.calculation_type,
           value: Number(employeeComponent.value ?? 0),
-          is_active: Boolean(employeeComponent.is_active),
+          is_active: employeeComponent.is_active,
 
-          // Master configuration
-          affects_lop: Boolean(employeeComponent.affects_lop ?? masterComponent.affects_lop),
+          // Employee-specific LOP setting
+          affects_lop: employeeComponent.affects_lop,
+
+          // Master metadata
           is_statutory: Boolean(masterComponent.is_statutory),
           description: masterComponent.description || "",
         };
@@ -151,7 +185,7 @@ export async function GET(request: Request) {
     return NextResponse.json({
       components,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error(
       "GET /api/payroll/employee-components:",
       error
@@ -160,8 +194,9 @@ export async function GET(request: Request) {
     return NextResponse.json(
       {
         error:
-          error?.message ||
-          "Failed to load employee salary components.",
+          error instanceof Error
+            ? error.message
+            : "Failed to load employee salary components.",
       },
       { status: 500 }
     );
@@ -176,15 +211,10 @@ export async function PATCH(request: Request) {
   try {
     const supabase = await createClient();
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const { response } = await verifyHRAccess(supabase);
 
-    if (!user) {
-      return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401 }
-      );
+    if (response) {
+      return response;
     }
 
     const body = await request.json();
@@ -197,11 +227,12 @@ export async function PATCH(request: Request) {
       affects_lop,
     } = body;
 
-    // =========================================================
-    // VALIDATE ID
-    // =========================================================
+    // VALIDATE EMPLOYEE COMPONENT ID
 
-    if (!id) {
+    if (
+      typeof id !== "string" ||
+      !id.trim()
+    ) {
       return NextResponse.json(
         {
           error: "Employee salary component ID is required.",
@@ -210,23 +241,11 @@ export async function PATCH(request: Request) {
       );
     }
 
-    if (affects_lop !== undefined && typeof affects_lop !== "boolean") 
-        {
-            return NextResponse.json(
-                { error: "affects_lop must be a boolean" },
-                { status: 400 }
-            );
-        }
-
-    // =========================================================
     // BUILD UPDATE OBJECT
-    // =========================================================
 
     const updates: Record<string, unknown> = {};
 
-    // =========================================================
     // CALCULATION TYPE
-    // =========================================================
 
     if (calculation_type !== undefined) {
       const validCalculationTypes = [
@@ -235,11 +254,12 @@ export async function PATCH(request: Request) {
         "percentage_of_gross",
       ];
 
-      if (!validCalculationTypes.includes(calculation_type)) {
+      if (
+        typeof calculation_type !== "string" ||
+        !validCalculationTypes.includes(calculation_type)
+      ) {
         return NextResponse.json(
-          {
-            error: "Invalid calculation type.",
-          },
+          { error: "Invalid calculation type." },
           { status: 400 }
         );
       }
@@ -247,29 +267,33 @@ export async function PATCH(request: Request) {
       updates.calculation_type = calculation_type;
     }
 
-    // =========================================================
     // LOP APPLICABLE
-    // =========================================================
 
     if (affects_lop !== undefined) {
-        updates.affects_lop = affects_lop;
+      if (typeof affects_lop !== "boolean") {
+        return NextResponse.json(
+          { error: "affects_lop must be a boolean." },
+          { status: 400 }
+        );
+      }
+
+      updates.affects_lop = affects_lop;
     }
 
-    // =========================================================
     // VALUE
-    // =========================================================
 
     if (value !== undefined) {
       const numericValue = Number(value);
 
       if (
+        value === null ||
+        value === "" ||
         !Number.isFinite(numericValue) ||
         numericValue < 0
       ) {
         return NextResponse.json(
           {
-            error:
-              "Value must be a valid non-negative number.",
+            error: "Value must be a valid non-negative number.",
           },
           { status: 400 }
         );
@@ -278,17 +302,20 @@ export async function PATCH(request: Request) {
       updates.value = numericValue;
     }
 
-    // =========================================================
     // ACTIVE / DISABLED
-    // =========================================================
 
     if (is_active !== undefined) {
-      updates.is_active = Boolean(is_active);
+      if (typeof is_active !== "boolean") {
+        return NextResponse.json(
+          { error: "is_active must be a boolean." },
+          { status: 400 }
+        );
+      }
+
+      updates.is_active = is_active;
     }
 
-    // =========================================================
     // NOTHING TO UPDATE
-    // =========================================================
 
     if (Object.keys(updates).length === 0) {
       return NextResponse.json(
@@ -299,9 +326,8 @@ export async function PATCH(request: Request) {
       );
     }
 
-    // =========================================================
     // UPDATE EMPLOYEE SALARY COMPONENT
-    // =========================================================
+    // The supplied ID must be employee_salary_components.id.
 
     const {
       data: updated,
@@ -319,7 +345,7 @@ export async function PATCH(request: Request) {
         is_active,
         affects_lop
       `)
-      .single();
+      .maybeSingle();
 
     if (error) {
       throw new Error(error.message);
@@ -328,8 +354,7 @@ export async function PATCH(request: Request) {
     if (!updated) {
       return NextResponse.json(
         {
-          error:
-            "Employee salary component not found.",
+          error: "Employee salary component not found.",
         },
         { status: 404 }
       );
@@ -339,7 +364,7 @@ export async function PATCH(request: Request) {
       success: true,
       component: updated,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error(
       "PATCH /api/payroll/employee-components:",
       error
@@ -348,8 +373,9 @@ export async function PATCH(request: Request) {
     return NextResponse.json(
       {
         error:
-          error?.message ||
-          "Failed to update employee salary component.",
+          error instanceof Error
+            ? error.message
+            : "Failed to update employee salary component.",
       },
       { status: 500 }
     );

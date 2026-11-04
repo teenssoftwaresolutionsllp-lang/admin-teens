@@ -52,6 +52,8 @@ export default function PayrollManager({
   const [selectedMonth, setSelectedMonth] = useState(currentMonth === 1 ? 12 : currentMonth - 1);
   const [selectedYear, setSelectedYear] = useState(currentMonth === 1 ? currentYear - 1 : currentYear);
   const [selectedEmployee, setSelectedEmployee] = useState("");
+  const [payrollEmployeeSearch, setPayrollEmployeeSearch] = useState("");
+  const [payrollDepartmentFilter, setPayrollDepartmentFilter] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [running, setRunning] = useState(false);
   const [componentLoading, setComponentLoading] = useState<string | null>(null);
@@ -73,6 +75,33 @@ export default function PayrollManager({
       type: "Incentive" | "Bonus" | "Compensation";
       amount: number;
     }[]>([]);
+
+  type PendingContributionData = {
+    hasPending: boolean;
+    employeeId: string;
+    previousMonth: number;
+    previousYear: number;
+    previousMonthName: string;
+    pf: {
+      eligible: number;
+      deducted: number;
+      pending: number;
+    };
+    esi: {
+      eligible: number;
+      deducted: number;
+      pending: number;
+    };
+    totalPending: number;
+  };
+
+  const [pendingContribution, setPendingContribution] = useState<PendingContributionData | null>(null);
+
+  const [showPendingContributionModal, setShowPendingContributionModal] = useState(false);
+
+  const [checkingPendingContribution, setCheckingPendingContribution] = useState(false);
+
+  const [pendingContributionReviewed, setPendingContributionReviewed] = useState(false);
   type AdditionalEarningType = "" | "Incentive" | "Bonus" | "Compensation";
   const [additionalEarningType, setAdditionalEarningType] =  useState<AdditionalEarningType>("");
   const [additionalEarningAmount, setAdditionalEarningAmount] = useState("");
@@ -82,10 +111,65 @@ export default function PayrollManager({
     [currentYear]
   );
 
-  const activeEmployees = useMemo(
-    () => employees.filter(employee => employee.status === "active"),
-    [employees]
-  );
+  const activeEmployees = useMemo(() => employees.filter(employee => employee.status === "active"),[employees]);
+    const getEmployeeDepartment = (employee: Employee) => {
+    const department = (employee as any).department;
+    if (typeof department === "object" && department !== null) {
+      return department.name || (employee as any).department_name || "Unassigned";
+    }
+    return (
+      (employee as any).department_name ||
+      department ||
+      "Unassigned"
+    );
+  };
+
+  const payrollDepartments = useMemo(() => {
+    return Array.from(
+      new Set(activeEmployees.map(getEmployeeDepartment))
+    ).sort((a, b) => a.localeCompare(b));
+  }, [activeEmployees]);
+
+  const filteredPayrollEmployees = useMemo(() => {
+    const search = payrollEmployeeSearch.trim().toLowerCase();
+
+    return activeEmployees.filter((employee) => {
+      const department = getEmployeeDepartment(employee);
+
+      const matchesDepartment =
+        payrollDepartmentFilter === "all" ||
+        department === payrollDepartmentFilter;
+
+      const fullName =
+        `${employee.first_name || ""} ${employee.last_name || ""}`.toLowerCase();
+
+      const employeeCode = String(employee.employee_id || "").toLowerCase();
+      const email = String(employee.email || "").toLowerCase();
+
+      const matchesSearch =
+        !search ||
+        fullName.includes(search) ||
+        employeeCode.includes(search) ||
+        email.includes(search);
+
+      return matchesDepartment && matchesSearch;
+    });
+  }, [
+    activeEmployees,
+    payrollEmployeeSearch,
+    payrollDepartmentFilter,
+  ]);
+
+  useEffect(() => {
+    if (
+      selectedEmployee &&
+      !filteredPayrollEmployees.some(
+        (employee) => employee.id === selectedEmployee
+      )
+    ) {
+      setSelectedEmployee("");
+    }
+  }, [filteredPayrollEmployees, selectedEmployee]);
 
   const selectedEmployeeData = useMemo(
     () => employees.find(employee => employee.id === selectedEmployee),
@@ -649,32 +733,10 @@ function PayslipBreakupRow({
     );
   };
 
-  const handleRunPayroll = async () => {
-    setMessage(null);
-
-    if (!selectedEmployee) {
-      setMessage({ type: "error", text: "Please select an employee before generating payroll." });
-      return;
-    }
-
-    if (isFuturePeriod) {
-      setMessage({
-        type: "error",
-        text: "Payroll can only be generated after the selected month has been completed."
-      });
-      return;
-    }
-
-    if (isBeforeJoiningPeriod) {
-      setMessage({
-        type: "error",
-        text: "Payroll cannot be generated for a month before the employee's joining month."
-      });
-      return;
-    }
-
+  const generatePayroll = async () => {
     try {
       setRunning(true);
+
       const response = await fetch("/api/payroll/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -683,39 +745,112 @@ function PayslipBreakupRow({
           month: selectedMonth,
           year: selectedYear,
           additionalEarnings,
-        })
+        }),
       });
+
       const data = await response.json();
 
-      if (!response.ok) throw new Error(data?.error || "Failed to generate payroll.");
+      if (!response.ok) {
+        throw new Error(data?.error || "Failed to generate payroll.");
+      }
 
       if (data.payslips?.length) {
-        setPayslips(previous => {
+        setPayslips((previous) => {
           const generated = data.payslips as Payslip[];
+
           const withoutGenerated = previous.filter(
-            existing => !generated.some(
-              newSlip =>
-                newSlip.employee_id === existing.employee_id &&
-                newSlip.payroll_month === existing.payroll_month &&
-                newSlip.payroll_year === existing.payroll_year
-            )
+            (existing) =>
+              !generated.some(
+                (newSlip) =>
+                  newSlip.employee_id === existing.employee_id &&
+                  newSlip.payroll_month === existing.payroll_month &&
+                  newSlip.payroll_year === existing.payroll_year
+              )
           );
+
           return [...generated, ...withoutGenerated];
         });
       }
 
       setMessage({
         type: "success",
-        text: `Payroll generated successfully for ${selectedEmployeeData?.first_name || "employee"}.`
+        text: `Payroll generated successfully for ${selectedEmployeeData?.first_name || "employee"}.`,
       });
+
       setActiveTab("slips");
     } catch (error: any) {
       setMessage({
         type: "error",
-        text: error?.message || "Something went wrong while generating payroll."
+        text: error?.message || "Something went wrong while generating payroll.",
       });
     } finally {
       setRunning(false);
+    }
+  };
+
+  const handleRunPayroll = async () => {
+    setMessage(null);
+
+    if (!selectedEmployee) {
+      setMessage({
+        type: "error",
+        text: "Please select an employee before generating payroll.",
+      });
+      return;
+    }
+
+    if (isFuturePeriod) {
+      setMessage({
+        type: "error",
+        text: "Payroll can only be generated after the selected month has been completed.",
+      });
+      return;
+    }
+
+    if (isBeforeJoiningPeriod) {
+      setMessage({
+        type: "error",
+        text: "Payroll cannot be generated for a month before the employee's joining month.",
+      });
+      return;
+    }
+
+    try {
+      setCheckingPendingContribution(true);
+
+      const params = new URLSearchParams({
+        employeeId: selectedEmployee,
+        month: String(selectedMonth),
+        year: String(selectedYear),
+      });
+
+      const response = await fetch(
+        `/api/payroll/pending-contributions?${params.toString()}`
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data?.error || "Failed to check pending PF/ESI contributions."
+        );
+      }
+
+      setPendingContribution(data);
+
+      if (data.hasPending) {
+        setShowPendingContributionModal(true);
+        return;
+      }
+
+      await generatePayroll();
+    } catch (error: any) {
+      setMessage({
+        type: "error",
+        text: error?.message || "Unable to check pending contributions.",
+      });
+    } finally {
+      setCheckingPendingContribution(false);
     }
   };
 
@@ -969,24 +1104,114 @@ function PayslipBreakupRow({
 
               <div className="p-5">
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                  <div className="md:col-span-3">
-                    <label className="mb-1.5 block text-xs font-semibold text-slate-700">Employee</label>
+                  {/* Department Filter */}
+                  <div className="md:col-span-1">
+                    <label className="mb-1.5 block text-xs font-semibold text-slate-700">
+                      Department
+                    </label>
+
+                    <select
+                      value={payrollDepartmentFilter}
+                      onChange={(event) =>
+                        setPayrollDepartmentFilter(event.target.value)
+                      }
+                      className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50"
+                    >
+                      <option value="all">All Departments</option>
+
+                      {payrollDepartments.map((department) => (
+                        <option key={department} value={department}>
+                          {department}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Employee Search */}
+                  <div className="md:col-span-2">
+                    <label className="mb-1.5 block text-xs font-semibold text-slate-700">
+                      Search Employee
+                    </label>
+
                     <div className="relative">
-                      <UserRound className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                      <select
-                        value={selectedEmployee}
-                        onChange={event => setSelectedEmployee(event.target.value)}
-                        className="h-10 w-full appearance-none rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50"
-                      >
-                        <option value="">Select an employee</option>
-                        {activeEmployees.map(employee => (
-                          <option key={employee.id} value={employee.id}>
-                            {employee.first_name} {employee.last_name} — {employee.employee_id}
-                          </option>
-                        ))}
-                      </select>
+                      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+
+                      <input
+                        type="text"
+                        value={payrollEmployeeSearch}
+                        onChange={(event) =>
+                          setPayrollEmployeeSearch(event.target.value)
+                        }
+                        placeholder="Search by employee name, ID or email..."
+                        className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50"
+                      />
                     </div>
                   </div>
+
+                  {/* Filtered Employee Selection */}
+
+                  <div className="relative md:col-span-3">
+                    <label className="mb-1.5 block text-xs font-semibold text-slate-700">
+                      Select Employee
+                    </label>
+
+                    {/* Selected employee display */}
+                    <div className="flex h-10 items-center rounded-lg border border-slate-200 bg-white px-3 text-sm">
+                      {selectedEmployeeData ? (
+                        <span className="font-medium text-slate-800">
+                          {selectedEmployeeData.first_name}{" "}
+                          {selectedEmployeeData.last_name} —{" "}
+                          {selectedEmployeeData.employee_id}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400">
+                          Select an employee from the results below
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Automatically visible filtered employee list */}
+                    {(payrollEmployeeSearch.trim().length > 0 ||
+                      payrollDepartmentFilter !== "all") &&
+                      !selectedEmployee && (
+                        <div className="mt-2 max-h-64 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-md">
+
+                          {filteredPayrollEmployees.length > 0 ? (
+                            filteredPayrollEmployees.map((employee) => (
+                              <button
+                                key={employee.id}
+                                type="button"
+                                onClick={() => setSelectedEmployee(employee.id)}
+                                className="flex w-full items-center justify-between border-b border-slate-100 px-4 py-3 text-left transition hover:bg-indigo-50 last:border-b-0"
+                              >
+                                <div>
+                                  <p className="text-sm font-semibold text-slate-800">
+                                    {employee.first_name} {employee.last_name}
+                                  </p>
+
+                                  <p className="mt-1 text-xs text-slate-500">
+                                    {employee.employee_id} ·{" "}
+                                    {getEmployeeDepartment(employee)}
+                                  </p>
+                                </div>
+
+                                <UserRound className="h-4 w-4 text-slate-400" />
+                              </button>
+                            ))
+                          ) : (
+                            <p className="px-4 py-3 text-sm text-amber-600">
+                              No employees found for the selected department and search.
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                    <p className="mt-1.5 text-xs text-slate-500">
+                      Showing {filteredPayrollEmployees.length} of{" "}
+                      {activeEmployees.length} active employees
+                    </p>
+                  </div>
+
 
                   <FieldSelect
                     label="Payroll Month"
@@ -1303,13 +1528,28 @@ function PayslipBreakupRow({
                     <p className="text-xs font-semibold text-slate-800">Ready to process?</p>
                     <p className="mt-0.5 text-[10px] text-slate-500">The generated payslip will be saved for the selected employee and period.</p>
                   </div>
-                  <button
-                    onClick={handleRunPayroll}
-                    disabled={running || !selectedEmployee || !payrollPeriodValid}
-                    className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-indigo-600 px-5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {running ? <><Loader2 className="h-4 w-4 animate-spin" />Generating...</> : <><Play className="h-4 w-4" />Generate Payroll</>}
-                  </button>
+                    <button
+                      onClick={handleRunPayroll}
+                      disabled={
+                        running ||
+                        checkingPendingContribution ||
+                        !selectedEmployee ||
+                        !payrollPeriodValid
+                      }
+                      className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-indigo-600 px-5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {running || checkingPendingContribution ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          {checkingPendingContribution ? "Checking PF/ESI..." : "Generating..."}
+                        </>
+                      ) : (
+                        <>
+                          <Play className="h-4 w-4" />
+                          Generate Payroll
+                        </>
+                      )}
+                    </button>
                 </div>
               </div>
             </div>
@@ -1753,7 +1993,10 @@ function PayslipBreakupRow({
                     type="text"
                     placeholder="Search employee..."
                     value={searchTerm}
-                    onChange={event => setSearchTerm(event.target.value)}
+                    onChange={(event) => {
+                      setSelectedEmployee("");
+                      setPayrollEmployeeSearch(event.target.value);
+                    }}
                     className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-8 pr-3 text-xs outline-none focus:border-indigo-500 sm:w-56"
                   />
                 </div>
@@ -1876,6 +2119,125 @@ function PayslipBreakupRow({
           </div>
         )}
       </main>
+
+      {showPendingContributionModal &&pendingContribution &&createPortal(
+          <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
+            <div className="w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl">
+              <div className="flex items-start justify-between border-b border-amber-100 bg-amber-50 p-5">
+                <div className="flex gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
+                    <Info className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-base font-bold text-slate-900">
+                      Pending Statutory Contributions
+                    </h2>
+                    <p className="mt-1 text-xs text-slate-600">
+                      Previous payroll: {pendingContribution.previousMonthName}{" "}
+                      {pendingContribution.previousYear}
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowPendingContributionModal(false)}
+                  className="rounded-lg p-1.5 text-slate-400 hover:bg-white hover:text-slate-700"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="space-y-4 p-5">
+                <p className="text-xs leading-5 text-slate-600">
+                  The previous month's payslip has pending statutory contributions.
+                  Review these amounts before generating the current month's payroll.
+                  No pending amount will be automatically recovered.
+                </p>
+
+                <div className="overflow-hidden rounded-xl border border-slate-200">
+                  <div className="grid grid-cols-4 gap-2 bg-slate-50 px-3 py-2 text-[9px] font-bold uppercase text-slate-500">
+                    <span>Contribution</span>
+                    <span className="text-right">Eligible</span>
+                    <span className="text-right">Deducted</span>
+                    <span className="text-right">Pending</span>
+                  </div>
+
+                  {[
+                    {
+                      name: "PF",
+                      ...pendingContribution.pf,
+                    },
+                    {
+                      name: "ESI",
+                      ...pendingContribution.esi,
+                    },
+                  ].map((item) => (
+                    <div
+                      key={item.name}
+                      className="grid grid-cols-4 gap-2 border-t border-slate-100 px-3 py-3"
+                    >
+                      <span className="text-xs font-semibold text-slate-800">
+                        {item.name}
+                      </span>
+                      <span className="text-right text-[10px] text-slate-600">
+                        {formatCurrency(item.eligible)}
+                      </span>
+                      <span className="text-right text-[10px] text-slate-600">
+                        {formatCurrency(item.deducted)}
+                      </span>
+                      <span className="text-right text-[10px] font-bold text-rose-600">
+                        {formatCurrency(item.pending)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex items-center justify-between rounded-xl bg-rose-50 px-4 py-3">
+                  <span className="text-xs font-semibold text-rose-800">
+                    Total Pending
+                  </span>
+                  <span className="text-lg font-bold text-rose-700">
+                    {formatCurrency(pendingContribution.totalPending)}
+                  </span>
+                </div>
+
+                <p className="text-[10px] leading-4 text-slate-500">
+                  Continuing will generate payroll without recovering these previous
+                  pending amounts. Review and obtain the necessary authorization
+                  before making any recovery.
+                </p>
+              </div>
+
+              <div className="flex flex-col-reverse gap-2 border-t border-slate-100 bg-slate-50 p-4 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowPendingContributionModal(false);
+                    setActiveTab("slips");
+                  }}
+                  className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                >
+                  Review Previous Payslip
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowPendingContributionModal(false);
+                    void generatePayroll();
+                  }}
+                  disabled={running}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+                >
+                  <Play className="h-3.5 w-3.5" />
+                  Continue Without Recovery
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+      )}
 
       {isMounted && previewSlip && createPortal(
         <div className="fixed inset-0 z-[9999]">
@@ -2287,9 +2649,7 @@ function PayslipBreakupRow({
                                 </span>
 
                                 <span className="whitespace-nowrap text-sm font-bold text-green-800">
-                                  {formatPayslipCurrency(
-                                    previewSlip.gross_salary || 0
-                                  )}
+                                  {formatPayslipCurrency(earnings.reduce((total, item) => total + Number(item.amount || 0),0))}
                                 </span>
 
                               </div>

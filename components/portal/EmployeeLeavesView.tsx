@@ -138,6 +138,7 @@ export default function EmployeeLeavesView({
       startDate: today,
       endDate: today,
       isHalfDay: false,
+      leaveDuration: "" as "" | "first_half" | "second_half",
       reason: "",
     });
 
@@ -213,6 +214,7 @@ export default function EmployeeLeavesView({
       startDate: today,
       endDate: today,
       isHalfDay: false,
+      leaveDuration: "",
       reason: "",
     });
 
@@ -277,6 +279,22 @@ export default function EmployeeLeavesView({
       return;
     }
 
+    // Half-day validation
+
+
+    if (formData.isHalfDay) {
+      if (!formData.leaveDuration) {
+        alert("Please select First Half or Second Half.");
+        return;
+      }
+
+      if (formData.startDate !== formData.endDate) {
+        alert("Half-day leave must be for a single date.");
+        return;
+      }
+    }
+
+
     /* ----------------------------------------------------------
        VALIDATE REASON
     ---------------------------------------------------------- */
@@ -312,25 +330,23 @@ export default function EmployeeLeavesView({
           },
 
           body: JSON.stringify({
-            employeeId:
-              employee.id,
+            employeeId: employee.id,
 
-            leaveTypeId:
-              formData.leaveTypeId,
+            leaveTypeId: formData.leaveTypeId,
 
-            startDate:
-              formData.startDate,
+            startDate: formData.startDate,
 
-            endDate:
-              formData.endDate,
+            endDate: formData.endDate,
 
             totalDays,
 
-            isHalfDay:
-              formData.isHalfDay,
+            isHalfDay: formData.isHalfDay,
 
-            reason:
-              formData.reason.trim(),
+            leaveDuration: formData.isHalfDay
+              ? formData.leaveDuration
+              : null,
+
+            reason: formData.reason.trim(),
           }),
         }
       );
@@ -400,6 +416,7 @@ export default function EmployeeLeavesView({
         endDate: today,
 
         isHalfDay: false,
+        leaveDuration: "",
 
         reason: "",
       });
@@ -764,7 +781,11 @@ export default function EmployeeLeavesView({
 
                           {r.is_half_day && (
                             <p className="mt-0.5 text-[10px] font-medium text-slate-400">
-                              Half Day
+                              {r.leave_duration === "first_half"
+                                ? "First Half Leave"
+                                : r.leave_duration === "second_half"
+                                ? "Second Half Leave"
+                                : "Half Day"}
                             </p>
                           )}
 
@@ -1037,13 +1058,13 @@ export default function EmployeeLeavesView({
                     formData.isHalfDay
                   }
                   onChange={(e) =>
-                    setFormData(
-                      (prev) => ({
-                        ...prev,
-                        isHalfDay:
-                          e.target.checked,
-                      })
-                    )
+                    setFormData((prev) => ({
+                      ...prev,
+                      isHalfDay: e.target.checked,
+                      leaveDuration: e.target.checked
+                        ? prev.leaveDuration
+                        : "",
+                    }))
                   }
                   className="rounded text-indigo-600 focus:ring-indigo-500"
                 />
@@ -1057,6 +1078,46 @@ export default function EmployeeLeavesView({
                 </label>
 
               </div>
+
+              {formData.isHalfDay && (
+                <div className="space-y-2">
+                  <label className="block font-semibold text-slate-700">
+                    Select Half-Day Leave
+                  </label>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    {(
+                      [
+                        ["first_half", "First Half"],
+                        ["second_half", "Second Half"],
+                      ] as const
+                    ).map(([value, label]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            leaveDuration: value,
+                          }))
+                        }
+                        className={`rounded-lg border px-3 py-2 font-semibold ${
+                          formData.leaveDuration === value
+                            ? "border-indigo-600 bg-indigo-50 text-indigo-700"
+                            : "border-slate-300 text-slate-700"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <p className="text-[11px] text-slate-500">
+                    First Half Leave: You work the second half of your shift.
+                    Second Half Leave: You work the first half of your shift.
+                  </p>
+                </div>
+              )}
 
               {/* ==================================================
                   REASON
