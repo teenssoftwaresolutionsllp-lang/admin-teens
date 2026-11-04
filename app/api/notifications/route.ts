@@ -1,4 +1,3 @@
-
 import { NextResponse } from "next/server";
 import {
   createClient,
@@ -85,6 +84,7 @@ export async function GET() {
         .from("notifications")
         .select("id, title, message, type, is_read, created_at")
         .eq("employee_id", employeeId)
+        .is("recipient_user_id", null)
         .order("created_at", { ascending: false })
         .limit(50);
 
@@ -147,7 +147,7 @@ export async function GET() {
   }
 }
 
-export async function PATCH() {
+export async function PATCH(request: Request) {
   try {
     const supabase = await createClient();
 
@@ -191,22 +191,88 @@ export async function PATCH() {
 
     employeeId = employeeQuery.data?.id ?? null;
 
-    // Always target this user's HR notifications, and also their
-    // employee notifications when an employee record exists.
-    let query = admin
+    // An optional notificationId marks one notification as read.
+    // An empty body preserves the existing mark-all-as-read behavior.
+    let body: { notificationId?: string | number } = {};
+    try {
+      body = await request.json();
+    } catch {
+      body = {};
+    }
+
+    if (body.notificationId !== undefined && body.notificationId !== null) {
+      const notificationId = String(body.notificationId).trim();
+
+      if (!notificationId) {
+        return NextResponse.json(
+          { success: false, error: "Invalid notification ID." },
+          { status: 400, headers: noCacheHeaders }
+        );
+      }
+
+      // First check notifications addressed directly to this user.
+      const { data: recipientNotification, error: recipientError } = await admin
+        .from("notifications")
+        .update({ is_read: true })
+        .eq("id", notificationId)
+        .eq("recipient_user_id", user.id)
+        .eq("is_read", false)
+        .select("id")
+        .maybeSingle();
+
+      if (recipientError) {
+        throw new Error(recipientError.message);
+      }
+
+      let updatedNotification = recipientNotification;
+
+      // Otherwise, allow only this employee's legacy employee-scoped row.
+      if (!updatedNotification && employeeId) {
+        const { data, error } = await admin
+          .from("notifications")
+          .update({ is_read: true })
+          .eq("id", notificationId)
+          .eq("employee_id", employeeId)
+          .is("recipient_user_id", null)
+          .eq("is_read", false)
+          .select("id")
+          .maybeSingle();
+
+        if (error) {
+          throw new Error(error.message);
+        }
+
+        updatedNotification = data;
+      }
+
+      if (!updatedNotification) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Notification not found or you do not have permission to update it.",
+          },
+          { status: 404, headers: noCacheHeaders }
+        );
+      }
+
+      return NextResponse.json(
+        { success: true, notificationId },
+        { headers: noCacheHeaders }
+      );
+    }
+
+    // Mark all notifications addressed to this user as read.
+    const { error: recipientError } = await admin
       .from("notifications")
       .update({ is_read: true })
       .eq("is_read", false)
       .eq("recipient_user_id", user.id);
 
-    // The recipient_user_id filter above is intentionally scoped
-    // to this user. Handle employee-owned notifications separately.
-    const { error: recipientError } = await query;
-
     if (recipientError) {
       throw new Error(recipientError.message);
     }
 
+    // Also mark this employee's legacy employee-scoped rows as read.
     if (employeeId) {
       const { error } = await admin
         .from("notifications")

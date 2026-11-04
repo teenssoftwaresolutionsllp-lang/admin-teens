@@ -56,20 +56,16 @@ export async function DELETE(
     }
 
     // Delete Cloudinary file
-    if (document.cloudinary_public_id) {
+    // Joining documents share their original private Cloudinary asset.
+    if (document.cloudinary_public_id &&!document.source_joining_document_id) 
+    {
       try {
         await cloudinary.uploader.destroy(
           document.cloudinary_public_id,
-          {
-            resource_type:
-              document.cloudinary_resource_type || 'image',
-          }
+          {resource_type:document.cloudinary_resource_type || 'image'}
         );
       } catch (cloudinaryError) {
-        console.error(
-          'Cloudinary delete error:',
-          cloudinaryError
-        );
+        console.error('Cloudinary delete error:',cloudinaryError);
       }
     }
 

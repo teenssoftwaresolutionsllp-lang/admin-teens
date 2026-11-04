@@ -31,36 +31,22 @@ export default async function AddEmployeePage() {
   const generatedEmployeeId = await DataStore.getNextEmployeeId();
 
   let departments: Department[] = [];
+
   try {
     const adminClient = await createAdminClient();
-    const { data } = await adminClient
+
+    const { data, error } = await adminClient
       .from("departments")
-      .select("*")
-      .order("name");
-    departments = (data as Department[]) || [];
-    if (departments.length === 0) {
-      const createdAt = new Date().toISOString();
-      departments = [
-        { id: "d1", name: "Engineering", description: "Software development and engineering", created_at: createdAt },
-        { id: "d2", name: "Design", description: "UI/UX and product design", created_at: createdAt },
-        { id: "d3", name: "Marketing", description: "Marketing and communications", created_at: createdAt },
-        { id: "d4", name: "Sales", description: "Sales and business development", created_at: createdAt },
-        { id: "d5", name: "HR", description: "Human Resources and Operations", created_at: createdAt },
-        { id: "d6", name: "Finance", description: "Finance and Accounting", created_at: createdAt },
-        { id: "d7", name: "Operations", description: "Business operations", created_at: createdAt },
-      ];
+      .select("id, name, description, created_at")
+      .order("name", { ascending: true });
+
+    if (error) {
+      console.error("Failed to load departments:", error);
+    } else {
+      departments = (data as Department[]) ?? [];
     }
-  } catch {
-    const createdAt = new Date().toISOString();
-    departments = [
-      { id: "d1", name: "Engineering", description: "Software development and engineering", created_at: createdAt },
-      { id: "d2", name: "Design", description: "UI/UX and product design", created_at: createdAt },
-      { id: "d3", name: "Marketing", description: "Marketing and communications", created_at: createdAt },
-      { id: "d4", name: "Sales", description: "Sales and business development", created_at: createdAt },
-      { id: "d5", name: "HR", description: "Human Resources and Operations", created_at: createdAt },
-      { id: "d6", name: "Finance", description: "Finance and Accounting", created_at: createdAt },
-      { id: "d7", name: "Operations", description: "Business operations", created_at: createdAt },
-    ];
+  } catch (error) {
+    console.error("Department loading failed:", error);
   }
 
   return (

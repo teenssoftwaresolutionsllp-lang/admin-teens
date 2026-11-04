@@ -1,0 +1,72 @@
+name: Daily HRMS Automation
+
+on:
+  schedule:
+    # 12:05 AM IST = 18:35 UTC (previous day)
+    - cron: "35 18 * * *"
+
+  workflow_dispatch:
+    inputs:
+      execute:
+        description: "Actually update attendance and notice-period records"
+        required: true
+        type: boolean
+        default: false
+
+concurrency:
+  group: daily-hrms-automation
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  daily-automation:
+    name: Attendance and Notice Period
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Scheduled run OR manually selected execution.
+      - name: Process previous-day attendance
+        if: github.event_name == 'schedule' || inputs.execute
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          DEFAULT_HOLIDAY_CALENDAR_ID: ${{ secrets.DEFAULT_HOLIDAY_CALENDAR_ID }}
+        run: npx tsx scripts/attendance/process-daily-absence.ts --execute
+
+      # Manual run defaults to dry-run.
+      - name: Preview previous-day attendance
+        if: github.event_name == 'workflow_dispatch' && !inputs.execute
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          DEFAULT_HOLIDAY_CALENDAR_ID: ${{ secrets.DEFAULT_HOLIDAY_CALENDAR_ID }}
+        run: npx tsx scripts/attendance/process-daily-absence.ts
+
+      # Runs only after the attendance step succeeds.
+      - name: Complete due notice periods
+        if: github.event_name == 'schedule' || inputs.execute
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: npx tsx scripts/complete-notice-periods.ts --execute
+
+      - name: Preview notice-period completion
+        if: github.event_name == 'workflow_dispatch' && !inputs.execute
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: npx tsx scripts/complete-notice-periods.ts

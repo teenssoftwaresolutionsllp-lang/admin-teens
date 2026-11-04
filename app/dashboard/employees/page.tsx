@@ -1,11 +1,13 @@
-import { createClient } from "@/lib/supabase-server";
+import { createClient, createAdminClient } from "@/lib/supabase-server";
 import { DataStore } from "@/lib/data-store";
 import { redirect } from "next/navigation";
 import EmployeeTable from "@/components/EmployeeTable";
+import JoiningEmployeesView from "@/components/admin/JoiningEmployeesView";
 
 type EmployeesPageProps = {
   searchParams: Promise<{
     status?: string;
+    notice?: string;
   }>;
 };
 
@@ -16,7 +18,21 @@ const statusOptions: Record<string, string> = {
   notice_period: "Notice Period",
   notice_completed: "Notice Completed",
   early_release: "Early Release",
+  resigned: "Resigned",
 };
+
+const noticeTitles: Record<string, string> = {
+  notice_period: "On Notice",
+  notice_completed: "Notice Completed",
+  early_release: "Early Released",
+};
+
+function normalizeStatus(value: unknown): string {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+}
 
 export default async function EmployeesPage({
   searchParams,
@@ -41,85 +57,121 @@ export default async function EmployeesPage({
     profile?.role || user.user_metadata?.role || "hr";
 
   const params = await searchParams;
-  const selectedStatus = params.status?.toLowerCase();
+
+  const selectedStatus = normalizeStatus(params.status);
+  const selectedNotice = normalizeStatus(params.notice);
 
   const employees = await DataStore.getEmployees();
 
-  const { data: dbDepartments } = await supabase
-    .from("departments")
-    .select("*")
-    .order("name");
+  if (selectedStatus === "joining") {
+    return (
+      <div className="flex-1 space-y-6 p-8">
+        <div className="flex items-center justify-between">
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900">
+            Joining
+          </h1>
+        </div>
 
-  const departments =
-    dbDepartments && dbDepartments.length > 0
-      ? dbDepartments
-      : [
-          {
-            id: "d1",
-            name: "Engineering",
-            description: "Software development",
-          },
-          {
-            id: "d2",
-            name: "Design",
-            description: "UI/UX and product design",
-          },
-          {
-            id: "d3",
-            name: "HR",
-            description: "Human Resources",
-          },
-          {
-            id: "d4",
-            name: "Finance",
-            description: "Finance and payroll",
-          },
-        ];
+        <JoiningEmployeesView />
+      </div>
+    );
+  }
 
-  // Apply a filter only when a recognized status is selected.
-  // The employee status field must match the corresponding key.
+  const adminClient = await createAdminClient();
 
+  const { data: dbDepartments, error: departmentsError } =
+    await adminClient
+      .from("departments")
+      .select("id, name, description, created_at")
+      .order("name", { ascending: true });
 
-  const filteredEmployees = selectedStatus? employees.filter((employee) => {
-        const employeeStatus = String(employee.status ?? "")
-          .trim()
-          .toLowerCase()
-          .replace(/[\s-]+/g, "_");
+  if (departmentsError) {
+    console.error(
+      "Failed to load departments:",
+      departmentsError
+    );
+  }
+
+  const departments = dbDepartments ?? [];
+
+  const today = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+
+  const filteredEmployees = selectedStatus
+    ? employees.filter((employee) => {
+        const employeeStatus = normalizeStatus(employee.status);
 
         const emp = employee as typeof employee & {
           notice_status?: string | null;
           planned_last_working_date?: string | null;
         };
 
-        const noticeStatus = String(emp.notice_status ?? "")
-          .trim()
-          .toLowerCase()
-          .replace(/[\s-]+/g, "_");
+        const noticeStatus = normalizeStatus(emp.notice_status);
 
         if (
-          !Object.prototype.hasOwnProperty.call(statusOptions, selectedStatus)
+          !Object.prototype.hasOwnProperty.call(
+            statusOptions,
+            selectedStatus
+          )
         ) {
           return false;
         }
 
-        if (selectedStatus === "notice_period") {
-          return (
-            employeeStatus === "on_notice" &&
-            noticeStatus !== "notice_completed" &&
-            noticeStatus !== "early_release" &&
-            (
-              !emp.planned_last_working_date ||
-              emp.planned_last_working_date >=
-                new Date().toISOString().slice(0, 10)
-            )
-          );
+        const isOnNotice = (employeeStatus === "on_notice" || (employeeStatus === "resigned" && noticeStatus === "notice_period")) &&
+          (!emp.planned_last_working_date || emp.planned_last_working_date >= today);
+
+        const isNoticeCompleted =
+          employeeStatus === "resigned" &&
+          noticeStatus === "notice_completed";
+
+        const isEarlyReleased =
+          employeeStatus === "resigned" &&
+          noticeStatus === "early_release";
+
+        // RESIGNED PARENT AND SUBCATEGORIES
+        if (selectedStatus === "resigned") {
+          // Parent: show all three categories
+          if (!selectedNotice) {
+            return (
+              isOnNotice ||
+              isNoticeCompleted ||
+              isEarlyReleased
+            );
+          }
+
+          // On Notice
+          if (selectedNotice === "notice_period") {
+            return isOnNotice;
+          }
+
+          // Notice Completed
+          if (selectedNotice === "notice_completed") {
+            return isNoticeCompleted;
+          }
+
+          // Early Released
+          if (selectedNotice === "early_release") {
+            return isEarlyReleased;
+          }
+
+          return false;
         }
+
+        // INDIVIDUAL STATUS FILTERS
+        if (selectedStatus === "notice_period") {
+          return isOnNotice;
+        }
+
         if (selectedStatus === "notice_completed") {
-          return noticeStatus === "notice_completed";
+          return isNoticeCompleted;
         }
 
         if (selectedStatus === "early_release") {
-          return noticeStatus === "early_release";
+          return isEarlyReleased;
         }
 
         if (selectedStatus === "laid_off") {
@@ -130,22 +182,18 @@ export default async function EmployeesPage({
           return employeeStatus === "terminated";
         }
 
-        if (selectedStatus === "resigned") {
-          return (
-            employeeStatus === "resigned" &&
-            noticeStatus !== "notice_completed" &&
-            noticeStatus !== "early_release"
-          );
-        }
-
         return employeeStatus === selectedStatus;
       })
     : employees;
 
   const pageTitle =
-    selectedStatus && statusOptions[selectedStatus]
-      ? statusOptions[selectedStatus]
-      : "All Employees";
+    selectedStatus === "resigned"
+      ? selectedNotice
+        ? noticeTitles[selectedNotice] || "Resigned"
+        : "Resigned"
+      : selectedStatus && statusOptions[selectedStatus]
+        ? statusOptions[selectedStatus]
+        : "All Employees";
 
   return (
     <div className="flex-1 space-y-6 p-8">

@@ -241,6 +241,28 @@ export async function POST(request: Request) {
     );
     const adminClient = await createAdminClient();
 
+    // Validate department_id against the departments table
+    if (employeeData.department_id) {
+      const { data: department, error: departmentError } = await adminClient
+        .from("departments")
+        .select("id")
+        .eq("id", employeeData.department_id)
+        .maybeSingle();
+
+      if (departmentError) {
+        throw new Error(
+          `Failed to validate department: ${departmentError.message}`
+        );
+      }
+
+      if (!department) {
+        return NextResponse.json(
+          { error: "Invalid department selected. Please select a valid department." },
+          { status: 400 }
+        );
+      }
+    }
+
     //gen emp ud
     if (!employeeData.employee_id) {
     const { data: existingEmployees, error: employeeIdError } = await adminClient

@@ -29,17 +29,43 @@ export async function proxy(request: NextRequest) {
 
   const {
     data: { user },
+    error,
   } = await supabase.auth.getUser()
+
+  if (error) {
+    console.error("SUPABASE PROXY AUTH ERROR:", {
+      message: error.message,
+      status: error.status,
+      name: error.name,
+      path: request.nextUrl.pathname,
+    })
+  }
+
+  console.log("SUPABASE PROXY SESSION:", {
+    authenticated: !!user,
+    path: request.nextUrl.pathname,
+  })
 
   const path = request.nextUrl.pathname
   const isDashboardPath = path.startsWith('/dashboard')
   const isPortalPath = path.startsWith('/portal')
   const isLoginPath = path === '/login'
+  const isTemporaryAuthFailure =
+    error?.name === "AuthRetryableFetchError" ||
+    error?.status === 0 ||
+    error?.name === "AbortError";
+
+  if (!user && isTemporaryAuthFailure && (isDashboardPath || isPortalPath)) {
+    return new NextResponse(
+      "Authentication service is temporarily unavailable. Please try again.",
+      {status: 503,headers: {"Retry-After": "5","Content-Type": "text/plain",},}
+    );
+  }
 
   if (!user && (isDashboardPath || isPortalPath)) {
-    const url = request.nextUrl.clone()
-    url.pathname = '/login'
-    return NextResponse.redirect(url)
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+    return NextResponse.redirect(url);
   }
 
   if (user && isLoginPath) {
@@ -54,5 +80,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*', '/portal/:path*', '/login'],
+  matcher: ['/dashboard/:path*', '/portal/:path*', '/login','/api/:path*',],
 }
