@@ -31,6 +31,17 @@ export default async function AdminAttendancePage() {
   }
 
   const logs = (attendanceLogs ?? []) as AttendanceLog[];
+  const { data: approvedLeaves, error: leaveError } = await admin
+    .from("leave_requests")
+    .select(
+      "id, employee_id, start_date, end_date, total_days, is_half_day, leave_duration"
+    )
+    .eq("status", "approved");
+
+  if (leaveError) {
+    console.error("Approved leave loading failed:", leaveError);
+    throw new Error("Unable to load approved leave records.");
+  }
 
   // Keep existing employee and project loading unchanged.
   const employees = await DataStore.getEmployees();
@@ -41,6 +52,7 @@ export default async function AdminAttendancePage() {
       logs={logs}
       employees={employees}
       projects={projects}
+      approvedLeaves={approvedLeaves ?? []}
     />
   );
 }
