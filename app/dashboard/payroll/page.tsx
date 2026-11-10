@@ -1,4 +1,3 @@
-
 import { createClient } from "@/lib/supabase-server";
 import { DataStore } from "@/lib/data-store";
 import PayrollManager from "@/components/admin/PayrollManager";

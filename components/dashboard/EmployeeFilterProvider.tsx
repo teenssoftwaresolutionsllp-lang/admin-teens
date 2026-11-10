@@ -10,9 +10,11 @@ import {
 import type { ReactNode } from "react";
 
 type DashboardEmployeeFilter = {
-  status: "active";
+  status: "all" | "active";
   departmentId: string | null;
   departmentName: string;
+  joiningDateFrom?: string | null;
+  joiningDateTo?: string | null;
 };
 
 type EmployeeFilterContextType = {

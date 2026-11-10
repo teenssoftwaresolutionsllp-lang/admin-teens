@@ -622,40 +622,6 @@ export default async function DashboardPage({
             </div>
           </div>
 
-          {/* Pending Approval Alert */}
-          {/* {totalPendingActions > 0 && (
-            <div className="flex flex-col justify-between gap-4 rounded-2xl border border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50 p-4 sm:flex-row sm:items-center sm:p-5">
-              <div className="flex min-w-0 items-center gap-3">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
-                  <ShieldAlert className="h-5 w-5" />
-                </div>
-
-                <div className="min-w-0">
-                  <p className="text-sm font-bold text-slate-900">
-                    {totalPendingActions} pending request
-                    {totalPendingActions === 1 ? '' : 's'} require your review
-                  </p>
-
-                  <p className="mt-1 text-xs leading-5 text-slate-600">
-                    {pendingProfileCount} profile changes
-                    <span className="mx-2 text-amber-400">•</span>
-                    {pendingLeaveCount} leave requests
-                    <span className="mx-2 text-amber-400">•</span>
-                    {pendingRegCount} attendance regularizations
-                  </p>
-                </div>
-              </div>
-
-              <Link
-                href="/dashboard/approvals"
-                className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-amber-600 px-4 py-2.5 text-xs font-semibold text-white shadow-sm transition hover:bg-amber-700"
-              >
-                Review Requests
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </div>
-          )} */}
-
           {/* Interactive KPI cards */}
           <DashboardKpiCards
             activeEmployees={activeEmployees}

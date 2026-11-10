@@ -1,4 +1,5 @@
 "use client";
+
 import { useEmployeeDashboardFilter } from "@/components/dashboard/EmployeeFilterProvider";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -9,7 +10,6 @@ import {
   Building2,
   CheckCircle2,
   Clock,
-  TrendingUp,
 } from "lucide-react";
 
 interface DashboardChartsProps {
@@ -123,8 +123,7 @@ function getDonutSegmentPath(
   const innerEnd = point(innerRadius, endAngle);
   const innerStart = point(innerRadius, startAngle);
 
-  const largeArc =
-    endAngle - startAngle > 180 ? 1 : 0;
+  const largeArc = endAngle - startAngle > 180 ? 1 : 0;
 
   return [
     `M ${outerStart.x} ${outerStart.y}`,
@@ -146,9 +145,7 @@ export default function DashboardCharts({
     new Date().getMonth() + 1
   );
 
-  const [selectedYear, setSelectedYear] = useState(
-    currentYear
-  );
+  const [selectedYear, setSelectedYear] = useState(currentYear);
 
   const [selectedDepartment, setSelectedDepartment] =
     useState<string | null>(null);
@@ -185,12 +182,10 @@ export default function DashboardCharts({
       }
     });
 
-    return Array.from(availableYears).sort(
-      (a, b) => b - a
-    );
+    return Array.from(availableYears).sort((a, b) => b - a);
   }, [typedEmployees, currentYear]);
 
-  // Employees completing probation in the selected month/year.
+  // All active employees scheduled for probation in selected month/year.
   const probationEmployees = useMemo(() => {
     return typedEmployees
       .filter((employee) => {
@@ -200,11 +195,10 @@ export default function DashboardCharts({
 
         if (!probationDate) return false;
 
-        const [year, month] = probationDate
-          .split("-")
-          .map(Number);
+        const [year, month] = probationDate.split("-").map(Number);
 
         return (
+          String(employee.status ?? "").toLowerCase() === "active" &&
           year === selectedYear &&
           month === selectedMonth
         );
@@ -218,16 +212,30 @@ export default function DashboardCharts({
       });
   }, [typedEmployees, selectedMonth, selectedYear]);
 
-  // Pending probation: only today and future probation dates.
-  const pendingProbationCount = probationEmployees.filter(
+  // Probation end date is today or earlier.
+  // These employees still need HR confirmation.
+  const completedProbationEmployees = probationEmployees.filter(
     (employee) => {
       const probationDate = getDateOnly(
         employee.probation_end_date
       );
 
-      return probationDate && probationDate >= todayDate;
+      return probationDate && probationDate <= todayDate;
     }
-  ).length;
+  );
+
+  // Future probation end dates.
+  const pendingProbationEmployees = probationEmployees.filter(
+    (employee) => {
+      const probationDate = getDateOnly(
+        employee.probation_end_date
+      );
+
+      return probationDate && probationDate > todayDate;
+    }
+  );
+
+  const pendingProbationCount = pendingProbationEmployees.length;
 
   // Department-wise workforce distribution.
   const departmentData = useMemo<DepartmentChartItem[]>(() => {
@@ -278,76 +286,6 @@ export default function DashboardCharts({
     0
   );
 
-    // Workforce overview: current employee status distribution.
-  const workforceSummary = useMemo(() => {
-    const summary = {
-      active: 0,
-      onNotice: 0,
-      other: 0,
-    };
-
-    typedEmployees.forEach((employee) => {
-      const status = String(employee.status ?? "").toLowerCase();
-
-      if (status === "active") {
-        summary.active++;
-      } else if (status === "on_notice") {
-        summary.onNotice++;
-      } else {
-        summary.other++;
-      }
-    });
-
-    return summary;
-  }, [typedEmployees]);
-
-  // Actual monthly joinings for the last six months.
-  const monthlyJoiningData = useMemo(() => {
-    const now = new Date();
-
-    return Array.from({ length: 6 }, (_, index) => {
-      const date = new Date(
-        now.getFullYear(),
-        now.getMonth() - 5 + index,
-        1
-      );
-
-      const count = typedEmployees.filter((employee) => {
-        const joiningDate = getDateOnly(employee.joining_date);
-
-        if (!joiningDate) return false;
-
-        const [year, month] = joiningDate.split("-").map(Number);
-
-        return (
-          year === date.getFullYear() &&
-          month === date.getMonth() + 1
-        );
-      }).length;
-
-      return {
-        month: date.toLocaleDateString("en-IN", {
-          month: "short",
-        }),
-        count,
-      };
-    });
-  }, [typedEmployees]);
-
-  const maxMonthlyJoinings = Math.max(
-    1,
-    ...monthlyJoiningData.map((item) => item.count)
-  );
-
-  const monthlyJoiningPoints = monthlyJoiningData
-    .map((item, index) => {
-      const x = 25 + index * 58;
-      const y = 115 - (item.count / maxMonthlyJoinings) * 85;
-
-      return `${x},${y}`;
-    })
-    .join(" ");
-
   const selectedDepartmentData = departmentData.find(
     (department) => department.name === selectedDepartment
   );
@@ -376,24 +314,18 @@ export default function DashboardCharts({
 
   return (
     <div className="grid min-w-0 grid-cols-1 gap-5 xl:grid-cols-5">
-
       {/* Probation Completion Tracker */}
       <section className="flex min-w-0 flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-3">
-
         {/* Header and filters */}
         <div className="mb-6 flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
-          <div className="flex items-center gap-2">
+          <div>
+            <h2 className="text-base font-semibold text-slate-800">
+              Probation Completion Tracker
+            </h2>
 
-
-            <div>
-              <h2 className="text-base font-semibold text-slate-800">
-                Probation Completion Tracker
-              </h2>
-
-              <p className="mt-1 text-xs text-slate-500">
-                Active employee distribution by department
-              </p>
-            </div>
+            <p className="mt-1 text-xs text-slate-500">
+              Active employee probation status
+            </p>
           </div>
 
           <div className="flex items-center gap-2">
@@ -431,8 +363,7 @@ export default function DashboardCharts({
 
         {/* Summary cards */}
         <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
-
-          {/* Total probation completions in selected month */}
+          {/* Completing probation */}
           <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 p-4">
             <div className="flex items-center justify-between">
               <p className="text-xs font-medium text-indigo-700">
@@ -443,16 +374,15 @@ export default function DashboardCharts({
             </div>
 
             <p className="mt-3 text-2xl font-bold text-indigo-700">
-              {probationEmployees.length}
+              {completedProbationEmployees.length}
             </p>
 
             <p className="mt-1 text-xs text-indigo-600">
-              Employees in {MONTHS[selectedMonth - 1]}{" "}
-              {selectedYear}
+              Employees in {MONTHS[selectedMonth - 1]} {selectedYear}
             </p>
           </div>
 
-          {/* Pending probation in selected month */}
+          {/* Pending probation */}
           <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-4">
             <div className="flex items-center justify-between">
               <p className="text-xs font-medium text-emerald-700">
@@ -467,16 +397,16 @@ export default function DashboardCharts({
             </p>
 
             <p className="mt-1 text-xs text-emerald-600">
-              Not yet completed
+              Upcoming probation end dates
             </p>
           </div>
         </div>
 
-        {/* Employee list */}
+        {/* Employee list: both groups */}
         <div className="min-w-0">
           <div className="mb-3 flex items-center justify-between gap-2">
             <h3 className="text-sm font-semibold text-slate-800">
-              Employees Completing Probation
+              Probation Employees
             </h3>
 
             <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
@@ -517,12 +447,9 @@ export default function DashboardCharts({
                       employee.probation_end_date
                     );
 
-                    const probationStatus =
-                      probationDate && probationDate < todayDate
-                        ? "Completed"
-                        : probationDate === todayDate
-                          ? "Completing Today"
-                          : "Pending";
+                    const isPastOrToday =
+                      probationDate !== null &&
+                      probationDate <= todayDate;
 
                     return (
                       <tr
@@ -543,8 +470,7 @@ export default function DashboardCharts({
                       >
                         <td className="px-4 py-3">
                           <p className="text-xs font-semibold text-slate-800">
-                            {employee.first_name}{" "}
-                            {employee.last_name}
+                            {employee.first_name} {employee.last_name}
                           </p>
 
                           <p className="mt-1 text-[11px] text-slate-500">
@@ -561,21 +487,14 @@ export default function DashboardCharts({
                         </td>
 
                         <td className="px-4 py-3 text-xs font-medium text-slate-700">
-                          {probationDate
-                            ? formatDate(probationDate)
-                            : "-"}
+                          {probationDate ? formatDate(probationDate) : "-"}
                         </td>
 
                         <td className="px-4 py-3">
-                          {probationStatus === "Completed" ? (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-medium text-blue-700">
+                          {isPastOrToday ? (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-700">
                               <CheckCircle2 className="h-3 w-3" />
                               Completed
-                            </span>
-                          ) : probationStatus === "Completing Today" ? (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-700">
-                              <Clock className="h-3 w-3" />
-                              Completing Today
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-700">
@@ -595,11 +514,11 @@ export default function DashboardCharts({
               <CalendarDays className="mb-3 h-8 w-8 text-slate-300" />
 
               <p className="text-sm font-medium text-slate-600">
-                No probation completions found
+                No probation employees found
               </p>
 
               <p className="mt-1 text-xs text-slate-400">
-                No employees are scheduled to complete probation in{" "}
+                No active employees have probation dates in{" "}
                 {MONTHS[selectedMonth - 1]} {selectedYear}.
               </p>
             </div>
@@ -607,9 +526,8 @@ export default function DashboardCharts({
         </div>
       </section>
 
-      {/* Department-wise Employees - Separate Card */}
+      {/* Department-wise Employees */}
       <section className="flex min-w-0 flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-2">
-
         <div className="mb-5">
           <h2 className="text-base font-semibold text-slate-800">
             Department-wise Employees
@@ -622,7 +540,7 @@ export default function DashboardCharts({
 
         {activeEmployees.length > 0 && departmentData.length > 0 ? (
           <>
-            {/* Interactive thin doughnut chart */}
+            {/* Interactive doughnut chart */}
             <div className="flex justify-center py-3">
               <div className="relative h-56 w-56 shrink-0">
                 <svg
@@ -637,8 +555,7 @@ export default function DashboardCharts({
                     return departmentData.map((department) => {
                       const percentage =
                         totalDepartmentEmployees > 0
-                          ? department.count /
-                            totalDepartmentEmployees
+                          ? department.count / totalDepartmentEmployees
                           : 0;
 
                       const startAngle = currentAngle - 90;
@@ -669,8 +586,12 @@ export default function DashboardCharts({
                                 ? 0.3
                                 : 1,
                           }}
-                          onClick={() => handleDepartmentClick(department.name)}
-                          onDoubleClick={() => handleDepartmentDoubleClick(department.name)}
+                          onClick={() =>
+                            handleDepartmentClick(department.name)
+                          }
+                          onDoubleClick={() =>
+                            handleDepartmentDoubleClick(department.name)
+                          }
                         />
                       );
                     });
@@ -705,7 +626,7 @@ export default function DashboardCharts({
               </div>
             </div>
 
-            {/* Interactive department legend */}
+            {/* Department legend */}
             <div className="mt-4 max-h-[300px] space-y-2 overflow-y-auto pr-1">
               {departmentData.map((department) => {
                 const isSelected =
@@ -716,7 +637,9 @@ export default function DashboardCharts({
                     key={department.name}
                     type="button"
                     onClick={() => handleDepartmentClick(department.name)}
-                    onDoubleClick={() => handleDepartmentDoubleClick(department.name)}
+                    onDoubleClick={() =>
+                      handleDepartmentDoubleClick(department.name)
+                    }
                     className={`flex w-full items-center justify-between gap-3 rounded-lg p-2 text-left transition ${
                       isSelected
                         ? "bg-indigo-50 ring-1 ring-indigo-200"

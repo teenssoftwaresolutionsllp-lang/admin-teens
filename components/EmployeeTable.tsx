@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { usePathname,useRouter,useSearchParams } from "next/navigation"
+import { exportToExcel } from "@/lib/excel/exportToExcel";
 import companiesData from "@/data/companies.json"
 import Link from "next/link"
 import Image from "next/image"
@@ -152,7 +153,7 @@ export default function EmployeeTable({
   role,
 }: EmployeeTableProps) {
   const searchParams = useSearchParams()
-  const { dashboardFilter } = useEmployeeDashboardFilter();
+  const { dashboardFilter,clearDashboardFilter } = useEmployeeDashboardFilter();
   const pathname = usePathname()
   const router = useRouter()
   const sidebarStatus = searchParams.get("status") || "all"
@@ -329,6 +330,7 @@ export default function EmployeeTable({
     );
 
     setCurrentPage(1);
+    clearDashboardFilter();
   }
 
   useEffect(() => {
@@ -407,6 +409,8 @@ export default function EmployeeTable({
     (isAllSubmenu && statusFilter !== "all") ||
     typeFilter !== "all" ||
     (fromDate !== "" || toDate !== "") ||
+    (dashboardFilter?.joiningDateFrom != null ||
+      dashboardFilter?.joiningDateTo != null) ||
     (isAllSubmenu && additionalFiltersActive)
 
   const getStatusBadge = (status: string) => {
@@ -645,129 +649,118 @@ export default function EmployeeTable({
     </div>
   )
 
-  // Download one employee's details as DOCX.
+  // Download one employee's details as excel.
   const handleDownloadEmployee = async (emp: Employee) => {
     try {
-      const { Document, Packer, Paragraph, TextRun, HeadingLevel } =
-        await import("docx")
+      const experienceLevel =
+        (emp as EmployeeFilterRecord).experience_level === "fresher"
+          ? "Fresher"
+          : (emp as EmployeeFilterRecord).experience_level
+            ? "Experienced"
+            : "N/A";
 
-      const doc = new Document({
-        sections: [
-          {
-            children: [
-              new Paragraph({
-                text: "EMPLOYEE DETAILS",
-                heading: HeadingLevel.TITLE,
-              }),
-              new Paragraph({
-                children: [
-                  new TextRun({
-                    text: "Personal Information",
-                    bold: true,
-                    size: 28,
-                  }),
-                ],
-              }),
-              new Paragraph(`Employee ID: ${emp.employee_id || "N/A"}`),
-              new Paragraph(`First Name: ${emp.first_name || "N/A"}`),
-              new Paragraph(`Last Name: ${emp.last_name || "N/A"}`),
-              new Paragraph(`Email: ${emp.email || "N/A"}`),
-              new Paragraph(`Phone: ${emp.phone || "N/A"}`),
-              new Paragraph(`Date of Birth: ${formatDate(emp.date_of_birth)}`),
-              new Paragraph(`Gender: ${emp.gender || "N/A"}`),
-              new Paragraph(`Blood Group: ${emp.blood_group || "N/A"}`),
-              new Paragraph(`Marital Status: ${emp.marital_status || "N/A"}`),
-              new Paragraph({
-                children: [
-                  new TextRun({
-                    text: "Employment Information",
-                    bold: true,
-                    size: 28,
-                  }),
-                ],
-                spacing: { before: 300 },
-              }),
-              new Paragraph(`Department: ${getDepartmentName(emp)}`),
-              new Paragraph(`Designation: ${emp.designation || "N/A"}`),
-              new Paragraph(`Employment Type: ${emp.employment_type || "N/A"}`),
-              new Paragraph(`Experience Level: ${(emp as EmployeeFilterRecord).experience_level? (emp as EmployeeFilterRecord).experience_level === "fresher"? "Fresher": "Experienced": "N/A"}`),
-              new Paragraph(`Total Experience: ${formatTotalExperience(emp)}`),
-              new Paragraph(`Joining Date: ${formatDate(emp.joining_date)}`),
-              new Paragraph(`Probation End Date: ${formatDate(emp.probation_end_date)}`),
-              new Paragraph(`Confirmation Date: ${formatDate(emp.confirmation_date)}`),
-              new Paragraph(`Reporting Manager: ${emp.reporting_manager || "N/A"}`),
-              new Paragraph(`Work Location: ${emp.work_location || "N/A"}`),
-              new Paragraph(`Client Type: ${emp.client_type || "N/A"}`),
-              new Paragraph(`Company: ${emp.company_name || "N/A"}`),
-              new Paragraph(`CTC: ₹${emp.salary || "N/A"}`),
-              new Paragraph(`ESI Number: ${emp.esi_number || "N/A"}`),
-              new Paragraph(`Status: ${getEmployeeStatusLabel(emp)}`),
-              new Paragraph({
-                children: [
-                  new TextRun({
-                    text: "Bank & Identity Information",
-                    bold: true,
-                    size: 28,
-                  }),
-                ],
-                spacing: { before: 300 },
-              }),
-              new Paragraph(`Bank Name: ${emp.bank_name || "N/A"}`),
-              new Paragraph(`Bank Account Number: ${emp.bank_account_number || "N/A"}`),
-              new Paragraph(`IFSC Code: ${emp.ifsc_code || "N/A"}`),
-              new Paragraph(`PAN Number: ${emp.pan_number || "N/A"}`),
-              new Paragraph(`Aadhaar Number: ${emp.aadhar_number || "N/A"}`),
-              new Paragraph({
-                children: [
-                  new TextRun({
-                    text: "Address Information",
-                    bold: true,
-                    size: 28,
-                  }),
-                ],
-                spacing: { before: 300 },
-              }),
-              new Paragraph(`Permanent Address: ${emp.permanent_address || "N/A"}`),
-              new Paragraph(`Permanent City: ${emp.permanent_city || "N/A"}`),
-              new Paragraph(`Permanent State: ${emp.permanent_state || "N/A"}`),
-              new Paragraph(`Permanent Pincode: ${emp.permanent_pincode || "N/A"}`),
-              new Paragraph(`Temporary Address: ${emp.temporary_address || "N/A"}`),
-              new Paragraph(`Temporary City: ${emp.temporary_city || "N/A"}`),
-              new Paragraph(`Temporary State: ${emp.temporary_state || "N/A"}`),
-              new Paragraph(`Temporary Pincode: ${emp.temporary_pincode || "N/A"}`),
-              new Paragraph({
-                children: [
-                  new TextRun({
-                    text: "Emergency Contact",
-                    bold: true,
-                    size: 28,
-                  }),
-                ],
-                spacing: { before: 300 },
-              }),
-              new Paragraph(`Contact Name: ${emp.emergency_contact_name || "N/A"}`),
-              new Paragraph(`Contact Phone: ${emp.emergency_contact_phone || "N/A"}`),
-              new Paragraph(`Relation: ${emp.emergency_contact_relation || "N/A"}`),
-            ],
-          },
-        ],
-      })
+      const employeeData: Record<string, unknown> = {
+        employee_id: emp.employee_id || "N/A",
+        first_name: emp.first_name || "N/A",
+        last_name: emp.last_name || "N/A",
+        email: emp.email || "N/A",
+        phone: emp.phone || "N/A",
+        date_of_birth: formatDate(emp.date_of_birth),
+        gender: emp.gender || "N/A",
+        blood_group: emp.blood_group || "N/A",
+        marital_status: emp.marital_status || "N/A",
 
-      const blob = await Packer.toBlob(doc)
-      const url = window.URL.createObjectURL(blob)
-      const link = document.createElement("a")
+        department: getDepartmentName(emp),
+        designation: emp.designation || "N/A",
+        employment_type: emp.employment_type || "N/A",
+        experience_level: experienceLevel,
+        total_experience: formatTotalExperience(emp),
+        joining_date: formatDate(emp.joining_date),
+        probation_end_date: formatDate(emp.probation_end_date),
+        confirmation_date: formatDate(emp.confirmation_date),
+        reporting_manager: emp.reporting_manager || "N/A",
+        work_location: emp.work_location || "N/A",
+        client_type: emp.client_type || "N/A",
+        company: emp.company_name || "N/A",
+        ctc: emp.salary || "N/A",
+        esi_number: emp.esi_number || "N/A",
+        status: getEmployeeStatusLabel(emp),
 
-      link.href = url
-      link.download = `${emp.employee_id || `${emp.first_name}-${emp.last_name}`}-Employee.docx`
+        bank_name: emp.bank_name || "N/A",
+        bank_account_number: emp.bank_account_number || "N/A",
+        ifsc_code: emp.ifsc_code || "N/A",
+        pan_number: emp.pan_number || "N/A",
+        aadhar_number: emp.aadhar_number || "N/A",
 
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      window.URL.revokeObjectURL(url)
+        permanent_address: emp.permanent_address || "N/A",
+        permanent_city: emp.permanent_city || "N/A",
+        permanent_state: emp.permanent_state || "N/A",
+        permanent_pincode: emp.permanent_pincode || "N/A",
+        temporary_address: emp.temporary_address || "N/A",
+        temporary_city: emp.temporary_city || "N/A",
+        temporary_state: emp.temporary_state || "N/A",
+        temporary_pincode: emp.temporary_pincode || "N/A",
+
+        emergency_contact_name: emp.emergency_contact_name || "N/A",
+        emergency_contact_phone: emp.emergency_contact_phone || "N/A",
+        emergency_contact_relation: emp.emergency_contact_relation || "N/A",
+      };
+
+      const columns = [
+        { header: "Employee ID", key: "employee_id", width: 18 },
+        { header: "First Name", key: "first_name", width: 18 },
+        { header: "Last Name", key: "last_name", width: 18 },
+        { header: "Email", key: "email", width: 30 },
+        { header: "Phone", key: "phone", width: 18 },
+        { header: "Date of Birth", key: "date_of_birth", width: 18 },
+        { header: "Gender", key: "gender", width: 14 },
+        { header: "Blood Group", key: "blood_group", width: 14 },
+        { header: "Marital Status", key: "marital_status", width: 18 },
+        { header: "Department", key: "department", width: 22 },
+        { header: "Designation", key: "designation", width: 22 },
+        { header: "Employment Type", key: "employment_type", width: 18 },
+        { header: "Experience Level", key: "experience_level", width: 18 },
+        { header: "Total Experience", key: "total_experience", width: 20 },
+        { header: "Joining Date", key: "joining_date", width: 18 },
+        { header: "Probation End Date", key: "probation_end_date", width: 20 },
+        { header: "Confirmation Date", key: "confirmation_date", width: 20 },
+        { header: "Reporting Manager", key: "reporting_manager", width: 22 },
+        { header: "Work Location", key: "work_location", width: 20 },
+        { header: "Client Type", key: "client_type", width: 18 },
+        { header: "Company", key: "company", width: 25 },
+        { header: "CTC", key: "ctc", width: 18 },
+        { header: "ESI Number", key: "esi_number", width: 20 },
+        { header: "Status", key: "status", width: 18 },
+        { header: "Bank Name", key: "bank_name", width: 22 },
+        { header: "Bank Account Number", key: "bank_account_number", width: 24 },
+        { header: "IFSC Code", key: "ifsc_code", width: 18 },
+        { header: "PAN Number", key: "pan_number", width: 18 },
+        { header: "Aadhaar Number", key: "aadhar_number", width: 20 },
+        { header: "Permanent Address", key: "permanent_address", width: 35 },
+        { header: "Permanent City", key: "permanent_city", width: 18 },
+        { header: "Permanent State", key: "permanent_state", width: 18 },
+        { header: "Permanent Pincode", key: "permanent_pincode", width: 18 },
+        { header: "Temporary Address", key: "temporary_address", width: 35 },
+        { header: "Temporary City", key: "temporary_city", width: 18 },
+        { header: "Temporary State", key: "temporary_state", width: 18 },
+        { header: "Temporary Pincode", key: "temporary_pincode", width: 18 },
+        { header: "Emergency Contact Name", key: "emergency_contact_name", width: 25 },
+        { header: "Emergency Contact Phone", key: "emergency_contact_phone", width: 24 },
+        { header: "Emergency Contact Relation", key: "emergency_contact_relation", width: 25 },
+      ];
+
+      await exportToExcel({
+        fileName: `${emp.employee_id || `${emp.first_name}-${emp.last_name}`}-Employee.xlsx`,
+        sheetName: "Employee Details",
+        title: "EMPLOYEE DETAILS",
+        columns,
+        rows: [employeeData],
+      });
     } catch (error) {
-      console.error("Failed to generate employee document:", error)
+      console.error("Failed to generate employee Excel:", error);
     }
-  }
+  };
+
 
   // All-view filters are applied only when the All submenu is selected.
   const filteredEmployees = employees.filter((employee) => {
@@ -888,6 +881,19 @@ export default function EmployeeTable({
     const matchesToDate =
       !toDate || (!!dateForRange && dateForRange <= toDate)
 
+    // Dashboard New Joinings KPI date range.
+    const dashboardJoiningFrom =
+      dashboardFilter?.joiningDateFrom || "";
+
+    const dashboardJoiningTo =
+      dashboardFilter?.joiningDateTo || "";
+
+    const matchesDashboardJoiningDate =
+      (!dashboardJoiningFrom ||
+        (!!dateForRange && dateForRange >= dashboardJoiningFrom)) &&
+      (!dashboardJoiningTo ||
+        (!!dateForRange && dateForRange <= dashboardJoiningTo));
+
     // Do not apply the additional filters to any other sidebar view.
     if (!isAllSubmenu) {
       return (
@@ -897,7 +903,8 @@ export default function EmployeeTable({
         matchesType &&
         matchesCompany &&
         matchesFromDate &&
-        matchesToDate
+        matchesToDate && 
+        matchesDashboardJoiningDate
       )
     }
 
@@ -1041,6 +1048,7 @@ export default function EmployeeTable({
       matchesExperienceMonths &&
       matchesSalaryMin &&
       matchesSalaryMax &&
+      matchesDashboardJoiningDate &&
       matchesEligibility(pfFilter, emp.pf_eligible) &&
       matchesEligibility(esiFilter, emp.esi_healthcare_eligible) &&
       matchesEligibility(ptFilter, emp.pt_eligible) &&
@@ -1109,170 +1117,139 @@ export default function EmployeeTable({
     }
   }
 
-  // Download selected employees as one DOCX.
+  // Download selected employees as one excel file.
   const handleDownloadSelectedEmployees = async () => {
     const employeesToDownload = filteredEmployees.filter((emp) =>
       selectedEmployees.includes(emp.id)
-    )
+    );
 
     if (employeesToDownload.length === 0) {
-      alert("Please select at least one employee.")
-      return
+      alert("Please select at least one employee.");
+      return;
     }
 
     try {
-      setIsDownloading(true)
+      setIsDownloading(true);
 
-      const {
-        Document,
-        Packer,
-        Paragraph,
-        TextRun,
-        HeadingLevel,
-        PageBreak,
-      } = await import("docx")
+      const rows: Record<string, unknown>[] = employeesToDownload.map((emp) => {
+        const details = emp as EmployeeFilterRecord;
 
-      const children: any[] = []
+        return {
+          employee_id: emp.employee_id || "N/A",
+          first_name: emp.first_name || "N/A",
+          last_name: emp.last_name || "N/A",
+          email: emp.email || "N/A",
+          phone: emp.phone || "N/A",
+          date_of_birth: formatDate(details.date_of_birth),
+          gender: emp.gender || "N/A",
+          blood_group: details.blood_group || "N/A",
+          marital_status: details.marital_status || "N/A",
 
-      employeesToDownload.forEach((emp, index) => {
-        children.push(
-          new Paragraph({
-            text: "EMPLOYEE DETAILS",
-            heading: HeadingLevel.TITLE,
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: `${emp.first_name || ""} ${emp.last_name || ""}`,
-                bold: true,
-                size: 30,
-              }),
-            ],
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: "Personal Information",
-                bold: true,
-                size: 28,
-              }),
-            ],
-          }),
-          new Paragraph(`Employee ID: ${emp.employee_id || "N/A"}`),
-          new Paragraph(`First Name: ${emp.first_name || "N/A"}`),
-          new Paragraph(`Last Name: ${emp.last_name || "N/A"}`),
-          new Paragraph(`Email: ${emp.email || "N/A"}`),
-          new Paragraph(`Phone: ${emp.phone || "N/A"}`),
-          new Paragraph(`Date of Birth: ${formatDate(emp.date_of_birth)}`),
-          new Paragraph(`Gender: ${emp.gender || "N/A"}`),
-          new Paragraph(`Blood Group: ${emp.blood_group || "N/A"}`),
-          new Paragraph(`Marital Status: ${emp.marital_status || "N/A"}`),
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: "Employment Information",
-                bold: true,
-                size: 28,
-              }),
-            ],
-            spacing: { before: 300 },
-          }),
-          new Paragraph(`Department: ${getDepartmentName(emp)}`),
-          new Paragraph(`Designation: ${emp.designation || "N/A"}`),
-          new Paragraph(`Employment Type: ${emp.employment_type || "N/A"}`),
-          new Paragraph(`Experience Level: ${(emp as EmployeeFilterRecord).experience_level? (emp as EmployeeFilterRecord).experience_level === "fresher"? "Fresher": "Experienced": "N/A"}`),
-          new Paragraph(`Total Experience: ${formatTotalExperience(emp)}`),
-          new Paragraph(`Joining Date: ${formatDate(emp.joining_date)}`),
-          new Paragraph(`Probation End Date: ${formatDate(emp.probation_end_date)}`),
-          new Paragraph(`Confirmation Date: ${formatDate(emp.confirmation_date)}`),
-          new Paragraph(`Reporting Manager: ${emp.reporting_manager || "N/A"}`),
-          new Paragraph(`Work Location: ${emp.work_location || "N/A"}`),
-          new Paragraph(`Client Type: ${emp.client_type || "N/A"}`),
-          new Paragraph(`Company: ${emp.company_name || "N/A"}`),
-          new Paragraph(`CTC: ₹${emp.salary || "N/A"}`),
-          new Paragraph(`ESI Number: ${emp.esi_number || "N/A"}`),
-          new Paragraph(`Status: ${getEmployeeStatusLabel(emp)}`),
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: "Bank & Identity Information",
-                bold: true,
-                size: 28,
-              }),
-            ],
-            spacing: { before: 300 },
-          }),
-          new Paragraph(`Bank Name: ${emp.bank_name || "N/A"}`),
-          new Paragraph(`Bank Account Number: ${emp.bank_account_number || "N/A"}`),
-          new Paragraph(`IFSC Code: ${emp.ifsc_code || "N/A"}`),
-          new Paragraph(`PAN Number: ${emp.pan_number || "N/A"}`),
-          new Paragraph(`Aadhaar Number: ${emp.aadhar_number || "N/A"}`),
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: "Address Information",
-                bold: true,
-                size: 28,
-              }),
-            ],
-            spacing: { before: 300 },
-          }),
-          new Paragraph(`Permanent Address: ${emp.permanent_address || "N/A"}`),
-          new Paragraph(`Permanent City: ${emp.permanent_city || "N/A"}`),
-          new Paragraph(`Permanent State: ${emp.permanent_state || "N/A"}`),
-          new Paragraph(`Permanent Pincode: ${emp.permanent_pincode || "N/A"}`),
-          new Paragraph(`Temporary Address: ${emp.temporary_address || "N/A"}`),
-          new Paragraph(`Temporary City: ${emp.temporary_city || "N/A"}`),
-          new Paragraph(`Temporary State: ${emp.temporary_state || "N/A"}`),
-          new Paragraph(`Temporary Pincode: ${emp.temporary_pincode || "N/A"}`),
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: "Emergency Contact",
-                bold: true,
-                size: 28,
-              }),
-            ],
-            spacing: { before: 300 },
-          }),
-          new Paragraph(`Contact Name: ${emp.emergency_contact_name || "N/A"}`),
-          new Paragraph(`Contact Phone: ${emp.emergency_contact_phone || "N/A"}`),
-          new Paragraph(`Relation: ${emp.emergency_contact_relation || "N/A"}`)
-        )
+          department: getDepartmentName(emp),
+          designation: emp.designation || "N/A",
+          employment_type: emp.employment_type || "N/A",
+          experience_level:
+            details.experience_level === "fresher"
+              ? "Fresher"
+              : details.experience_level
+                ? "Experienced"
+                : "N/A",
+          total_experience: formatTotalExperience(emp),
+          joining_date: formatDate(emp.joining_date),
+          probation_end_date: formatDate(details.probation_end_date),
+          confirmation_date: formatDate(details.confirmation_date),
+          reporting_manager: emp.reporting_manager || "N/A",
+          work_location: details.work_location || "N/A",
+          client_type: details.client_type || "N/A",
+          company: emp.company_name || "N/A",
+          ctc: emp.salary ?? "N/A",
+          esi_number: emp.esi_number || "N/A",
+          status: getEmployeeStatusLabel(emp),
 
-        if (index < employeesToDownload.length - 1) {
-          children.push(new Paragraph({ children: [new PageBreak()] }))
-        }
-      })
+          bank_name: emp.bank_name || "N/A",
+          bank_account_number: emp.bank_account_number || "N/A",
+          ifsc_code: emp.ifsc_code || "N/A",
+          pan_number: emp.pan_number || "N/A",
+          aadhar_number: emp.aadhar_number || "N/A",
 
-      const doc = new Document({
-        sections: [{ children }],
-      })
+          permanent_address: emp.permanent_address || "N/A",
+          permanent_city: emp.permanent_city || "N/A",
+          permanent_state: emp.permanent_state || "N/A",
+          permanent_pincode: emp.permanent_pincode || "N/A",
+          temporary_address: emp.temporary_address || "N/A",
+          temporary_city: emp.temporary_city || "N/A",
+          temporary_state: emp.temporary_state || "N/A",
+          temporary_pincode: emp.temporary_pincode || "N/A",
 
-      const blob = await Packer.toBlob(doc)
-      const url = window.URL.createObjectURL(blob)
-      const link = document.createElement("a")
+          emergency_contact_name: emp.emergency_contact_name || "N/A",
+          emergency_contact_phone: emp.emergency_contact_phone || "N/A",
+          emergency_contact_relation: emp.emergency_contact_relation || "N/A",
+        };
+      });
 
-      link.href = url
+      const columns = [
+        { header: "Employee ID", key: "employee_id", width: 18 },
+        { header: "First Name", key: "first_name", width: 18 },
+        { header: "Last Name", key: "last_name", width: 18 },
+        { header: "Email", key: "email", width: 30 },
+        { header: "Phone", key: "phone", width: 18 },
+        { header: "Date of Birth", key: "date_of_birth", width: 18 },
+        { header: "Gender", key: "gender", width: 14 },
+        { header: "Blood Group", key: "blood_group", width: 14 },
+        { header: "Marital Status", key: "marital_status", width: 18 },
+        { header: "Department", key: "department", width: 22 },
+        { header: "Designation", key: "designation", width: 22 },
+        { header: "Employment Type", key: "employment_type", width: 18 },
+        { header: "Experience Level", key: "experience_level", width: 18 },
+        { header: "Total Experience", key: "total_experience", width: 20 },
+        { header: "Joining Date", key: "joining_date", width: 18 },
+        { header: "Probation End Date", key: "probation_end_date", width: 20 },
+        { header: "Confirmation Date", key: "confirmation_date", width: 20 },
+        { header: "Reporting Manager", key: "reporting_manager", width: 22 },
+        { header: "Work Location", key: "work_location", width: 20 },
+        { header: "Client Type", key: "client_type", width: 18 },
+        { header: "Company", key: "company", width: 25 },
+        { header: "CTC", key: "ctc", width: 18, numFmt: '"₹"#,##0.00' },
+        { header: "ESI Number", key: "esi_number", width: 20 },
+        { header: "Status", key: "status", width: 18 },
+        { header: "Bank Name", key: "bank_name", width: 22 },
+        { header: "Bank Account Number", key: "bank_account_number", width: 24 },
+        { header: "IFSC Code", key: "ifsc_code", width: 18 },
+        { header: "PAN Number", key: "pan_number", width: 18 },
+        { header: "Aadhaar Number", key: "aadhar_number", width: 20 },
+        { header: "Permanent Address", key: "permanent_address", width: 35 },
+        { header: "Permanent City", key: "permanent_city", width: 18 },
+        { header: "Permanent State", key: "permanent_state", width: 18 },
+        { header: "Permanent Pincode", key: "permanent_pincode", width: 18 },
+        { header: "Temporary Address", key: "temporary_address", width: 35 },
+        { header: "Temporary City", key: "temporary_city", width: 18 },
+        { header: "Temporary State", key: "temporary_state", width: 18 },
+        { header: "Temporary Pincode", key: "temporary_pincode", width: 18 },
+        { header: "Emergency Contact Name", key: "emergency_contact_name", width: 25 },
+        { header: "Emergency Contact Phone", key: "emergency_contact_phone", width: 24 },
+        { header: "Emergency Contact Relation", key: "emergency_contact_relation", width: 25 },
+      ];
 
       const companyName =
         compFilter !== "all"
           ? compFilter.replace(/[^a-zA-Z0-9]/g, "-")
-          : "Employees"
+          : "Employees";
 
-      link.download = `${companyName}-Employee-Details.docx`
-
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      window.URL.revokeObjectURL(url)
+      await exportToExcel({
+        fileName: `${companyName}-Employee-Details.xlsx`,
+        sheetName: "Employee Details",
+        title: "EMPLOYEE DETAILS",
+        subtitle: `Selected Employees: ${employeesToDownload.length}`,
+        columns,
+        rows,
+      });
     } catch (error) {
-      console.error("Failed to generate employee document:", error)
-      alert("Failed to generate employee document.")
+      console.error("Failed to generate employee Excel:", error);
+      alert("Failed to generate employee Excel.");
     } finally {
-      setIsDownloading(false)
+      setIsDownloading(false);
     }
-  }
+  };
 
   return (
     <div className="flex flex-col gap-5">
@@ -1484,7 +1461,7 @@ export default function EmployeeTable({
                   className="inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-3.5 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-300"
                 >
                   <Download className="h-4 w-4" />
-                  {isDownloading ? "Generating DOCX..." : `Download Selected${selectedEmployees.length ? ` (${selectedEmployees.length})` : ""}`}
+                  {isDownloading ? "Generating Excel..." : `Download Selected${selectedEmployees.length ? ` (${selectedEmployees.length})` : ""}`}
                 </button>
               </>
             )}
