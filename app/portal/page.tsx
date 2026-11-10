@@ -5,23 +5,33 @@ import ClockInWidget from "@/components/portal/ClockInWidget";
 import AttendanceCalendar from "@/components/portal/AttendanceCalendar";
 import Link from "next/link";
 import { Calendar, FileText, ArrowRight, Globe, AlertCircle, Briefcase } from "lucide-react";
+import { redirect } from "next/navigation";
 
 export default async function EmployeePortalPage() {
   const supabase = await createClient();
+
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Find employee corresponding to this user
-  let employee = null;
-  if (user) {
-    employee = await DataStore.getEmployeeByUserId(user.id);
+  if (!user) {
+    redirect("/login");
   }
 
-  // Fallback to sample employee if not linked yet
+  const employee = await DataStore.getEmployeeByUserId(user.id);
+
   if (!employee) {
-    const all = await DataStore.getEmployees();
-    employee = all.find((e) => e.email === user?.email) || all[0] || null;
+    return (
+      <div className="max-w-3xl mx-auto mt-10 rounded-xl border border-amber-200 bg-amber-50 p-6">
+        <h2 className="text-lg font-bold text-amber-900">
+          Employee Profile Not Linked
+        </h2>
+        <p className="mt-2 text-sm text-amber-800">
+          Your login is not linked to an employee profile. Please contact HR
+          to complete the account linking.
+        </p>
+      </div>
+    );
   }
 
   const employeeId = employee?.id;
@@ -203,11 +213,11 @@ export default async function EmployeePortalPage() {
                 {latestPayslip?.payroll_year || 2026}
               </h3>
               <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full">
-                {latestPayslip?.payment_status || "Processed"}
+                {latestPayslip?.payment_status || "No Payslip"}
               </span>
             </div>
             <p className="text-xs text-slate-300 mt-1">
-              Monthly CTC: ₹{(latestPayslip?.gross_salary || employee?.salary || 75000).toLocaleString("en-IN")}{" "}
+              Monthly CTC:{" "} {latestPayslip ? `₹${Number(latestPayslip.gross_salary ?? 0).toLocaleString("en-IN")}` : "Not available"}{" "}
               {latestPayslip && latestPayslip.lop_days > 0 && (
                 <span className="text-amber-300 font-semibold ml-1">
                   &bull; {latestPayslip.lop_days} day(s) LOP deduction (-₹
@@ -222,7 +232,9 @@ export default async function EmployeePortalPage() {
           <div className="text-right">
             <span className="text-xs text-slate-400 block">Take-Home Net Salary</span>
             <span className="text-2xl font-bold font-mono text-emerald-400">
-              ₹{(latestPayslip?.net_salary || 64800).toLocaleString("en-IN")}
+              ₹{latestPayslip
+                ? `₹${Number(latestPayslip.net_salary ?? 0).toLocaleString("en-IN")}`
+                : "Not available"}
             </span>
           </div>
 

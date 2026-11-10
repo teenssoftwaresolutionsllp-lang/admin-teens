@@ -8,9 +8,13 @@ import {
   TrendingDown, ShieldCheck, ChevronRight, Briefcase, CircleDollarSign,X,
   UserRound, User, Clock3, Info, Search, CreditCard, Pencil, Save
 } from "lucide-react";
-import Image from "next/image";
-import { SalaryComponent, Payslip, Employee } from "@/lib/types";
 import { numberToWordsIndian } from "@/lib/calculations";
+import Image from "next/image";
+
+import { SalaryComponent, Payslip, Employee } from "@/lib/types";
+import StandardPayslip, {
+  type PayslipItem,
+} from "@/components/payroll/StandardPayslip";
 
 interface PayrollManagerProps {
   initialComponents: SalaryComponent[];
@@ -27,11 +31,179 @@ const monthNames = [
   "July","August","September","October","November","December"
 ];
 
+
+const normalizePayslipBreakup = (breakup: any): any[] => {
+  if (!breakup) return [];
+
+  if (Array.isArray(breakup)) {
+    return breakup;
+  }
+
+  if (typeof breakup === "object") {
+    return Object.entries(breakup).map(([key, value]: [string, any]) => {
+      if (value && typeof value === "object") {
+        return {
+          ...value,
+          code: value.code || key,
+          name:
+            value.name ||
+            value.component_name ||
+            value.component ||
+            key,
+        };
+      }
+
+      return {
+        code: key,
+        name: key,
+        amount: value,
+      };
+    });
+  }
+
+  return [];
+};
+
+const STANDARD_SALARY_HEADS = [
+  { key: "basic", label: "Basic Salary", aliases: ["basic", "basic salary"] },
+  { key: "hra", label: "House Rent Allowance", aliases: ["hra", "house rent allowance"] },
+  { key: "conveyance", label: "Conveyance Allowance", aliases: ["conveyance", "conveyance allowance"] },
+  { key: "medical", label: "Medical Allowance", aliases: ["medical", "medical allowance"] },
+  { key: "lta", label: "Leave Travel Allowance", aliases: ["lta", "leave travel allowance"] },
+  { key: "special", label: "Special Allowance", aliases: ["special", "special allowance"] },
+];
+
+const getPayslipStandardSalary = (slip: Payslip): PayslipItem[] => {
+  const items = normalizePayslipBreakup(slip.earnings_breakup);
+
+  return STANDARD_SALARY_HEADS.map((head) => {
+    const item = items.find((entry: any) => {
+      const identifiers = [
+        entry?.code,
+        entry?.component_code,
+        entry?.name,
+        entry?.component_name,
+        entry?.component,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .replace(/[_-]+/g, " ");
+
+      return head.aliases.some((alias) => identifiers.includes(alias));
+    });
+
+    return {
+      key: head.key,
+      label: head.label,
+      amount: Number(item?.amount ?? item?.value ?? 0),
+    };
+  });
+};
+
+const getPayslipOtherEarnings = (slip: Payslip) => {
+  const items = normalizePayslipBreakup(slip.earnings_breakup);
+
+  return items.filter((item: any) => {
+    const identifiers = [
+      item?.code,
+      item?.component_code,
+      item?.name,
+      item?.component_name,
+      item?.component,
+      item?.type,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase()
+      .replace(/[_-]+/g, " ");
+
+    const isStandardSalaryHead = STANDARD_SALARY_HEADS.some((head) =>
+      head.aliases.some((alias) => identifiers.includes(alias))
+    );
+    const isEmployerContribution =
+      /employer.?contribution|employer.?pf|employer.?esi|pf.?admin|gratuity.?provision|employer.?gratuity/.test(identifiers);
+
+    return !isStandardSalaryHead && !isEmployerContribution;
+  });
+};
+
+const getPayslipDeductions = (slip: Payslip) => {
+  const items = normalizePayslipBreakup(slip.deductions_breakup);
+
+  const isLopItem = (item: any) => {
+    const text = [
+      item?.code,
+      item?.component_code,
+      item?.name,
+      item?.component_name,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+
+    return /\blop\b|loss.?of.?pay/.test(text);
+  };
+
+  const hasLop = items.some(isLopItem);
+  const lopAmount = Number(slip.lop_deduction || 0);
+
+  if (!hasLop && lopAmount > 0) {
+    items.push({
+      component_id: "lop-deduction",
+      name: "Loss of Pay",
+      code: "LOP",
+      type: "deduction" as any,
+      amount: lopAmount,
+    });
+  }
+
+  return items.filter((item: any) => {
+    const text = [
+      item?.code,
+      item?.component_code,
+      item?.name,
+      item?.component_name,
+      item?.type,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+
+    return (
+      !/employer.?contribution|employer.?pf|employer.?esi|pf.?admin|gratuity.?provision|employer.?gratuity/.test(text) &&
+      !/\bremarks?\b/.test(text)
+    );
+  });
+};
+
+const getPayslipDeductionAmount = (
+  slip: Payslip,
+  aliases: string[],
+  fallbackKey: string
+): number => {
+  const items = normalizePayslipBreakup(slip.deductions_breakup);
+  const match = items.find((item: any) => {
+    const identifiers = [item?.code, item?.component_code, item?.name, item?.component_name, item?.component]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase()
+      .replace(/[_-]+/g, " ");
+    return aliases.some((alias) => identifiers.includes(alias));
+  });
+
+  if (match) return Number(match.amount ?? match.value ?? 0);
+  return Number((slip as any)[fallbackKey] ?? 0);
+};
+
+// Currency formatters
 const formatCurrency = (value: number | null | undefined) =>
   `₹${Number(value || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 
 const formatNumber = (value: number | null | undefined) =>
   Number(value || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 });
+
+
 
 export default function PayrollManager({
   initialComponents,
@@ -314,101 +486,6 @@ const getPayslipDate = (value: any) => {
 /* AMOUNT TO WORDS */
 /* ========================================================= */
 
-const numberToWordsIndian = (num: number): string => {
-  const value = Math.floor(Math.abs(Number(num) || 0));
-
-  if (value === 0) return "Zero";
-
-  const ones = [
-    "",
-    "One",
-    "Two",
-    "Three",
-    "Four",
-    "Five",
-    "Six",
-    "Seven",
-    "Eight",
-    "Nine",
-    "Ten",
-    "Eleven",
-    "Twelve",
-    "Thirteen",
-    "Fourteen",
-    "Fifteen",
-    "Sixteen",
-    "Seventeen",
-    "Eighteen",
-    "Nineteen",
-  ];
-
-  const tens = [
-    "",
-    "",
-    "Twenty",
-    "Thirty",
-    "Forty",
-    "Fifty",
-    "Sixty",
-    "Seventy",
-    "Eighty",
-    "Ninety",
-  ];
-
-  const convertBelowThousand = (n: number): string => {
-    let result = "";
-
-    if (n >= 100) {
-      result += `${ones[Math.floor(n / 100)]} Hundred`;
-      n %= 100;
-
-      if (n > 0) {
-        result += " ";
-      }
-    }
-
-    if (n >= 20) {
-      result += tens[Math.floor(n / 10)];
-      n %= 10;
-
-      if (n > 0) {
-        result += ` ${ones[n]}`;
-      }
-    } else if (n > 0) {
-      result += ones[n];
-    }
-
-    return result;
-  };
-
-  let remaining = value;
-  const parts: string[] = [];
-
-  if (remaining >= 10000000) {
-    const crore = Math.floor(remaining / 10000000);
-    parts.push(`${convertBelowThousand(crore)} Crore`);
-    remaining %= 10000000;
-  }
-
-  if (remaining >= 100000) {
-    const lakh = Math.floor(remaining / 100000);
-    parts.push(`${convertBelowThousand(lakh)} Lakh`);
-    remaining %= 100000;
-  }
-
-  if (remaining >= 1000) {
-    const thousand = Math.floor(remaining / 1000);
-    parts.push(`${convertBelowThousand(thousand)} Thousand`);
-    remaining %= 1000;
-  }
-
-  if (remaining > 0) {
-    parts.push(convertBelowThousand(remaining));
-  }
-
-  return parts.join(" ");
-};
-
 const getAmountInWords = (amount: number) => {
   const roundedAmount = Math.round(Number(amount || 0));
 
@@ -478,37 +555,7 @@ function PayslipSummaryItem({
 /* NORMALIZE SALARY BREAKUP */
 /* ========================================================= */
 
-const normalizePayslipBreakup = (breakup: any): any[] => {
-  if (!breakup) return [];
 
-  if (Array.isArray(breakup)) {
-    return breakup;
-  }
-
-  if (typeof breakup === "object") {
-    return Object.entries(breakup).map(([key, value]: [string, any]) => {
-      if (value && typeof value === "object") {
-        return {
-          ...value,
-          code: value.code || key,
-          name:
-            value.name ||
-            value.component_name ||
-            value.component ||
-            key,
-        };
-      }
-
-      return {
-        code: key,
-        name: key,
-        amount: value,
-      };
-    });
-  }
-
-  return [];
-};
 
 
 /* ========================================================= */
@@ -537,6 +584,7 @@ function PayslipBreakupRow({
     item?.value ??
     0
   );
+
 
   return (
     <div className="flex min-h-[58px] items-center justify-between gap-5 border-b border-slate-100 py-3">
@@ -973,21 +1021,24 @@ function PayslipBreakupRow({
   };
 
   const handleViewPayslip = async (slip: Payslip) => {
-  try {
-    const response = await fetch(`/api/payroll/${slip.id}`);
+    try {
+      const response = await fetch(`/api/payroll/${slip.id}`);
 
-    if (!response.ok) {
-      throw new Error("Failed to load payslip");
+      if (!response.ok) {
+        throw new Error("Failed to load payslip");
+      }
+
+      const data = await response.json();
+      const payslipData = data.payslip || data;
+
+      setPreviewSlip({
+        ...payslipData,
+        employee: data.employee || payslipData.employee || slip.employee,
+      });
+    } catch (error) {
+      console.error("Failed to load payslip:", error);
+      setPreviewSlip(slip);
     }
-
-    const data = await response.json();
-
-    setPreviewSlip(data.payslip || data);
-  } catch (error) {
-    console.error("Failed to load payslip:", error);
-
-    setPreviewSlip(slip);
-  }
   };
 
 
@@ -2256,7 +2307,7 @@ function PayslipBreakupRow({
               <div className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 py-3 sm:px-6">
                 <div>
                   <h2 className="text-sm font-bold text-slate-900">
-                    Payslip
+                    Official Payslip Voucher
                   </h2>
                   <p className="mt-0.5 text-[11px] text-slate-500">
                     {monthNames[selectedMonth - 1]} {selectedYear}
@@ -2269,7 +2320,7 @@ function PayslipBreakupRow({
                     className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
                   >
                   <Printer className="h-4 w-4" />
-                    Print
+                    Print / Save as PDF
                   </button>
                   <button
                     type="button"
@@ -2290,511 +2341,120 @@ function PayslipBreakupRow({
                   id="payslip-print"
                   className="mx-auto my-4 w-full max-w-5xl bg-white shadow-sm print:my-0 print:max-w-none print:shadow-none"
                 >
-                  {/* ================================================= */}
-                  {/* TOP HEADER */}
-                  {/* ================================================= */}
 
-                  <div className="grid grid-cols-1 border-b border-slate-200 md:grid-cols-2">
-                    {/* COMPANY */}
-                    <div className="border-b border-slate-200 px-7 py-6 md:border-b-0 md:border-r">
-                      <div className="flex items-center gap-4">
-                        <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-white">
-                          <img
-                            src="/logo.png"
-                            alt="Teens Software Solutions LLP"
-                            className="h-full w-full object-contain p-2"
-                          />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-xs text-slate-500">
-                            Company
-                          </p>
-                          <h1 className="mt-1 text-base font-bold text-slate-900">
-                            Teens Software Solutions LLP
-                          </h1>
-                          <p className="mt-1 text-[10px] text-slate-500">
-                            Professional Payroll System
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                    {/* PAYSLIP MONTH */}
-                      <div className="px-7 py-6">
-
-                        <div className="flex items-start justify-between gap-5">
-
-                          <div>
-
-                            <p className="text-xs text-slate-500">
-                              Payslip for Month
-                            </p>
-
-                            <div className="mt-3 flex min-h-[42px] items-center rounded-md border border-slate-300 bg-white px-3">
-
-                              <span className="text-sm font-semibold text-slate-800">
-                                {monthNames[selectedMonth - 1]} {selectedYear}
-                              </span>
-
-                            </div>
-
-                          </div>
-
-                          <div className="text-right">
-
-                            <p className="text-[9px] font-semibold uppercase tracking-[0.2em] text-slate-400">
-                              Salary Statement
-                            </p>
-
-                            <p className="mt-1 text-xl font-bold text-slate-800">
-                              PAYSLIP
-                            </p>
-
-                            <p className="mt-1 text-xs font-semibold text-slate-500">
-                              {monthNames[selectedMonth - 1]} {selectedYear}
-                            </p>
-
-                          </div>
-
-                        </div>
-
-                      </div>
-
-                    </div>
-
-
-                    {/* ================================================= */}
-                    {/* COMPANY DETAILS */}
-                    {/* ================================================= */}
-
-                    <div className="border-b border-slate-200 px-7 py-6">
-
-                      <div className="mb-5">
-
-                        <h2 className="text-sm font-bold uppercase tracking-wide text-slate-800">
-                          Company Details
-                        </h2>
-
-                        <div className="mt-2 h-px bg-slate-200" />
-
-                      </div>
-
-                      <div className="grid grid-cols-1 gap-x-8 gap-y-5 md:grid-cols-2">
-
-                        <PayslipInfoRow
-                          label="Company Name"
-                          value="Teens Software Solutions LLP"
-                        />
-
-                        <PayslipInfoRow
-                          label="Email"
-                          value="info@teenss.com"
-                        />
-
-                        <div className="md:col-span-2">
-
-                          <PayslipInfoRow
-                            label="Company Address"
-                            value="Plot No. 1, 2nd Floor, Road No. 12, Banjara Hills"
-                          />
-
-                        </div>
-
-                        <PayslipInfoRow
-                          label="City"
-                          value="Hyderabad, Telangana, India"
-                        />
-
-                        <PayslipInfoRow
-                          label="Pincode"
-                          value="500037"
-                        />
-
-                      </div>
-
-                    </div>
-
-
-                    {/* ================================================= */}
-                    {/* EMPLOYEE PAY SUMMARY */}
-                    {/* ================================================= */}
-
-                    <div className="border-b border-slate-200 px-7 py-6">
-
-                      <div className="mb-5">
-
-                        <h2 className="text-sm font-bold uppercase tracking-wide text-slate-800">
-                          Employee Pay Summary
-                        </h2>
-
-                        <div className="mt-2 h-px bg-slate-200" />
-
-                      </div>
-
-                      {/* EMPLOYEE INFORMATION */}
-
-                      <div className="grid grid-cols-1 gap-x-8 gap-y-5 md:grid-cols-3">
-
-                        <PayslipInfoRow
-                          label="Employee Name"
-                          value={getPayslipEmployeeName(
-                            previewSlip.employee
-                          )}
-                        />
-
-                        <PayslipInfoRow
-                          label="Employee ID"
-                          value={getPayslipEmployeeCode(
-                            previewSlip.employee
-                          )}
-                        />
-
-                        <PayslipInfoRow
-                          label="Date of Joining"
-                          value={getPayslipDate(
-                            previewSlip.employee?.joining_date
-                          )}
-                        />
-
-                        <PayslipInfoRow
-                          label="Designation"
-                          value={
-                            previewSlip.employee?.designation || "-"
-                          }
-                        />
-
-                        <PayslipInfoRow
-                          label="Department"
-                          value={
-                            typeof previewSlip.employee?.department === "object"
-                              ? previewSlip.employee.department?.name || "-"
-                              : previewSlip.employee?.department || "-"
-                          }
-                        />
-
-                        <PayslipInfoRow
-                          label="Pay Date"
-                          value={getPayslipDate(
-                            previewSlip.created_at
-                          )}
-                        />
-
-                      </div>
-
-
-                      {/* PAY SUMMARY */}
-
-                      <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
-
-                        <PayslipSummaryItem
-                          label="Paid Days"
-                          value={previewSlip.present_days ?? 0}
-                        />
-
-                        <PayslipSummaryItem
-                          label="Loss of Pay Days"
-                          value={previewSlip.lop_days ?? 0}
-                        />
-
-                        <PayslipSummaryItem
-                          label="Paid Leave"
-                          value={previewSlip.paid_leaves ?? 0}
-                        />
-
-                      </div>
-
-                    </div>
-
-
-                    {/* ================================================= */}
-                    {/* BANK + STATUTORY DETAILS */}
-                    {/* ================================================= */}
-
-                    <div className="border-b border-slate-200 px-7 py-6">
-
-                      <div className="mb-5">
-
-                        <h2 className="text-sm font-bold uppercase tracking-wide text-slate-800">
-                          Bank Details
-                        </h2>
-
-                        <div className="mt-2 h-px bg-slate-200" />
-
-                      </div>
-
-                      <div className="grid grid-cols-1 gap-x-8 gap-y-5 md:grid-cols-3">
-
-                        <PayslipInfoRow
-                          label="Bank Name"
-                          value={getPayslipBankName(
-                            previewSlip.employee
-                          )}
-                        />
-
-                        <PayslipInfoRow
-                          label="Account Number"
-                          value={getPayslipAccountNumber(
-                            previewSlip.employee
-                          )}
-                        />
-
-                        <PayslipInfoRow
-                          label="IFSC Code"
-                          value={getPayslipIFSC(
-                            previewSlip.employee
-                          )}
-                        />
-
-                        <PayslipInfoRow
-                          label="PF Number"
-                          value={
-                            previewSlip.employee?.uan_number || "-"
-                          }
-                        />
-
-                        <PayslipInfoRow
-                          label="ESI Number"
-                          value={
-                            previewSlip.employee?.esi_number || "-"
-                          }
-                        />
-
-                        <PayslipInfoRow
-                          label="PAN NUMBER"
-                          value={
-                            previewSlip.employee?.pan_number || "-"
-                          }
-                        />
-
-                      </div>
-
-                    </div>
-
-
-                  {/* ================================================= */}
-                  {/* INCOME DETAILS */}
-                  {/* ================================================= */}
-
-                  <div className="border-b border-slate-200 px-7 py-6">
-
-                    <div className="mb-5">
-                      <h2 className="text-sm font-bold uppercase tracking-wide text-slate-800">
-                        Income Details
-                      </h2>
-
-                      <div className="mt-2 h-px bg-slate-200" />
-                    </div>
-
-                    {(() => {
-                      const earnings = normalizePayslipBreakup(
-                        previewSlip.earnings_breakup
-                      );
-
-                      const deductions = normalizePayslipBreakup(
-                        previewSlip.deductions_breakup
-                      );
-
-                      return (
-                        <div className="grid grid-cols-1 gap-10 lg:grid-cols-2">
-
-                          {/* ================================================= */}
-                          {/* EARNINGS */}
-                          {/* ================================================= */}
-
-                          <div>
-
-                            {/* HEADER */}
-
-                            <div className="mb-2 flex items-center justify-between border-b border-slate-300 pb-2">
-
-                              <h3 className="text-xs font-bold uppercase tracking-wide text-slate-800">
-                                Earnings
-                              </h3>
-
-                              <span className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">
-                                Amount
-                              </span>
-
-                            </div>
-
-
-                            {/* EARNING ROWS */}
-
-                            <div>
-
-                              {earnings.length > 0 ? (
-                                earnings.map(
-                                  (
-                                    item: any,
-                                    index: number
-                                  ) => (
-                                    <PayslipBreakupRow
-                                      key={`${item?.id || item?.code || "earning"}-${index}`}
-                                      item={item}
-                                    />
-                                  )
-                                )
-                              ) : (
-                                <div className="py-5 text-center text-xs text-slate-400">
-                                  No earnings available
-                                </div>
-                              )}
-
-
-                              {/* GROSS EARNINGS */}
-
-                              <div className="mt-2 flex min-h-[52px] items-center justify-between gap-4 rounded-md bg-green-50 px-4 py-3">
-
-                                <span className="text-xs font-bold text-green-800">
-                                  Gross Earnings
-                                </span>
-
-                                <span className="whitespace-nowrap text-sm font-bold text-green-800">
-                                  {formatPayslipCurrency(earnings.reduce((total, item) => total + Number(item.amount || 0),0))}
-                                </span>
-
-                              </div>
-
-                            </div>
-
-                          </div>
-
-
-                          {/* ================================================= */}
-                          {/* DEDUCTIONS */}
-                          {/* ================================================= */}
-
-                          <div>
-
-                            {/* HEADER */}
-
-                            <div className="mb-2 flex items-center justify-between border-b border-slate-300 pb-2">
-
-                              <h3 className="text-xs font-bold uppercase tracking-wide text-slate-800">
-                                Deductions
-                              </h3>
-
-                              <span className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">
-                                Amount
-                              </span>
-
-                            </div>
-
-
-                            {/* DEDUCTION ROWS */}
-
-                            <div>
-
-                              {deductions.length > 0 ? (
-                                deductions.map(
-                                  (
-                                    item: any,
-                                    index: number
-                                  ) => (
-                                    <PayslipBreakupRow
-                                     key={`${item?.id || item?.code || "deduction"}-${index}`}
-                                     item={item}
-                                    />
-                                  )
-                                )
-                              ) : (
-                                <div className="py-5 text-center text-xs text-slate-400">
-                                  No deductions available
-                                </div>
-                              )}
-
-
-                              {/* TOTAL DEDUCTIONS */}
-
-                              <div className="mt-2 flex min-h-[52px] items-center justify-between gap-4 rounded-md bg-red-50 px-4 py-3">
-
-                                <span className="text-xs font-bold text-red-800">
-                                  Total Deductions
-                                </span>
-
-                                <span className="whitespace-nowrap text-sm font-bold text-red-800">
-                                  {formatPayslipCurrency(
-                                    previewSlip.total_deductions || 0
-                                  )}
-                                </span>
-
-                              </div>
-
-                            </div>
-
-                          </div>
-
-                        </div>
-                      );
-                    })()}
-
-                  </div>
-
-
-                  {/* ================================================= */}
-                  {/* NET PAY */}
-                  {/* ================================================= */}
-
-                  <div className="border-b border-slate-200 px-7 py-6">
-
-                    <div className="grid grid-cols-1 gap-5 rounded-xl border border-indigo-100 bg-indigo-50 px-6 py-5 md:grid-cols-2">
-
-                      {/* NET PAY */}
-
-                      <div>
-
-                        <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-indigo-600">
-                          Net Pay
-                        </p>
-
-                        <p className="mt-2 text-2xl font-bold text-slate-900">
-                          {formatPayslipCurrency(
-                            previewSlip.net_salary || 0
-                          )}
-                        </p>
-
-                      </div>
-
-
-                      {/* AMOUNT IN WORDS */}
-
-                      <div className="md:text-right">
-
-                        <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-black-200">
-                          Amount in Words
-                        </p>
-
-                        <p className="mt-2 text-xs font-medium leading-5 text-slate-700">
-                          {getAmountInWords(
-                            Number(
-                              previewSlip.net_salary || 0
+                  <StandardPayslip
+                    employee={{
+                      name: getPayslipEmployeeName(previewSlip.employee),
+                      employeeCode: getPayslipEmployeeCode(previewSlip.employee),
+                      designation: previewSlip.employee?.designation || "-",
+                      department:
+                        typeof previewSlip.employee?.department === "object"
+                          ? previewSlip.employee.department?.name || "-"
+                          : previewSlip.employee?.department || "-",
+                      joiningDate: getPayslipDate(
+                        previewSlip.employee?.joining_date
+                      ),
+                      bankName: getPayslipBankName(previewSlip.employee),
+                      bankAccountNumber: getPayslipAccountNumber(
+                        previewSlip.employee
+                      ),
+                      ifscCode: getPayslipIFSC(previewSlip.employee),
+                      pan: previewSlip.employee?.pan_number || "-",
+                      uan: previewSlip.employee?.uan_number || "-",
+                      esiNumber: previewSlip.employee?.esi_number || "-",
+                    }}
+                    month={monthNames[selectedMonth - 1]}
+                    year={selectedYear}
+                    standardSalary={getPayslipStandardSalary(previewSlip).map((item, index) => ({
+                      ...item,
+                      label: ["Basic Pay", "House Rent Allowance", "Conveyance", "Medical Allowance", "Leave Travel Allowance", "Special Allowance"][index] || item.label,
+                    }))}
+                    earnings={[
+                      {
+                        key: "monthly-earnings-after-lop",
+                        label: "Monthly Earnings After LOP",
+                        // gross_salary is the employee's full monthly gross before LOP.
+                        // The payslip row must show the amount remaining after LOP.
+                        amount: Math.max(
+                          0,
+                          Number((previewSlip as any).gross_salary ?? 0) -
+                            getPayslipDeductionAmount(
+                              previewSlip,
+                              ["lop", "loss of pay"],
+                              "lop_deduction"
                             )
-                          )}
-                        </p>
+                        ),
+                      },
+                      {
+                        key: "arrears",
+                        label: "Arrears",
+                        amount: Number((previewSlip as any).arrears ?? 0),
+                      },
+                      {
+                        key: "incentive-bonus",
+                        label: "Incentive / Bonus",
+                        amount: Number((previewSlip as any).incentive ?? 0),
+                      },
+                    ]}
+                    deductions={[
+                      {
+                        key: "pt",
+                        label: "Professional Tax",
+                        amount: getPayslipDeductionAmount(previewSlip, ["pt", "professional tax"], "pt"),
+                      },
+                      {
+                        key: "employee-pf",
+                        label: "Employee PF",
+                        amount: getPayslipDeductionAmount(previewSlip, ["epf", "employee pf", "employee provident fund"], "epf"),
+                      },
+                      {
+                        key: "employee-esi",
+                        label: "Employee ESI",
+                        amount: getPayslipDeductionAmount(previewSlip, ["esic emp", "employee esi", "employee esic"], "esic_emp"),
+                      },
+                      {
+                        key: "tds",
+                        label: "TDS",
+                        amount: getPayslipDeductionAmount(previewSlip, ["tds", "tax deducted at source"], "tds"),
+                      },
+                      {
+                        key: "advance",
+                        label: "Advance",
+                        amount: getPayslipDeductionAmount(previewSlip, ["advance", "salary advance"], "advance"),
+                      },
+                      {
+                        key: "lop",
+                        label: "Loss of Pay",
+                        amount: getPayslipDeductionAmount(previewSlip, ["lop", "loss of pay"], "lop_deduction"),
+                      },
+                      {
+                        key: "other-deduction",
+                        label: "Other Deduction",
+                        amount: getPayslipDeductionAmount(previewSlip, ["other deduction", "other deductions"], "other_deduction"),
+                      },
+                    ]}
+                    payDate={getPayslipDate(previewSlip.created_at)}
+                    amountInWords={getAmountInWords(Number(previewSlip.net_salary || 0))}
+                    workingDays={Number(previewSlip.working_days || 0)}
+                    paidDays={Number(previewSlip.present_days || 0)}
+                    paidLeaves={Number(previewSlip.paid_leaves || 0)}
+                    lopDays={Number(previewSlip.lop_days || 0)}
+                    grossSalaryBeforeLOP={
+                      Number((previewSlip as any).gross_salary ?? 0)
+                    }
+                    grossDeductions={
+                      getPayslipDeductionAmount(previewSlip, ["pt", "professional tax"], "pt") +
+                      getPayslipDeductionAmount(previewSlip, ["epf", "employee pf", "employee provident fund"], "epf") +
+                      getPayslipDeductionAmount(previewSlip, ["esic emp", "employee esi", "employee esic"], "esic_emp") +
+                      getPayslipDeductionAmount(previewSlip, ["tds", "tax deducted at source"], "tds") +
+                      getPayslipDeductionAmount(previewSlip, ["advance", "salary advance"], "advance") +
+                      getPayslipDeductionAmount(previewSlip, ["lop", "loss of pay"], "lop_deduction") +
+                      getPayslipDeductionAmount(previewSlip, ["other deduction", "other deductions"], "other_deduction")
+                    }
+                    netPay={Number(previewSlip.net_salary || 0)}
+                    remarks={`Salary processed for ${monthNames[selectedMonth - 1]} ${selectedYear}.`}
+                  />
 
-                      </div>
-
-                    </div>
-
-                  </div>
-
-
-                  {/* ================================================= */}
-                  {/* REMARKS */}
-                  {/* ================================================= */}
-
-                  <div className="border-b border-slate-200 px-7 py-5">
-
-                    <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                      Remarks
-                    </label>
-
-                    <p className="mt-2 text-xs text-slate-600">
-                      Salary processed for{" "}
-                      {monthNames[selectedMonth - 1]}{" "}
-                      {selectedYear}.
-                    </p>
-
-                  </div>
 
 
                     {/* ================================================= */}
@@ -2990,6 +2650,19 @@ function PayslipBreakupRow({
           }
           @page { size: A4; margin: 10mm; }
           .fixed { position: static !important; }
+
+          #payslip-print .payslip-salary-grid {
+            display: grid !important;
+            grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+            gap: 8px !important;
+            align-items: start !important;
+          }
+
+          #payslip-print .payslip-salary-grid > div {
+            min-width: 0 !important;
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+          }
         }
       `}</style>
     </div>

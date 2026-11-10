@@ -8,6 +8,15 @@ import {
 
 export const dynamic = "force-dynamic";
 
+function getIndiaDate(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -48,7 +57,7 @@ export async function PATCH(
     const { data: leaveRequest, error: leaveError } =
       await adminSupabase
         .from("leave_requests")
-        .select("id, employee_id, start_date, end_date")
+        .select("id, employee_id, start_date, end_date, status")
         .eq("id", id)
         .single();
 
@@ -59,6 +68,49 @@ export async function PATCH(
           error: leaveError?.message || "Leave request not found.",
         },
         { status: 404 }
+      );
+    }
+
+    // Only pending leave requests can be reviewed.
+    if (leaveRequest.status !== "pending") {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `This leave request cannot be reviewed because its current status is "${leaveRequest.status}".`,
+        },
+        { status: 409 }
+      );
+    }
+
+    // Expire overdue pending requests using the India date.
+    const today = getIndiaDate();
+
+    if (leaveRequest.end_date < today) {
+      const { data: expiredRequest, error: expiryError } =
+        await adminSupabase
+          .from("leave_requests")
+          .update({ status: "expired" })
+          .eq("id", id)
+          .eq("status", "pending")
+          .lt("end_date", today)
+          .select("id")
+          .maybeSingle();
+
+      if (expiryError) {
+        throw new Error(
+          `Could not expire overdue leave request: ${expiryError.message}`
+        );
+      }
+
+      return NextResponse.json(
+        {
+          success: false,
+          expired: Boolean(expiredRequest),
+          error: expiredRequest
+            ? "This leave request has expired because its leave period has already ended."
+            : "This leave request is no longer pending or has already been updated.",
+        },
+        { status: 409 }
       );
     }
 

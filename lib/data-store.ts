@@ -741,8 +741,14 @@ export class DataStore {
         ...request,
         supporting_documents: documentsByRequest.get(request.id) ?? [],
       })) as ProfileChangeRequest[];
-    } catch (error) {
-      console.error("Failed to load profile change requests:", error);
+    } catch (error: any) {
+      console.error("Failed to load profile change requests:", {
+        message: error?.message,
+        code: error?.code,
+        details: error?.details,
+        hint: error?.hint,
+        stack: error?.stack,
+      });
 
       return [...cache.changeRequests].sort(
         (a, b) =>
@@ -3166,8 +3172,15 @@ const todayStr = `${parts.find(p => p.type === "year")!.value}-${parts.find(p =>
 
         if (leave) {
           const leaveUnit = leave.is_half_day ? 0.5 : 1;
-          const isPaid = Boolean(leave.leave_type?.is_paid);
-          if (isPaid) {
+          const isLop =
+            leave.leave_type?.is_paid === false ||
+            String(leave.leave_type?.code || "").toUpperCase() === "LOP" ||
+            String(leave.leave_type?.code || "").toUpperCase() === "UNPAID" ||
+            String(leave.leave_type?.name || "").toLowerCase().includes("loss of pay") ||
+            String(leave.leave_type?.name || "").toLowerCase().includes("lop") ||
+            String(leave.leave_type?.name || "").toLowerCase().includes("unpaid");
+
+          if (!isLop) {
             paidLeaves += leaveUnit;
           } else {
             lopDays += leaveUnit;
@@ -3205,12 +3218,11 @@ const todayStr = `${parts.find(p => p.type === "year")!.value}-${parts.find(p =>
         }
 
         // -----------------------------------------------------
-        // HALF DAY
+        // HALF DAY (No LOP per company policy)
         // -----------------------------------------------------
 
         if (status === "half_day") {
-          presentDays += 0.5;
-          lopDays += 0.5;
+          presentDays += 1;
           continue;
         }
 
@@ -3323,6 +3335,7 @@ const todayStr = `${parts.find(p => p.type === "year")!.value}-${parts.find(p =>
       } = await supabase
         .from("payslips")
         .select(`
+          id,
           incentive,
           bonus,
           compensation,
@@ -3562,20 +3575,27 @@ const todayStr = `${parts.find(p => p.type === "year")!.value}-${parts.find(p =>
       // SAVE / UPDATE PAYSLIP
       // =======================================================
 
-      const {
-        data: savedPayslip,
-        error: payslipError,
-      } = await supabase
-        .from("payslips")
-        .upsert(
-          payslipData,
-          {
-            onConflict:
-              "employee_id,payroll_month,payroll_year",
-          }
-        )
-        .select()
-        .single();
+      let savedPayslip: any = null;
+      let payslipError: any = null;
+
+      if ((existingPayslip as any)?.id) {
+        const res = await supabase
+          .from("payslips")
+          .update(payslipData)
+          .eq("id", (existingPayslip as any).id)
+          .select()
+          .single();
+        savedPayslip = res.data;
+        payslipError = res.error;
+      } else {
+        const res = await supabase
+          .from("payslips")
+          .insert([payslipData])
+          .select()
+          .single();
+        savedPayslip = res.data;
+        payslipError = res.error;
+      }
 
       if (payslipError) {
         throw new Error(

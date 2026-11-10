@@ -30,6 +30,8 @@ interface ApprovalsHubProps {
   initialRegularizations: AttendanceRegularization[];
   initialResignationRequests: ResignationRequest[];
   initialWfhRequests: WfhRequest[];
+  selectedLeaveId: string | null;
+  initialLeaveStatus: string;
 }
 
 type Feedback = {
@@ -43,11 +45,13 @@ export default function ApprovalsHub({
   initialRegularizations,
   initialResignationRequests,
   initialWfhRequests,
+  selectedLeaveId,
+  initialLeaveStatus,
 }: ApprovalsHubProps) {
   const searchParams = useSearchParams();
-  const requestedView = (searchParams.get("status") ?? "pending").toLowerCase();
+  const requestedView = (searchParams.get("status")  ?? initialLeaveStatus ?? "pending").toLowerCase();
   const isHistoryView = requestedView === "history";
-  const [activeTab, setActiveTab] = useState<"profile" | "leaves" | "attendance" | "documents" | "resignations" | "revert_resignations" | "wfh">("profile");
+  const [activeTab, setActiveTab] = useState<"profile" | "leaves" | "attendance" | "documents" | "resignations" | "revert_resignations" | "wfh">(selectedLeaveId ? "leaves" : "profile");
 
   const [profileRequests, setProfileRequests] = useState<ProfileChangeRequest[]>(initialProfileRequests);
   const [profileStatusFilter, setProfileStatusFilter] = useState("all");
@@ -108,7 +112,7 @@ export default function ApprovalsHub({
 
 
   useEffect(() => {
-    setActiveTab("profile");
+    setActiveTab(selectedLeaveId ? "leaves" : "profile");
     setProfileStatusFilter("all");
     setLeaveDepartmentFilter("all");
     setLeaveDurationFilter("all");
@@ -121,7 +125,8 @@ export default function ApprovalsHub({
     setResignationEmployeeSearch("");
     setResignationFromDate("");
     setResignationToDate("");
-  }, [isHistoryView]);
+  }, [isHistoryView, selectedLeaveId]);
+
 
   // Open rejection dialogs
   const openLeaveRejectionDialog = (id: string) => {
@@ -805,8 +810,29 @@ export default function ApprovalsHub({
     const leaveTo = leaveToDate ? new Date(`${leaveToDate}T23:59:59.999`) : null;
     const dateMatches = (!leaveFrom || (leaveDate !== null && leaveDate >= leaveFrom)) &&
       (!leaveTo || (leaveDate !== null && leaveDate <= leaveTo));
+
+    // Expired requests must never appear in Pending or History.
+    if (status === "expired") {
+      return false;
+    }
+    if (selectedLeaveId && leave.id === selectedLeaveId) {
+      return true;
+    }
     return statusMatches && departmentMatches && employeeMatches && durationMatches && dateMatches;
   });
+
+  useEffect(() => {
+    if (!selectedLeaveId || activeTab !== "leaves") return;
+
+    const element = document.getElementById(
+      `leave-request-${selectedLeaveId}`
+    );
+
+    element?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+  }, [selectedLeaveId, activeTab, filteredLeaveRequests.length]);
 
   const filteredRegularizations = regularizations.filter(
     (request) => String(request.status ?? "").toLowerCase() === "pending"
@@ -1657,8 +1683,13 @@ export default function ApprovalsHub({
                       return (
                         <tr
                           key={leave.id}
-                          className="transition-colors hover:bg-slate-50/80"
-                        >
+                          id={`leave-request-${leave.id}`}
+                          className={`transition-colors hover:bg-slate-50/80 ${
+                            selectedLeaveId === leave.id
+                              ? "bg-indigo-50 ring-2 ring-inset ring-indigo-500"
+                              : ""
+                          }`}
+>
                           <td className="px-4 py-3.5">
                             <div className="flex items-center gap-3">
                               <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-indigo-600 text-xs font-bold text-white">
