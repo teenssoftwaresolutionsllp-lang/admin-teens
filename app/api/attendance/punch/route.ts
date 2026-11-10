@@ -59,7 +59,7 @@ export async function POST(request: Request) {
     const { data: attendance, error: attendanceError } = await admin
       .from("attendance_logs")
       .select(
-        "id, check_in_time, check_out_time, work_mode, hr_decision_by, hr_decision_at, hr_decision_reason"
+        "id, check_in_time, check_out_time, work_mode, hr_decision_by, hr_decision_at"
       )
       .eq("employee_id", employee.id)
       .eq("attendance_date", today)
@@ -78,7 +78,6 @@ export async function POST(request: Request) {
               "HR has already recorded your attendance decision for today. Contact HR if you believe it needs correction.",
             hrDecision: {
               saved: true,
-              reason: attendance.hr_decision_reason,
               reviewedAt: attendance.hr_decision_at,
             },
           },

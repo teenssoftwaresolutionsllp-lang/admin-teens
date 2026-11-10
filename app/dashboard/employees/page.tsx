@@ -8,10 +8,12 @@ type EmployeesPageProps = {
   searchParams: Promise<{
     status?: string;
     notice?: string;
+    department?: string;
   }>;
 };
 
 const statusOptions: Record<string, string> = {
+  active: "Active Employees",
   joining: "Joining",
   terminated: "Terminated",
   laid_off: "Layoff",
@@ -60,9 +62,13 @@ export default async function EmployeesPage({
 
   const selectedStatus = normalizeStatus(params.status);
   const selectedNotice = normalizeStatus(params.notice);
+  const selectedDepartment = String(
+    params.department ?? ""
+  ).trim();
 
   const employees = await DataStore.getEmployees();
 
+  // Keep existing Joining page behavior.
   if (selectedStatus === "joining") {
     return (
       <div className="flex-1 space-y-6 p-8">
@@ -77,13 +83,16 @@ export default async function EmployeesPage({
     );
   }
 
+  // Load departments for EmployeeTable and department filtering.
   const adminClient = await createAdminClient();
 
-  const { data: dbDepartments, error: departmentsError } =
-    await adminClient
-      .from("departments")
-      .select("id, name, description, created_at")
-      .order("name", { ascending: true });
+  const {
+    data: dbDepartments,
+    error: departmentsError,
+  } = await adminClient
+    .from("departments")
+    .select("id, name, description, created_at")
+    .order("name", { ascending: true });
 
   if (departmentsError) {
     console.error(
@@ -101,16 +110,24 @@ export default async function EmployeesPage({
     day: "2-digit",
   }).format(new Date());
 
-  const filteredEmployees = selectedStatus
+  // ------------------------------------------
+  // 1. Apply existing status and notice filters
+  // ------------------------------------------
+
+  const statusFilteredEmployees = selectedStatus
     ? employees.filter((employee) => {
-        const employeeStatus = normalizeStatus(employee.status);
+        const employeeStatus = normalizeStatus(
+          employee.status
+        );
 
         const emp = employee as typeof employee & {
           notice_status?: string | null;
           planned_last_working_date?: string | null;
         };
 
-        const noticeStatus = normalizeStatus(emp.notice_status);
+        const noticeStatus = normalizeStatus(
+          emp.notice_status
+        );
 
         if (
           !Object.prototype.hasOwnProperty.call(
@@ -121,8 +138,23 @@ export default async function EmployeesPage({
           return false;
         }
 
-        const isOnNotice = (employeeStatus === "on_notice" || (employeeStatus === "resigned" && noticeStatus === "notice_period")) &&
-          (!emp.planned_last_working_date || emp.planned_last_working_date >= today);
+        // Active employees.
+        if (selectedStatus === "active") {
+          return employeeStatus === "active";
+        }
+
+        const isOnNotice =
+          (
+            employeeStatus === "on_notice" ||
+            (
+              employeeStatus === "resigned" &&
+              noticeStatus === "notice_period"
+            )
+          ) &&
+          (
+            !emp.planned_last_working_date ||
+            emp.planned_last_working_date >= today
+          );
 
         const isNoticeCompleted =
           employeeStatus === "resigned" &&
@@ -132,9 +164,8 @@ export default async function EmployeesPage({
           employeeStatus === "resigned" &&
           noticeStatus === "early_release";
 
-        // RESIGNED PARENT AND SUBCATEGORIES
+        // Resigned parent and subcategories.
         if (selectedStatus === "resigned") {
-          // Parent: show all three categories
           if (!selectedNotice) {
             return (
               isOnNotice ||
@@ -143,17 +174,14 @@ export default async function EmployeesPage({
             );
           }
 
-          // On Notice
           if (selectedNotice === "notice_period") {
             return isOnNotice;
           }
 
-          // Notice Completed
           if (selectedNotice === "notice_completed") {
             return isNoticeCompleted;
           }
 
-          // Early Released
           if (selectedNotice === "early_release") {
             return isEarlyReleased;
           }
@@ -161,7 +189,7 @@ export default async function EmployeesPage({
           return false;
         }
 
-        // INDIVIDUAL STATUS FILTERS
+        // Individual status filters.
         if (selectedStatus === "notice_period") {
           return isOnNotice;
         }
@@ -186,14 +214,72 @@ export default async function EmployeesPage({
       })
     : employees;
 
-  const pageTitle =
-    selectedStatus === "resigned"
-      ? selectedNotice
-        ? noticeTitles[selectedNotice] || "Resigned"
-        : "Resigned"
-      : selectedStatus && statusOptions[selectedStatus]
-        ? statusOptions[selectedStatus]
+  // ------------------------------------------
+  // 2. Apply department filter
+  // Supports department ID and department name
+  // ------------------------------------------
+
+  const filteredEmployees = selectedDepartment
+    ? statusFilteredEmployees.filter((employee) => {
+        const emp = employee as typeof employee & {
+          department?:
+            | string
+            | {
+                id?: string | null;
+                name?: string | null;
+              }
+            | null;
+          department_id?: string | null;
+        };
+
+        const employeeDepartmentId =
+          emp.department_id ||
+          (typeof emp.department === "object"
+            ? emp.department?.id
+            : null);
+
+        const employeeDepartmentName =
+          typeof emp.department === "string"
+            ? emp.department
+            : emp.department?.name ||
+              departments.find(
+                (department) =>
+                  department.id === employeeDepartmentId
+              )?.name ||
+              "";
+
+        return (
+          employeeDepartmentId === selectedDepartment ||
+          employeeDepartmentName.trim().toLowerCase() ===
+            selectedDepartment.toLowerCase()
+        );
+      })
+    : statusFilteredEmployees;
+
+  // ------------------------------------------
+  // 3. Page heading
+  // ------------------------------------------
+
+  const selectedDepartmentName =
+    departments.find(
+      (department) => department.id === selectedDepartment
+    )?.name || selectedDepartment;
+
+  const pageTitle = selectedStatus === "active"
+    ? "All Employees"
+    : selectedStatus
+      ? selectedStatus === "resigned"
+        ? selectedNotice
+          ? noticeTitles[selectedNotice] || "Resigned"
+          : "Resigned"
+        : statusOptions[selectedStatus] || "All Employees"
+      : selectedDepartment
+        ? `${selectedDepartmentName} Employees`
         : "All Employees";
+
+  // ------------------------------------------
+  // 4. Render Employees
+  // ------------------------------------------
 
   return (
     <div className="flex-1 space-y-6 p-8">

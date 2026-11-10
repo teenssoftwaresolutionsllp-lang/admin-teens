@@ -203,10 +203,13 @@ export async function GET(request: Request) {
 
     return NextResponse.json(employees);
   } catch (error) {
-    console.error('API Error in GET /api/employees:', error);
-    const fallbackEmployees = await DataStore.getEmployees();
-    return NextResponse.json(fallbackEmployees);
-  }
+      console.error("API Error in GET /api/employees:", error);
+
+      return NextResponse.json(
+        { error: "Failed to load employees." },
+        { status: 500 }
+      );
+    }
 }
 
 export async function POST(request: Request) {
@@ -228,6 +231,45 @@ export async function POST(request: Request) {
       } catch {
         // ignore
       }
+    }
+
+    // =========================================================
+    // PAYROLL / EMPLOYEE LIST ACCESS: HR AND CEO ONLY
+    // =========================================================
+
+    if (!user) {
+      return NextResponse.json(
+        { error: "Authentication required." },
+        { status: 401 }
+      );
+    }
+
+    const authorizationClient = await createAdminClient();
+
+    const { data: profile, error: profileError } =
+      await authorizationClient
+        .from("profiles")
+        .select("id, role")
+        .eq("id", user.id)
+        .maybeSingle();
+
+    if (profileError) {
+      console.error(
+        "Employee-list authorization lookup failed:",
+        profileError.message
+      );
+
+      return NextResponse.json(
+        { error: "Unable to verify user permissions." },
+        { status: 500 }
+      );
+    }
+
+    if (!profile || !["hr", "ceo"].includes(profile.role ?? "")) {
+      return NextResponse.json(
+        { error: "You are not authorized to access the employee list." },
+        { status: 403 }
+      );
     }
 
     const rawBody = await request.json();

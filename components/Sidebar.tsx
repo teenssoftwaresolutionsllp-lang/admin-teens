@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { ElementType, ChangeEvent } from "react";
+import { useEmployeeDashboardFilter } from "@/components/dashboard/EmployeeFilterProvider";
 
 import {
   LayoutDashboard,
@@ -58,6 +59,7 @@ export default function Sidebar({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const router = useRouter();
+  const { clearDashboardFilter } = useEmployeeDashboardFilter();
 
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [openMenus, setOpenMenus] = useState<string[]>([
@@ -827,6 +829,11 @@ export default function Sidebar({
                             <Link
                               key={child.name}
                               href={child.href ?? "#"}
+                              onClick={() => {
+                                if (child.name === "All") {
+                                  clearDashboardFilter();
+                                }
+                              }}
                               className={`flex items-center gap-2 rounded-lg px-2 py-2 text-sm transition-colors ${
                                 child.href && isPathActive(child.href)
                                   ? "bg-indigo-600 text-white"

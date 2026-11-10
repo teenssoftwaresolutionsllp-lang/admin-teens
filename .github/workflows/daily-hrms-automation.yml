@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       execute:
-        description: "Actually update attendance and notice-period records"
+        description: "Actually update attendance, notice-period and leave records"
         required: true
         type: boolean
         default: false
@@ -22,7 +22,7 @@ permissions:
 
 jobs:
   daily-automation:
-    name: Attendance and Notice Period
+    name: Attendance , Notice Period and Leave Expiry
     runs-on: ubuntu-latest
 
     steps:
@@ -70,3 +70,20 @@ jobs:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: npx tsx scripts/complete-notice-periods.ts
+
+
+      # Automatically expire overdue pending leave requests.
+      - name: Expire overdue pending leave requests
+        if: github.event_name == 'schedule' || inputs.execute
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: npx tsx scripts/expire-pending-leaves.ts --execute
+
+      # Preview only when manually running without execute.
+      - name: Preview overdue pending leave requests
+        if: github.event_name == 'workflow_dispatch' && !inputs.execute
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: npx tsx scripts/expire-pending-leaves.ts

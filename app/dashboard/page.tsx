@@ -316,6 +316,45 @@ export default async function DashboardPage({
     (request) => request.status === 'pending'
   ).length;
 
+  // Pending leave requests grouped by leave category.
+  const pendingLeaveBreakdown = {
+    CL: 0,
+    SL: 0,
+    ML: 0,
+    PL: 0,
+  };
+
+  for (const request of leaveRequests) {
+    if (request.status !== 'pending') continue;
+
+    const leaveType = (request.leave_type?.name ?? '')
+      .trim()
+      .toLowerCase();
+
+    if (
+      leaveType === 'cl' ||
+      leaveType.includes('casual')
+    ) {
+      pendingLeaveBreakdown.CL += 1;
+    } else if (
+      leaveType === 'sl' ||
+      leaveType.includes('sick')
+    ) {
+      pendingLeaveBreakdown.SL += 1;
+    } else if (
+      leaveType === 'ml' ||
+      leaveType.includes('maternity')
+    ) {
+      pendingLeaveBreakdown.ML += 1;
+    } else if (
+      leaveType === 'pl' ||
+      leaveType.includes('privilege') ||
+      leaveType.includes('earned leave')
+    ) {
+      pendingLeaveBreakdown.PL += 1;
+    }
+  }
+
   const pendingRegCount = regularizations.filter(
     (request) => request.status === 'pending'
   ).length;
@@ -367,6 +406,57 @@ export default async function DashboardPage({
       ).length,
     };
   });
+
+
+  // Probation completion counts grouped by confirmation date.
+  const probationCompletionCounts = allEmployees
+    .map((employee) => ({
+      confirmationDate: getDateOnly(employee.confirmation_date),
+    }))
+    .filter(
+      (employee) =>
+        employee.confirmationDate &&
+        employee.confirmationDate <= todayIndia
+    );
+
+  // Monthly probation completion trend for the current year.
+  const probationMonthlyData = Array.from(
+    { length: 12 },
+    (_, monthIndex) => {
+      const month = String(monthIndex + 1).padStart(2, "0");
+
+      return {
+        label: new Date(
+          currentYear,
+          monthIndex,
+          1
+        ).toLocaleDateString("en-IN", { month: "short" }),
+
+        employees: probationCompletionCounts.filter(
+          (employee) =>
+            employee.confirmationDate?.slice(0, 7) ===
+            `${currentYear}-${month}`
+        ).length,
+      };
+    }
+  );
+
+  // Yearly probation completion trend for the last five calendar years.
+  const probationYearlyData = Array.from(
+    { length: 5 },
+    (_, index) => {
+      const year = currentYear - 4 + index;
+
+      return {
+        label: String(year),
+        employees: probationCompletionCounts.filter(
+          (employee) =>
+            employee.confirmationDate?.slice(0, 4) === String(year)
+        ).length,
+      };
+    }
+  );
+
 
   // Department-wise active employee count.
   const departmentCounts = new Map<string, number>();
@@ -497,44 +587,43 @@ export default async function DashboardPage({
       {role === 'hr' && (
         <>
           {/* Welcome header */}
-          <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="absolute right-0 top-0 h-36 w-36 rounded-full bg-indigo-50 blur-3xl" />
+          {/* Redesigned Welcome Header */}
 
-            <div className="relative flex flex-col justify-between gap-5 sm:flex-row sm:items-center">
-              <div>
-                <p className="mb-2 text-xs font-bold uppercase tracking-[0.15em] text-indigo-600">
-                  HR Management Dashboard
-                </p>
+          {/* Design Concept 4 - Welcome Header */}
+          <div className="relative isolate h-[166px] overflow-hidden rounded-[18px] border border-indigo-100/70 bg-gradient-to-r from-[#e9e8ff] via-[#f1f0ff] to-[#dfe5ff] shadow-sm">
 
-                <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-                  Welcome Back, {profile?.full_name || 'HR Admin'}!
+            {/* Right-side illustration */}
+            <div
+              className="pointer-events-none absolute inset-y-0 right-0 w-[58%] bg-[url('/hr-dashboard-header-illustration.png')] bg-cover bg-center bg-no-repeat"
+              aria-hidden="true"
+            />
+
+            {/* Fade illustration into the text area */}
+            <div className="pointer-events-none absolute inset-y-0 left-[35%] right-0 bg-gradient-to-r from-[#e9e8ff] via-[#e9e8ff]/30 to-transparent" />
+
+            {/* Welcome content */}
+            <div className="relative z-10 flex h-full items-center px-6 sm:px-9">
+              <div className="max-w-[58%]">
+                <h1 className="text-[27px] font-extrabold tracking-tight text-[#101a49] sm:text-[34px]">
+                  Welcome Back, {profile?.full_name || "HR"}! <span>👋</span>
                 </h1>
 
-                <p className="mt-2 max-w-xl text-sm text-slate-500">
-                  Here&apos;s your organization&apos;s workforce overview and the latest HR
-                  activities for today.
+                <p className="mt-2 text-sm font-medium text-[#172554] sm:text-[17px]">
+                  Here's what's happening in your organization today.
                 </p>
-              </div>
 
-              <div className="flex shrink-0 items-center gap-3 rounded-xl border border-indigo-100 bg-indigo-50/70 px-4 py-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white text-indigo-600 shadow-sm">
-                  <CalendarDays className="h-5 w-5" />
-                </div>
-
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-indigo-500">
-                    Today
-                  </p>
-                  <p className="text-sm font-semibold text-slate-800">
+                <div className="mt-3 flex items-center gap-3 text-[#111b4b]">
+                  <CalendarDays className="h-[21px] w-[21px] text-indigo-600" />
+                  <span className="text-xs font-semibold sm:text-sm">
                     {formattedToday}
-                  </p>
+                  </span>
                 </div>
               </div>
             </div>
           </div>
 
           {/* Pending Approval Alert */}
-          {totalPendingActions > 0 && (
+          {/* {totalPendingActions > 0 && (
             <div className="flex flex-col justify-between gap-4 rounded-2xl border border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50 p-4 sm:flex-row sm:items-center sm:p-5">
               <div className="flex min-w-0 items-center gap-3">
                 <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
@@ -565,12 +654,13 @@ export default async function DashboardPage({
                 <ArrowRight className="h-4 w-4" />
               </Link>
             </div>
-          )}
+          )} */}
 
           {/* Interactive KPI cards */}
           <DashboardKpiCards
             activeEmployees={activeEmployees}
             pendingLeaveCount={pendingLeaveCount}
+            pendingLeaveBreakdown={pendingLeaveBreakdown}
             joiningCounts={joiningCounts}
             departmentAttendanceData={departmentAttendanceData}
             currentMonth={currentMonth + 1}
@@ -582,11 +672,8 @@ export default async function DashboardPage({
           {/* Charts and weekly leave requests */}
           <div className="grid grid-cols-1 items-stretch gap-5 xl:grid-cols-12">
             <div className="min-w-0 xl:col-span-8">
-              <DashboardCharts
-                monthlyData={monthlyData}
-                yearlyData={yearlyData}
-                departmentData={departmentData}
-              />
+              <DashboardCharts employees={allEmployees} />
+
             </div>
 
             <div className="min-w-0 xl:col-span-4 [&>section]:h-full">

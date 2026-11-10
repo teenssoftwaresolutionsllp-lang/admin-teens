@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { createPortal } from "react-dom";
 import {
   Bell,
   LogOut,
@@ -75,6 +76,10 @@ export default function Header({ profile }: HeaderProps) {
 
     if (pathname === "/dashboard/leaves") {
       return "Leave Policy & Balances";
+    }
+
+    if (pathname === "/dashboard/payroll/master-data") {
+      return "Payroll Master Register";
     }
 
     if (pathname === "/dashboard/payroll") {

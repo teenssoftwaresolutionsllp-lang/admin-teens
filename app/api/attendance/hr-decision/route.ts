@@ -40,6 +40,19 @@ function errorResponse(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status });
 }
 
+function getTimeInMinutes(value: string): number {
+  const [hours, minutes] = value.slice(0, 5).split(":").map(Number);
+  return hours * 60 + minutes;
+}
+
+function getISTDateAtMinutes(date: string, minutes: number): Date {
+  const [year, month, day] = date.split("-").map(Number);
+
+  return new Date(
+    Date.UTC(year, month - 1, day, 0, minutes - 330)
+  );
+}
+
 export async function POST(request: NextRequest) {
   try {
     // 1. Verify logged-in user.
@@ -179,11 +192,13 @@ export async function POST(request: NextRequest) {
 
     // 5. Resolve the employee's holiday calendar.
     let calendarId = DEFAULT_CALENDAR_ID;
+    let shiftStartTime = "09:00";
+    let shiftEndTime = "18:00";
 
     if (employee.project_id) {
       const { data: project, error: projectError } = await admin
         .from("projects")
-        .select("id, calendar_id")
+        .select("id, calendar_id, shift_start_time, shift_end_time")
         .eq("id", employee.project_id)
         .maybeSingle();
 
@@ -207,6 +222,8 @@ export async function POST(request: NextRequest) {
       }
 
       calendarId = project.calendar_id;
+      shiftStartTime = project.shift_start_time || "09:00";
+      shiftEndTime = project.shift_end_time || "18:00";
     }
 
     // Confirm that the selected calendar exists.
@@ -287,8 +304,10 @@ export async function POST(request: NextRequest) {
       const isValidSingleDayHalfLeave =
         leave.is_half_day === true &&
         isSingleDay &&
-        Number(leave.total_days) === 0.5;
-
+        Number(leave.total_days) === 0.5 &&
+        ["first_half", "second_half"].includes(
+          leave.leave_duration ?? ""
+        );
       if (leave.is_half_day === true && !isValidSingleDayHalfLeave) {
         return errorResponse(
           "This half-day leave has an ambiguous multi-day or duration pattern. HR review is required before recording attendance.",
@@ -307,7 +326,38 @@ export async function POST(request: NextRequest) {
       // and decided by HR using the status submitted in this request.
     }
 
-    // 8. Approved regularization must not conflict with an HR decision.
+    // 8. Enforce the applicable 3-hour HR remark threshold.
+    const shiftStartMinutes = getTimeInMinutes(shiftStartTime);
+    let shiftEndMinutes = getTimeInMinutes(shiftEndTime);
+
+    if (shiftEndMinutes <= shiftStartMinutes) {
+      shiftEndMinutes += 1440;
+    }
+
+    let thresholdMinutes = shiftStartMinutes + 180;
+
+    const approvedHalfLeave = approvedLeaves?.[0];
+
+    if (approvedHalfLeave?.leave_duration === "first_half") {
+      const shiftDuration = shiftEndMinutes - shiftStartMinutes;
+
+      thresholdMinutes =
+        shiftStartMinutes + Math.floor(shiftDuration / 2) + 180;
+    }
+
+    const thresholdTime = getISTDateAtMinutes(
+      attendanceDate,
+      thresholdMinutes
+    );
+
+    if (Date.now() < thresholdTime.getTime()) {
+      return errorResponse(
+        "HR remarks become available only after the applicable 3-hour attendance threshold.",
+        403
+      );
+    }
+
+    // 9. Approved regularization must not conflict with an HR decision.
     const { data: approvedRegularizations, error: regularizationError } =
       await admin
         .from("attendance_regularizations")
@@ -332,7 +382,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 9. Check existing attendance.
+    // 10. Check existing attendance.
     const { data: existing, error: attendanceError } = await admin
       .from("attendance_logs")
       .select(
@@ -371,7 +421,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 10. Save decision and audit information.
+    // 11. Save decision and audit information.
     const decision = {
       status,
       hr_decision_by: user.id,
