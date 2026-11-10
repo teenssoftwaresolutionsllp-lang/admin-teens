@@ -16,6 +16,7 @@ import {
   ArrowRight,
   Sun,
 } from "lucide-react";
+import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
@@ -26,15 +27,24 @@ export default async function EmployeePortalPage() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  let employee = null;
-
-  if (user) {
-    employee = await DataStore.getEmployeeByUserId(user.id);
+  if (!user) {
+    redirect("/login");
   }
 
+  const employee = await DataStore.getEmployeeByUserId(user.id);
+
   if (!employee) {
-    const all = await DataStore.getEmployees();
-    employee = all.find((e) => e.email === user?.email) || all[0] || null;
+    return (
+      <div className="max-w-3xl mx-auto mt-10 rounded-xl border border-amber-200 bg-amber-50 p-6">
+        <h2 className="text-lg font-bold text-amber-900">
+          Employee Profile Not Linked
+        </h2>
+        <p className="mt-2 text-sm text-amber-800">
+          Your login is not linked to an employee profile. Please contact HR
+          to complete the account linking.
+        </p>
+      </div>
+    );
   }
 
   const employeeId = employee?.id;
@@ -54,6 +64,11 @@ export default async function EmployeePortalPage() {
   const leaveBalances = employeeId
     ? await DataStore.getLeaveBalances(employeeId)
     : [];
+
+  const payslips = employeeId
+    ? await DataStore.getPayslips(employeeId)
+    : [];
+  const latestPayslip = payslips[0] ?? null;
 
   const projects = await DataStore.getProjects();
 
@@ -439,6 +454,57 @@ export default async function EmployeePortalPage() {
         </div>
       </section>
 
+      {/* Latest payslip snapshot */}
+      <section className="flex flex-col justify-between gap-6 rounded-xl bg-gradient-to-r from-slate-900 to-indigo-950 p-6 text-white shadow-md md:flex-row md:items-center">
+        <div className="flex items-center gap-4">
+          <div className="shrink-0 rounded-xl bg-white/10 p-3">
+            <FileText className="h-7 w-7 text-indigo-300" />
+          </div>
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-lg font-bold text-white">
+                Latest Payslip: {latestPayslip?.month_name || "No payslip"}{" "}
+                {latestPayslip?.payroll_year || ""}
+              </h2>
+              <span className="rounded-full border border-emerald-500/30 bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-300">
+                {latestPayslip?.payment_status || "No Payslip"}
+              </span>
+            </div>
+            <p className="mt-1 text-xs text-slate-300">
+              Monthly CTC:{" "}
+              {latestPayslip
+                ? `₹${Number(latestPayslip.gross_salary ?? 0).toLocaleString("en-IN")}`
+                : "Not available"}
+              {latestPayslip && latestPayslip.lop_days > 0 && (
+                <span className="ml-1 font-semibold text-amber-300">
+                  &bull; {latestPayslip.lop_days} day(s) LOP deduction (-₹
+                  {Number(latestPayslip.lop_deduction ?? 0).toLocaleString("en-IN")})
+                </span>
+              )}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between gap-6 md:justify-end">
+          <div className="text-right">
+            <span className="block text-xs text-slate-400">
+              Take-Home Net Salary
+            </span>
+            <span className="font-mono text-2xl font-bold text-emerald-400">
+              {latestPayslip
+                ? `₹${Number(latestPayslip.net_salary ?? 0).toLocaleString("en-IN")}`
+                : "Not available"}
+            </span>
+          </div>
+          <Link
+            href="/portal/payslips"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-white px-4 py-2.5 text-xs font-semibold text-slate-900 shadow-sm transition-colors hover:bg-slate-100"
+          >
+            <span>View &amp; Download</span>
+            <ArrowRight className="h-4 w-4" />
+          </Link>
+        </div>
+      </section>
     </div>
   );
 }

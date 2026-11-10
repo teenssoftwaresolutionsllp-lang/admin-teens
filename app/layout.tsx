@@ -23,7 +23,9 @@ export const metadata: Metadata = {
   },
 };
 
-export default async function RootLayout(props: LayoutProps<"/">) {
+export default async function RootLayout(props: {
+  children: React.ReactNode;
+}) {
   return (
     <html lang="en" data-scroll-behavior="smooth">
       <body

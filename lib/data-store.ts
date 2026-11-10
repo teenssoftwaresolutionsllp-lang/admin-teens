@@ -3711,8 +3711,15 @@ static async createLeaveRequest({
 
         if (leave) {
           const leaveUnit = leave.is_half_day ? 0.5 : 1;
-          const isPaid = Boolean(leave.leave_type?.is_paid);
-          if (isPaid) {
+          const isLop =
+            leave.leave_type?.is_paid === false ||
+            String(leave.leave_type?.code || "").toUpperCase() === "LOP" ||
+            String(leave.leave_type?.code || "").toUpperCase() === "UNPAID" ||
+            String(leave.leave_type?.name || "").toLowerCase().includes("loss of pay") ||
+            String(leave.leave_type?.name || "").toLowerCase().includes("lop") ||
+            String(leave.leave_type?.name || "").toLowerCase().includes("unpaid");
+
+          if (!isLop) {
             paidLeaves += leaveUnit;
           } else {
             lopDays += leaveUnit;
@@ -3750,12 +3757,11 @@ static async createLeaveRequest({
         }
 
         // -----------------------------------------------------
-        // HALF DAY
+        // HALF DAY (No LOP per company policy)
         // -----------------------------------------------------
 
         if (status === "half_day") {
-          presentDays += 0.5;
-          lopDays += 0.5;
+          presentDays += 1;
           continue;
         }
 
@@ -3868,6 +3874,7 @@ static async createLeaveRequest({
       } = await supabase
         .from("payslips")
         .select(`
+          id,
           incentive,
           bonus,
           compensation,
@@ -4107,20 +4114,27 @@ static async createLeaveRequest({
       // SAVE / UPDATE PAYSLIP
       // =======================================================
 
-      const {
-        data: savedPayslip,
-        error: payslipError,
-      } = await supabase
-        .from("payslips")
-        .upsert(
-          payslipData,
-          {
-            onConflict:
-              "employee_id,payroll_month,payroll_year",
-          }
-        )
-        .select()
-        .single();
+      let savedPayslip: any = null;
+      let payslipError: any = null;
+
+      if ((existingPayslip as any)?.id) {
+        const res = await supabase
+          .from("payslips")
+          .update(payslipData)
+          .eq("id", (existingPayslip as any).id)
+          .select()
+          .single();
+        savedPayslip = res.data;
+        payslipError = res.error;
+      } else {
+        const res = await supabase
+          .from("payslips")
+          .insert([payslipData])
+          .select()
+          .single();
+        savedPayslip = res.data;
+        payslipError = res.error;
+      }
 
       if (payslipError) {
         throw new Error(

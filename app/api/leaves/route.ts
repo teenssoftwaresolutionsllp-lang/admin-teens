@@ -101,7 +101,7 @@ async function uploadSupportingDocument(
   admin: Awaited<ReturnType<typeof createAdminClient>>,
   employeeId: string,
   file: File
-): Promise<{ path: string; name: string }> {
+): Promise<{ path: string }> {
   if (file.size <= 0) {
     throw new Error("Please select a valid supporting document.");
   }
@@ -135,10 +135,7 @@ async function uploadSupportingDocument(
     );
   }
 
-  return {
-    path,
-    name: file.name,
-  };
+  return { path };
 }
 
 export async function GET(request: Request) {
@@ -613,9 +610,10 @@ export async function POST(request: Request) {
       );
     }
 
-    // Validate and upload an optional supporting document.
+    // =====================================================
+    // UPLOAD SUPPORTING DOCUMENT
     // Upload happens only after overlap validation succeeds.
-    let supportingDocumentName: string | null = null;
+    // =====================================================
 
     if (supportingFile) {
       const uploaded = await uploadSupportingDocument(
@@ -625,11 +623,12 @@ export async function POST(request: Request) {
       );
 
       uploadedPath = uploaded.path;
-      supportingDocumentName = uploaded.name;
     }
 
     // =====================================================
     // CREATE LEAVE REQUEST
+    // Document URL and special leave duration are saved
+    // directly by DataStore.createLeaveRequest().
     // =====================================================
 
     const leaveReq = await DataStore.createLeaveRequest({
@@ -651,14 +650,6 @@ export async function POST(request: Request) {
       leaveDurationUnit:
         code === "ML" || code === "PL" ? "days" : undefined,
     });
-
-    const leaveRequestId = (
-      leaveReq as { id?: string }
-    )?.id;
-
-    if (!leaveRequestId) {
-      throw new Error("Leave request ID was not returned.");
-    }
 
     // =====================================================
     // NOTIFY HR USERS
@@ -707,40 +698,6 @@ export async function POST(request: Request) {
     }
 
     // =====================================================
-    // SAVE SUPPORTING DOCUMENT AND SPECIAL LEAVE DURATION
-    // =====================================================
-
-    const updateData: Record<string, unknown> = {};
-
-    if (supportingFile && uploadedPath) {
-      updateData.medical_document_url = uploadedPath;
-      updateData.medical_document_name = supportingDocumentName;
-    }
-
-    if (code === "ML") {
-      updateData.leave_duration = maternityDays;
-      updateData.leave_duration_unit = "days";
-    }
-
-    if (code === "PL") {
-      updateData.leave_duration = paternityDuration;
-      updateData.leave_duration_unit = "days";
-    }
-
-    if (Object.keys(updateData).length > 0) {
-      const { error: updateError } = await admin
-        .from("leave_requests")
-        .update(updateData)
-        .eq("id", leaveRequestId);
-
-      if (updateError) {
-        throw new Error(
-          `Could not save leave details: ${updateError.message}`
-        );
-      }
-    }
-
-    // =====================================================
     // SUCCESS RESPONSE
     // =====================================================
 
@@ -749,21 +706,20 @@ export async function POST(request: Request) {
         success: true,
         leaveRequest: {
           ...leaveReq,
-          ...(supportingFile
+          ...(supportingFile && uploadedPath
             ? {
-                medical_document_url: uploadedPath,
-                medical_document_name: supportingDocumentName,
+                supporting_document_url: uploadedPath,
               }
             : {}),
           ...(code === "ML"
             ? {
-                leave_duration: maternityDays,
+                leave_duration: String(maternityDays),
                 leave_duration_unit: "days",
               }
             : {}),
           ...(code === "PL"
             ? {
-                leave_duration: paternityDuration,
+                leave_duration: String(paternityDuration),
                 leave_duration_unit: "days",
               }
             : {}),
@@ -774,7 +730,7 @@ export async function POST(request: Request) {
   } catch (error: unknown) {
     console.error("POST /api/leaves error:", error);
 
-    // Remove uploaded document if leave creation/update fails.
+    // Remove uploaded document if leave creation fails.
     if (admin && uploadedPath) {
       try {
         await admin.storage

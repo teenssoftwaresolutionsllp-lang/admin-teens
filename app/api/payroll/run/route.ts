@@ -1,7 +1,12 @@
 import { NextResponse } from 'next/server';
+import { createClient, createAdminClient } from '@/lib/supabase-server';
 import { DataStore } from '@/lib/data-store';
-import { createClient } from '@/lib/supabase-server';
-import { createAdminClient } from "@/lib/supabase-server";
+import {
+  calculateMasterPayrollRow,
+  calculateEmployeeLopDays,
+  MasterPayrollEmployee,
+  MasterPayrollAdjustments,
+} from '@/lib/payroll/master-payroll-engine';
 
 const monthNames = [
   "January",
@@ -69,11 +74,10 @@ export async function POST(request: Request) {
     }
 
     // =========================================================
-    // PREVENT FUTURE PAYROLL
+    // PREVENT CURRENT & FUTURE MONTH PAYROLL
     // =========================================================
 
     const now = new Date();
-
     const currentMonth = now.getMonth() + 1;
     const currentYear = now.getFullYear();
 
@@ -83,20 +87,45 @@ export async function POST(request: Request) {
     if (requestedPeriod >= currentPeriod) {
       return NextResponse.json(
         {
-          error: " can only be generated after the payroll month is completed",
+          error: "Payroll can only be generated after the payroll month is completed. Current and future months are locked.",
         },
         { status: 400 }
       );
     }
 
+    const admin = await createAdminClient();
 
     // =========================================================
-    // GET EMPLOYEE
+    // GET EMPLOYEE DETAILS
     // =========================================================
 
-    const employee = await DataStore.getEmployeeById(employeeId);
+    const { data: employee, error: empError } = await admin
+      .from("employees")
+      .select(`
+        id,
+        employee_id,
+        first_name,
+        last_name,
+        designation,
+        joining_date,
+        bank_name,
+        bank_account_number,
+        pan_number,
+        uan_number,
+        salary,
+        status,
+        department_id,
+        project_id,
+        pf_eligible,
+        esi_healthcare_eligible,
+        pt_eligible,
+        tds_eligible,
+        exit_date
+      `)
+      .eq("id", employeeId)
+      .maybeSingle();
 
-    if (!employee) {
+    if (empError || !employee) {
       return NextResponse.json(
         {
           error: "Employee not found.",
@@ -107,13 +136,6 @@ export async function POST(request: Request) {
 
     // =========================================================
     // PREVENT PAYROLL BEFORE JOINING MONTH
-    //
-    // Example:
-    // Joining Date: October 1, 2026
-    //
-    // September 2026 -> BLOCKED
-    // October 2026   -> ALLOWED
-    // November 2026  -> Future / BLOCKED
     // =========================================================
 
     if (!employee.joining_date) {
@@ -126,10 +148,7 @@ export async function POST(request: Request) {
     }
 
     const joiningDateString = String(employee.joining_date).slice(0, 10);
-
-    const [joiningYear, joiningMonth] = joiningDateString
-      .split("-")
-      .map(Number);
+    const [joiningYear, joiningMonth] = joiningDateString.split("-").map(Number);
 
     if (
       !Number.isInteger(joiningYear) ||
@@ -149,7 +168,6 @@ export async function POST(request: Request) {
 
     if (requestedPeriod < joiningPeriod) {
       const joiningMonthName = monthNames[joiningMonth - 1];
-
       return NextResponse.json(
         {
           error: `Payroll cannot be generated for ${monthNames[payrollMonth - 1]} ${payrollYear}. Employee joined in ${joiningMonthName} ${joiningYear}.`,
@@ -158,163 +176,275 @@ export async function POST(request: Request) {
       );
     }
 
-
-    // Insentive nad bonus validation
-    const allowedAdditionalEarningTypes = ["Incentive","Bonus","Compensation",] as const;
-
-    const requestedAdditionalEarnings = Array.isArray(additionalEarnings)? additionalEarnings: [];
+    // =========================================================
+    // ADDITIONAL EARNINGS PARSING
+    // =========================================================
+    const requestedAdditionalEarnings = Array.isArray(additionalEarnings) ? additionalEarnings : [];
+    let parsedIncentive = 0;
+    let parsedArrears = 0;
 
     for (const earning of requestedAdditionalEarnings) {
-      if (!allowedAdditionalEarningTypes.includes(earning.type)) {
-        return NextResponse.json(
-          {
-            error: `Invalid additional earning type: ${earning.type}`,
-          },
-          { status: 400 }
-        );
-      }
-
-      const amount = Number(earning.amount);
-
-      if (!Number.isFinite(amount) || amount <= 0) {
-        return NextResponse.json(
-          {
-            error: `Invalid amount for ${earning.type}.`,
-          },
-          { status: 400 }
-        );
+      const amount = Number(earning.amount) || 0;
+      if (earning.type === "Incentive" || earning.type === "Bonus") {
+        parsedIncentive += amount;
+      } else if (earning.type === "Compensation") {
+        parsedArrears += amount;
       }
     }
 
+    const monthName = monthNames[payrollMonth - 1];
+    const daysInMonth = new Date(payrollYear, payrollMonth, 0).getDate();
+    const monthStart = `${payrollYear}-${String(payrollMonth).padStart(2, "0")}-01`;
+    const monthEnd = `${payrollYear}-${String(payrollMonth).padStart(2, "0")}-${String(daysInMonth).padStart(2, "0")}`;
 
-    const requestedTypes = requestedAdditionalEarnings.map((earning: 
+    // =========================================================
+    // FETCH ATTENDANCE LOGS & APPROVED LEAVES (LOP RULES)
+    // =========================================================
+    const { data: attendanceLogs } = await admin
+      .from("attendance_logs")
+      .select("employee_id, attendance_date, status")
+      .eq("employee_id", employeeId)
+      .gte("attendance_date", monthStart)
+      .lte("attendance_date", monthEnd);
+
+    const { data: leaveRequests } = await admin
+      .from("leave_requests")
+      .select(`
+        id,
+        employee_id,
+        start_date,
+        end_date,
+        total_days,
+        is_half_day,
+        status,
+        leave_types ( id, name, code, is_paid )
+      `)
+      .eq("employee_id", employeeId)
+      .eq("status", "approved")
+      .lte("start_date", monthEnd)
+      .gte("end_date", monthStart);
+
+    // Fetch holidays & working Saturdays
+    const { data: holidays } = await admin
+      .from("holidays")
+      .select("holiday_date, is_working_day, is_optional")
+      .gte("holiday_date", monthStart)
+      .lte("holiday_date", monthEnd);
+
+    const workingSaturdays = await DataStore.getWorkingSaturdays(payrollYear, payrollMonth);
+
+    // Calculate LOP using master business rules:
+    // 1. Absent: Counts as LOP (+1.0 LOP per day) if not covered by approved paid leave.
+    // 2. Half day: NO LOP (0 LOP).
+    // 3. Approved leave: Paid leave (SL/CL is_paid=true) -> NO LOP. LOP/unpaid leave -> Counts as LOP.
+    // 4. Full month absence: 0 present days & 0 paid leaves -> all calendar days count as LOP (0 pay days).
+    const calculatedLopDays = calculateEmployeeLopDays(
+      employeeId,
+      (attendanceLogs ?? []) as any[],
+      (leaveRequests ?? []) as any[],
+      monthStart,
+      monthEnd,
       {
-        type: "Incentive" | "Bonus" | "Compensation";
-        amount: number;
-      }) => earning.type
+        joiningDate: employee.joining_date,
+        exitDate: employee.exit_date,
+        holidays: holidays ?? [],
+        workingSaturdays,
+      }
     );
 
-    if (new Set(requestedTypes).size !== requestedTypes.length) {
-      return NextResponse.json(
-        {
-          error: "The same additional earning cannot be added more than once.",
-        },
-        { status: 400 }
-      );
+    // =========================================================
+    // FETCH PREVIOUS MONTH PENDING STATUTORY CONTRIBUTIONS
+    // =========================================================
+    const prevDate = new Date(payrollYear, payrollMonth - 2, 1);
+    const prevMonth = prevDate.getMonth() + 1;
+    const prevYear = prevDate.getFullYear();
+
+    const { data: prevPayslip } = await admin
+      .from("payslips")
+      .select("employee_id, pf_pending_amount, esi_pending_amount")
+      .eq("employee_id", employeeId)
+      .eq("payroll_month", prevMonth)
+      .eq("payroll_year", prevYear)
+      .maybeSingle();
+
+    const pendingPf = Number(prevPayslip?.pf_pending_amount || 0);
+    const pendingEsi = Number(prevPayslip?.esi_pending_amount || 0);
+    const pendingStatutory = pendingPf > 0 || pendingEsi > 0 ? { pf: pendingPf, esi: pendingEsi } : undefined;
+
+    // Check for existing payslip for this month to preserve adjustments
+    const { data: existingPayslips } = await admin
+      .from("payslips")
+      .select("*")
+      .eq("employee_id", employeeId)
+      .eq("payroll_month", payrollMonth)
+      .eq("payroll_year", payrollYear)
+      .order("created_at", { ascending: false });
+
+    const existingPayslip = existingPayslips?.[0] || null;
+
+    // Clean up any older duplicate payslips if they exist
+    if (existingPayslips && existingPayslips.length > 1) {
+      const duplicateIds = existingPayslips.slice(1).map((p: any) => p.id);
+      await admin.from("payslips").delete().in("id", duplicateIds);
     }
 
+    const empAdjustments: MasterPayrollAdjustments = {
+      incentive: parsedIncentive > 0 ? parsedIncentive : existingPayslip?.incentive ? Number(existingPayslip.incentive) : 0,
+      arrears: parsedArrears > 0 ? parsedArrears : existingPayslip?.compensation ? Number(existingPayslip.compensation) : 0,
+      recoverPendingStatutory: Boolean(pendingStatutory),
+    };
 
-    // =========================================================
-    // PREVENT DUPLICATE ADDITIONAL EARNINGS
-    // =========================================================
+    // Calculate payroll row with exact master payroll engine
+    const row = calculateMasterPayrollRow(
+      employee as MasterPayrollEmployee,
+      daysInMonth,
+      calculatedLopDays,
+      empAdjustments,
+      existingPayslip || undefined,
+      pendingStatutory
+    );
 
-    const { data: existingPayslip, error: existingPayslipError } =
-      await supabase
+    const earningsBreakup = [
+      { code: "BASIC", name: "Basic Salary", type: "earning", amount: row.basic },
+      { code: "HRA", name: "House Rent Allowance", type: "earning", amount: row.hra },
+      { code: "CONVEYANCE", name: "Conveyance Allowance", type: "earning", amount: row.conveyance },
+      { code: "MEDICAL", name: "Medical Allowance", type: "earning", amount: row.medical_allowance },
+      { code: "LTA", name: "Leave Travel Allowance", type: "earning", amount: row.leave_travel_allowance },
+      { code: "EMPLOYER_PF", name: "Employer PF", type: "earning", amount: row.employer_pf },
+      { code: "SPECIAL_ALLOWANCE", name: "Special Allowance", type: "earning", amount: row.special_allowance },
+      ...(row.arrears > 0
+        ? [{ code: "ARREARS", name: "Arrears of Salary", type: "earning", amount: row.arrears }]
+        : []),
+      ...(row.incentive > 0
+        ? [{ code: "INCENTIVE", name: "Incentive", type: "earning", amount: row.incentive }]
+        : []),
+    ];
+
+    const deductionsBreakup = [
+      ...(row.pt > 0 ? [{ code: "PT", name: "Professional Tax", type: "deduction", amount: row.pt }] : []),
+      ...(row.epf > 0 ? [{ code: "PF", name: "EPF", type: "deduction", amount: row.epf }] : []),
+      ...(row.tds > 0 ? [{ code: "TDS", name: "TDS", type: "deduction", amount: row.tds }] : []),
+      ...(row.advance > 0
+        ? [{ code: "ADVANCE", name: "Advance", type: "deduction", amount: row.advance }]
+        : []),
+      ...(row.other_deduction > 0
+        ? [
+            {
+              code: "STATUTORY_RECOVERY",
+              name: "Pending Statutory Recovery",
+              type: "deduction",
+              amount: row.other_deduction,
+            },
+          ]
+        : []),
+      ...(row.remarks
+        ? [{ code: "REMARK", name: "Remarks", type: "remark", text: row.remarks }]
+        : []),
+    ];
+
+    const isAbsentMonth = row.pay_days === 0;
+    const pendingPfForAbsence = isAbsentMonth && employee.pf_eligible !== false ? row.epf : 0;
+    const pendingEsiForAbsence = isAbsentMonth && row.esic_emp > 0 ? row.esic_emp : 0;
+
+    const payslipRecord = {
+      employee_id: employee.id,
+      payroll_month: payrollMonth,
+      payroll_year: payrollYear,
+      month_name: monthName,
+      working_days: row.working_days,
+      present_days: row.pay_days,
+      paid_leaves: 0,
+      lop_days: row.lop_days,
+      gross_salary: row.ctc + row.incentive + row.arrears,
+      lop_deduction: row.loss_of_pay,
+      total_earnings: row.ctc + row.incentive + row.arrears,
+      total_deductions: row.total_deductions,
+      net_salary: row.net_payout,
+      pf_pending_amount: pendingPfForAbsence,
+      esi_pending_amount: pendingEsiForAbsence,
+      earnings_breakup: earningsBreakup,
+      deductions_breakup: deductionsBreakup,
+      payment_status: "processed",
+      employer_pf: row.employer_pf,
+      gratuity_provision: Math.round(((row.basic * 15) / (26 * 12)) * 100) / 100,
+      incentive: row.incentive,
+      bonus: 0,
+      compensation: row.arrears,
+    };
+
+    // Save payslip: update if already exists, insert if new
+    let savedPayslip = null;
+
+    if (existingPayslip?.id) {
+      const { data: updated, error: updateError } = await admin
         .from("payslips")
-        .select("incentive, bonus, compensation")
-        .eq("employee_id", employee.id)
-        .eq("payroll_month", payrollMonth)
-        .eq("payroll_year", payrollYear)
-        .maybeSingle();
+        .update(payslipRecord)
+        .eq("id", existingPayslip.id)
+        .select("*")
+        .single();
 
-    if (existingPayslipError) {
-      console.error(
-        "Failed to check existing payslip:",
-        existingPayslipError
-      );
-
-      return NextResponse.json(
-        {
-          error: "Failed to check existing payroll.",
-        },
-        { status: 500 }
-      );
-    }
-
-    const duplicateAdditionalEarning =
-      requestedAdditionalEarnings.find((earning: {
-        type: "Incentive" | "Bonus" | "Compensation";
-        amount: number;
-      }) => {
-        if (earning.type === "Incentive") {
-          return Number(existingPayslip?.incentive || 0) > 0;
-        }
-
-        if (earning.type === "Bonus") {
-          return Number(existingPayslip?.bonus || 0) > 0;
-        }
-
-        if (earning.type === "Compensation") {
-          return Number(existingPayslip?.compensation || 0) > 0;
-        }
-
-        return false;
-      });
-
-    if (duplicateAdditionalEarning) {
-      return NextResponse.json(
-        {
-          error: `${duplicateAdditionalEarning.type} has already been added for ${monthNames[payrollMonth - 1]} ${payrollYear}.`,
-        },
-        { status: 400 }
-      );
-    }
-
-    // =========================================================
-    // GENERATE PAYROLL
-    // =========================================================
-
-
-  const result = await DataStore.generateMonthlyPayroll({
-    employeeId,
-    month: payrollMonth,
-    year: payrollYear,
-    additionalEarnings: requestedAdditionalEarnings,
-  });
-
-  // Notify employees after payroll generation succeeds.
-  if (Array.isArray(result.payslips) && result.payslips.length > 0) {
-    const adminSupabase = await createAdminClient();
-
-    const notificationRows = result.payslips
-      .filter((payslip: { employee_id?: string }) => Boolean(payslip.employee_id))
-      .map((payslip: { employee_id: string }) => ({
-        employee_id: payslip.employee_id,
-        title: "Payslip Generated",
-        message: `Your payslip for ${monthNames[payrollMonth - 1]} ${payrollYear} has been generated.`,
-        type: "payslip",
-        is_read: false,
-      }));
-
-    if (notificationRows.length > 0) {
-      const { data, error } = await adminSupabase
-        .from("notifications")
-        .insert(notificationRows)
-        .select("id");
-
-      if (error) {
-        console.error(
-          "Payslips generated, but notification insertion failed:",
-          error.message
-        );
-      } else {
-        console.log(
-          `Created ${data?.length ?? 0} payslip notification(s).`
+      if (updateError || !updated) {
+        console.error("[Individual Payroll Run] Update failed:", updateError);
+        return NextResponse.json(
+          { error: `Failed to save payslip: ${updateError?.message || "Unknown error"}` },
+          { status: 500 }
         );
       }
+      savedPayslip = updated;
+    } else {
+      const { data: inserted, error: insertError } = await admin
+        .from("payslips")
+        .insert([payslipRecord])
+        .select("*")
+        .single();
+
+      if (insertError || !inserted) {
+        console.error("[Individual Payroll Run] Insert failed:", insertError);
+        return NextResponse.json(
+          { error: `Failed to save payslip: ${insertError?.message || "Unknown error"}` },
+          { status: 500 }
+        );
+      }
+      savedPayslip = inserted;
     }
-  }
 
-  return NextResponse.json({
-    success: true,
-    generatedCount: result.generatedCount,
-    payslips: result.payslips,
-  });
+    // Clear recovered statutory if applicable
+    if (row.recovered_statutory && row.recovered_statutory > 0) {
+      await admin
+        .from("payslips")
+        .update({ pf_pending_amount: 0, esi_pending_amount: 0 })
+        .eq("employee_id", employeeId)
+        .eq("payroll_month", prevMonth)
+        .eq("payroll_year", prevYear);
+    }
 
+    // Send in-app notification
+    try {
+      await admin.from("notifications").insert([
+        {
+          employee_id: employeeId,
+          title: "Payslip Generated",
+          message: `Your payslip for ${monthName} ${payrollYear} has been generated.`,
+          type: "payslip",
+          is_read: false,
+        },
+      ]);
+    } catch (notifErr) {
+      console.error("[Individual Payroll Run] Notification non-blocking error:", notifErr);
+    }
 
+    const clientPayslip = {
+      ...savedPayslip,
+      employee,
+    };
+
+    return NextResponse.json({
+      success: true,
+      generatedCount: 1,
+      payslips: [clientPayslip],
+    });
   } catch (error: any) {
     console.error("Payroll generation error:", error);
-
     return NextResponse.json(
       {
         error: error?.message || "Failed to generate payroll",

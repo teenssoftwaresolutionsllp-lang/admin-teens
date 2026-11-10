@@ -11,12 +11,22 @@ import {
   BriefcaseBusiness,
   Home,
   TrendingUp,
+  ArrowUpRight,
+  Clock3,
+  ChevronDown,
 } from "lucide-react";
 
 type JoiningCount = {
   year: number;
   month: number;
   count: number;
+};
+
+type PendingLeaveBreakdown = {
+  CL: number;
+  SL: number;
+  ML: number;
+  PL: number;
 };
 
 type DepartmentAttendance = {
@@ -36,33 +46,43 @@ type Props = {
   currentYear: number;
   selectedAttendanceDate: string;
   todayDate: string;
+  pendingLeaveBreakdown?: PendingLeaveBreakdown;
 };
 
 const months = [
-  "January", "February", "March", "April",
-  "May", "June", "July", "August",
-  "September", "October", "November", "December",
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
 ];
-
-const selectClass =
-  "rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs font-medium text-slate-700 outline-none transition hover:bg-white focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100";
 
 const numberFormat = (value: number) =>
   value.toLocaleString("en-IN");
 
-function formatAttendanceDate(date: string) {
-  if (!date) return "";
+// Shared filter styling
+const selectClass =
+  "h-9 w-full min-w-0 appearance-none rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-800 shadow-sm outline-none transition-all duration-200 hover:border-indigo-300 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100";
 
-  return new Date(`${date}T00:00:00`).toLocaleDateString("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-}
+const selectLabel =
+  "mb-1.5 block text-[10px] font-semibold text-slate-500";
 
 export default function DashboardKpiCards({
   activeEmployees,
   pendingLeaveCount,
+  pendingLeaveBreakdown = {
+    CL: 0,
+    SL: 0,
+    ML: 0,
+    PL: 0,
+  },
   joiningCounts,
   departmentAttendanceData,
   currentMonth,
@@ -89,11 +109,13 @@ export default function DashboardKpiCards({
   }, [joiningCounts, currentYear]);
 
   const selectedJoiningCount = useMemo(() => {
-    return joiningCounts.find(
-      (item) =>
-        item.year === selectedYear &&
-        item.month === selectedMonth
-    )?.count ?? 0;
+    return (
+      joiningCounts.find(
+        (item) =>
+          item.year === selectedYear &&
+          item.month === selectedMonth
+      )?.count ?? 0
+    );
   }, [joiningCounts, selectedMonth, selectedYear]);
 
   const selectedAttendance = useMemo(() => {
@@ -119,258 +141,348 @@ export default function DashboardKpiCards({
     };
   }, [departmentAttendanceData, selectedDepartment]);
 
-  // Change the attendance date and reload server-side attendance data.
   const handleAttendanceDateChange = (date: string) => {
     if (!date || date > todayDate) return;
 
     const selectedDay = new Date(`${date}T00:00:00`).getDay();
 
-    // Disable Saturday (6) and Sunday (0)
+    // Preserve the existing weekday-only attendance selection.
     if (selectedDay === 0 || selectedDay === 6) return;
 
     const params = new URLSearchParams(searchParams.toString());
 
     if (date === todayDate) {
-        params.delete("attendanceDate");
+      params.delete("attendanceDate");
     } else {
-        params.set("attendanceDate", date);
+      params.set("attendanceDate", date);
     }
 
     const queryString = params.toString();
 
     router.replace(
-        queryString ? `${pathname}?${queryString}` : pathname,
-        { scroll: false }
+      queryString ? `${pathname}?${queryString}` : pathname,
+      { scroll: false }
     );
   };
 
-  const cardClass =
-    "relative flex min-h-[220px] min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md";
+  const cardBase =
+    "group relative flex min-h-[205px] min-w-0 flex-col overflow-hidden rounded-2xl border p-4 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md";
 
-  const iconClass =
-    "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl";
-
-  const labelClass =
-    "text-sm font-semibold text-slate-600";
-
-  const numberClass =
-    "mt-2 text-3xl font-bold tracking-tight text-slate-900";
+  const iconBase =
+    "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl";
 
   return (
-    <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
+    <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
 
-      {/* Active Employees */}
-      <section className={cardClass}>
-        <div className="absolute right-0 top-0 h-24 w-24 rounded-full bg-blue-50 blur-2xl" />
+      {/* ACTIVE EMPLOYEES */}
+      <section
+        className={`${cardBase} border-indigo-100 bg-gradient-to-br from-indigo-50 via-white to-blue-50`}
+      >
+        <div className="pointer-events-none absolute -right-12 -top-12 h-32 w-32 rounded-full bg-indigo-200/30 blur-2xl transition-transform duration-500 group-hover:scale-125" />
 
         <div className="relative flex items-center justify-between">
-          <div className={`${iconClass} bg-blue-50 text-blue-600`}>
-            <Users className="h-5 w-5" />
+          <div className={`${iconBase} bg-indigo-100 text-indigo-700`}>
+            <Users className="h-4 w-4" />
           </div>
 
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-emerald-700">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-white/80 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider text-emerald-700">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
             Active
           </span>
         </div>
 
-        <div className="relative mt-6">
-          <p className={labelClass}>Active Employees</p>
-          <h2 className={numberClass}>
-            {numberFormat(activeEmployees)}
-          </h2>
-          <p className="mt-2 text-xs text-slate-400">
+        <div className="relative mt-4">
+          <p className="text-xs font-semibold text-slate-600">
+            Active Employees
+          </p>
+
+          <div className="mt-1 flex items-end gap-2">
+            <h2 className="text-[32px] font-extrabold leading-none tracking-tight text-slate-900">
+              {numberFormat(activeEmployees)}
+            </h2>
+
+            <span className="mb-1 flex h-5 w-5 items-center justify-center rounded-full bg-indigo-100 text-indigo-600">
+              <ArrowUpRight className="h-3.5 w-3.5" />
+            </span>
+          </div>
+
+          <p className="mt-2 text-[11px] text-slate-500">
             Currently active in the organization
           </p>
         </div>
 
-        <div className="mt-auto flex items-center gap-2 border-t border-slate-100 pt-3">
-          <TrendingUp className="h-3.5 w-3.5 text-emerald-600" />
-          <span className="text-[11px] font-medium text-slate-500">
-            Active workforce
-          </span>
+        <div className="relative mt-auto border-t border-indigo-100 pt-3">
+          <div className="flex items-center justify-between gap-1">
+            <span className="flex items-center gap-1.5 text-[11px] font-semibold text-indigo-700">
+              <TrendingUp className="h-3.5 w-3.5" />
+              Active workforce
+            </span>
+
+            <span className="text-[9px] font-medium text-slate-400">
+              Employee overview
+            </span>
+          </div>
         </div>
       </section>
 
-      {/* New Joinings */}
-      <section className={cardClass}>
-        <div className="flex items-center justify-between">
-          <div className={`${iconClass} bg-indigo-50 text-indigo-600`}>
-            <UserPlus className="h-5 w-5" />
+      {/* NEW JOININGS */}
+      <section
+        className={`${cardBase} border-teal-100 bg-gradient-to-br from-teal-50 via-white to-cyan-50`}
+      >
+        <div className="pointer-events-none absolute -right-12 -top-12 h-32 w-32 rounded-full bg-teal-200/30 blur-2xl transition-transform duration-500 group-hover:scale-125" />
+
+        <div className="relative flex items-center justify-between">
+          <div className={`${iconBase} bg-teal-100 text-teal-700`}>
+            <UserPlus className="h-4 w-4" />
           </div>
 
-          <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-indigo-700">
+          <span className="rounded-full border border-teal-200 bg-white/80 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider text-teal-700">
             Recruitment
           </span>
         </div>
 
-        <div className="mt-5">
-          <p className={labelClass}>New Joinings</p>
-          <h2 className={numberClass}>
+        <div className="relative mt-4">
+          <p className="text-xs font-semibold text-slate-600">
+            New Joinings
+          </p>
+
+          <h2 className="mt-1 text-[32px] font-extrabold leading-none tracking-tight text-slate-900">
             {numberFormat(selectedJoiningCount)}
           </h2>
-          <p className="mt-1 text-xs text-slate-400">
+
+          <p className="mt-2 text-[11px] text-slate-500">
             Employees joined in selected period
           </p>
         </div>
 
-        <div className="mt-auto grid grid-cols-2 gap-2 border-t border-slate-100 pt-3">
+        <div className="relative mt-auto grid grid-cols-2 gap-2 border-t border-teal-100 pt-3">
           <div className="min-w-0">
-            <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-              Month
-            </label>
-            <select
-              aria-label="Joining month"
-              value={selectedMonth}
-              onChange={(event) =>
-                setSelectedMonth(Number(event.target.value))
-              }
-              className={`${selectClass} w-full min-w-0`}
-            >
-              {months.map((month, index) => (
-                <option key={month} value={index + 1}>
-                  {month}
-                </option>
-              ))}
-            </select>
+            <label className={selectLabel}>Joining Month</label>
+
+            <div className="relative">
+              <select
+                aria-label="Joining month"
+                value={selectedMonth}
+                onChange={(event) =>
+                  setSelectedMonth(Number(event.target.value))
+                }
+                className={`${selectClass} pr-9`}
+              >
+                {months.map((month, index) => (
+                  <option key={month} value={index + 1}>
+                    {month}
+                  </option>
+                ))}
+              </select>
+
+              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            </div>
           </div>
 
           <div className="min-w-0">
-            <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-              Year
-            </label>
-            <select
-              aria-label="Joining year"
-              value={selectedYear}
-              onChange={(event) =>
-                setSelectedYear(Number(event.target.value))
-              }
-              className={`${selectClass} w-full min-w-0`}
-            >
-              {years.map((year) => (
-                <option key={year} value={year}>
-                  {year}
-                </option>
-              ))}
-            </select>
+            <label className={selectLabel}>Joining Year</label>
+
+            <div className="relative">
+              <select
+                aria-label="Joining year"
+                value={selectedYear}
+                onChange={(event) =>
+                  setSelectedYear(Number(event.target.value))
+                }
+                className={`${selectClass} pr-9`}
+              >
+                {years.map((year) => (
+                  <option key={year} value={year}>
+                    {year}
+                  </option>
+                ))}
+              </select>
+
+              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            </div>
           </div>
         </div>
       </section>
 
-      {/* Leave Requests */}
-      <section className={cardClass}>
-        <div className="flex items-center justify-between">
-          <div className={`${iconClass} bg-amber-50 text-amber-600`}>
-            <CalendarDays className="h-5 w-5" />
+      {/* LEAVE REQUESTS */}
+      <section
+        className={`${cardBase} border-amber-100 bg-gradient-to-br from-amber-50 via-white to-orange-50`}
+      >
+        <div className="pointer-events-none absolute -right-12 -top-12 h-32 w-32 rounded-full bg-amber-200/30 blur-2xl transition-transform duration-500 group-hover:scale-125" />
+
+        <div className="relative flex items-center justify-between">
+          <div className={`${iconBase} bg-amber-100 text-amber-700`}>
+            <CalendarDays className="h-4 w-4" />
           </div>
 
-          <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-amber-700">
+          <span className="rounded-full border border-amber-200 bg-white/80 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider text-amber-700">
             Pending
           </span>
         </div>
 
-        <div className="mt-6">
-          <p className={labelClass}>Leave Requests</p>
-          <h2 className={numberClass}>
+        <div className="relative mt-4">
+          <p className="text-xs font-semibold text-slate-600">
+            Leave Requests
+          </p>
+
+          <h2 className="mt-1 text-[32px] font-extrabold leading-none tracking-tight text-slate-900">
             {numberFormat(pendingLeaveCount)}
           </h2>
-          <p className="mt-2 text-xs text-slate-400">
+
+          <p className="mt-2 text-[11px] text-slate-500">
             Awaiting HR review
           </p>
+
+          {/* Leave type breakdown */}
+          <div className="mt-3 grid grid-cols-4 gap-2">
+            {(
+              [
+                ["CL", pendingLeaveBreakdown.CL],
+                ["SL", pendingLeaveBreakdown.SL],
+                ["ML", pendingLeaveBreakdown.ML],
+                ["PL", pendingLeaveBreakdown.PL],
+              ] as const
+            ).map(([type, count]) => (
+              <div
+                key={type}
+                className="rounded-lg border border-amber-100 bg-white/80 px-1 py-2 text-center"
+              >
+                <p className="text-[10px] font-bold text-slate-500">
+                  {type}
+                </p>
+                <p className="mt-1 text-sm font-bold text-amber-800">
+                  {numberFormat(count)}
+                </p>
+              </div>
+            ))}
+          </div>
         </div>
 
-        <div className="mt-auto flex items-center justify-between border-t border-slate-100 pt-3">
-          <span className="text-[11px] font-medium text-slate-500">
+        <div className="relative mt-auto flex items-center justify-between border-t border-amber-100 pt-3">
+          <span className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-600">
+            <Clock3 className="h-3.5 w-3.5 text-amber-600" />
             Pending approvals
           </span>
-          <span className="flex h-7 min-w-7 items-center justify-center rounded-lg bg-amber-50 px-2 text-xs font-bold text-amber-700">
+
+          <span className="flex h-7 min-w-7 items-center justify-center rounded-lg bg-amber-100 px-2 text-xs font-bold text-amber-800">
             {numberFormat(pendingLeaveCount)}
           </span>
         </div>
       </section>
 
-      {/* Attendance */}
-      <section className={cardClass}>
-        <div className="flex items-center justify-between">
-          <div className={`${iconClass} bg-violet-50 text-violet-600`}>
-            <UserCheck className="h-5 w-5" />
+      {/* TODAY PRESENT */}
+      <section
+        className={`${cardBase} border-violet-100 bg-gradient-to-br from-violet-50 via-white to-purple-50`}
+      >
+        <div className="pointer-events-none absolute -right-12 -top-12 h-32 w-32 rounded-full bg-violet-200/30 blur-2xl transition-transform duration-500 group-hover:scale-125" />
+
+        {/* Header */}
+        <div className="relative flex items-center justify-between">
+          <div className={`${iconBase} bg-violet-100 text-violet-700`}>
+            <UserCheck className="h-4 w-4" />
           </div>
 
-          <span className="rounded-full bg-violet-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-violet-700">
+          <span className="rounded-full border border-violet-200 bg-white/80 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider text-violet-700">
             {selectedAttendanceDate === todayDate ? "Today" : "Past Date"}
           </span>
         </div>
 
-        <div className="mt-4">
+        {/* Attendance summary */}
+        <div className="relative mt-3">
           <div className="flex items-center justify-between gap-2">
-            <p className={labelClass}>Today Present</p>
-            <Building2 className="h-4 w-4 shrink-0 text-slate-400" />
+            <p className="text-xs font-semibold text-slate-600">
+              Today Present
+            </p>
+
+            <Building2 className="h-3.5 w-3.5 shrink-0 text-violet-500" />
           </div>
 
-          <input
-            type="date"
-            aria-label="Select attendance date"
-            value={selectedAttendanceDate}
-            max={todayDate}
-            onChange={(event) =>handleAttendanceDateChange(event.target.value)}
-            className={`${selectClass} mt-2 w-full cursor-pointer`}
-          />
+          <div className="mt-2 flex items-end gap-2">
+            <h2 className="text-[32px] font-extrabold leading-none tracking-tight text-slate-900">
+              {numberFormat(selectedAttendance.present)}
+            </h2>
 
-          <p className="mt-1 text-[10px] text-slate-400">
-            Attendance for {formatAttendanceDate(selectedAttendanceDate)}
-          </p>
+            <span className="mb-1 text-[11px] font-medium text-slate-500">
+              Present
+            </span>
+          </div>
 
-          <select
-            aria-label="Attendance department"
-            value={selectedDepartment}
-            onChange={(event) =>
-              setSelectedDepartment(event.target.value)
-            }
-            className={`${selectClass} mt-2 w-full`}
-          >
-            <option value="all">All Departments</option>
-            {departmentAttendanceData.map((department) => (
-              <option
-                key={department.departmentId}
-                value={department.departmentId}
-              >
-                {department.departmentName}
-              </option>
-            ))}
-          </select>
+          {/* WFO / WFH */}
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <div className="flex min-w-0 items-center gap-1.5 rounded-lg border border-white bg-white/75 p-2">
+              <BriefcaseBusiness className="h-3.5 w-3.5 shrink-0 text-blue-600" />
 
-          <h2 className={numberClass}>
-            {numberFormat(selectedAttendance.present)}
-          </h2>
-        </div>
+              <div className="min-w-0">
+                <p className="text-[9px] font-semibold text-slate-500">
+                  WFO
+                </p>
+                <p className="text-xs font-bold text-slate-900">
+                  {numberFormat(selectedAttendance.wfo)}
+                </p>
+              </div>
+            </div>
 
-        <div className="mt-auto grid grid-cols-2 gap-2 border-t border-slate-100 pt-3">
-          <div className="flex min-w-0 items-center gap-2 rounded-xl bg-slate-50 p-2">
-            <BriefcaseBusiness className="h-4 w-4 shrink-0 text-blue-600" />
-            <div className="min-w-0">
-              <p className="truncate text-[10px] font-medium text-slate-500">
-                WFO
-              </p>
-              <p className="text-sm font-bold text-slate-900">
-                {numberFormat(selectedAttendance.wfo)}
-              </p>
+            <div className="flex min-w-0 items-center gap-1.5 rounded-lg border border-white bg-white/75 p-2">
+              <Home className="h-3.5 w-3.5 shrink-0 text-violet-600" />
+
+              <div className="min-w-0">
+                <p className="text-[9px] font-semibold text-slate-500">
+                  WFH
+                </p>
+                <p className="text-xs font-bold text-slate-900">
+                  {numberFormat(selectedAttendance.wfh)}
+                </p>
+              </div>
             </div>
           </div>
+        </div>
 
-          <div className="flex min-w-0 items-center gap-2 rounded-xl bg-slate-50 p-2">
-            <Home className="h-4 w-4 shrink-0 text-violet-600" />
-            <div className="min-w-0">
-              <p className="truncate text-[10px] font-medium text-slate-500">
-                WFH
-              </p>
-              <p className="text-sm font-bold text-slate-900">
-                {numberFormat(selectedAttendance.wfh)}
-              </p>
+        {/* Filters at bottom */}
+        <div className="relative mt-auto grid grid-cols-2 gap-2 border-t border-violet-100 pt-3">
+          <div className="min-w-0">
+            <label className={selectLabel}>Attendance Date</label>
+
+            <input
+              type="date"
+              aria-label="Select attendance date"
+              value={selectedAttendanceDate}
+              max={todayDate}
+              onChange={(event) =>
+                handleAttendanceDateChange(event.target.value)
+              }
+              className={selectClass}
+            />
+          </div>
+
+          <div className="min-w-0">
+            <label className={selectLabel}>Department</label>
+
+            <div className="relative">
+              <select
+                aria-label="Attendance department"
+                value={selectedDepartment}
+                onChange={(event) =>
+                  setSelectedDepartment(event.target.value)
+                }
+                className={`${selectClass} pr-9`}
+              >
+                <option value="all">All Departments</option>
+
+                {departmentAttendanceData.map((department) => (
+                  <option
+                    key={department.departmentId}
+                    value={department.departmentId}
+                  >
+                    {department.departmentName}
+                  </option>
+                ))}
+              </select>
+
+              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             </div>
           </div>
         </div>
       </section>
-
     </div>
   );
 }

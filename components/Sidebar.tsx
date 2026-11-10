@@ -1,3 +1,4 @@
+
 "use client";
 
 import Image from "next/image";
@@ -46,13 +47,16 @@ type SidebarNavItem = {
 interface SidebarProps {
   role: UserRole;
   currentPath?: string;
+  avatarUrl?: string | null;
 }
 
 export default function Sidebar({ role }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
+
   const [isCollapsed, setIsCollapsed] = useState(false);
+
   const [openMenus, setOpenMenus] = useState<string[]>([
     "Employees",
     "Approval Hub",
@@ -325,10 +329,14 @@ export default function Sidebar({ role }: SidebarProps) {
     if (!href) return false;
 
     const [path, query] = href.split("?");
+
     if (pathname !== path) return false;
 
     if (!query) {
-      if (path === "/dashboard/employees" || path === "/dashboard/approvals") {
+      if (
+        path === "/dashboard/employees" ||
+        path === "/dashboard/approvals"
+      ) {
         return !searchParams.has("status");
       }
 
@@ -336,6 +344,7 @@ export default function Sidebar({ role }: SidebarProps) {
     }
 
     const expectedParams = new URLSearchParams(query);
+
     for (const [key, value] of expectedParams.entries()) {
       if (searchParams.get(key) !== value) return false;
     }
@@ -348,9 +357,9 @@ export default function Sidebar({ role }: SidebarProps) {
     (item.children?.some(hasActiveChild) ?? false);
 
   const renderNavItem = (item: SidebarNavItem, level = 0) => {
-    const children = item.children?.filter((child) =>
-      child.roles.includes(role)
-    ) ?? [];
+    const children =
+      item.children?.filter((child) => child.roles.includes(role)) ?? [];
+
     const hasChildren = children.length > 0;
     const isOpen = openMenus.includes(item.name);
     const isActive = hasActiveChild(item);
@@ -380,9 +389,15 @@ export default function Sidebar({ role }: SidebarProps) {
             }`}
           >
             <Icon className="h-4 w-4 shrink-0 text-slate-400" />
-            <span className={isCollapsed ? "sr-only" : "flex-1 text-left text-sm"}>
+
+            <span
+              className={
+                isCollapsed ? "sr-only" : "flex-1 text-left text-sm"
+              }
+            >
               {item.name}
             </span>
+
             {!isCollapsed &&
               (isOpen ? (
                 <ChevronDown className="h-4 w-4" />
@@ -390,9 +405,12 @@ export default function Sidebar({ role }: SidebarProps) {
                 <ChevronRight className="h-4 w-4" />
               ))}
           </button>
+
           {!isCollapsed && isOpen && (
             <div className="ml-4 mt-1 space-y-1 border-l border-slate-700 pl-2">
-              {children.map((child) => renderNavItem(child, level + 1))}
+              {children.map((child) =>
+                renderNavItem(child, level + 1)
+              )}
             </div>
           )}
         </div>
@@ -413,6 +431,7 @@ export default function Sidebar({ role }: SidebarProps) {
         }`}
       >
         <Icon className="h-4 w-4 shrink-0" />
+
         <span className={isCollapsed ? "sr-only" : "text-sm"}>
           {item.name}
         </span>
@@ -441,10 +460,12 @@ export default function Sidebar({ role }: SidebarProps) {
             style={{ width: "30px", height: "auto" }}
           />
         </div>
+
         <div className={isCollapsed ? "hidden" : ""}>
           <span className="block text-sm font-semibold leading-tight sm:text-base">
             Teens Software
           </span>
+
           <span className="text-[10px] font-medium uppercase tracking-wide text-slate-400">
             {role === "employee"
               ? "Employee Portal"
@@ -454,7 +475,9 @@ export default function Sidebar({ role }: SidebarProps) {
       </div>
 
       <div className="flex-1 overflow-y-auto px-3 py-4">
-        <div className="space-y-1">{visibleItems.map((item) => renderNavItem(item))}</div>
+        <div className="space-y-1">
+          {visibleItems.map((item) => renderNavItem(item))}
+        </div>
       </div>
 
       <div className="border-t border-slate-800 p-3">
@@ -476,6 +499,7 @@ export default function Sidebar({ role }: SidebarProps) {
               <PanelLeftClose className="h-4 w-4" />
             )}
           </button>
+
           <button
             type="button"
             onClick={handleLogout}
@@ -487,6 +511,7 @@ export default function Sidebar({ role }: SidebarProps) {
             }`}
           >
             <LogOut className="h-4 w-4 shrink-0 text-slate-400" />
+
             <span
               className={
                 isCollapsed

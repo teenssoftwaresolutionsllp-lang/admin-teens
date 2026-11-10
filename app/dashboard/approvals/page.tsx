@@ -4,7 +4,17 @@ import ApprovalsHub from "@/components/admin/ApprovalsHub";
 import { redirect } from "next/navigation";
 import type { ResignationRequest, Employee , WfhRequest} from "@/lib/types";
 
-export default async function ApprovalsPage() {
+interface ApprovalsPageProps {
+  searchParams: Promise<{
+    leaveId?: string;
+    status?: string;
+  }>;
+}
+
+export default async function ApprovalsPage({
+  searchParams,
+}: ApprovalsPageProps) {
+  const { leaveId, status } = await searchParams;
   const supabase = await createClient();
 
   const {
@@ -214,12 +224,14 @@ export default async function ApprovalsPage() {
 
 
   return (
-    <ApprovalsHub
-      initialProfileRequests={profileRequests}
-      initialLeaveRequests={leaveRequests}
-      initialRegularizations={regularizations}
-      initialResignationRequests={initialResignationRequests}
-      initialWfhRequests={initialWfhRequests}
-    />
+  <ApprovalsHub
+    initialProfileRequests={profileRequests}
+    initialLeaveRequests={leaveRequests}
+    initialRegularizations={regularizations}
+    initialResignationRequests={initialResignationRequests}
+    initialWfhRequests={initialWfhRequests}
+    selectedLeaveId={leaveId ?? null}
+    initialLeaveStatus={status ?? "pending"}
+  />
   );
 }

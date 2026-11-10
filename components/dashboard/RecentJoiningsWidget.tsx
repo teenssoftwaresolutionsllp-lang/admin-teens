@@ -1,6 +1,9 @@
+"use client";
+
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, Users } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 export interface RecentJoining {
   id: string;
@@ -39,6 +42,7 @@ function getInitials(name: string) {
 export default function RecentJoiningsWidget({
   employees,
 }: RecentJoiningsWidgetProps) {
+  const router = useRouter();
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="mb-5 flex items-center justify-between gap-3">
@@ -75,7 +79,19 @@ export default function RecentJoiningsWidget({
               {employees.map((employee) => (
                 <tr
                   key={employee.id}
-                  className="border-b border-slate-50 last:border-0"
+                  role="link"
+                  tabIndex={0}
+                  aria-label={`View ${employee.name}`}
+                  onClick={() =>
+                    router.push(`/dashboard/employees/${employee.id}`)
+                  }
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      router.push(`/dashboard/employees/${employee.id}`);
+                    }
+                  }}
+                  className="cursor-pointer border-b border-slate-50 transition-colors hover:bg-indigo-50/50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-500 last:border-0"
                 >
                   <td className="py-3 pr-3">
                     <div className="flex items-center gap-2.5">

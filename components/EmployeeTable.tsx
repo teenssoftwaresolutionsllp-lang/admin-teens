@@ -1,11 +1,12 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useSearchParams } from "next/navigation"
+import { usePathname,useRouter,useSearchParams } from "next/navigation"
 import companiesData from "@/data/companies.json"
 import Link from "next/link"
 import Image from "next/image"
 import { Employee, Department, UserRole } from "@/lib/types"
+import { useEmployeeDashboardFilter } from "@/components/dashboard/EmployeeFilterProvider";
 import {
   Eye,
   UserCircle,
@@ -151,8 +152,12 @@ export default function EmployeeTable({
   role,
 }: EmployeeTableProps) {
   const searchParams = useSearchParams()
+  const { dashboardFilter } = useEmployeeDashboardFilter();
+  const pathname = usePathname()
+  const router = useRouter()
   const sidebarStatus = searchParams.get("status") || "all"
   const sidebarNotice = searchParams.get("notice")
+  const departmentFromUrl = searchParams.get("department") || ""
   const isAllSubmenu = sidebarStatus === "all"
 
   // Existing filters
@@ -312,12 +317,58 @@ export default function EmployeeTable({
     setResignationDateTo("")
     setExitDateFrom("")
     setExitDateTo("")
+
+    // Remove the department URL filter as well.
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("department");
+
+    const queryString = params.toString();
+
+    router.replace(
+      queryString ? `${pathname}?${queryString}` : pathname
+    );
+
+    setCurrentPage(1);
   }
 
   useEffect(() => {
-    const statusFromUrl = searchParams.get("status") || "all"
-    setStatusFilter(statusFromUrl)
-  }, [searchParams])
+    if (dashboardFilter) {
+      setStatusFilter(dashboardFilter.status);
+      setDeptFilter(dashboardFilter.departmentId ?? "unassigned");
+      setCurrentPage(1);
+      return;
+    }
+
+    setStatusFilter(sidebarStatus);
+
+    // Restore the normal All Employees view when no sidebar
+    // status filter or dashboard department selection is active.
+    if (sidebarStatus === "all") {
+      setDeptFilter("all");
+    }
+
+    setCurrentPage(1);
+  }, [dashboardFilter, sidebarStatus]);
+
+  useEffect(() => {
+    // Dashboard department selection takes priority over URL filters.
+    if (dashboardFilter) return;
+
+    if (!departmentFromUrl) {
+      if (sidebarStatus === "all") {
+        setDeptFilter("all");
+      }
+      return;
+    }
+
+    // Preserve support for older URL-based department filters.
+    const matchedDepartment = departments.find(
+      (department) =>
+        normalize(department.name) === normalize(departmentFromUrl)
+    );
+
+    setDeptFilter(matchedDepartment?.id || "all");
+  }, [dashboardFilter, departmentFromUrl, departments, sidebarStatus]);
 
   const additionalFiltersActive =
     designationFilter !== "all" ||
@@ -733,7 +784,10 @@ export default function EmployeeTable({
       (emp.phone || "").toLowerCase().includes(searchString)
 
     const matchesDept =
-      deptFilter === "all" || emp.department_id === deptFilter
+      deptFilter === "all" ||
+      (deptFilter === "unassigned"
+        ? !emp.department_id
+        : emp.department_id === deptFilter);
 
     const normalizedEmployeeStatus = normalize(emp.status)
     const employeeNoticeStatus = normalize(emp.notice_status || "")
@@ -1224,7 +1278,7 @@ export default function EmployeeTable({
     <div className="flex flex-col gap-5">
       {/* Filters */}
       {isAllSubmenu ? (
-        <div className="relative z-30 w-full shrink-0 bg-white">
+        <div className="sticky top-0 z-[100] w-full shrink-0 bg-white shadow-md">
           <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
             {/* Header */}
             <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
@@ -1437,12 +1491,12 @@ export default function EmployeeTable({
           </div>
         </div>
 
-        <div className="w-full overflow-x-auto">
-          <table className={`w-full ${isAllSubmenu ? "min-w-[3000px]" : "min-w-[980px]"} border-separate border-spacing-0 text-left`}>
-            <thead className="sticky top-0 z-20">
-              <tr className="bg-slate-50">
+        <div className="relative max-h-[650px] overflow-auto">
+          <table className={`w-full ${isAllSubmenu ? "min-w-[3000px]" : "min-w-[980px]"} border-collapse text-left text-xs`}>
+            <thead className="sticky top-0 z-30 bg-slate-100 text-[11px] font-bold uppercase tracking-wider text-slate-800 shadow-sm border-b border-slate-300">
+              <tr>
                 {isFilterActive && (
-                  <th className="w-12 border-b border-slate-200 px-5 py-3.5">
+                  <th className="text-slate-900 sticky top-0 left-0 z-40 w-12 border-r border-slate-300 border-b border-slate-200 bg-slate-100 px-2 py-3 text-center font-bold">
                     <input
                       type="checkbox"
                       checked={filteredEmployees.length > 0 && filteredEmployees.every((emp) => selectedEmployees.includes(emp.id))}
@@ -1452,45 +1506,45 @@ export default function EmployeeTable({
                     />
                   </th>
                 )}
-                <th className="border-b border-slate-200 px-5 py-3.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Employee</th>
-                <th className="border-b border-slate-200 px-5 py-3.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Employee ID</th>
-                <th className="border-b border-slate-200 px-5 py-3.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Department</th>
-                <th className="border-b border-slate-200 px-5 py-3.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Designation</th>
-                <th className="border-b border-slate-200 px-5 py-3.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Joining Date</th>
+                <th className={`sticky top-0 z-40 w-[300px] min-w-[300px] whitespace-nowrap border-r border-slate-300 border-b border-slate-200 bg-slate-100 px-4 py-3 text-left font-bold text-slate-900 ${isFilterActive ? "left-12" : "left-0"}`}>Employee</th>
+                <th className={`sticky top-0 z-40 w-[150px] min-w-[150px] whitespace-nowrap border-r border-slate-300 border-b border-slate-200 bg-slate-100 px-4 py-3 text-left font-bold text-slate-900 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.12)] ${isFilterActive ? "left-[348px]" : "left-[300px]"}`}>Employee ID</th>
+                <th className="sticky top-0 z-30 whitespace-nowrap border-r border-slate-300 border-b border-slate-200 bg-slate-100 px-4 py-3 font-bold text-slate-900">Department</th>
+                <th className="sticky top-0 z-30 whitespace-nowrap border-r border-slate-300 border-b border-slate-200 bg-slate-100 px-4 py-3 font-bold text-slate-900">Designation</th>
+                <th className="sticky top-0 z-30 whitespace-nowrap border-r border-slate-300 border-b border-slate-200 bg-slate-100 px-4 py-3 font-bold text-slate-900">Joining Date</th>
                 {isAllSubmenu && (
                   <>
-                    <th className="whitespace-nowrap border-b border-slate-200 px-5 py-3.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Project</th>
-                    <th className="whitespace-nowrap border-b border-slate-200 px-5 py-3.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Gender</th>
-                    <th className="whitespace-nowrap border-b border-slate-200 px-5 py-3.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Date of Birth</th>
-                    <th className="whitespace-nowrap border-b border-slate-200 px-5 py-3.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Work Location</th>
-                    <th className="whitespace-nowrap border-b border-slate-200 px-5 py-3.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Client Type</th>
-                    <th className="whitespace-nowrap border-b border-slate-200 px-5 py-3.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Marital Status</th>
-                    <th className="whitespace-nowrap border-b border-slate-200 px-5 py-3.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Blood Group</th>
-                    <th className="whitespace-nowrap border-b border-slate-200 px-5 py-3.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Salary / CTC</th>
-                    <th className="whitespace-nowrap border-b border-slate-200 px-5 py-3.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Appointment Date</th>
-                    <th className="whitespace-nowrap border-b border-slate-200 px-5 py-3.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Confirmation Date</th>
-                    <th className="whitespace-nowrap border-b border-slate-200 px-5 py-3.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Probation Duration</th>
-                    <th className="whitespace-nowrap border-b border-slate-200 px-5 py-3.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Experience Level</th>
-                    <th className="whitespace-nowrap border-b border-slate-200 px-5 py-3.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Total Experience</th>
-                    <th className="whitespace-nowrap border-b border-slate-200 px-5 py-3.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Probation End Date</th>
-                    <th className="whitespace-nowrap border-b border-slate-200 px-5 py-3.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Notice Period (Days)</th>
-                    <th className="whitespace-nowrap border-b border-slate-200 px-5 py-3.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Notice Status</th>
-                    <th className="whitespace-nowrap border-b border-slate-200 px-5 py-3.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Resignation Date</th>
-                    <th className="whitespace-nowrap border-b border-slate-200 px-5 py-3.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Exit Date</th>
-                    <th className="whitespace-nowrap border-b border-slate-200 px-5 py-3.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">PF</th>
-                    <th className="whitespace-nowrap border-b border-slate-200 px-5 py-3.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">ESI Healthcare</th>
-                    <th className="whitespace-nowrap border-b border-slate-200 px-5 py-3.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">PT</th>
-                    <th className="whitespace-nowrap border-b border-slate-200 px-5 py-3.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">TDS</th>
+                    <th className="sticky top-0 z-30 whitespace-nowrap border-r border-slate-300 border-b border-slate-200 bg-slate-100 px-4 py-3 font-bold text-slate-900">Project</th>
+                    <th className="sticky top-0 z-30 whitespace-nowrap border-r border-slate-300 border-b border-slate-200 bg-slate-100 px-4 py-3 font-bold text-slate-900">Gender</th>
+                    <th className="sticky top-0 z-30 whitespace-nowrap border-r border-slate-300 border-b border-slate-200 bg-slate-100 px-4 py-3 font-bold text-slate-900">Date of Birth</th>
+                    <th className="sticky top-0 z-30 whitespace-nowrap border-r border-slate-300 border-b border-slate-200 bg-slate-100 px-4 py-3 font-bold text-slate-900">Work Location</th>
+                    <th className="sticky top-0 z-30 whitespace-nowrap border-r border-slate-300 border-b border-slate-200 bg-slate-100 px-4 py-3 font-bold text-slate-900">Client Type</th>
+                    <th className="sticky top-0 z-30 whitespace-nowrap border-r border-slate-300 border-b border-slate-200 bg-slate-100 px-4 py-3 font-bold text-slate-900">Marital Status</th>
+                    <th className="sticky top-0 z-30 whitespace-nowrap border-r border-slate-300 border-b border-slate-200 bg-slate-100 px-4 py-3 font-bold text-slate-900">Blood Group</th>
+                    <th className="sticky top-0 z-30 whitespace-nowrap border-r border-slate-300 border-b border-slate-200 bg-slate-100 px-4 py-3 font-bold text-slate-900">Salary / CTC</th>
+                    <th className="sticky top-0 z-30 whitespace-nowrap border-r border-slate-300 border-b border-slate-200 bg-slate-100 px-4 py-3 font-bold text-slate-900">Appointment Date</th>
+                    <th className="sticky top-0 z-30 whitespace-nowrap border-r border-slate-300 border-b border-slate-200 bg-slate-100 px-4 py-3 font-bold text-slate-900">Confirmation Date</th>
+                    <th className="sticky top-0 z-30 whitespace-nowrap border-r border-slate-300 border-b border-slate-200 bg-slate-100 px-4 py-3 font-bold text-slate-900">Probation Duration</th>
+                    <th className="sticky top-0 z-30 whitespace-nowrap border-r border-slate-300 border-b border-slate-200 bg-slate-100 px-4 py-3 font-bold text-slate-900">Experience Level</th>
+                    <th className="sticky top-0 z-30 whitespace-nowrap border-r border-slate-300 border-b border-slate-200 bg-slate-100 px-4 py-3 font-bold text-slate-900">Total Experience</th>
+                    <th className="sticky top-0 z-30 whitespace-nowrap border-r border-slate-300 border-b border-slate-200 bg-slate-100 px-4 py-3 font-bold text-slate-900">Probation End Date</th>
+                    <th className="sticky top-0 z-30 whitespace-nowrap border-r border-slate-300 border-b border-slate-200 bg-slate-100 px-4 py-3 font-bold text-slate-900">Notice Period (Days)</th>
+                    <th className="sticky top-0 z-30 whitespace-nowrap border-r border-slate-300 border-b border-slate-200 bg-slate-100 px-4 py-3 font-bold text-slate-900">Notice Status</th>
+                    <th className="sticky top-0 z-30 whitespace-nowrap border-r border-slate-300 border-b border-slate-200 bg-slate-100 px-4 py-3 font-bold text-slate-900">Resignation Date</th>
+                    <th className="sticky top-0 z-30 whitespace-nowrap border-r border-slate-300 border-b border-slate-200 bg-slate-100 px-4 py-3 font-bold text-slate-900">Exit Date</th>
+                    <th className="sticky top-0 z-30 whitespace-nowrap border-r border-slate-300 border-b border-slate-200 bg-slate-100 px-4 py-3 font-bold text-slate-900">PF</th>
+                    <th className="sticky top-0 z-30 whitespace-nowrap border-r border-slate-300 border-b border-slate-200 bg-slate-100 px-4 py-3 font-bold text-slate-900">ESI Healthcare</th>
+                    <th className="sticky top-0 z-30 whitespace-nowrap border-r border-slate-300 border-b border-slate-200 bg-slate-100 px-4 py-3 font-bold text-slate-900">PT</th>
+                    <th className="sticky top-0 z-30 whitespace-nowrap border-r border-slate-300 border-b border-slate-200 bg-slate-100 px-4 py-3 font-bold text-slate-900">TDS</th>
                   </>
                 )}
                 {showExitDetails && (
                   <>
-                    <th className="border-b border-slate-200 px-5 py-3.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Years Worked</th>
-                    <th className="border-b border-slate-200 px-5 py-3.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Last Working Date</th>
+                    <th className="sticky top-0 z-30 whitespace-nowrap border-r border-slate-300 border-b border-slate-200 bg-slate-100 px-4 py-3 font-bold text-slate-900">Years Worked</th>
+                    <th className="sticky top-0 z-30 whitespace-nowrap border-r border-slate-300 border-b border-slate-200 bg-slate-100 px-4 py-3 font-bold text-slate-900">Last Working Date</th>
                   </>
                 )}
-                <th className="border-b border-slate-200 px-5 py-3.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Status</th>
-                <th className="border-b border-slate-200 px-5 py-3.5 text-right text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Actions</th>
+                <th className="sticky top-0 z-30 whitespace-nowrap border-r border-slate-300 border-b border-slate-200 bg-slate-100 px-4 py-3 font-bold text-slate-900">Status</th>
+                <th className="sticky right-0 top-0 z-40 whitespace-nowrap border-l border-slate-300 border-b border-slate-200 bg-slate-100 px-4 py-3 text-right font-bold text-slate-900 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.1)]">Actions</th>
               </tr>
             </thead>
 
@@ -1499,20 +1553,34 @@ export default function EmployeeTable({
                 paginatedEmployees.map((emp) => (
                   <tr
                     key={emp.id}
-                    className={`group transition-colors hover:bg-indigo-50/35 ${selectedEmployees.includes(emp.id) ? "bg-indigo-50/40" : "bg-white"}`}
+                    role="link"
+                    tabIndex={0}
+                    aria-label={`View ${emp.first_name} ${emp.last_name}`}
+                    onClick={() => router.push(`/dashboard/employees/${emp.id}`)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" && event.target === event.currentTarget) {
+                        router.push(`/dashboard/employees/${emp.id}`)
+                      }
+                    }}
+                    className={`group cursor-pointer transition-colors hover:bg-indigo-50/35 ${
+                      selectedEmployees.includes(emp.id)
+                        ? "bg-indigo-50/40"
+                        : "bg-white"
+                    }`}
                   >
                     {isFilterActive && (
-                      <td className="border-b border-slate-100 px-5 py-4 align-middle">
+                      <td className={`sticky left-0 z-20 border-r border-slate-200 border-b border-slate-100 bg-white px-2 py-3 align-middle ${selectedEmployees.includes(emp.id) ? "!bg-indigo-50/40" : ""}`}>
                         <input
                           type="checkbox"
                           checked={selectedEmployees.includes(emp.id)}
+                          onClick={(event) => event.stopPropagation()}
                           onChange={() => handleSelectEmployee(emp.id)}
                           className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                           aria-label={`Select ${emp.first_name} ${emp.last_name}`}
                         />
                       </td>
                     )}
-                    <td className="border-b border-slate-100 px-5 py-4">
+                    <td className={`sticky z-20 w-[300px] min-w-[300px] border-r border-slate-200 border-b border-slate-100 bg-white px-4 py-3 ${isFilterActive ? "left-12" : "left-0"} ${selectedEmployees.includes(emp.id) ? "!bg-indigo-50/40" : ""}`}>
                       <div className="flex min-w-[220px] items-center gap-3">
                         {emp.profile_photo_url ? (
                           <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full border border-slate-200 bg-slate-100 ring-2 ring-white">
@@ -1524,21 +1592,21 @@ export default function EmployeeTable({
                           </div>
                         )}
                         <div className="min-w-0">
-                          <Link href={`/dashboard/employees/${emp.id}`} className="block truncate text-sm font-bold text-slate-800 transition hover:text-indigo-700">
+                          <Link href={`/dashboard/employees/${emp.id}`} onClick={(event) => event.stopPropagation()} className="block truncate text-sm font-bold text-slate-800 transition hover:text-indigo-700">
                             {emp.first_name} {emp.last_name}
                           </Link>
                           <p className="mt-0.5 max-w-[220px] truncate text-xs text-slate-400">{emp.email || "No email available"}</p>
                         </div>
                       </div>
                     </td>
-                    <td className="border-b border-slate-100 px-5 py-4">
+                    <td className={`sticky z-20 w-[150px] min-w-[150px] whitespace-nowrap border-r border-slate-200 border-b border-slate-100 bg-white px-4 py-3 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.12)] ${isFilterActive ? "left-[348px]" : "left-[300px]"} ${selectedEmployees.includes(emp.id) ? "!bg-indigo-50/40" : ""}`}>
                       <span className="rounded-md bg-slate-100 px-2 py-1 font-mono text-xs font-semibold text-slate-600">{emp.employee_id || "-"}</span>
                     </td>
-                    <td className="border-b border-slate-100 px-5 py-4">
+                    <td className="whitespace-nowrap border-r border-slate-200 border-b border-slate-100 px-4 py-3">
                       <span className="inline-flex rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs font-semibold text-slate-700">{getDepartmentName(emp)}</span>
                     </td>
-                    <td className="border-b border-slate-100 px-5 py-4 text-sm font-medium text-slate-700">{emp.designation || "-"}</td>
-                    <td className="whitespace-nowrap border-b border-slate-100 px-5 py-4 text-xs font-medium text-slate-500">{formatDate(emp.joining_date)}</td>
+                    <td className="whitespace-nowrap border-r border-slate-200 border-b border-slate-100 px-4 py-3 text-sm font-medium text-slate-700">{emp.designation || "-"}</td>
+                    <td className="whitespace-nowrap border-r border-slate-200 border-b border-slate-100 px-4 py-3 text-xs font-medium text-slate-500">{formatDate(emp.joining_date)}</td>
                     {isAllSubmenu && (() => {
                       const details = emp as EmployeeFilterRecord
                       const eligibility = (value?: boolean | null) => (
@@ -1548,49 +1616,52 @@ export default function EmployeeTable({
                       )
                       return (
                         <>
-                          <td className="whitespace-nowrap border-b border-slate-100 px-5 py-4 text-xs text-slate-600">{details.project?.name || details.project_id || "—"}</td>
-                          <td className="whitespace-nowrap border-b border-slate-100 px-5 py-4 text-xs capitalize text-slate-600">{details.gender || "—"}</td>
-                          <td className="whitespace-nowrap border-b border-slate-100 px-5 py-4 text-xs text-slate-500">{formatDate(details.date_of_birth)}</td>
-                          <td className="whitespace-nowrap border-b border-slate-100 px-5 py-4 text-xs text-slate-600">{details.work_location || "—"}</td>
-                          <td className="whitespace-nowrap border-b border-slate-100 px-5 py-4 text-xs capitalize text-slate-600">{details.client_type || "—"}</td>
-                          <td className="whitespace-nowrap border-b border-slate-100 px-5 py-4 text-xs capitalize text-slate-600">{details.marital_status || "—"}</td>
-                          <td className="whitespace-nowrap border-b border-slate-100 px-5 py-4 text-xs text-slate-600">{details.blood_group || "—"}</td>
-                          <td className="whitespace-nowrap border-b border-slate-100 px-5 py-4 text-xs font-semibold text-slate-700">{details.salary != null ? `₹${Number(details.salary).toLocaleString("en-IN")}` : "—"}</td>
-                          <td className="whitespace-nowrap border-b border-slate-100 px-5 py-4 text-xs text-slate-500">{formatDate(details.appointment_date)}</td>
-                          <td className="whitespace-nowrap border-b border-slate-100 px-5 py-4 text-xs text-slate-500">{formatDate(details.confirmation_date)}</td>
-                          <td className="whitespace-nowrap border-b border-slate-100 px-5 py-4 text-xs text-slate-600">{details.probation_duration != null ? `${details.probation_duration} months` : "—"}</td>
-                          <td className="whitespace-nowrap border-b border-slate-100 px-5 py-4 text-xs capitalize text-slate-600">{details.experience_level? details.experience_level === "fresher"? "Fresher": "Experienced": "—"}</td>
-                          <td className="whitespace-nowrap border-b border-slate-100 px-5 py-4 text-xs text-slate-600">{formatTotalExperience(emp)}</td>
-                          <td className="whitespace-nowrap border-b border-slate-100 px-5 py-4 text-xs text-slate-500">{formatDate(details.probation_end_date)}</td>
-                          <td className="whitespace-nowrap border-b border-slate-100 px-5 py-4 text-xs text-slate-600">{details.notice_period_days ?? "—"}</td>
-                          <td className="whitespace-nowrap border-b border-slate-100 px-5 py-4 text-xs capitalize text-slate-600">{details.notice_status?.replace(/_/g, " ") || "—"}</td>
-                          <td className="whitespace-nowrap border-b border-slate-100 px-5 py-4 text-xs text-slate-500">{formatDate(details.resignation_date)}</td>
-                          <td className="whitespace-nowrap border-b border-slate-100 px-5 py-4 text-xs text-slate-500">{formatDate(details.exit_date)}</td>
-                          <td className="whitespace-nowrap border-b border-slate-100 px-5 py-4">{eligibility(details.pf_eligible)}</td>
-                          <td className="whitespace-nowrap border-b border-slate-100 px-5 py-4">{eligibility(details.esi_healthcare_eligible)}</td>
-                          <td className="whitespace-nowrap border-b border-slate-100 px-5 py-4">{eligibility(details.pt_eligible)}</td>
-                          <td className="whitespace-nowrap border-b border-slate-100 px-5 py-4">{eligibility(details.tds_eligible)}</td>
+                          <td className="whitespace-nowrap border-r border-slate-200 border-b border-slate-100 px-4 py-3 text-xs text-slate-600">{details.project?.name || details.project_id || "—"}</td>
+                          <td className="whitespace-nowrap border-r border-slate-200 border-b border-slate-100 px-4 py-3 text-xs capitalize text-slate-600">{details.gender || "—"}</td>
+                          <td className="whitespace-nowrap border-r border-slate-200 border-b border-slate-100 px-4 py-3 text-xs text-slate-500">{formatDate(details.date_of_birth)}</td>
+                          <td className="whitespace-nowrap border-r border-slate-200 border-b border-slate-100 px-4 py-3 text-xs text-slate-600">{details.work_location || "—"}</td>
+                          <td className="whitespace-nowrap border-r border-slate-200 border-b border-slate-100 px-4 py-3 text-xs capitalize text-slate-600">{details.client_type || "—"}</td>
+                          <td className="whitespace-nowrap border-r border-slate-200 border-b border-slate-100 px-4 py-3 text-xs capitalize text-slate-600">{details.marital_status || "—"}</td>
+                          <td className="whitespace-nowrap border-r border-slate-200 border-b border-slate-100 px-4 py-3 text-xs text-slate-600">{details.blood_group || "—"}</td>
+                          <td className="whitespace-nowrap border-r border-slate-200 border-b border-slate-100 px-4 py-3 text-xs font-semibold text-slate-700">{details.salary != null ? `₹${Number(details.salary).toLocaleString("en-IN")}` : "—"}</td>
+                          <td className="whitespace-nowrap border-r border-slate-200 border-b border-slate-100 px-4 py-3 text-xs text-slate-500">{formatDate(details.appointment_date)}</td>
+                          <td className="whitespace-nowrap border-r border-slate-200 border-b border-slate-100 px-4 py-3 text-xs text-slate-500">{formatDate(details.confirmation_date)}</td>
+                          <td className="whitespace-nowrap border-r border-slate-200 border-b border-slate-100 px-4 py-3 text-xs text-slate-600">{details.probation_duration != null ? `${details.probation_duration} months` : "—"}</td>
+                          <td className="whitespace-nowrap border-r border-slate-200 border-b border-slate-100 px-4 py-3 text-xs capitalize text-slate-600">{details.experience_level? details.experience_level === "fresher"? "Fresher": "Experienced": "—"}</td>
+                          <td className="whitespace-nowrap border-r border-slate-200 border-b border-slate-100 px-4 py-3 text-xs text-slate-600">{formatTotalExperience(emp)}</td>
+                          <td className="whitespace-nowrap border-r border-slate-200 border-b border-slate-100 px-4 py-3 text-xs text-slate-500">{formatDate(details.probation_end_date)}</td>
+                          <td className="whitespace-nowrap border-r border-slate-200 border-b border-slate-100 px-4 py-3 text-xs text-slate-600">{details.notice_period_days ?? "—"}</td>
+                          <td className="whitespace-nowrap border-r border-slate-200 border-b border-slate-100 px-4 py-3 text-xs capitalize text-slate-600">{details.notice_status?.replace(/_/g, " ") || "—"}</td>
+                          <td className="whitespace-nowrap border-r border-slate-200 border-b border-slate-100 px-4 py-3 text-xs text-slate-500">{formatDate(details.resignation_date)}</td>
+                          <td className="whitespace-nowrap border-r border-slate-200 border-b border-slate-100 px-4 py-3 text-xs text-slate-500">{formatDate(details.exit_date)}</td>
+                          <td className="whitespace-nowrap border-r border-slate-200 border-b border-slate-100 px-4 py-3">{eligibility(details.pf_eligible)}</td>
+                          <td className="whitespace-nowrap border-r border-slate-200 border-b border-slate-100 px-4 py-3">{eligibility(details.esi_healthcare_eligible)}</td>
+                          <td className="whitespace-nowrap border-r border-slate-200 border-b border-slate-100 px-4 py-3">{eligibility(details.pt_eligible)}</td>
+                          <td className="whitespace-nowrap border-r border-slate-200 border-b border-slate-100 px-4 py-3">{eligibility(details.tds_eligible)}</td>
                         </>
                       )
                     })()}
                     {showExitDetails && (
                       <>
-                        <td className="whitespace-nowrap border-b border-slate-100 px-5 py-4 text-xs font-medium text-slate-600">{getYearsWorked(emp)}</td>
-                        <td className="whitespace-nowrap border-b border-slate-100 px-5 py-4 text-xs font-medium text-slate-500">{formatDate(getLastWorkingDate(emp))}</td>
+                        <td className="whitespace-nowrap border-r border-slate-200 border-b border-slate-100 px-4 py-3 text-xs font-medium text-slate-600">{getYearsWorked(emp)}</td>
+                        <td className="whitespace-nowrap border-r border-slate-200 border-b border-slate-100 px-4 py-3 text-xs font-medium text-slate-500">{formatDate(getLastWorkingDate(emp))}</td>
                       </>
                     )}
-                    <td className="border-b border-slate-100 px-5 py-4">
+                    <td className="border-r border-slate-200 border-b border-slate-100 px-4 py-3">
                       <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${getEmployeeStatusBadge(emp)}`}>
                         <span className="h-1.5 w-1.5 rounded-full bg-current" />
                         {getEmployeeStatusLabel(emp)}
                       </span>
                     </td>
-                    <td className="border-b border-slate-100 px-5 py-4">
+                    <td className="sticky right-0 z-20 border-l border-slate-200 border-b border-slate-100 bg-white px-2 py-2 text-center shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.1)]">
                       <div className="flex items-center justify-end gap-1">
-                        <Link href={`/dashboard/employees/${emp.id}`} className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 transition hover:bg-indigo-100 hover:text-indigo-700" title="View employee details" aria-label={`View ${emp.first_name} ${emp.last_name}`}>
+                        <Link href={`/dashboard/employees/${emp.id}`} onClick={(event) => event.stopPropagation()} className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 transition hover:bg-indigo-100 hover:text-indigo-700" title="View employee details" aria-label={`View ${emp.first_name} ${emp.last_name}`}>
                           <Eye className="h-4 w-4" />
                         </Link>
-                        <button type="button" onClick={() => handleDownloadEmployee(emp)} className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 transition hover:bg-indigo-100 hover:text-indigo-700" title="Download employee document" aria-label={`Download ${emp.first_name} ${emp.last_name} details`}>
+                        <button type="button"   onClick={(event) => {
+                              event.stopPropagation()
+                              handleDownloadEmployee(emp)
+                            }} className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 transition hover:bg-indigo-100 hover:text-indigo-700" title="Download employee document" aria-label={`Download ${emp.first_name} ${emp.last_name} details`}>
                           <Download className="h-4 w-4" />
                         </button>
                       </div>

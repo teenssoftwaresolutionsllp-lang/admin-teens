@@ -78,6 +78,10 @@ export default function Header({ profile }: HeaderProps) {
       return "Leave Policy & Balances";
     }
 
+    if (pathname === "/dashboard/payroll/master-data") {
+      return "Payroll Master Register";
+    }
+
     if (pathname === "/dashboard/payroll") {
       return "Payroll & Salary Processing";
     }

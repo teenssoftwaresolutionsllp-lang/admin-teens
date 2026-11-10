@@ -91,9 +91,12 @@ export default function LeaveRequestsWidget({
       {requests.length > 0 ? (
         <div className="min-h-0 flex-1 space-y-0 overflow-y-auto pr-1">
           {requests.map((request) => (
-            <div
+            <Link
               key={request.id}
-              className="flex items-center gap-3 border-b border-slate-100 py-4 first:pt-2 last:border-0 last:pb-2"
+              href={`/dashboard/approvals?status=${
+                request.status === "pending" ? "pending" : "history"
+              }&leaveId=${encodeURIComponent(request.id)}`}
+              className="flex items-center gap-3 border-b border-slate-100 py-4 transition-colors hover:bg-indigo-50/50 first:pt-2 last:border-0 last:pb-2"
             >
               {/* Employee photo */}
               {request.employeePhoto ? (
@@ -134,7 +137,7 @@ export default function LeaveRequestsWidget({
               <div className="shrink-0">
                 <StatusBadge status={request.status} />
               </div>
-            </div>
+            </Link>
           ))}
         </div>
       ) : (

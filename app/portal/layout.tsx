@@ -70,7 +70,7 @@ export default async function PortalLayout({ children }: { children: React.React
   return (
     <div className="flex flex-col md:flex-row h-screen overflow-hidden bg-slate-50">
       <div className="hidden md:block">
-        <Sidebar role="employee" />
+        <Sidebar role="employee" avatarUrl={employeePhotoUrl} />
       </div>
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">

@@ -12,8 +12,8 @@ export async function GET() {
       .select('role')
       .eq('id', user.id)
       .single();
-    if (profileError || !profile || profile.role !== 'hr') {
-      return NextResponse.json({ error: 'Only HR can view master salary components.' }, { status: 403 });
+    if (profileError || !profile || (profile.role !== 'hr' && profile.role !== 'ceo')) {
+      return NextResponse.json({ error: 'Only HR and CEO can view master salary components.' }, { status: 403 });
     }
 
     const components = await DataStore.getSalaryComponents();
@@ -41,9 +41,9 @@ export async function PATCH(request: Request) {
       .eq("id", user.id)
       .single();
 
-    if (profileError || !profile || profile.role !== "hr") {
+    if (profileError || !profile || (profile.role !== "hr" && profile.role !== "ceo")) {
       return NextResponse.json(
-        { error: "Only HR can update master salary components." },
+        { error: "Only HR and CEO can update master salary components." },
         { status: 403 }
       );
     }

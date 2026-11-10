@@ -1,6 +1,7 @@
 
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -1230,7 +1231,7 @@ if (isSpecialLeave) {
               ? HeartPulse
               : code === "EL"
                 ? BriefcaseBusiness
-                : code === "ML" || code === "PL"
+                : code === "PL"
                   ? Baby
                   : CalendarDays;
 
@@ -1241,7 +1242,17 @@ if (isSpecialLeave) {
             >
               <div className="flex items-center gap-2.5">
                 <span className={`rounded-lg p-2 ${theme.icon}`}>
-                  <Icon className="h-4 w-4" />
+                  {code === "ML" ? (
+                    <Image
+                      src="/maternity-leave-icon.png"
+                      alt=""
+                      width={24}
+                      height={30}
+                      className="h-6 w-6 object-contain"
+                    />
+                  ) : (
+                    <Icon className="h-4 w-4" />
+                  )}
                 </span>
                 <div className="min-w-0">
                   <p className={`truncate text-[10px] font-semibold ${theme.badge}`}>
@@ -1348,7 +1359,7 @@ if (isSpecialLeave) {
                       ? HeartPulse
                       : leaveCode === "EL"
                         ? BriefcaseBusiness
-                        : leaveCode === "ML" || leaveCode === "PL"
+                        : leaveCode === "PL"
                           ? Baby
                           : CalendarDays;
                   const LeaveIcon = leaveIcon;
@@ -1364,7 +1375,17 @@ if (isSpecialLeave) {
                       <td className="px-3 py-2.5 font-medium text-slate-800">
                         <div className="flex items-center gap-2 whitespace-nowrap">
                           <span className="rounded-md bg-blue-50 p-1 text-blue-700">
-                            <LeaveIcon className="h-3 w-3" />
+                            {leaveCode === "ML" ? (
+                              <Image
+                                src="/maternity-leave-icon.png"
+                                alt=""
+                                width={20}
+                                height={25}
+                                className="h-5 w-5 object-contain"
+                              />
+                            ) : (
+                              <LeaveIcon className="h-3 w-3" />
+                            )}
                           </span>
                           {request.leave_type?.name || "Leave"}
                           {request.is_half_day && (

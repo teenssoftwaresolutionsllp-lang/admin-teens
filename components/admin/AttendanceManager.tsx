@@ -1,14 +1,25 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { AttendanceLog, Employee, Project } from "@/lib/types";
 import { Clock, Search, Filter } from "lucide-react";
+
+type ApprovedLeaveForAttendance = {
+  id: string;
+  employee_id: string;
+  start_date: string;
+  end_date: string;
+  total_days: number;
+  is_half_day: boolean;
+  leave_duration: "first_half" | "second_half" | null;
+};
 
 interface AttendanceManagerProps {
   logs: AttendanceLog[];
   employees: Employee[];
   projects: Project[];
+  approvedLeaves: ApprovedLeaveForAttendance[];
 }
 
 type HRDecision = "present" | "absent" | "half_day";
@@ -19,12 +30,115 @@ type AttendanceLogWithDecision = AttendanceLog & {
   hr_decision_reason?: string | null;
 };
 
+
+function getTimeInMinutes(value: string): number {
+  const [hours, minutes] = value.slice(0, 5).split(":").map(Number);
+  return hours * 60 + minutes;
+}
+
+function getISTDateAtMinutes(date: string, minutes: number): number {
+  const [year, month, day] = date.split("-").map(Number);
+
+  return Date.UTC(year, month - 1, day, 0, minutes - 330);
+}
+
+function getHRRemarkAvailability({
+  employee,
+  attendanceDate,
+  projects,
+  approvedLeaves,
+  now,
+}: {
+  employee: Employee;
+  attendanceDate: string;
+  projects: Project[];
+  approvedLeaves: ApprovedLeaveForAttendance[];
+  now: number;
+}): { available: boolean; message: string } {
+  const employeeLeaves = approvedLeaves.filter(
+    (leave) =>
+      leave.employee_id === employee.id &&
+      leave.start_date <= attendanceDate &&
+      leave.end_date >= attendanceDate
+  );
+
+  if (employeeLeaves.length > 1) {
+    return {
+      available: false,
+      message: "Overlapping approved leave requires HR review.",
+    };
+  }
+
+  const leave = employeeLeaves[0];
+
+  if (leave) {
+    const validHalfDay =
+      leave.is_half_day === true &&
+      leave.start_date === attendanceDate &&
+      leave.end_date === attendanceDate &&
+      Number(leave.total_days) === 0.5 &&
+      ["first_half", "second_half"].includes(
+        leave.leave_duration ?? ""
+      );
+
+    if (!validHalfDay) {
+      return {
+        available: false,
+        message: "Approved leave requires review.",
+      };
+    }
+  }
+
+  const project =
+    projects.find((item) => item.id === employee.project_id) ??
+    employee.project;
+
+  const shiftStart = project?.shift_start_time || "09:00";
+  const shiftEnd = project?.shift_end_time || "18:00";
+
+  const startMinutes = getTimeInMinutes(shiftStart);
+  let endMinutes = getTimeInMinutes(shiftEnd);
+
+  if (endMinutes <= startMinutes) {
+    endMinutes += 1440;
+  }
+
+  let thresholdMinutes = startMinutes + 180;
+
+  if (leave?.leave_duration === "first_half") {
+    const shiftDuration = endMinutes - startMinutes;
+
+    thresholdMinutes =
+      startMinutes + Math.floor(shiftDuration / 2) + 180;
+  }
+
+  const thresholdTime = getISTDateAtMinutes(
+    attendanceDate,
+    thresholdMinutes
+  );
+
+  return {
+    available: now >= thresholdTime,
+    message: "HR remark becomes available after the 3-hour threshold.",
+  };
+}
+
 export default function AttendanceManager({
   logs: initialLogs,
   employees,
   projects,
+  approvedLeaves,
 }: AttendanceManagerProps) {
   const router = useRouter();
+  const [currentTime, setCurrentTime] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(Date.now());
+    }, 30000);
+
+    return () => clearInterval(timer);
+  }, []);
 
   const [selectedDate, setSelectedDate] = useState<string>(
     new Date().toISOString().split("T")[0]
@@ -344,7 +458,16 @@ export default function AttendanceManager({
             <tbody className="divide-y divide-slate-100">
               {filteredEmployees.map((emp) => {
                 const log = getLogForEmployee(emp.id);
-                const project = emp.project || projects[0];
+
+                const project = projects.find((item) => item.id === emp.project_id) ?? emp.project;
+
+                const hrRemarkAvailability = getHRRemarkAvailability({
+                  employee: emp,
+                  attendanceDate: selectedDate,
+                  projects,
+                  approvedLeaves,
+                  now: currentTime,
+                });
 
                 return (
                   <tr
@@ -464,7 +587,11 @@ export default function AttendanceManager({
 
                     {/* HR Decision */}
                     <td className="py-3.5 px-4 min-w-[280px]">
-                      {log?.hr_decision_by ? (
+                      {!hrRemarkAvailability.available ? (
+                        <span className="text-[10px] text-slate-400">
+                          {hrRemarkAvailability.message}
+                        </span>
+                      ) : log?.hr_decision_by ? (
                         <div className="space-y-1">
                           <span className="inline-flex px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 text-[10px] font-bold uppercase">
                             HR Decision Saved
@@ -476,9 +603,7 @@ export default function AttendanceManager({
 
                           {log.hr_decision_at && (
                             <p className="text-[10px] text-slate-400">
-                              {new Date(
-                                log.hr_decision_at
-                              ).toLocaleString("en-IN")}
+                              {new Date(log.hr_decision_at).toLocaleString("en-IN")}
                             </p>
                           )}
                         </div>
@@ -507,9 +632,7 @@ export default function AttendanceManager({
                             <button
                               type="button"
                               disabled={savingEmployee === emp.id}
-                              onClick={() =>
-                                saveHRDecision(emp.id, "present")
-                              }
+                              onClick={() => saveHRDecision(emp.id, "present")}
                               className="px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white text-[10px] font-bold hover:bg-emerald-700 disabled:opacity-50"
                             >
                               Present
@@ -518,9 +641,7 @@ export default function AttendanceManager({
                             <button
                               type="button"
                               disabled={savingEmployee === emp.id}
-                              onClick={() =>
-                                saveHRDecision(emp.id, "absent")
-                              }
+                              onClick={() => saveHRDecision(emp.id, "absent")}
                               className="px-2.5 py-1.5 rounded-lg bg-rose-600 text-white text-[10px] font-bold hover:bg-rose-700 disabled:opacity-50"
                             >
                               Absent
@@ -529,9 +650,7 @@ export default function AttendanceManager({
                             <button
                               type="button"
                               disabled={savingEmployee === emp.id}
-                              onClick={() =>
-                                saveHRDecision(emp.id, "half_day")
-                              }
+                              onClick={() => saveHRDecision(emp.id, "half_day")}
                               className="px-2.5 py-1.5 rounded-lg bg-amber-500 text-white text-[10px] font-bold hover:bg-amber-600 disabled:opacity-50"
                             >
                               Half Day

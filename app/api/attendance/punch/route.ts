@@ -148,7 +148,6 @@ export async function POST(request: Request) {
               "HR has already recorded your attendance decision for today. Contact HR if you believe it needs correction.",
             hrDecision: {
               saved: true,
-              reason: attendance.hr_decision_reason,
               reviewedAt: attendance.hr_decision_at,
             },
           },
