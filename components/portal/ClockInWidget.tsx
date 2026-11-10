@@ -295,17 +295,15 @@ export default function ClockInWidget({
     latestRegularization?.status === "pending" &&
     requestCreatedTimestamp > checkoutTimestamp;
 
-  const canLogin =
-    isToday &&
-    !isCheckedIn &&
-    !isApprovedLeave &&
-    !regularizationPending &&
-    (!isCheckedOut || regularizationApproved);
+const canLogin =
+  isToday &&
+  !isCheckedIn &&
+  !isApprovedLeave;
 
-  const canLogout =
-    isToday &&
-    isCheckedIn &&
-    !isApprovedLeave;
+const canLogout =
+  isToday &&
+  isCheckedIn &&
+  !isApprovedLeave;
 
   const shiftStart = project?.shift_start_time || "09:00";
   const shiftEnd = project?.shift_end_time || "18:00";
@@ -690,11 +688,11 @@ export default function ClockInWidget({
             )}
 
           {/* Regularization Status */}
-          {regularizationPending && (
+          {/* {regularizationPending && (
             <p className="text-center text-[10px] font-medium text-amber-600">
               Your regularization request is awaiting HR approval.
             </p>
-          )}
+          )} */}
 
           {isCheckedOut && (
             <p className="text-center text-[10px] font-medium text-emerald-600">

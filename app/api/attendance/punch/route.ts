@@ -1,4 +1,3 @@
-
 import { NextResponse } from "next/server";
 import { DataStore } from "@/lib/data-store";
 import {
@@ -20,19 +19,28 @@ export async function POST(request: Request) {
 
     if (authError || !user) {
       return NextResponse.json(
-        { success: false, error: "Unauthorized. Please log in again." },
+        {
+          success: false,
+          error: "Unauthorized. Please log in again.",
+        },
         { status: 401 }
       );
     }
 
-    // 2. Validate the request body
-    let body: { employeeId?: string; action?: string };
+    // 2. Validate request body
+    let body: {
+      employeeId?: string;
+      action?: string;
+    };
 
     try {
       body = await request.json();
     } catch {
       return NextResponse.json(
-        { success: false, error: "Invalid JSON request body." },
+        {
+          success: false,
+          error: "Invalid JSON request body.",
+        },
         { status: 400 }
       );
     }
@@ -53,7 +61,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // 3. Verify that this employee belongs to the logged-in user
+    // 3. Verify employee belongs to logged-in user
     const employee = await DataStore.getEmployeeById(employeeId);
 
     if (!employee || employee.user_id !== user.id) {
@@ -66,7 +74,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // 4. Get the admin Supabase client
+    // 4. Get admin Supabase client
     const admin = await createAdminClient();
 
     // 5. Get today's date in India Standard Time
@@ -77,12 +85,22 @@ export async function POST(request: Request) {
       day: "2-digit",
     }).formatToParts(new Date());
 
-    const year = dateParts.find((part) => part.type === "year")?.value;
-    const month = dateParts.find((part) => part.type === "month")?.value;
-    const day = dateParts.find((part) => part.type === "day")?.value;
+    const year = dateParts.find(
+      (part) => part.type === "year"
+    )?.value;
+
+    const month = dateParts.find(
+      (part) => part.type === "month"
+    )?.value;
+
+    const day = dateParts.find(
+      (part) => part.type === "day"
+    )?.value;
 
     if (!year || !month || !day) {
-      throw new Error("Unable to determine today's attendance date.");
+      throw new Error(
+        "Unable to determine today's attendance date."
+      );
     }
 
     const today = `${year}-${month}-${day}`;
@@ -93,13 +111,26 @@ export async function POST(request: Request) {
       error: attendanceError,
     } = await admin
       .from("attendance_logs")
-      .select("id, check_in_time, check_out_time, work_mode")
+      .select(
+        `
+          id,
+          check_in_time,
+          check_out_time,
+          work_mode,
+          hr_decision_by,
+          hr_decision_at,
+          hr_decision_reason
+        `
+      )
       .eq("employee_id", employee.id)
       .eq("attendance_date", today)
       .maybeSingle();
 
     if (attendanceError) {
-      console.error("Attendance lookup failed:", attendanceError);
+      console.error(
+        "Attendance lookup failed:",
+        attendanceError
+      );
 
       throw new Error(
         `Unable to retrieve attendance: ${attendanceError.message}`
@@ -108,8 +139,28 @@ export async function POST(request: Request) {
 
     // 7. CLOCK IN
     if (action === "in") {
-      // Prevent duplicate clock-in while already logged in
-      if (attendance?.check_in_time && !attendance?.check_out_time) {
+      // Do not overwrite an HR-approved attendance decision
+      if (attendance?.hr_decision_by) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "HR has already recorded your attendance decision for today. Contact HR if you believe it needs correction.",
+            hrDecision: {
+              saved: true,
+              reason: attendance.hr_decision_reason,
+              reviewedAt: attendance.hr_decision_at,
+            },
+          },
+          { status: 403 }
+        );
+      }
+
+      // Prevent duplicate login while already logged in
+      if (
+        attendance?.check_in_time &&
+        !attendance?.check_out_time
+      ) {
         return NextResponse.json(
           {
             success: false,
@@ -119,45 +170,7 @@ export async function POST(request: Request) {
         );
       }
 
-      // If already clocked out today, require approved regularization
-      if (attendance?.check_out_time) {
-        const {
-          data: approved,
-          error: approvalError,
-        } = await admin
-          .from("attendance_regularizations")
-          .select("id")
-          .eq("employee_id", employee.id)
-          .eq("attendance_date", today)
-          .eq("status", "approved")
-          .order("reviewed_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
-        if (approvalError) {
-          console.error(
-            "Regularization approval lookup failed:",
-            approvalError
-          );
-
-          throw new Error(
-            `Unable to verify regularization approval: ${approvalError.message}`
-          );
-        }
-
-        if (!approved) {
-          return NextResponse.json(
-            {
-              success: false,
-              error:
-                "Submit Attendance Regularization and wait for HR approval before logging in again.",
-            },
-            { status: 403 }
-          );
-        }
-      }
-
-      // Record clock-in through the existing DataStore method
+      // Allow login again after logout without HR regularization
       const log = await DataStore.clockIn(employee.id);
 
       return NextResponse.json({
@@ -169,7 +182,12 @@ export async function POST(request: Request) {
     }
 
     // 8. CLOCK OUT
-    if (!attendance?.check_in_time || attendance?.check_out_time) {
+
+    // Employee must have an active login session
+    if (
+      !attendance?.check_in_time ||
+      attendance?.check_out_time
+    ) {
       return NextResponse.json(
         {
           success: false,
@@ -179,7 +197,19 @@ export async function POST(request: Request) {
       );
     }
 
-    // Record clock-out through the existing DataStore method
+    // Do not overwrite an HR-approved attendance decision
+    if (attendance.hr_decision_by) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "HR has already recorded your attendance decision for today. Contact HR if you believe it needs correction.",
+        },
+        { status: 403 }
+      );
+    }
+
+    // Record clock-out
     const log = await DataStore.clockOut(employee.id);
 
     return NextResponse.json({
@@ -188,7 +218,7 @@ export async function POST(request: Request) {
       log,
     });
   } catch (error: unknown) {
-    // 9. Log the real server-side error for debugging
+    // 9. Log server-side errors
     console.error("Punch API error:", error);
 
     const message =

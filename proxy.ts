@@ -50,11 +50,22 @@ export async function proxy(request: NextRequest) {
   const isDashboardPath = path.startsWith('/dashboard')
   const isPortalPath = path.startsWith('/portal')
   const isLoginPath = path === '/login'
+  const isTemporaryAuthFailure =
+    error?.name === "AuthRetryableFetchError" ||
+    error?.status === 0 ||
+    error?.name === "AbortError";
+
+  if (!user && isTemporaryAuthFailure && (isDashboardPath || isPortalPath)) {
+    return new NextResponse(
+      "Authentication service is temporarily unavailable. Please try again.",
+      {status: 503,headers: {"Retry-After": "5","Content-Type": "text/plain",},}
+    );
+  }
 
   if (!user && (isDashboardPath || isPortalPath)) {
-    const url = request.nextUrl.clone()
-    url.pathname = '/login'
-    return NextResponse.redirect(url)
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+    return NextResponse.redirect(url);
   }
 
   if (user && isLoginPath) {

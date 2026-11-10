@@ -269,46 +269,53 @@ export default function AttendanceCalendar({
      APPROVED LEAVE DATES
      ======================================================= */
 
-  const leaveDates = useMemo(() => {
-    const dates = new Set<string>();
+/* =======================================================
+   APPROVED LEAVE DATES
+   ======================================================= */
 
-    leaveRequests
-      .filter(
-        (request) => String(request.status).toLowerCase() === "approved"
-      )
-      .forEach((request) => {
-        if (!request.start_date || !request.end_date) return;
+const leaveDates = useMemo(() => {
+  const dates = new Set<string>();
 
-        const startValue = request.start_date.slice(0, 10);
-        const endValue = request.end_date.slice(0, 10);
+  leaveRequests
+    .filter(
+      (request) => String(request.status).toLowerCase() === "approved"
+    )
+    .forEach((request) => {
+      if (!request.start_date || !request.end_date) return;
 
-        const start = new Date(`${startValue}T00:00:00`);
-        const end = new Date(`${endValue}T00:00:00`);
+      const startValue = request.start_date.slice(0, 10);
+      const endValue = request.end_date.slice(0, 10);
 
-        if (
-          Number.isNaN(start.getTime()) ||
-          Number.isNaN(end.getTime()) ||
-          start > end
-        ) {
-          return;
-        }
+      const start = new Date(`${startValue}T00:00:00`);
+      const end = new Date(`${endValue}T00:00:00`);
 
-        const current = new Date(start);
+      if (
+        Number.isNaN(start.getTime()) ||
+        Number.isNaN(end.getTime()) ||
+        start > end
+      ) {
+        return;
+      }
 
-        while (current <= end) {
-          const date = formatDate(current);
+      const current = new Date(start);
 
-          // Do not show leave before the employee joined.
-          if (!joiningDate || date >= joiningDate) {
+      while (current <= end) {
+        const date = formatDate(current);
+
+        // Do not show leave before the employee joined.
+        if (!joiningDate || date >= joiningDate) {
+          // Do not mark Saturday or Sunday as leave.
+          if (!isWeekend(date)) {
             dates.add(date);
           }
-
-          current.setDate(current.getDate() + 1);
         }
-      });
 
-    return dates;
-  }, [leaveRequests, joiningDate]);
+        current.setDate(current.getDate() + 1);
+      }
+    });
+
+  return dates;
+}, [leaveRequests, joiningDate]);
 
   const holidaysByDate = useMemo(() => {
     const map = new Map<string, string>();
@@ -353,70 +360,61 @@ export default function AttendanceCalendar({
      ======================================================= */
 
   const getDayState = (day: number): DayState => {
-    const date = `${year}-${String(month + 1).padStart(
-      2,
-      "0"
-    )}-${String(day).padStart(2, "0")}`;
+  const date = `${year}-${String(month + 1).padStart(
+    2,
+    "0"
+  )}-${String(day).padStart(2, "0")}`;
 
-    // Dates before the employee joined never show attendance or demo data.
-    if (joiningDate && date < joiningDate) {
-      return "empty";
-    }
+  if (joiningDate && date < joiningDate) {
+    return "empty";
+  }
 
-    // Preserve the existing demo data.
-    // if (dummyAttendance[date]) {
-    //   return dummyAttendance[date].status;
-    // }
+  if (holidaysByDate.has(date)) {
+    return "holiday";
+  }
 
-    // A configured non-working holiday keeps its holiday color, even if a
-    // leave or attendance row also exists for that date.
-    if (holidaysByDate.has(date)) {
-      return "holiday";
-    }
+  if (leaveDates.has(date)) {
+    return "leave";
+  }
 
-    // Approved leave takes priority over missing attendance.
-    if (leaveDates.has(date)) {
+  const log = logByDate.get(date);
+
+  if (log) {
+    const status = String(log.status).toLowerCase();
+
+    if (status === "on_leave" || status === "leave") {
       return "leave";
     }
 
-    const log = logByDate.get(date);
-
-    if (log) {
-      const status = String(log.status).toLowerCase();
-
-      if (status === "on_leave" || status === "leave") {
-        return "leave";
-      }
-
-      if (isWorkFromHome(log)) {
-        return "work_from_home";
-      }
-
-      if (status === "late" || log.is_late) {
-        return "late";
-      }
-
-      if (status === "half_day") {
-        return "half_day";
-      }
-
-      if (status === "present") {
-        return "present";
-      }
-
-      if (status === "absent" || status === "not_present") {
-        return "absent";
-      }
+    if (isWorkFromHome(log)) {
+      return "work_from_home";
     }
 
-    // Past working days without attendance are absent.
-    // Today, future dates, and weekends are not automatically absent.
-    if (isPastWorkingDay(date)) {
+    // Late employees remain Present in attendance data.
+    // Only their calendar color changes to orange.
+    if (status === "half_day") {
+      return "half_day";
+    }
+
+    if (status === "present" && log.is_late) {
+      return "late";
+    }
+
+    if (status === "present") {
+      return "present";
+    }
+
+    if (status === "absent" || status === "not_present") {
       return "absent";
     }
+  }
 
-    return "empty";
-  };
+  if (isPastWorkingDay(date)) {
+    return "absent";
+  }
+
+  return "empty";
+};
 
   /* =======================================================
      GET ATTENDANCE DETAILS
@@ -582,11 +580,13 @@ export default function AttendanceCalendar({
         return `${base} bg-amber-200 text-amber-900 hover:bg-amber-300${selectedRing}`;
 
       case "leave":
-      case "absent":
-        return `${base} bg-rose-200 text-rose-900 hover:bg-rose-300${selectedRing}`;
+  return `${base} bg-orange-200 text-orange-900 hover:bg-orange-300${selectedRing}`;
+
+case "absent":
+  return `${base} bg-red-200 text-red-900 hover:bg-red-300${selectedRing}`;
 
       case "work_from_home":
-        return `${base} bg-blue-200 text-blue-900 hover:bg-blue-300${selectedRing}`;
+        return `${base} bg-purple-200 text-purple-900 hover:bg-purple-300${selectedRing}`;
 
       case "holiday":
         return `${base} bg-[#94a3b8] text-white hover:bg-[#64748b]${selectedRing}`;
@@ -734,9 +734,10 @@ export default function AttendanceCalendar({
       {/* LEGEND */}
       <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 border-t border-slate-100 pt-2">
         <Legend color="bg-emerald-500" label="Present" />
-        <Legend color="bg-rose-500" label="Absent" />
-        <Legend color="bg-amber-400" label="Late" />
-        <Legend color="bg-blue-500" label="Work From Home" />
+        <Legend color="bg-red-500" label="Absent" />
+        <Legend color="bg-orange-600" label="Leave" />
+        {/* <Legend color="bg-amber-400" label="Late" /> */}
+        <Legend color="bg-purple-500" label="Work From Home" />
         <Legend color="bg-[#94a3b8]" label="Holiday" />
       </div>
     </section>

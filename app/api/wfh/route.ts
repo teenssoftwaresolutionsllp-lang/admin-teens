@@ -1,6 +1,12 @@
 
 import { NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase-server";
+import {
+  getAuthFailureStatus,
+  getAuthFailureMessage,
+} from "@/lib/supabase-auth-error";
+
+export const dynamic = "force-dynamic";
 
 function getIndiaToday(): string {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -26,37 +32,112 @@ async function getAuthenticatedEmployee() {
   } = await supabase.auth.getUser();
 
   if (authError || !user) {
-    return { error: "Unauthorized", status: 401 as const };
+    const status = getAuthFailureStatus(authError);
+
+    return {
+      error: getAuthFailureMessage(status),
+      status,
+    };
   }
 
   const admin = await createAdminClient();
 
-  const { data: employee, error } = await admin
+  // First, find employee using authenticated user ID.
+  const { data: userIdMatches, error: userIdError } = await admin
     .from("employees")
-    .select("id, employee_id, first_name, last_name, email, status")
+    .select(
+      "id, employee_id, user_id, first_name, last_name, email, status"
+    )
     .eq("user_id", user.id)
-    .eq("status", "active")
-    .maybeSingle();
+    .limit(2);
 
-  if (error) {
-    console.error("WFH employee lookup failed:", error);
+  if (userIdError) {
+    console.error("WFH employee lookup by user ID failed:", userIdError);
+
     return {
       error: "Unable to verify employee account.",
       status: 500 as const,
     };
   }
 
+  let employee = null;
+
+  if (userIdMatches && userIdMatches.length > 1) {
+    console.error("Multiple employees found for user:", user.id);
+
+    return {
+      error: "Multiple employee accounts found. Please contact HR.",
+      status: 409 as const,
+    };
+  }
+
+  if (userIdMatches && userIdMatches.length === 1) {
+    employee = userIdMatches[0];
+  }
+
+  // If user ID lookup fails, try authenticated user's email.
+  if (!employee && user.email) {
+    const { data: emailMatches, error: emailError } = await admin
+      .from("employees")
+      .select(
+        "id, employee_id, user_id, first_name, last_name, email, status"
+      )
+      .ilike("email", user.email.trim())
+      .limit(2);
+
+    if (emailError) {
+      console.error("WFH employee lookup by email failed:", emailError);
+
+      return {
+        error: "Unable to verify employee account.",
+        status: 500 as const,
+      };
+    }
+
+    if (emailMatches && emailMatches.length > 1) {
+      console.error("Multiple employees found for email:", user.email);
+
+      return {
+        error: "Multiple employee accounts found. Please contact HR.",
+        status: 409 as const,
+      };
+    }
+
+    if (emailMatches && emailMatches.length === 1) {
+      employee = emailMatches[0];
+    }
+  }
+
   if (!employee) {
     return {
-      error: "Only active employees can submit WFH requests.",
+      error: "Employee account not found. Please contact HR.",
       status: 403 as const,
     };
   }
 
-  return { user, employee, admin };
+  // Allow active and on_notice employees.
+  const employeeStatus = String(employee.status ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_");
+
+  const allowedStatuses = ["active", "on_notice"];
+
+  if (!allowedStatuses.includes(employeeStatus)) {
+    return {
+      error: `Your employee account is '${employeeStatus || "not active"}'. Please contact HR.`,
+      status: 403 as const,
+    };
+  }
+
+  return {
+    user,
+    employee,
+    admin,
+  };
 }
 
-// GET: Fetch only the authenticated employee's WFH requests.
+// GET: Fetch authenticated employee's WFH requests.
 export async function GET() {
   try {
     const result = await getAuthenticatedEmployee();
@@ -86,7 +167,16 @@ export async function GET() {
       );
     }
 
-    return NextResponse.json({ requests: data ?? [] });
+    return NextResponse.json(
+      { requests: data ?? [] },
+      {
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate",
+          Pragma: "no-cache",
+          Expires: "0",
+        },
+      }
+    );
   } catch (error) {
     console.error("WFH GET API error:", error);
 
@@ -97,7 +187,7 @@ export async function GET() {
   }
 }
 
-// POST: Create a WFH request and notify HR.
+// POST: Create WFH request and notify HR.
 export async function POST(request: Request) {
   try {
     const result = await getAuthenticatedEmployee();
@@ -111,7 +201,16 @@ export async function POST(request: Request) {
 
     const { employee, admin } = result;
 
-    const body = await request.json();
+    let body: Record<string, unknown>;
+
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json(
+        { error: "Invalid request body." },
+        { status: 400 }
+      );
+    }
 
     const requestDate =
       typeof body.request_date === "string"
@@ -123,6 +222,7 @@ export async function POST(request: Request) {
         ? body.reason.trim()
         : "";
 
+    // Validate date format.
     if (!/^\d{4}-\d{2}-\d{2}$/.test(requestDate)) {
       return NextResponse.json(
         { error: "Please provide a valid WFH date." },
@@ -130,6 +230,7 @@ export async function POST(request: Request) {
       );
     }
 
+    // Validate actual calendar date.
     const [year, month, day] = requestDate.split("-").map(Number);
 
     const parsedDate = new Date(Date.UTC(year, month - 1, day));
@@ -146,6 +247,7 @@ export async function POST(request: Request) {
       );
     }
 
+    // Do not allow past dates.
     if (requestDate < getIndiaToday()) {
       return NextResponse.json(
         { error: "WFH requests cannot be submitted for past dates." },
@@ -153,6 +255,7 @@ export async function POST(request: Request) {
       );
     }
 
+    // Validate reason.
     if (!reason || reason.length < 5) {
       return NextResponse.json(
         { error: "Please provide a reason of at least 5 characters." },
@@ -167,7 +270,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // 1. Save the WFH request.
+    // Create WFH request.
     const { data, error } = await admin
       .from("wfh_requests")
       .insert({
@@ -195,7 +298,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // 2. Get all HR users.
+    // Find all HR users.
     const { data: hrProfiles, error: hrProfilesError } = await admin
       .from("profiles")
       .select("id")
@@ -204,7 +307,6 @@ export async function POST(request: Request) {
     if (hrProfilesError) {
       console.error("WFH HR profiles lookup failed:", hrProfilesError);
     } else if (hrProfiles && hrProfiles.length > 0) {
-      // 3. Prepare notifications for HR.
       const employeeName =
         `${employee.first_name ?? ""} ${employee.last_name ?? ""}`.trim() ||
         employee.employee_id ||
@@ -219,7 +321,6 @@ export async function POST(request: Request) {
         is_read: false,
       }));
 
-      // 4. Insert notifications.
       const { error: notificationError } = await admin
         .from("notifications")
         .insert(notificationRows);
@@ -234,7 +335,6 @@ export async function POST(request: Request) {
       }
     }
 
-    // 5. Return successful WFH request response.
     return NextResponse.json(
       {
         success: true,

@@ -1,0 +1,55 @@
+name: Missing Punch Notifications
+
+on:
+  schedule:
+    # Runs every 5 minutes (UTC)
+    - cron: "*/5 * * * *"
+
+  workflow_dispatch:
+    inputs:
+      execute:
+        description: "Actually insert HR/CEO notifications"
+        required: true
+        type: boolean
+        default: false
+
+concurrency:
+  group: missing-punch-notifications
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  notify-missing-punches:
+    name: Check Missing Punch-Ins
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Preview missing-punch notifications
+        if: github.event_name == 'workflow_dispatch' && !inputs.execute
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          DEFAULT_HOLIDAY_CALENDAR_ID: ${{ secrets.DEFAULT_HOLIDAY_CALENDAR_ID }}
+        run: npx tsx scripts/attendance/notify-missing-punches.ts
+
+      - name: Insert missing-punch notifications
+        if: github.event_name == 'schedule' || inputs.execute
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          DEFAULT_HOLIDAY_CALENDAR_ID: ${{ secrets.DEFAULT_HOLIDAY_CALENDAR_ID }}
+        run: npx tsx scripts/attendance/notify-missing-punches.ts --execute

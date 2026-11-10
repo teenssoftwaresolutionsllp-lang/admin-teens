@@ -220,11 +220,21 @@ export default function Header({ profile }: HeaderProps) {
 
       const contentType = response.headers.get("content-type") || "";
 
-      if (!contentType.includes("application/json")) {
-        throw new Error(
-          "Notifications API did not return JSON. Check app/api/notifications/route.ts."
-        );
-      }
+      if (!contentType.toLowerCase().includes("application/json")) {
+  const responseText = await response.text();
+
+  console.error("Notifications API returned HTML or another format:", {
+    status: response.status,
+    url: response.url,
+    redirected: response.redirected,
+    contentType,
+    response: responseText.substring(0, 1000),
+  });
+
+  throw new Error(
+    `Notifications API error: HTTP ${response.status}. URL: ${response.url}. Check the browser console for the response.`
+  );
+}
 
       const data = await response.json();
 

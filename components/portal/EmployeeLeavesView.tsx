@@ -263,6 +263,7 @@ export default function EmployeeLeavesView({
     startDate: defaultLeaveDate,
     endDate: defaultLeaveDate,
     isHalfDay: false,
+    leaveDuration: "" as "" | "first_half" | "second_half",
     reason: "",
     specialLeaveDuration: "",
   });
@@ -282,6 +283,7 @@ export default function EmployeeLeavesView({
         leaveTypeId: getDefaultLeaveTypeId(),
         specialLeaveDuration: "",
         isHalfDay: false,
+        leaveDuration: "",
         endDate: previous.startDate,
       };
     });
@@ -305,25 +307,24 @@ export default function EmployeeLeavesView({
   const isPaternityLeave = selectedLeaveCode === "PL";
   const isSpecialLeave = isMaternityLeave || isPaternityLeave;
 
-  const getSpecialDurationOptions = () => {
-    if (isMaternityLeave) {
-      return [
-        { label: "26 Weeks (182 Days)", value: "182" },
-      ];
-    }
+const getSpecialDurationOptions = () => {
+  if (isMaternityLeave) {
+    return [
+      { label: "3 Months (90 Days)", value: "90" },
+      { label: "6 Months (180 Days)", value: "180" },
+    ];
+  }
 
-    if (isPaternityLeave) {
-      return [
-        { label: "2 Days", value: "2" },
-        { label: "1 Week (7 Days)", value: "7" },
-        { label: "2 Weeks (14 Days)", value: "14" },
-        { label: "3 Weeks (21 Days)", value: "21" },
-        { label: "4 Weeks (28 Days)", value: "28" },
-      ];
-    }
+  if (isPaternityLeave) {
+    return [
+      { label: "1 Week (7 Days)", value: "7" },
+      { label: "15 Days", value: "15" },
+      { label: "30 Days", value: "30" },
+    ];
+  }
 
-    return [];
-  };
+  return [];
+};
 
   const calculateEndDate = (startDate: string, duration: number) => {
     if (!startDate || duration <= 0) return startDate;
@@ -341,29 +342,48 @@ export default function EmployeeLeavesView({
     return `${year}-${month}-${day}`;
   };
 
-  const calculateDays = () => {
-    if (!formData.startDate || !formData.endDate) return 0;
+ const calculateDays = () => {
+  if (!formData.startDate || !formData.endDate) return 0;
 
-    if (formData.isHalfDay) return 0.5;
+  if (formData.isHalfDay) return 0.5;
 
-    const start = new Date(`${formData.startDate}T00:00:00`);
-    const end = new Date(`${formData.endDate}T00:00:00`);
+  const start = new Date(`${formData.startDate}T00:00:00`);
+  const end = new Date(`${formData.endDate}T00:00:00`);
 
-    if (
-      Number.isNaN(start.getTime()) ||
-      Number.isNaN(end.getTime()) ||
-      end < start
-    ) {
-      return 0;
-    }
+  if (
+    Number.isNaN(start.getTime()) ||
+    Number.isNaN(end.getTime()) ||
+    end < start
+  ) {
+    return 0;
+  }
 
+  // Maternity and Paternity leave use calendar days
+  if (isSpecialLeave) {
     return (
       Math.floor(
         (end.getTime() - start.getTime()) /
           (1000 * 60 * 60 * 24)
       ) + 1
     );
-  };
+  }
+
+  // Other leave types exclude Saturday and Sunday
+  let totalDays = 0;
+  const current = new Date(start);
+
+  while (current <= end) {
+    const day = current.getDay();
+
+    if (day !== 0 && day !== 6) {
+      totalDays++;
+    }
+
+    current.setDate(current.getDate() + 1);
+  }
+
+  return totalDays;
+};
 
   const openLeaveModal = () => {
     setSuccessMsg(null);
@@ -375,6 +395,7 @@ export default function EmployeeLeavesView({
       startDate: defaultLeaveDate,
       endDate: defaultLeaveDate,
       isHalfDay: false,
+      leaveDuration: "",
       reason: "",
       specialLeaveDuration: "",
     });
@@ -517,18 +538,30 @@ export default function EmployeeLeavesView({
       return;
     }
 
+    if (formData.isHalfDay) {
+      if (!formData.leaveDuration) {
+        setAlertMessage("Please select First Half or Second Half.");
+        return;
+      }
+
+      if (formData.startDate !== formData.endDate) {
+        setAlertMessage("Half-day leave must be for a single date.");
+        return;
+      }
+    }
     if (!formData.reason.trim()) {
       setAlertMessage("Please enter a reason for leave.");
       return;
     }
+if (isMaternityLeave) {
+  const maternityDays = Number(formData.specialLeaveDuration);
 
-    if (isMaternityLeave && !isFemale) {
-      setAlertMessage(
-        "Maternity Leave is available only for female employees."
-      );
-
-      return;
-    }
+  if (![90, 180].includes(maternityDays)) {
+    throw new Error(
+      "Select maternity leave for 3 months (90 days) or 6 months (180 days)."
+    );
+  }
+}
 
     if (isPaternityLeave && !isMale) {
       setAlertMessage(
@@ -537,47 +570,43 @@ export default function EmployeeLeavesView({
 
       return;
     }
+if (isSpecialLeave) {
+  if (!formData.specialLeaveDuration) {
+    setAlertMessage(
+      `Please select the duration for ${
+        isMaternityLeave ? "Maternity Leave" : "Paternity Leave"
+      }.`
+    );
+    return;
+  }
 
-    if (isSpecialLeave) {
-      if (!formData.specialLeaveDuration) {
-        setAlertMessage(
-          `Please select the duration for ${
-            isMaternityLeave ? "Maternity Leave" : "Paternity Leave"
-          }.`
-        );
+  const selectedDuration = Number(formData.specialLeaveDuration);
 
-        return;
-      }
+  const allowedDurations = isMaternityLeave
+    ? [90, 180]
+    : [2, 7, 14, 21, 28];
 
-      const allowedDurations = isMaternityLeave
-        ? [182]
-        : [2, 7, 14, 21, 28];
+  if (!allowedDurations.includes(selectedDuration)) {
+    setAlertMessage(
+      isMaternityLeave
+        ? "Select maternity leave for 3 months (90 days) or 6 months (180 days)."
+        : "Please select a valid paternity leave duration."
+    );
+    return;
+  }
 
-      const selectedDuration = Number(
-        formData.specialLeaveDuration
-      );
+  const expectedEndDate = calculateEndDate(
+    formData.startDate,
+    selectedDuration
+  );
 
-      if (!allowedDurations.includes(selectedDuration)) {
-        setAlertMessage(
-          "Please select a valid special leave duration."
-        );
-
-        return;
-      }
-
-      const expectedEndDate = calculateEndDate(
-        formData.startDate,
-        selectedDuration
-      );
-
-      if (formData.endDate !== expectedEndDate) {
-        setAlertMessage(
-          "The leave end date does not match the selected duration. Please select the duration again."
-        );
-
-        return;
-      }
-    }
+  if (formData.endDate !== expectedEndDate) {
+    setAlertMessage(
+      "The leave end date does not match the selected duration. Please select the duration again."
+    );
+    return;
+  }
+}
 
     if (isSpecialLeave && formData.isHalfDay) {
       setAlertMessage(
@@ -623,6 +652,10 @@ export default function EmployeeLeavesView({
       requestBody.append("endDate", formData.endDate);
       requestBody.append("totalDays", String(totalDays));
       requestBody.append("isHalfDay", String(formData.isHalfDay));
+      requestBody.append(
+        "leaveDuration",
+        formData.isHalfDay ? formData.leaveDuration : ""
+      );
       requestBody.append("reason", formData.reason.trim());
 
       if (isMaternityLeave) {
@@ -684,6 +717,7 @@ export default function EmployeeLeavesView({
         startDate: defaultLeaveDate,
         endDate: defaultLeaveDate,
         isHalfDay: false,
+        leaveDuration: "",
         reason: "",
         specialLeaveDuration: "",
       });
@@ -1333,6 +1367,15 @@ export default function EmployeeLeavesView({
                             <LeaveIcon className="h-3 w-3" />
                           </span>
                           {request.leave_type?.name || "Leave"}
+                          {request.is_half_day && (
+                            <span className="text-[10px] font-medium text-slate-400">
+                              {request.leave_duration === "first_half"
+                                ? "First Half"
+                                : request.leave_duration === "second_half"
+                                  ? "Second Half"
+                                  : "Half Day"}
+                            </span>
+                          )}
                         </div>
                       </td>
                       <td className="whitespace-nowrap px-3 py-2.5">
@@ -1638,6 +1681,9 @@ export default function EmployeeLeavesView({
                     setFormData((previous) => ({
                       ...previous,
                       isHalfDay: e.target.checked,
+                      leaveDuration: e.target.checked
+                        ? previous.leaveDuration
+                        : "",
                     }))
                   }
                   className="rounded text-indigo-600 focus:ring-indigo-500 disabled:opacity-50"
@@ -1652,6 +1698,46 @@ export default function EmployeeLeavesView({
                   Applying for Half Day (0.5 day)
                 </label>
               </div>
+
+              {formData.isHalfDay && (
+                <div className="space-y-2">
+                  <label className="block font-semibold text-slate-700">
+                    Select Half-Day Leave
+                  </label>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    {(
+                      [
+                        ["first_half", "First Half"],
+                        ["second_half", "Second Half"],
+                      ] as const
+                    ).map(([value, label]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() =>
+                          setFormData((previous) => ({
+                            ...previous,
+                            leaveDuration: value,
+                          }))
+                        }
+                        className={`rounded-lg border px-3 py-2 font-semibold ${
+                          formData.leaveDuration === value
+                            ? "border-indigo-600 bg-indigo-50 text-indigo-700"
+                            : "border-slate-300 text-slate-700"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <p className="text-[11px] text-slate-500">
+                    First Half Leave: You work the second half of your shift.
+                    Second Half Leave: You work the first half of your shift.
+                  </p>
+                </div>
+              )}
 
               <div>
                 <label

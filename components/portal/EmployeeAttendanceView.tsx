@@ -682,6 +682,7 @@ export default function EmployeeAttendanceView({
       endDate: "",
       totalDays: 1,
       isHalfDay: false,
+      leaveDuration: "" as "" | "first_half" | "second_half",
       reason: "",
     });
 
@@ -906,80 +907,84 @@ export default function EmployeeAttendanceView({
   ============================================================ */
 
 
-  const presentCount = useMemo(() => {
-    const approvedLeaveDates = new Set<string>();
+ const presentCount = useMemo(() => {
+  const approvedLeaveDates = new Set<string>();
 
-    for (const request of leaveRequests as any[]) {
-      if (getLeaveRequestStatus(request) !== "approved") {
-        continue;
-      }
-
-      const start = String(
-        request.start_date ?? request.startDate ?? ""
-      ).slice(0, 10);
-
-      const end = String(
-        request.end_date ?? request.endDate ?? start
-      ).slice(0, 10);
-
-      if (!start || !end || start > end) continue;
-
-      const cursor = new Date(`${start}T00:00:00Z`);
-      const last = new Date(`${end}T00:00:00Z`);
-
-      while (cursor <= last) {
-        approvedLeaveDates.add(cursor.toISOString().slice(0, 10));
-        cursor.setUTCDate(cursor.getUTCDate() + 1);
-      }
+  for (const request of leaveRequests as any[]) {
+    if (getLeaveRequestStatus(request) !== "approved") {
+      continue;
     }
 
-    return logs.reduce((total, log) => {
-      const rawLog = log as any;
+    const start = String(
+      request.start_date ?? request.startDate ?? ""
+    ).slice(0, 10);
 
-      const attendanceDate = String(
-        rawLog.attendance_date ??
-        rawLog.attendanceDate ??
-        rawLog.date ??
-        ""
-      ).slice(0, 10);
+    const end = String(
+      request.end_date ?? request.endDate ?? start
+    ).slice(0, 10);
 
-      if (!attendanceDate) return total;
+    if (!start || !end || start > end) continue;
 
-      const [year, month] = attendanceDate.split("-").map(Number);
+    const cursor = new Date(`${start}T00:00:00Z`);
+    const last = new Date(`${end}T00:00:00Z`);
 
-      if (
-        year !== selectedCalendarYear ||
-        month !== selectedCalendarMonth + 1
-      ) {
-        return total;
-      }
+    while (cursor <= last) {
+      approvedLeaveDates.add(cursor.toISOString().slice(0, 10));
+      cursor.setUTCDate(cursor.getUTCDate() + 1);
+    }
+  }
 
-      // Approved leave takes precedence over attendance.
-      if (approvedLeaveDates.has(attendanceDate)) {
-        return total;
-      }
+  return logs.reduce((total, log) => {
+    const rawLog = log as any;
 
-      const status = normalizeAttendanceStatus(rawLog.status);
+    const attendanceDate = String(
+      rawLog.attendance_date ??
+      rawLog.attendanceDate ??
+      rawLog.date ??
+      ""
+    ).slice(0, 10);
 
-      if (status === "half_day") return total + 0.5;
+    if (!attendanceDate) return total;
 
-      if (
-        status === "present" &&
-        !Boolean(rawLog.is_late) &&
-        !isWorkFromHome(log)
-      ) {
-        return total + 1;
-      }
+    const [year, month] = attendanceDate.split("-").map(Number);
 
+    if (
+      year !== selectedCalendarYear ||
+      month !== selectedCalendarMonth + 1
+    ) {
       return total;
-    }, 0);
-  }, [
-    logs,
-    leaveRequests,
-    selectedCalendarYear,
-    selectedCalendarMonth,
-  ]);
+    }
 
+    // Approved leave should not count as present.
+    if (approvedLeaveDates.has(attendanceDate)) {
+      return total;
+    }
+
+    const status = normalizeAttendanceStatus(rawLog.status);
+
+    // Count office Present, Late, and WFH in Present.
+    if (
+      status === "present" ||
+      status === "late" ||
+      status === "work_from_home" ||
+      isWorkFromHome(log) ||
+      rawLog.is_late
+    ) {
+      return total + 1;
+    }
+
+    if (status === "half_day") {
+      return total + 0.5;
+    }
+
+    return total;
+  }, 0);
+}, [
+  logs,
+  leaveRequests,
+  selectedCalendarYear,
+  selectedCalendarMonth,
+]);
   const absentCount = useMemo(() => {
     const today = getTodayString();
 
@@ -1147,24 +1152,144 @@ export default function EmployeeAttendanceView({
   ]);
 
 
-const selectedMonthLogs = useMemo(
-  () =>
-    logs.filter((log) => {
-      const date = getLogDate(log);
-      return date.startsWith(
-        `${selectedCalendarYear}-${String(
-          selectedCalendarMonth + 1
-        ).padStart(2, "0")}`
+const selectedMonthLogs = useMemo(() => {
+  const monthStart = new Date(
+    selectedCalendarYear,
+    selectedCalendarMonth,
+    1
+  );
+
+  const monthEnd = new Date(
+    selectedCalendarYear,
+    selectedCalendarMonth + 1,
+    0
+  );
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const joiningDate = employee.joining_date
+    ? employee.joining_date.slice(0, 10)
+    : null;
+
+  const approvedLeaveDates = new Set<string>();
+
+  leaveRequests
+    .filter(
+      (request) =>
+        String(request.status).toLowerCase() === "approved"
+    )
+    .forEach((request) => {
+      if (!request.start_date || !request.end_date) return;
+
+      const start = new Date(
+        `${request.start_date.slice(0, 10)}T00:00:00`
       );
-    }),
-  [logs, selectedCalendarYear, selectedCalendarMonth]
+
+      const end = new Date(
+        `${request.end_date.slice(0, 10)}T00:00:00`
+      );
+
+      for (
+        let current = new Date(start);
+        current <= end;
+        current.setDate(current.getDate() + 1)
+      ) {
+        const date = [
+          current.getFullYear(),
+          String(current.getMonth() + 1).padStart(2, "0"),
+          String(current.getDate()).padStart(2, "0"),
+        ].join("-");
+
+        if (
+          current.getDay() !== 0 &&
+          current.getDay() !== 6 &&
+          (!joiningDate || date >= joiningDate)
+        ) {
+          approvedLeaveDates.add(date);
+        }
+      }
+    });
+
+  const attendanceMap = new Map<string, AttendanceLog>();
+
+  logs.forEach((log) => {
+    const date = getLogDate(log);
+    if (date) {
+      attendanceMap.set(date, log);
+    }
+  });
+
+  const holidays = new Set(
+  (project.calendar?.holidays || [])
+    .filter(
+      (holiday) =>
+        (holiday as any).is_working_day !== true
+    )
+    .map((holiday) => holiday.holiday_date.slice(0, 10))
 );
 
-const lateCount = selectedMonthLogs.filter(
-  (log) =>
-    Boolean(log.is_late) ||
-    normalizeAttendanceStatus(log.status) === "late"
-).length;
+  const generatedLogs: AttendanceLog[] = [];
+
+  for (
+    let current = new Date(monthStart);
+    current <= monthEnd;
+    current.setDate(current.getDate() + 1)
+  ) {
+    const date = [
+      current.getFullYear(),
+      String(current.getMonth() + 1).padStart(2, "0"),
+      String(current.getDate()).padStart(2, "0"),
+    ].join("-");
+
+    if (joiningDate && date < joiningDate) continue;
+    if (current > today) continue;
+
+    // Exclude weekends.
+    if (current.getDay() === 0 || current.getDay() === 6) {
+      continue;
+    }
+
+    const existingLog = attendanceMap.get(date);
+
+    if (existingLog) {
+      generatedLogs.push(existingLog);
+      continue;
+    }
+
+    let status = "absent";
+
+    if (holidays.has(date)) {
+      status = "holiday";
+    } else if (approvedLeaveDates.has(date)) {
+      status = "on_leave";
+    }
+
+    generatedLogs.push({
+      employee_id: employee.id,
+      attendance_date: date,
+      status,
+    } as AttendanceLog);
+  }
+
+  return generatedLogs.sort((a, b) =>
+    getLogDate(b).localeCompare(getLogDate(a))
+  );
+}, [
+  logs,
+  selectedCalendarYear,
+  selectedCalendarMonth,
+  employee.id,
+  employee.joining_date,
+  leaveRequests,
+  project.calendar?.holidays,
+]);
+
+// const lateCount = selectedMonthLogs.filter(
+//   (log) =>
+//     Boolean(log.is_late) ||
+//     normalizeAttendanceStatus(log.status) === "late"
+// ).length;
 
 const workFromHomeCount = selectedMonthLogs.filter(isWorkFromHome).length;
 
@@ -1310,6 +1435,7 @@ const totalWorkingDays = useMemo(() => {
       endDate: "",
       totalDays: 1,
       isHalfDay: false,
+      leaveDuration: "",
       reason: "",
     });
 
@@ -1391,6 +1517,23 @@ const totalWorkingDays = useMemo(() => {
         return;
       }
 
+      if (leaveForm.isHalfDay) {
+        if (leaveForm.startDate !== leaveForm.endDate) {
+          setLeaveError("Half-day leave must be for a single date.");
+          return;
+        }
+
+        if (leaveForm.totalDays !== 0.5) {
+          setLeaveError("Half-day leave must be 0.5 days.");
+          return;
+        }
+
+        if (!leaveForm.leaveDuration) {
+          setLeaveError("Please select First Half or Second Half.");
+          return;
+        }
+      }
+
       if (
         leaveForm.totalDays <= 0
       ) {
@@ -1422,20 +1565,14 @@ const totalWorkingDays = useMemo(() => {
                   "application/json",
               },
               body: JSON.stringify({
-                employeeId:
-                  employee.id,
-                leaveTypeId:
-                  leaveForm.leaveTypeId,
-                startDate:
-                  leaveForm.startDate,
-                endDate:
-                  leaveForm.endDate,
-                totalDays:
-                  leaveForm.totalDays,
-                isHalfDay:
-                  leaveForm.isHalfDay,
-                reason:
-                  leaveForm.reason.trim(),
+                employeeId:employee.id,
+                leaveTypeId:leaveForm.leaveTypeId,
+                startDate:leaveForm.startDate,
+                endDate:leaveForm.endDate,
+                totalDays:leaveForm.totalDays,
+                isHalfDay:leaveForm.isHalfDay,
+                leaveDuration: leaveForm.isHalfDay ? leaveForm.leaveDuration: null,
+                reason:leaveForm.reason.trim(),
               }),
             }
           );
@@ -1477,6 +1614,7 @@ const totalWorkingDays = useMemo(() => {
           endDate: "",
           totalDays: 1,
           isHalfDay: false,
+          leaveDuration: "",
           reason: "",
         });
 
@@ -2074,23 +2212,23 @@ const totalWorkingDays = useMemo(() => {
             Request WFH
           </button>
 
-          <button
+          {/* <button
             type="button"
             onClick={openLeaveModal}
             className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
           >
             <CalendarOff className="h-4 w-4" />
             Request Leave
-          </button>
+          </button> */}
 
-          <button
+          {/* <button
             type="button"
             onClick={openRegularization}
             className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-xs font-semibold text-white shadow-sm transition hover:bg-blue-700"
           >
             <FileCheck className="h-4 w-4" />
             Regularization Request
-          </button>
+          </button> */}
         </div>
       </div>
 
@@ -2124,13 +2262,13 @@ const totalWorkingDays = useMemo(() => {
             border: "border-rose-100",
             iconColor: "bg-rose-50 text-rose-600",
           },
-          {
-            label: "Late",
-            value: lateCount,
-            icon: Clock,
-            border: "border-amber-100",
-            iconColor: "bg-amber-50 text-amber-600",
-          },
+          // {
+          //   label: "Late",
+          //   value: lateCount,
+          //   icon: Clock,
+          //   border: "border-amber-100",
+          //   iconColor: "bg-amber-50 text-amber-600",
+          // },
           {
             label: "Work From Home",
             value: workFromHomeCount,
@@ -2254,7 +2392,10 @@ const totalWorkingDays = useMemo(() => {
                       const workFromHome = isWorkFromHome(log);
 
                       return (
-                        <tr key={log.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
+                       <tr
+                          key={`${employee.id}-${date}-${log.id || log.status}`}
+                          className="border-b border-slate-100 last:border-0 hover:bg-slate-50"
+                        >
                           <td className="whitespace-nowrap px-4 py-2.5 font-medium text-slate-800">
                             {formatDateForDisplay(date)}
                           </td>
@@ -2546,12 +2687,12 @@ const totalWorkingDays = useMemo(() => {
               color: "text-rose-700",
               background: "bg-rose-50",
             },
-            {
-              label: "Late Days",
-              value: lateCount,
-              color: "text-amber-700",
-              background: "bg-amber-50",
-            },
+            // {
+            //   label: "Late Days",
+            //   value: lateCount,
+            //   color: "text-amber-700",
+            //   background: "bg-amber-50",
+            // },
           ].map((item) => (
             <div
               key={item.label}
@@ -3603,27 +3744,22 @@ const totalWorkingDays = useMemo(() => {
                     checked={
                       leaveForm.isHalfDay
                     }
-                    onChange={(e) =>
-                      setLeaveForm(
-                        (prev) => ({
+                      onChange={(e) =>
+                        setLeaveForm((prev) => ({
                           ...prev,
-                          isHalfDay:
-                            e.target
-                              .checked,
-                          totalDays:
-                            e.target
-                              .checked
-                              ? 0.5
-                              : Math.max(
-                                  calculateDaysBetween(
-                                    prev.startDate,
-                                    prev.endDate
-                                  ),
-                                  1
+                          isHalfDay: e.target.checked,
+                          leaveDuration: "",
+                          totalDays: e.target.checked
+                            ? 0.5
+                            : Math.max(
+                                calculateDaysBetween(
+                                  prev.startDate,
+                                  prev.endDate
                                 ),
-                        })
-                      )
-                    }
+                                1
+                              ),
+                        }))
+                      }
                     className="h-4 w-4 rounded border-slate-300"
                   />
 
@@ -3632,6 +3768,46 @@ const totalWorkingDays = useMemo(() => {
                   </span>
 
                 </label>
+
+                {leaveForm.isHalfDay && (
+                  <div className="space-y-2">
+                    <label className="block text-sm font-semibold text-slate-700">
+                      Select Half-Day Leave
+                    </label>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      {(
+                        [
+                          ["first_half", "First Half"],
+                          ["second_half", "Second Half"],
+                        ] as const
+                      ).map(([value, label]) => (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() =>
+                            setLeaveForm((prev) => ({
+                              ...prev,
+                              leaveDuration: value,
+                            }))
+                          }
+                          className={`rounded-lg border px-3 py-2 text-sm font-semibold ${
+                            leaveForm.leaveDuration === value
+                              ? "border-indigo-600 bg-indigo-50 text-indigo-700"
+                              : "border-slate-300 text-slate-700"
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+
+                    <p className="text-xs text-slate-500">
+                      First Half Leave: You work the second half of your shift.
+                      Second Half Leave: You work the first half of your shift.
+                    </p>
+                  </div>
+                )}
 
                 <div>
 

@@ -1,3 +1,4 @@
+
 import { NextResponse } from "next/server";
 import {
   createAdminClient,
@@ -5,21 +6,35 @@ import {
 } from "@/lib/supabase-server";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 const noCacheHeaders = {
-  "Cache-Control": "no-store, no-cache, must-revalidate",
+  "Content-Type": "application/json; charset=utf-8",
+  "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
   Pragma: "no-cache",
   Expires: "0",
 };
 
+function jsonResponse(
+  data: Record<string, unknown>,
+  status = 200
+) {
+  return new NextResponse(JSON.stringify(data), {
+    status,
+    headers: noCacheHeaders,
+  });
+}
+
 async function getAuthenticatedUser() {
   const supabase = await createClient();
+
   const {
     data: { user },
     error,
   } = await supabase.auth.getUser();
 
   if (error || !user) return null;
+
   return user;
 }
 
@@ -53,41 +68,55 @@ async function getEmployeeId(
   return employeeQuery.data?.id ?? null;
 }
 
+// GET: Fetch notifications for the logged-in user.
 export async function GET() {
   try {
     const user = await getAuthenticatedUser();
 
     if (!user) {
-      return NextResponse.json(
+      return jsonResponse(
         {
           success: false,
           error: "Unauthorized",
           notifications: [],
           unreadCount: 0,
         },
-        { status: 401, headers: noCacheHeaders }
+        401
       );
     }
 
     const admin = await createAdminClient();
-    const employeeId = await getEmployeeId(admin, user.id, user.email);
-    const { data: recipientRows, error: recipientError } = await admin
-      .from("notifications")
-      .select("id, title, message, type, is_read, created_at")
-      .eq("recipient_user_id", user.id)
-      .order("created_at", { ascending: false })
-      .limit(50);
+
+    const employeeId = await getEmployeeId(
+      admin,
+      user.id,
+      user.email
+    );
+
+    // Notifications directly assigned to the logged-in user.
+    const { data: recipientRows, error: recipientError } =
+      await admin
+        .from("notifications")
+        .select(
+          "id, title, message, type, is_read, created_at"
+        )
+        .eq("recipient_user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(50);
 
     if (recipientError) {
       throw new Error(recipientError.message);
     }
 
+    // Notifications assigned through the employee record.
     let employeeRows: typeof recipientRows = [];
 
     if (employeeId) {
       const { data, error } = await admin
         .from("notifications")
-        .select("id, title, message, type, is_read, created_at")
+        .select(
+          "id, title, message, type, is_read, created_at"
+        )
         .eq("employee_id", employeeId)
         .is("recipient_user_id", null)
         .order("created_at", { ascending: false })
@@ -100,11 +129,11 @@ export async function GET() {
       employeeRows = data ?? [];
     }
 
+    // Remove duplicate notifications.
     const uniqueRows = new Map(
-      [...(recipientRows ?? []), ...employeeRows].map((item) => [
-        item.id,
-        item,
-      ])
+      [...(recipientRows ?? []), ...(employeeRows ?? [])].map(
+        (item) => [item.id, item]
+      )
     );
 
     const notifications = [...uniqueRows.values()]
@@ -124,79 +153,102 @@ export async function GET() {
         read: Boolean(item.is_read),
       }));
 
-    return NextResponse.json(
-      {
-        success: true,
-        notifications,
-        unreadCount: notifications.filter((item) => !item.read).length,
-      },
-      { headers: noCacheHeaders }
-    );
+    return jsonResponse({
+      success: true,
+      notifications,
+      unreadCount: notifications.filter(
+        (item) => !item.read
+      ).length,
+    });
   } catch (error: unknown) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : "Failed to load notifications.";
+    console.error("GET /api/notifications failed:", error);
 
-    console.error("GET /api/notifications failed:", message);
-
-    return NextResponse.json(
+    return jsonResponse(
       {
         success: false,
-        error: message,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to load notifications.",
         notifications: [],
         unreadCount: 0,
       },
-      { status: 500, headers: noCacheHeaders }
+      500
     );
   }
 }
 
+// PATCH: Mark one notification or all notifications as read.
 export async function PATCH(request: Request) {
   try {
     const user = await getAuthenticatedUser();
 
     if (!user) {
-      return NextResponse.json(
-        { success: false, error: "Unauthorized" },
-        { status: 401, headers: noCacheHeaders }
+      return jsonResponse(
+        {
+          success: false,
+          error: "Unauthorized",
+        },
+        401
       );
     }
 
     const admin = await createAdminClient();
-    const employeeId = await getEmployeeId(admin, user.id, user.email);
+
+    const employeeId = await getEmployeeId(
+      admin,
+      user.id,
+      user.email
+    );
+
     const requestBody = await request.text();
-    let body: { notificationId?: string | number } = {};
+
+    let body: {
+      notificationId?: string | number;
+    } = {};
 
     if (requestBody.trim()) {
       try {
-        body = JSON.parse(requestBody) as typeof body;
+        body = JSON.parse(requestBody);
       } catch {
-        return NextResponse.json(
-          { success: false, error: "Invalid request body." },
-          { status: 400, headers: noCacheHeaders }
+        return jsonResponse(
+          {
+            success: false,
+            error: "Invalid request body.",
+          },
+          400
         );
       }
     }
 
-    if (body.notificationId !== undefined && body.notificationId !== null) {
-      const notificationId = String(body.notificationId).trim();
+    // Mark one notification as read.
+    if (
+      body.notificationId !== undefined &&
+      body.notificationId !== null
+    ) {
+      const notificationId = String(
+        body.notificationId
+      ).trim();
 
       if (!notificationId) {
-        return NextResponse.json(
-          { success: false, error: "Invalid notification ID." },
-          { status: 400, headers: noCacheHeaders }
+        return jsonResponse(
+          {
+            success: false,
+            error: "Invalid notification ID.",
+          },
+          400
         );
       }
 
-      const { data: recipientNotification, error: recipientError } = await admin
-        .from("notifications")
-        .update({ is_read: true })
-        .eq("id", notificationId)
-        .eq("recipient_user_id", user.id)
-        .eq("is_read", false)
-        .select("id")
-        .maybeSingle();
+      const { data: recipientNotification, error: recipientError } =
+        await admin
+          .from("notifications")
+          .update({ is_read: true })
+          .eq("id", notificationId)
+          .eq("recipient_user_id", user.id)
+          .eq("is_read", false)
+          .select("id")
+          .maybeSingle();
 
       if (recipientError) {
         throw new Error(recipientError.message);
@@ -223,22 +275,23 @@ export async function PATCH(request: Request) {
       }
 
       if (!updatedNotification) {
-        return NextResponse.json(
+        return jsonResponse(
           {
             success: false,
             error:
               "Notification not found or you do not have permission to update it.",
           },
-          { status: 404, headers: noCacheHeaders }
+          404
         );
       }
 
-      return NextResponse.json(
-        { success: true, notificationId },
-        { headers: noCacheHeaders }
-      );
+      return jsonResponse({
+        success: true,
+        notificationId,
+      });
     }
 
+    // Mark all user notifications as read.
     const { error: recipientError } = await admin
       .from("notifications")
       .update({ is_read: true })
@@ -249,6 +302,7 @@ export async function PATCH(request: Request) {
       throw new Error(recipientError.message);
     }
 
+    // Also update employee-linked notifications.
     if (employeeId) {
       const { error } = await admin
         .from("notifications")
@@ -262,21 +316,21 @@ export async function PATCH(request: Request) {
       }
     }
 
-    return NextResponse.json(
-      { success: true },
-      { headers: noCacheHeaders }
-    );
+    return jsonResponse({
+      success: true,
+    });
   } catch (error: unknown) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : "Failed to mark notifications as read.";
+    console.error("PATCH /api/notifications failed:", error);
 
-    console.error("PATCH /api/notifications failed:", message);
-
-    return NextResponse.json(
-      { success: false, error: message },
-      { status: 500, headers: noCacheHeaders }
+    return jsonResponse(
+      {
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to mark notifications as read.",
+      },
+      500
     );
   }
 }

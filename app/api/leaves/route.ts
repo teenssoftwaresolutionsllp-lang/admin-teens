@@ -1,3 +1,4 @@
+
 import { NextResponse } from "next/server";
 import { DataStore } from "@/lib/data-store";
 import { createClient, createAdminClient } from "@/lib/supabase-server";
@@ -26,6 +27,8 @@ function isValidDate(value: string): boolean {
   );
 }
 
+// Calendar days: includes Saturdays and Sundays.
+// Used for Maternity and Paternity leave.
 function getInclusiveDays(startDate: string, endDate: string): number {
   const start = new Date(`${startDate}T00:00:00.000Z`).getTime();
   const end = new Date(`${endDate}T00:00:00.000Z`).getTime();
@@ -33,9 +36,32 @@ function getInclusiveDays(startDate: string, endDate: string): number {
   return Math.floor((end - start) / 86400000) + 1;
 }
 
+// Working days: excludes Saturdays and Sundays.
+// Used for regular leave types such as CL, SL, and LOP.
+function getWorkingDays(startDate: string, endDate: string): number {
+  const start = new Date(`${startDate}T00:00:00.000Z`);
+  const end = new Date(`${endDate}T00:00:00.000Z`);
+
+  let totalDays = 0;
+  const current = new Date(start);
+
+  while (current <= end) {
+    const day = current.getUTCDay();
+
+    if (day !== 0 && day !== 6) {
+      totalDays++;
+    }
+
+    current.setUTCDate(current.getUTCDate() + 1);
+  }
+
+  return totalDays;
+}
+
 function addCalendarDays(startDate: string, days: number): string {
   const date = new Date(`${startDate}T00:00:00.000Z`);
   date.setUTCDate(date.getUTCDate() + days);
+
   return date.toISOString().slice(0, 10);
 }
 
@@ -192,7 +218,6 @@ export async function POST(request: Request) {
     const contentType = request.headers.get("content-type") || "";
 
     let body: Record<string, unknown>;
-
     let supportingFile: File | null = null;
 
     // Read multipart form data when the frontend uploads a document.
@@ -231,7 +256,17 @@ export async function POST(request: Request) {
     const isHalfDay =
       body.isHalfDay === true || body.isHalfDay === "true";
 
-    const days = Number(body.totalDays);
+    const submittedDays = Number(body.totalDays);
+
+    // This value is normalized to calendar days for maternity leave
+    // after the leave type is identified.
+    let days = submittedDays;
+
+    const halfDayDuration =
+      body.leaveDuration === "first_half" ||
+      body.leaveDuration === "second_half"
+        ? body.leaveDuration
+        : null;
 
     const maternityDays = Number(
       body.maternityDays ?? body.specialLeaveDuration
@@ -270,9 +305,24 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!Number.isFinite(days) || days <= 0) {
+    if (!Number.isFinite(submittedDays) || submittedDays <= 0) {
       return NextResponse.json(
         { error: "Please select a valid leave duration." },
+        { status: 400 }
+      );
+    }
+
+    if (
+      isHalfDay &&
+      (startDate !== endDate ||
+        submittedDays !== 0.5 ||
+        !halfDayDuration)
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Half-day leave must be for one date, total 0.5 days, and specify First Half or Second Half.",
+        },
         { status: 400 }
       );
     }
@@ -370,9 +420,14 @@ export async function POST(request: Request) {
 
     const code = String(leaveType.code).toUpperCase();
 
+    // Calculate both calendar days and working days.
     const inclusiveDays = getInclusiveDays(startDate, endDate);
+    const workingDays = getWorkingDays(startDate, endDate);
 
-    // Maternity and paternity validations.
+    // =====================================================
+    // MATERNITY AND PATERNITY VALIDATIONS
+    // =====================================================
+
     if (code === "ML" || code === "PL") {
       if (!supportingFile) {
         return NextResponse.json(
@@ -415,6 +470,13 @@ export async function POST(request: Request) {
         employeeRecord.gender || ""
       ).toLowerCase();
 
+      // =====================================================
+      // MATERNITY LEAVE
+      // 3 months = 90 calendar days
+      // 6 months = 180 calendar days
+      // Weekends are included.
+      // =====================================================
+
       if (code === "ML") {
         if (employeeGender !== "female") {
           return NextResponse.json(
@@ -426,32 +488,43 @@ export async function POST(request: Request) {
           );
         }
 
-        if (maternityDays !== 182) {
+        if (![90, 180].includes(maternityDays)) {
           return NextResponse.json(
             {
-              error: "Maternity leave duration must be 26 weeks (182 days).",
+              error:
+                "Select maternity leave for 3 months (90 days) or 6 months (180 days).",
             },
             { status: 400 }
           );
         }
 
+        // Calculate the expected end date using calendar days.
         const expectedEndDate = addCalendarDays(
           startDate,
           maternityDays - 1
         );
 
+        // Validate the selected dates against the duration.
         if (
-          endDate !== expectedEndDate ||
-          days !== maternityDays
+          inclusiveDays !== maternityDays ||
+          endDate !== expectedEndDate
         ) {
           return NextResponse.json(
             {
-              error: `For 26 weeks, the end date must be ${expectedEndDate}.`,
+              error: `For ${maternityDays} days of maternity leave, the end date must be ${expectedEndDate}.`,
             },
             { status: 400 }
           );
         }
+
+        // Store maternity leave using calendar days,
+        // not working days.
+        days = maternityDays;
       }
+
+      // =====================================================
+      // PATERNITY LEAVE
+      // =====================================================
 
       if (code === "PL") {
         if (employeeGender !== "male") {
@@ -467,7 +540,8 @@ export async function POST(request: Request) {
         if (![2, 7, 14, 21, 28].includes(paternityDuration)) {
           return NextResponse.json(
             {
-              error: "Select paternity leave for 2 days, 1, 2, 3, or 4 weeks.",
+              error:
+                "Select paternity leave for 2 days, 1, 2, 3, or 4 weeks.",
             },
             { status: 400 }
           );
@@ -475,7 +549,7 @@ export async function POST(request: Request) {
 
         if (
           inclusiveDays !== paternityDuration ||
-          days !== paternityDuration
+          submittedDays !== paternityDuration
         ) {
           return NextResponse.json(
             {
@@ -485,18 +559,62 @@ export async function POST(request: Request) {
             { status: 400 }
           );
         }
+
+        days = paternityDuration;
       }
     } else if (
-      Math.abs(days - inclusiveDays) > 0.001 &&
-      !isHalfDay
+      !isHalfDay &&
+      Math.abs(days - workingDays) > 0.001
     ) {
       return NextResponse.json(
-        { error: "Leave duration must match the selected dates." },
+        {
+          error:
+            "Leave duration must match the selected working days (excluding Saturday and Sunday).",
+        },
         { status: 400 }
       );
     }
 
+    // =====================================================
+    // CHECK OVERLAPPING LEAVE REQUESTS
+    // Check pending and approved requests for this employee.
+    // This applies to every leave type.
+    // =====================================================
+
+    const { data: overlappingLeaves, error: overlapError } =
+      await admin
+        .from("leave_requests")
+        .select("id, leave_type_id, start_date, end_date, status")
+        .eq("employee_id", employeeId)
+        .in("status", ["pending", "approved"])
+        .lte("start_date", endDate)
+        .gte("end_date", startDate);
+
+    if (overlapError) {
+      throw new Error(
+        `Could not validate existing leave dates: ${overlapError.message}`
+      );
+    }
+
+    if (overlappingLeaves && overlappingLeaves.length > 0) {
+      const conflictingLeave = overlappingLeaves[0];
+
+      return NextResponse.json(
+        {
+          success: false,
+          code: "LEAVE_DATE_OVERLAP",
+          error:
+            `You already have a ${conflictingLeave.status} leave request ` +
+            `from ${conflictingLeave.start_date} to ${conflictingLeave.end_date}. ` +
+            "You cannot apply for leave on overlapping dates.",
+          overlappingLeaves,
+        },
+        { status: 409 }
+      );
+    }
+
     // Validate and upload an optional supporting document.
+    // Upload happens only after overlap validation succeeds.
     let supportingDocumentName: string | null = null;
 
     if (supportingFile) {
@@ -510,7 +628,10 @@ export async function POST(request: Request) {
       supportingDocumentName = uploaded.name;
     }
 
-    // Create leave request.
+    // =====================================================
+    // CREATE LEAVE REQUEST
+    // =====================================================
+
     const leaveReq = await DataStore.createLeaveRequest({
       employeeId,
       leaveTypeId,
@@ -519,6 +640,7 @@ export async function POST(request: Request) {
       totalDays: days,
       isHalfDay,
       reason: reason || "Personal Leave",
+      halfDayDuration: isHalfDay ? halfDayDuration : null,
       supportingDocumentUrl: uploadedPath || undefined,
       leaveDuration:
         code === "ML"
@@ -538,8 +660,10 @@ export async function POST(request: Request) {
       throw new Error("Leave request ID was not returned.");
     }
 
-    // Notify each HR user directly through their profile user ID.
-    // Notification failure must not undo a successfully created leave request.
+    // =====================================================
+    // NOTIFY HR USERS
+    // =====================================================
+
     try {
       const { data: hrProfiles, error: hrProfilesError } = await admin
         .from("profiles")
@@ -582,7 +706,10 @@ export async function POST(request: Request) {
       );
     }
 
-    // Save supporting document and special leave duration.
+    // =====================================================
+    // SAVE SUPPORTING DOCUMENT AND SPECIAL LEAVE DURATION
+    // =====================================================
+
     const updateData: Record<string, unknown> = {};
 
     if (supportingFile && uploadedPath) {
@@ -612,6 +739,10 @@ export async function POST(request: Request) {
         );
       }
     }
+
+    // =====================================================
+    // SUCCESS RESPONSE
+    // =====================================================
 
     return NextResponse.json(
       {

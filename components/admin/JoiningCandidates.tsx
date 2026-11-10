@@ -435,7 +435,7 @@ export default function JoiningCandidates() {
       department: candidate.department ?? "",
       employment_type: candidate.employment_type ?? "",
       work_location: candidate.work_location ?? "",
-      annual_ctc: String(candidate.annual_ctc ?? ""),
+      annual_ctc: String( Number(candidate.annual_ctc ?? 0) / 100000),
       experience_level: candidate.experience_level ?? "fresher",
       total_experience_years: String(candidate.total_experience_years ?? 0),
       total_experience_months: String(candidate.total_experience_months ?? 0),
@@ -502,7 +502,7 @@ export default function JoiningCandidates() {
           ...offerEditForm,
           first_name: offerEditForm.first_name.trim(),
           last_name: offerEditForm.last_name.trim(),
-          annual_ctc: ctc,
+          annual_ctc: Math.round(ctc * 100000),
           total_experience_years: years,
           total_experience_months: months,
         }),
@@ -1400,8 +1400,8 @@ export default function JoiningCandidates() {
                   <label className={labelClass}>Department *<select value={offerEditForm.department} onChange={(e) => setOfferEditForm((v) => ({ ...v, department: e.target.value }))} className={inputClass}><option value="">Select department</option>{departments.map((d) => <option key={d.id} value={d.name}>{d.name}</option>)}</select></label>
                   <label className={labelClass}>Employment type *<select value={offerEditForm.employment_type} onChange={(e) => setOfferEditForm((v) => ({ ...v, employment_type: e.target.value }))} className={inputClass}><option value="">Select employment type</option><option value="full_time">Full-time</option><option value="contract">Contract</option><option value="intern">Intern</option></select></label>
                   <label className={labelClass}>Work location *<select value={offerEditForm.work_location} onChange={(e) => setOfferEditForm((v) => ({ ...v, work_location: e.target.value }))} className={inputClass}><option value="">Select work location</option><option value="On-site">On-site</option><option value="Hybrid">Hybrid</option><option value="Remote">Remote</option></select></label>
-                  <label className={labelClass}>Annual CTC *<input type="number" min="0.01" step="0.01" value={offerEditForm.annual_ctc} onChange={(e) => setOfferEditForm((v) => ({ ...v, annual_ctc: e.target.value }))} className={inputClass} placeholder="Annual CTC" /></label>
-                </div>
+                  <label className={labelClass}>Annual CTC (in lakhs) *<input type="number" min="0.01" step="0.01" value={offerEditForm.annual_ctc} onChange={(e) => setOfferEditForm((v) => ({ ...v,annual_ctc: e.target.value,}))}className={inputClass}placeholder="e.g. 14"/> <span className="mt-1 block text-xs font-normal text-slate-500"> Enter 14 for ₹14,00,000 per year. </span> </label>                
+              </div>
               </div>
               <div className="border-t border-slate-100 pt-5">
                 <div className="mb-4 flex items-center gap-3">

@@ -333,6 +333,7 @@ export interface LeaveRequest {
   created_at: string;
   leave_type?: LeaveType;
   employee?: Employee;
+  leave_duration?: "first_half" | "second_half" | null;
 }
 export interface ResignationRevertRequest {
   id: string;
@@ -366,8 +367,9 @@ export interface ResignationRequest {
   revert_requests?: ResignationRevertRequest[];
 }
 
-export type SalaryComponentType = 'earning' | 'deduction';
-export type CalculationType = 'fixed' | 'percentage_of_basic' | 'percentage_of_gross';
+export type SalaryComponentType =  "earning" | "deduction" | "employer_contribution";
+
+export type CalculationType = "fixed" | "percentage_of_basic" | "percentage_of_gross" | "percentage_of_ctc" | "balance_of_ctc";
 
 export interface SalaryComponent {
   id: string;
@@ -387,7 +389,7 @@ export interface EmployeeSalaryComponent {
   id: string;
   employee_id: string;
   salary_component_id: string;
-  calculation_type: string;
+  calculation_type: CalculationType;
   value: number;
   is_active: boolean;
   affects_lop: boolean;
@@ -412,22 +414,44 @@ export interface PayslipBreakupItem {
 export interface Payslip {
   id: string;
   employee_id: string;
-  payroll_month: number; // 1-12
+  payroll_month: number;
   payroll_year: number;
   month_name: string;
+
   working_days: number;
   present_days: number;
   paid_leaves: number;
   lop_days: number;
+
   gross_salary: number;
   lop_deduction: number;
   total_earnings: number;
   total_deductions: number;
   net_salary: number;
+
+  employer_pf: number;
+  gratuity_provision: number;
+  employer_esi: number;
+  pf_admin: number;
+
+  incentive: number;
+  bonus: number;
+  compensation: number;
+
+  pf_eligible_amount: number;
+  pf_deducted_amount: number;
+  pf_pending_amount: number;
+
+  esi_eligible_amount: number;
+  esi_deducted_amount: number;
+  esi_pending_amount: number;
+
   earnings_breakup: PayslipBreakupItem[];
   deductions_breakup: PayslipBreakupItem[];
-  payment_status: 'draft' | 'processed' | 'paid';
+
+  payment_status: "draft" | "processed" | "paid";
   created_at: string;
+
   employee?: Employee;
 }
 

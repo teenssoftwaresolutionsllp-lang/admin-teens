@@ -499,17 +499,18 @@ export async function POST(
 
       if (profileError) throw profileError;
 
-      // annual_ctc is stored in rupees: ₹1,200,000 / 12 = ₹100,000.
+      // joining_candidates.annual_ctc is stored in rupees.
+      // employees.salary is stored in annual CTC lakhs.
       const annualCtcInRupees = Number(claimed.annual_ctc);
 
       if (
         !Number.isFinite(annualCtcInRupees) ||
         annualCtcInRupees < 0
       ) {
-        throw new Error(
-          "The candidate's annual CTC is invalid."
-        );
+        throw new Error("The candidate's annual CTC is invalid.");
       }
+
+      const annualCtcInLakhs = annualCtcInRupees / 100000;
 
       // Do not pass employee_id. DataStore generates the next ID.
       const employee = await DataStore.createEmployee({
@@ -530,7 +531,7 @@ export async function POST(
         probation_end_date: probationEndDate,
         appointment_date: joiningDate,
         work_location: claimed.work_location || null,
-        salary: annualCtcInRupees,
+        salary: annualCtcInLakhs,
 
         // Experience details from the joining candidate
         experience_level: claimed.experience_level || "fresher",
