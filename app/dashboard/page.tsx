@@ -316,6 +316,17 @@ export default async function DashboardPage({
     (request) => request.status === 'pending'
   ).length;
 
+  console.log(
+    "PENDING LEAVE TYPES:",
+    leaveRequests
+      .filter((request) => request.status === "pending")
+      .map((request) => ({
+        id: request.id,
+        leaveType: request.leave_type?.name,
+        leaveTypeData: request.leave_type,
+      }))
+  );
+
   // Pending leave requests grouped by leave category.
   const pendingLeaveBreakdown = {
     CL: 0,
@@ -327,31 +338,27 @@ export default async function DashboardPage({
   for (const request of leaveRequests) {
     if (request.status !== 'pending') continue;
 
-    const leaveType = (request.leave_type?.name ?? '')
-      .trim()
-      .toLowerCase();
+      const leaveCode = (
+      request.leave_type?.code ??
+      ''
+    ).trim().toUpperCase();
 
-    if (
-      leaveType === 'cl' ||
-      leaveType.includes('casual')
-    ) {
-      pendingLeaveBreakdown.CL += 1;
-    } else if (
-      leaveType === 'sl' ||
-      leaveType.includes('sick')
-    ) {
-      pendingLeaveBreakdown.SL += 1;
-    } else if (
-      leaveType === 'ml' ||
-      leaveType.includes('maternity')
-    ) {
-      pendingLeaveBreakdown.ML += 1;
-    } else if (
-      leaveType === 'pl' ||
-      leaveType.includes('privilege') ||
-      leaveType.includes('earned leave')
-    ) {
-      pendingLeaveBreakdown.PL += 1;
+    switch (leaveCode) {
+      case 'CL':
+        pendingLeaveBreakdown.CL += 1;
+        break;
+
+      case 'SL':
+        pendingLeaveBreakdown.SL += 1;
+        break;
+
+      case 'ML':
+        pendingLeaveBreakdown.ML += 1;
+        break;
+
+      case 'PL':
+        pendingLeaveBreakdown.PL += 1;
+        break;
     }
   }
 
