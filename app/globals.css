@@ -14,6 +14,12 @@
   --foreground: var(--color-foreground);
 }
 
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+}
+
 html {
   scroll-behavior: smooth;
 }

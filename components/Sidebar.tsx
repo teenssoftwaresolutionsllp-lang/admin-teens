@@ -624,7 +624,7 @@ export default function Sidebar({
       </div>
 
       {/* CONTENT */}
-      <div className="flex-1 px-3 py-4 overflow-y-auto">
+      <div className="flex-1 px-3 py-4 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {/* PHOTO UPLOAD */}
         {role === "employee" && (
           <div className="mb-5">

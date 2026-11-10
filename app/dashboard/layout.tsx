@@ -45,16 +45,16 @@ export default async function DashboardLayout({
 
   return (
     <EmployeeFilterProvider>
-      <div className="flex h-screen flex-col overflow-hidden bg-slate-50 md:flex-row">
+      <div className="flex h-screen min-h-0 flex-col overflow-hidden bg-slate-50 md:flex-row">
         <div className="hidden md:block">
           <Sidebar role={profile.role} />
         </div>
 
-        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           <Header profile={profile} />
 
-          <main className="flex-1 overflow-y-auto p-4 sm:p-6">
-            <div className="animate-fade-in h-full">
+          <main className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
+            <div className="animate-fade-in min-h-0">
               {children}
             </div>
           </main>
