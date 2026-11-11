@@ -686,6 +686,7 @@ const getEmployeeStatusLabel = () => {
               <DetailTile label="Joining Date" value={formatDate(employee.joining_date)} />
               <DetailTile label="Probation End Date" value={formatDate(employee.probation_end_date)} />
               <DetailTile label="Confirmation Date" value={formatDate(employee.confirmation_date)} />
+              <DetailTile label="Shift" value={ employee.shift_type === "night" ? "Night (06:30 PM – 03:30 AM)" : "General (09:00 AM – 06:00 PM)"}/>
               <DetailTile label="Experience Level" value={employee.experience_level === "fresher" ? "Fresher" : employee.experience_level === "experienced" ? "Experienced": "Not provided"}/>
               <DetailTile label="Total Experience" value={employee.experience_level === "fresher"? "0 Years, 0 Months" : employee.experience_level === "experienced" ? employee.total_experience_years == null && employee.total_experience_months == null ? "Not provided": `${employee.total_experience_years ?? 0} Years, ${employee.total_experience_months ?? 0} Months` : "Not provided"}/>
               <DetailTile label="Reporting Manager" value={employee.reporting_manager} />

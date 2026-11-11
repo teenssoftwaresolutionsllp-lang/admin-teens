@@ -17,12 +17,55 @@ export interface Department {
   created_at: string;
 }
 
+
 export interface Holiday {
   id: string;
   calendar_id: string;
   holiday_date: string;
   title: string;
   is_optional?: boolean;
+  is_working_day?: boolean;
+}
+
+export type HolidayDocumentStatus =
+  | "not_uploaded"
+  | "uploaded"
+  | "extracted"
+  | "under_review"
+  | "approved"
+  | "rejected"
+  | "imported";
+
+export interface HolidayCalendar {
+  id: string;
+  name: string;
+  country_code: string;
+  country_name: string;
+  timezone: string;
+
+  // Calendar identification
+  calendar_year?: number;
+  shift_type?: "general" | "night";
+
+  // Imported holiday records
+  holidays?: Holiday[];
+
+  // Document upload metadata
+  document_public_id?: string | null;
+  document_file_name?: string | null;
+  document_uploaded_by?: string | null;
+  document_uploaded_at?: string | null;
+
+  // Extraction and approval workflow
+  extracted_holidays?: unknown[] | null;
+  document_status?: HolidayDocumentStatus;
+  approved_by?: string | null;
+  approved_at?: string | null;
+  approval_remarks?: string | null;
+
+  // Import metadata
+  imported_at?: string | null;
+  imported_by?: string | null;
 }
 
 export interface HolidayCalendar {
@@ -47,6 +90,22 @@ export interface Project {
   calendar?: HolidayCalendar;
 }
 
+export type EmployeeShiftType = "general" | "night";
+
+export interface AttendanceLog {
+  id: string;
+  employee_id: string;
+  attendance_date: string;
+  check_in_time: string | null;
+  check_out_time: string | null;
+  session_check_in_time?: string | null; // Add this
+  total_hours: number | null;
+  status: AttendanceStatus;
+  is_late: boolean;
+  is_regularized: boolean;
+  created_at: string;
+  work_mode: "WFO" | "WFH" | null;
+}
 
 export interface Employee {
   // ==============================
@@ -103,6 +162,14 @@ export interface Employee {
   department_id?: string | null;
   project_id?: string | null;
   designation?: string | null;
+  shift_type?: EmployeeShiftType;
+
+  // Retained project settings for employees on bench.
+  retained_calendar_id?: string | null;
+  retained_shift_start_time?: string | null;
+  retained_shift_end_time?: string | null;
+  retained_grace_period_minutes?: number | null;
+  retained_half_day_cutoff_minutes?: number | null;
 
   employment_type?:
     | "full-time"

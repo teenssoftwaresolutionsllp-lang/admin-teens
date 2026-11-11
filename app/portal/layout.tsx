@@ -4,6 +4,7 @@ import Sidebar from "@/components/Sidebar";
 import Header from "@/components/Header";
 import { Profile, UserRole } from "@/lib/types";
 import { DataStore } from "@/lib/data-store";
+import { EmployeeFilterProvider } from "@/components/dashboard/EmployeeFilterProvider";
 
 export default async function PortalLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
@@ -45,18 +46,20 @@ export default async function PortalLayout({ children }: { children: React.React
     }
 
   return (
-    <div className="flex flex-col md:flex-row h-screen overflow-hidden bg-slate-50">
-      <div className="hidden md:block">
-        <Sidebar role="employee" avatarUrl={avatarUrl}/>
-      </div>
+    <EmployeeFilterProvider>
+      <div className="flex flex-col md:flex-row h-screen overflow-hidden bg-slate-50">
+        <div className="hidden md:block">
+          <Sidebar role="employee" avatarUrl={avatarUrl}/>
+        </div>
 
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <Header profile={{ ...profile, role: "employee" }} />
+        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+          <Header profile={{ ...profile, role: "employee" }} />
 
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6">
-          <div className="animate-fade-in h-full">{children}</div>
-        </main>
+          <main className="flex-1 overflow-y-auto p-4 sm:p-6">
+            <div className="animate-fade-in h-full">{children}</div>
+          </main>
+        </div>
       </div>
-    </div>
+    </EmployeeFilterProvider>
   );
 }

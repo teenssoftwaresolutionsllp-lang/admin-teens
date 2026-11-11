@@ -8,8 +8,21 @@ const ALLOWED_STATUSES = ["present", "absent", "half_day"] as const;
 
 type DecisionStatus = (typeof ALLOWED_STATUSES)[number];
 
-const DEFAULT_CALENDAR_ID =
-  "a72296b2-30f8-4c03-b35e-7aceb334d163";
+type Employee = {
+  id: string;
+  employee_id: string;
+  first_name: string | null;
+  last_name: string | null;
+  status: string;
+  joining_date: string;
+  exit_date: string | null;
+  planned_last_working_date: string | null;
+  project_id: string | null;
+  retained_calendar_id: string | null;
+  retained_shift_start_time: string | null;
+  retained_shift_end_time: string | null;
+  shift_type: string | null;
+};
 
 function indiaToday(): string {
   return new Intl.DateTimeFormat("en-CA", {
@@ -142,7 +155,7 @@ export async function POST(request: NextRequest) {
     const { data: employee, error: employeeError } = await admin
       .from("employees")
       .select(
-        "id, status, joining_date, exit_date, planned_last_working_date, project_id"
+        "id, status, joining_date, exit_date, planned_last_working_date, project_id, shift_type, retained_calendar_id, retained_shift_start_time, retained_shift_end_time, shift_type"
       )
       .eq("id", employeeId)
       .maybeSingle();
@@ -190,11 +203,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 5. Resolve the employee's holiday calendar.
-    let calendarId = DEFAULT_CALENDAR_ID;
+
+    // 5. Resolve the employee's holiday calendar and shift.
+    let calendarId: string | null = null;
     let shiftStartTime = "09:00";
     let shiftEndTime = "18:00";
 
+    // Priority 1: Assigned project's actual calendar and timings.
     if (employee.project_id) {
       const { data: project, error: projectError } = await admin
         .from("projects")
@@ -214,17 +229,85 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      if (!project.calendar_id) {
+      if (
+        !project.calendar_id ||
+        !project.shift_start_time ||
+        !project.shift_end_time
+      ) {
         return errorResponse(
-          "The employee's assigned project has no holiday calendar. HR review is required.",
+          "The employee's assigned project has no holiday calendar or shift timings. HR review is required.",
           409
         );
       }
 
       calendarId = project.calendar_id;
-      shiftStartTime = project.shift_start_time || "09:00";
-      shiftEndTime = project.shift_end_time || "18:00";
+      shiftStartTime = project.shift_start_time;
+      shiftEndTime = project.shift_end_time;
     }
+
+    // Priority 2: Retained project calendar and timings for bench employees.
+    else if (
+      employee.retained_calendar_id ||
+      employee.retained_shift_start_time ||
+      employee.retained_shift_end_time
+    ) {
+      if (
+        !employee.retained_calendar_id ||
+        !employee.retained_shift_start_time ||
+        !employee.retained_shift_end_time
+      ) {
+        return errorResponse(
+          "Retained project calendar or shift timings are incomplete. HR review is required.",
+          409
+        );
+      }
+
+      calendarId = employee.retained_calendar_id;
+      shiftStartTime = employee.retained_shift_start_time;
+      shiftEndTime = employee.retained_shift_end_time;
+    }
+
+    // Priority 3: Employee-level shift and matching India calendar.
+    else {
+      const shiftType =
+        employee.shift_type === "night" ? "night" : "general";
+
+      shiftStartTime =
+        shiftType === "night" ? "18:30" : "09:00";
+
+      shiftEndTime =
+        shiftType === "night" ? "03:30" : "18:00";
+
+      const { data: defaultCalendar, error: defaultCalendarError } =
+        await admin
+          .from("holiday_calendars")
+          .select("id")
+          .eq("country_code", "IN")
+          .eq("shift_type", shiftType)
+          .eq("calendar_year", Number(attendanceDate.slice(0, 4)))
+          .maybeSingle();
+
+      if (defaultCalendarError) {
+        console.error(
+          "Default India calendar lookup failed:",
+          defaultCalendarError
+        );
+        return errorResponse(
+          "Unable to verify the default India holiday calendar.",
+          500
+        );
+      }
+
+      calendarId = defaultCalendar?.id || null;
+    }
+
+    if (!calendarId) {
+      return errorResponse(
+        "No applicable holiday calendar was found. HR review is required.",
+        409
+      );
+    }
+
 
     // Confirm that the selected calendar exists.
     const { data: calendar, error: calendarError } = await admin
@@ -386,7 +469,7 @@ export async function POST(request: NextRequest) {
     const { data: existing, error: attendanceError } = await admin
       .from("attendance_logs")
       .select(
-        "id, check_in_time, hr_decision_by, is_regularized"
+        "id, check_in_time, session_check_in_time, hr_decision_by, is_regularized"
       )
       .eq("employee_id", employeeId)
       .eq("attendance_date", attendanceDate)
@@ -407,7 +490,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (existing?.check_in_time) {
+    if (existing?.check_in_time || existing?.session_check_in_time) {
       return errorResponse(
         "The employee has already clocked in. Review the existing attendance record instead.",
         409
@@ -436,6 +519,7 @@ export async function POST(request: NextRequest) {
         .eq("id", existing.id)
         .is("hr_decision_by", null)
         .is("check_in_time", null)
+        .is("session_check_in_time", null)
         .eq("is_regularized", false)
         .select("id")
         .maybeSingle();
