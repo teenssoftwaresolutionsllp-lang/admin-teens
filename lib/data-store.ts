@@ -1993,7 +1993,6 @@ export class DataStore {
       const { data, error } = await supabase
         .from("leave_types")
         .select("*")
-        .in("code", ["CL", "SL"])
         .eq("is_active", true)
         .order("name");
 

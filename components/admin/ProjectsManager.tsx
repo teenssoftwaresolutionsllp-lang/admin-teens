@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { FormEvent } from "react";
+import type { EmergencyHoliday } from "@/lib/types";
 import { useRouter } from "next/navigation";
 import {
   Project,
@@ -30,6 +32,8 @@ interface ProjectsManagerProps {
   initialProjects: Project[];
   calendars: HolidayCalendar[];
   employees: Employee[];
+  emergencyHolidays: EmergencyHoliday[];
+  canManageEmergencyHolidays: boolean;
 }
 
 interface DraftHoliday {
@@ -43,6 +47,8 @@ export default function ProjectsManager({
   initialProjects,
   calendars,
   employees,
+  emergencyHolidays,
+  canManageEmergencyHolidays,
 }: ProjectsManagerProps) {
   const router = useRouter();
 
@@ -80,6 +86,23 @@ export default function ProjectsManager({
     grace_period_minutes: 30,
     half_day_cutoff_minutes: 150,
   });
+
+  const [emergencyForm, setEmergencyForm] = useState({
+    title: "",
+    holiday_date: new Date().toLocaleDateString("en-CA"),
+    reason: "",
+    scope: "company" as "company" | "project",
+    project_ids: [] as string[],
+  });
+
+  const [emergencyMessage, setEmergencyMessage] = useState<string | null>(null);
+  const [emergencyError, setEmergencyError] = useState<string | null>(null);
+
+  const visibleEmergencyHolidays = emergencyHolidays.filter(
+    (holiday) =>
+      new Date(`${holiday.holiday_date}T00:00:00`).getFullYear() ===
+      selectedYear
+  );
 
   useEffect(() => {
     setCalendarList(calendars);
@@ -454,6 +477,128 @@ export default function ProjectsManager({
   const isImported =
     activeCalendar?.document_status === "imported";
 
+  const handleCreateEmergencyHoliday = async (
+    event: FormEvent<HTMLFormElement>
+  ) => {
+    event.preventDefault();
+
+    setEmergencyError(null);
+    setEmergencyMessage(null);
+
+    if (
+      emergencyForm.scope === "project" &&
+      emergencyForm.project_ids.length === 0
+    ) {
+      setEmergencyError("Please select at least one project.");
+      return;
+    }
+
+    setBusyAction("emergency-create");
+
+    try {
+      const response = await fetch("/api/emergency-holidays", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          title: emergencyForm.title,
+          holiday_date: emergencyForm.holiday_date,
+          reason: emergencyForm.reason,
+          scope: emergencyForm.scope,
+          project_ids:
+            emergencyForm.scope === "project"
+              ? emergencyForm.project_ids
+              : [],
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          result.error || "Unable to create emergency holiday."
+        );
+      }
+
+      const notificationFailures = (result.notifications || []).reduce(
+        (total: number, item: { failed?: number }) =>
+          total + (item.failed || 0),
+        0
+      );
+
+      setEmergencyMessage(
+        notificationFailures > 0
+          ? "Emergency holiday created, but some employee notifications could not be sent."
+          : "Emergency holiday created and affected employees notified."
+      );
+
+      setEmergencyForm({
+        title: "",
+        holiday_date: new Date().toLocaleDateString("en-CA"),
+        reason: "",
+        scope: "company",
+        project_ids: [],
+      });
+
+      router.refresh();
+    } catch (error) {
+      setEmergencyError(
+        error instanceof Error
+          ? error.message
+          : "Unable to create emergency holiday."
+      );
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const handleCancelEmergencyHoliday = async (holidayId: string) => {
+    const confirmed = window.confirm(
+      "Are you sure you want to cancel this emergency holiday? Affected employees will be notified."
+    );
+
+    if (!confirmed) return;
+
+    setEmergencyError(null);
+    setEmergencyMessage(null);
+    setBusyAction(`emergency-cancel-${holidayId}`);
+
+    try {
+      const response = await fetch("/api/emergency-holidays", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ id: holidayId }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          result.error || "Unable to cancel emergency holiday."
+        );
+      }
+
+      setEmergencyMessage(
+        result.notifications?.failed > 0
+          ? "Holiday cancelled, but some employee cancellation notifications could not be sent."
+          : "Emergency holiday cancelled and affected employees notified."
+      );
+
+      router.refresh();
+    } catch (error) {
+      setEmergencyError(
+        error instanceof Error
+          ? error.message
+          : "Unable to cancel emergency holiday."
+      );
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
       {/* Top Banner */}
@@ -587,7 +732,7 @@ export default function ProjectsManager({
                   key={country.code}
                   type="button"
                   onClick={() => setSelectedCountry(country.code)}
-                  className={`px-4 py-2.5 text-xs font-semibold rounded-lg transition-all ${
+                  className={`px-4 py-2.5 text-xs cursor-pointer font-semibold rounded-lg transition-all ${
                     selectedCountry === country.code
                       ? "bg-indigo-600 text-white shadow-md"
                       : "text-slate-700 hover:bg-slate-50"
@@ -619,7 +764,7 @@ export default function ProjectsManager({
                       onChange={(e) =>
                         setSelectedYear(Number(e.target.value))
                       }
-                      className="w-full appearance-none rounded-xl border border-slate-200 bg-white pl-10 pr-9 py-3 text-sm font-medium text-slate-800 outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400"
+                      className="w-full cursor-pointer appearance-none rounded-xl border border-slate-200 bg-white pl-10 pr-9 py-3 text-sm font-medium text-slate-800 outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400"
                     >
                       {yearOptions.map((year) => (
                         <option key={year} value={year}>
@@ -628,14 +773,14 @@ export default function ProjectsManager({
                       ))}
                     </select>
 
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none">
+                    <span className="absolute cursor-pointer  right-3 top-1/2 cursor-pointer  -translate-y-1/2 text-slate-500 pointer-events-none">
                       ▾
                     </span>
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-semibold text-slate-800 mb-2">
+                  <label className="block text-sm cursor-pointer  font-semibold text-slate-800 mb-2">
                     Select Shift
                   </label>
 
@@ -649,13 +794,13 @@ export default function ProjectsManager({
                           e.target.value as "general" | "night"
                         )
                       }
-                      className="w-full appearance-none rounded-xl border border-slate-200 bg-white pl-10 pr-9 py-3 text-sm font-medium text-slate-800 outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400"
+                      className="w-full cursor-pointer  appearance-none rounded-xl border border-slate-200 bg-white pl-10 pr-9 py-3 text-sm font-medium text-slate-800 outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400"
                     >
                       <option value="general">General Shift</option>
                       <option value="night">Night Shift</option>
                     </select>
 
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none">
+                    <span className="absolute cursor-pointer  right-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none">
                       ▾
                     </span>
                   </div>
@@ -673,73 +818,68 @@ export default function ProjectsManager({
             </div>
 
             {/* Right: Calendar Summary */}
-            <div className="min-h-[180px] rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50 via-white to-violet-100 p-5 sm:p-6 flex flex-col sm:flex-row items-center justify-between gap-5 overflow-hidden">
-              {activeCalendar ? (
-                <>
-                  <div className="flex items-center justify-center shrink-0 w-32 h-28 sm:w-40 sm:h-32 rounded-2xl bg-white/70">
-                    <div className="relative">
-                      <Calendar className="w-24 h-24 sm:w-28 sm:h-28 text-indigo-500 stroke-[1.4]" />
-                      <Globe className="absolute -right-5 -bottom-2 w-12 h-12 p-1.5 rounded-full bg-white text-blue-500 shadow-sm" />
+            <div className="w-full min-h-[180px] rounded-2xl overflow-hidden border-0 p-0 m-0">
+              <div
+                className="relative w-full min-h-[180px] bg-cover bg-center bg-no-repeat flex items-center p-0 m-0"
+                style={{
+                  backgroundImage: "url('/calbanner.png')",
+                }}
+              >
+                {activeCalendar ? (
+                  <div className="w-full flex justify-end items-center px-4 sm:px-7 py-5">
+                    <div className="w-full sm:w-[58%] text-center sm:text-left">
+                      <h4 className="text-lg sm:text-xl font-bold text-slate-900 leading-tight">
+                        {countryName} Holiday Calendar ({selectedYear})
+                      </h4>
+
+                      <p className="text-sm text-slate-700 mt-2 font-medium">
+                        {activeCalendar.holidays?.length || 0} calendar entries configured
+                        for {shiftLabel.toLowerCase()}.
+                      </p>
+
+                      <p className="text-xs text-slate-600 mt-1">
+                        {activeCalendar.name}
+                      </p>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          document
+                            .getElementById("current-calendar-entries")
+                            ?.scrollIntoView({ behavior: "smooth" })
+                        }
+                        className="inline-flex cursor-pointer items-center gap-2 mt-3 px-4 py-2 rounded-lg border border-indigo-500 bg-transparent text-indigo-700 text-xs font-semibold hover:bg-white/30 hover:border-indigo-600 transition-all duration-200"          >
+                        <Eye className="w-4 h-4" />
+                        View Holidays
+                      </button>
                     </div>
                   </div>
+                ) : (
+                  <div className="w-full flex justify-end items-center px-4 sm:px-7 py-5">
+                    <div className="w-full sm:w-[58%] text-center sm:text-left">
+                      <h4 className="text-lg sm:text-xl font-bold text-slate-900 leading-tight">
+                        {countryName} Holiday Calendar ({selectedYear})
+                      </h4>
 
-                  <div className="flex-1 text-center sm:text-left">
-                    <h4 className="text-lg font-bold text-slate-900">
-                      {countryName} Holiday Calendar ({selectedYear})
-                    </h4>
+                      <p className="text-sm text-slate-700 mt-2 font-semibold">
+                        Calendar Not Configured
+                      </p>
 
-                    <p className="text-sm text-slate-600 mt-1">
-                      {activeCalendar.holidays?.length || 0} calendar entries
-                      configured for {shiftLabel.toLowerCase()}.
-                    </p>
-
-                    <p className="text-xs text-slate-500 mt-1">
-                      {activeCalendar.name}
-                    </p>
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        document
-                          .getElementById("current-calendar-entries")
-                          ?.scrollIntoView({ behavior: "smooth" })
-                      }
-                      className="inline-flex items-center gap-2 mt-4 px-4 py-2 rounded-full border border-indigo-300 bg-white/80 text-xs font-semibold text-indigo-700 hover:bg-white transition-colors"
-                    >
-                      <Eye className="w-4 h-4" />
-                      View Holidays
-                    </button>
+                      <p className="text-xs text-slate-600 mt-1">
+                        No calendar exists for {countryName}, {selectedYear}, and{" "}
+                        {shiftLabel}.
+                      </p>
+                    </div>
                   </div>
-                </>
-              ) : (
-                <div className="w-full flex flex-col sm:flex-row items-center gap-5">
-                  <div className="w-32 h-28 flex items-center justify-center rounded-2xl bg-white/70 shrink-0">
-                    <Calendar className="w-20 h-20 text-indigo-300 stroke-[1.3]" />
-                  </div>
-
-                  <div className="text-center sm:text-left">
-                    <h4 className="text-lg font-bold text-slate-900">
-                      {countryName} Holiday Calendar ({selectedYear})
-                    </h4>
-
-                    <p className="text-sm text-slate-600 mt-1">
-                      Calendar Not Configured
-                    </p>
-
-                    <p className="text-xs text-slate-500 mt-1">
-                      No calendar exists for {countryName}, {selectedYear},
-                      and {shiftLabel}.
-                    </p>
-                  </div>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </div>
         </div>
       </div>
 
       {/* Holiday Document Section */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-2xl cursor-pointer border border-slate-200 shadow-sm overflow-hidden">
         <div className="p-5 border-b border-slate-200">
           <div className="flex items-center gap-2">
             <FileText className="w-6 h-6 text-indigo-600" />
@@ -1129,6 +1269,7 @@ export default function ProjectsManager({
         </div>
       </div>
 
+
       {/* Current Calendar Entries */}
       <div
         id="current-calendar-entries"
@@ -1142,30 +1283,271 @@ export default function ProjectsManager({
                 Current Calendar Entries
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">
-                {activeCalendar
-                  ? `${countryName} · ${selectedYear} · ${shiftLabel}`
-                  : `${countryName} · ${selectedYear} · ${shiftLabel}`}
+                {countryName} · {selectedYear} · {shiftLabel}
               </p>
             </div>
           </div>
+
+          {canManageEmergencyHolidays && (
+            <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-3 py-1.5">
+              HR / CEO Emergency Holiday Access
+            </span>
+          )}
         </div>
 
-        <div className="p-5">
-          {!activeCalendar ? (
+        <div className="p-5 space-y-5">
+          {/* Emergency Holiday Form */}
+          {canManageEmergencyHolidays && (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50/50 p-4 sm:p-5">
+              <div className="flex items-start gap-3 mb-4">
+                <div className="p-2 rounded-xl bg-amber-100 text-amber-700">
+                  <PlusCircle className="w-5 h-5" />
+                </div>
+
+                <div>
+                  <h4 className="text-sm font-bold text-slate-900">
+                    Declare Emergency Holiday
+                  </h4>
+                  <p className="text-xs text-slate-600 mt-1">
+                    Declare an additional holiday for the entire company or
+                    selected projects. Affected employees will be notified.
+                  </p>
+                </div>
+              </div>
+
+              {emergencyError && (
+                <div className="mb-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">
+                  {emergencyError}
+                </div>
+              )}
+
+              {emergencyMessage && (
+                <div className="mb-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
+                  {emergencyMessage}
+                </div>
+              )}
+
+              <form
+                onSubmit={handleCreateEmergencyHoliday}
+                className="space-y-4"
+              >
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                      Holiday Title *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      maxLength={150}
+                      value={emergencyForm.title}
+                      onChange={(event) =>
+                        setEmergencyForm((previous) => ({
+                          ...previous,
+                          title: event.target.value,
+                        }))
+                      }
+                      placeholder="e.g. Emergency Office Closure"
+                      className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-xs outline-none focus:ring-2 focus:ring-amber-400"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                      Holiday Date *
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={emergencyForm.holiday_date}
+                      onChange={(event) =>
+                        setEmergencyForm((previous) => ({
+                          ...previous,
+                          holiday_date: event.target.value,
+                        }))
+                      }
+                      className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-xs outline-none focus:ring-2 focus:ring-amber-400"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                    Holiday Scope *
+                  </label>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white p-3 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="emergency-scope"
+                        value="company"
+                        checked={emergencyForm.scope === "company"}
+                        onChange={() =>
+                          setEmergencyForm((previous) => ({
+                            ...previous,
+                            scope: "company",
+                            project_ids: [],
+                          }))
+                        }
+                        className="accent-amber-600"
+                      />
+                      <span>
+                        <span className="block text-xs font-bold text-slate-800">
+                          Company-wide
+                        </span>
+                        <span className="block text-[10px] text-slate-500 mt-0.5">
+                          All eligible employees
+                        </span>
+                      </span>
+                    </label>
+
+                    <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white p-3 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="emergency-scope"
+                        value="project"
+                        checked={emergencyForm.scope === "project"}
+                        onChange={() =>
+                          setEmergencyForm((previous) => ({
+                            ...previous,
+                            scope: "project",
+                          }))
+                        }
+                        className="accent-amber-600"
+                      />
+                      <span>
+                        <span className="block text-xs font-bold text-slate-800">
+                          Selected Projects
+                        </span>
+                        <span className="block text-[10px] text-slate-500 mt-0.5">
+                          Only employees assigned to selected projects
+                        </span>
+                      </span>
+                    </label>
+                  </div>
+                </div>
+
+                {emergencyForm.scope === "project" && (
+                  <div className="rounded-xl border border-slate-200 bg-white p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs font-semibold text-slate-700">
+                        Select Projects *
+                      </label>
+                      <span className="text-[10px] text-slate-500">
+                        {emergencyForm.project_ids.length} selected
+                      </span>
+                    </div>
+
+                    {projects.length === 0 ? (
+                      <p className="text-xs text-slate-500">
+                        No projects available.
+                      </p>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto">
+                        {projects.map((project) => (
+                          <label
+                            key={project.id}
+                            className="flex items-center gap-2 rounded-lg px-2 py-2 hover:bg-slate-50 cursor-pointer"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={emergencyForm.project_ids.includes(
+                                project.id
+                              )}
+                              onChange={(event) =>
+                                setEmergencyForm((previous) => ({
+                                  ...previous,
+                                  project_ids: event.target.checked
+                                    ? [
+                                        ...previous.project_ids,
+                                        project.id,
+                                      ]
+                                    : previous.project_ids.filter(
+                                        (id) => id !== project.id
+                                      ),
+                                }))
+                              }
+                              className="rounded border-slate-300 accent-amber-600"
+                            />
+                            <span className="text-xs text-slate-700">
+                              {project.name}
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                    Reason / Remarks *
+                  </label>
+                  <textarea
+                    required
+                    maxLength={1000}
+                    rows={3}
+                    value={emergencyForm.reason}
+                    onChange={(event) =>
+                      setEmergencyForm((previous) => ({
+                        ...previous,
+                        reason: event.target.value,
+                      }))
+                    }
+                    placeholder="Enter the reason for declaring this emergency holiday..."
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-xs outline-none resize-y focus:ring-2 focus:ring-amber-400"
+                  />
+                  <p className="text-[10px] text-slate-400 text-right mt-1">
+                    {emergencyForm.reason.length}/1000
+                  </p>
+                </div>
+
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-amber-200">
+                  <p className="text-[10px] text-slate-500">
+                    Emergency holidays do not deduct leave balances.
+                  </p>
+
+                  <button
+                    type="submit"
+                    disabled={
+                      busyAction !== null ||
+                      !emergencyForm.title.trim() ||
+                      !emergencyForm.reason.trim() ||
+                      (emergencyForm.scope === "project" &&
+                        emergencyForm.project_ids.length === 0)
+                    }
+                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-amber-600 hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-5 py-2.5 text-xs font-bold shadow-sm transition-colors"
+                  >
+                    {busyAction === "emergency-create" ? (
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Plus className="w-4 h-4" />
+                    )}
+                    Declare Emergency Holiday
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {/* Calendar Entries and Emergency Holidays */}
+          {(!activeCalendar?.holidays?.length &&
+            visibleEmergencyHolidays.length === 0) ? (
             <div className="text-center py-8 border border-dashed border-slate-200 rounded-xl">
               <Calendar className="w-8 h-8 text-slate-300 mx-auto mb-2" />
               <p className="text-sm font-semibold text-slate-700">
-                Calendar Not Configured
+                No Calendar Entries
               </p>
               <p className="text-xs text-slate-500 mt-1">
-                No calendar exists for {countryName}, {selectedYear}, and{" "}
-                {shiftLabel}.
+                {activeCalendar
+                  ? "No regular or emergency holidays have been added for this year."
+                  : `No calendar is configured for ${countryName}, ${selectedYear}, and ${shiftLabel}.`}
               </p>
             </div>
-          ) : activeCalendar.holidays &&
-            activeCalendar.holidays.length > 0 ? (
+          ) : (
             <div className="overflow-x-auto rounded-xl border border-slate-200">
-              <table className="w-full min-w-[650px] text-left">
+              <table className="w-full min-w-[850px] text-left">
                 <thead className="bg-slate-50">
                   <tr className="text-xs font-bold text-slate-700">
                     <th className="px-4 py-3 border-b border-slate-200">
@@ -1181,22 +1563,27 @@ export default function ProjectsManager({
                       Type
                     </th>
                     <th className="px-4 py-3 border-b border-slate-200">
+                      Scope
+                    </th>
+                    <th className="px-4 py-3 border-b border-slate-200">
                       Description
+                    </th>
+                    <th className="px-4 py-3 border-b border-slate-200">
+                      Status / Action
                     </th>
                   </tr>
                 </thead>
+
                 <tbody>
-                  {activeCalendar.holidays.map((holiday, index) => (
+                  {activeCalendar?.holidays?.map((holiday, index) => (
                     <tr
-                      key={holiday.id}
+                      key={`regular-${holiday.id}`}
                       className="text-xs text-slate-700 hover:bg-slate-50/70"
                     >
-                      {/* S.No */}
                       <td className="px-4 py-3 border-b border-slate-100 font-semibold text-slate-500">
                         {index + 1}
                       </td>
 
-                      {/* Date */}
                       <td className="px-4 py-3 border-b border-slate-100 whitespace-nowrap">
                         {new Date(
                           `${holiday.holiday_date}T00:00:00`
@@ -1207,12 +1594,10 @@ export default function ProjectsManager({
                         })}
                       </td>
 
-                      {/* Holiday Name */}
                       <td className="px-4 py-3 border-b border-slate-100 font-semibold text-slate-900">
                         {holiday.title}
                       </td>
 
-                      {/* Type */}
                       <td className="px-4 py-3 border-b border-slate-100">
                         <span
                           className={`inline-flex px-2.5 py-1 rounded-full border text-[10px] font-semibold ${
@@ -1231,7 +1616,10 @@ export default function ProjectsManager({
                         </span>
                       </td>
 
-                      {/* Description */}
+                      <td className="px-4 py-3 border-b border-slate-100 text-slate-500">
+                        Calendar
+                      </td>
+
                       <td className="px-4 py-3 border-b border-slate-100 text-slate-500">
                         {holiday.is_working_day
                           ? "Working day / working Saturday"
@@ -1239,22 +1627,107 @@ export default function ProjectsManager({
                             ? "Optional holiday"
                             : `${countryName} holiday`}
                       </td>
+
+                      <td className="px-4 py-3 border-b border-slate-100">
+                        <span className="inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                          Regular
+                        </span>
+                      </td>
                     </tr>
                   ))}
-                </tbody>
 
+                  {visibleEmergencyHolidays.map((holiday, index) => {
+                    const projectName = holiday.project_id
+                      ? projects.find(
+                          (project) => project.id === holiday.project_id
+                        )?.name || "Project"
+                      : "All Projects";
+
+                    return (
+                      <tr
+                        key={`emergency-${holiday.id}`}
+                        className="text-xs text-slate-700 hover:bg-amber-50/40"
+                      >
+                        <td className="px-4 py-3 border-b border-slate-100 font-semibold text-slate-500">
+                          {(activeCalendar?.holidays?.length || 0) +
+                            index +
+                            1}
+                        </td>
+
+                        <td className="px-4 py-3 border-b border-slate-100 whitespace-nowrap">
+                          {new Date(
+                            `${holiday.holiday_date}T00:00:00`
+                          ).toLocaleDateString("en-US", {
+                            month: "short",
+                            day: "2-digit",
+                            year: "numeric",
+                          })}
+                        </td>
+
+                        <td className="px-4 py-3 border-b border-slate-100 font-semibold text-slate-900">
+                          {holiday.title}
+                        </td>
+
+                        <td className="px-4 py-3 border-b border-slate-100">
+                          <span className="inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                            Emergency
+                          </span>
+                        </td>
+
+                        <td className="px-4 py-3 border-b border-slate-100 text-slate-600">
+                          {holiday.scope === "company"
+                            ? "Company-wide"
+                            : projectName}
+                        </td>
+
+                        <td className="px-4 py-3 border-b border-slate-100 text-slate-500 max-w-xs">
+                          <p className="whitespace-normal">
+                            {holiday.reason || "—"}
+                          </p>
+                        </td>
+
+                        <td className="px-4 py-3 border-b border-slate-100">
+                          {holiday.status === "active" ? (
+                            <div className="flex items-center gap-2">
+                              <span className="inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                Active
+                              </span>
+
+                              {canManageEmergencyHolidays && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleCancelEmergencyHoliday(holiday.id)
+                                  }
+                                  disabled={busyAction !== null}
+                                  className="inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 px-2 py-1.5 text-[10px] font-semibold disabled:opacity-50"
+                                >
+                                  {busyAction ===
+                                  `emergency-cancel-${holiday.id}` ? (
+                                    <RefreshCw className="w-3 h-3 animate-spin" />
+                                  ) : (
+                                    <XCircle className="w-3 h-3" />
+                                  )}
+                                  Cancel
+                                </button>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                              Cancelled
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
               </table>
-            </div>
-          ) : (
-            <div className="text-center py-8 border border-dashed border-slate-200 rounded-xl">
-              <Calendar className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-              <p className="text-xs font-semibold text-slate-600">
-                No calendar entries found
-              </p>
             </div>
           )}
         </div>
       </div>
+
 
       {/* Create Project Modal */}
       {isModalOpen && (

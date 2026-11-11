@@ -77,6 +77,18 @@ export interface HolidayCalendar {
   holidays?: Holiday[];
 }
 
+export interface EmergencyHoliday {
+  id: string;
+  holiday_date: string;
+  title: string;
+  reason: string | null;
+  scope: "company" | "project";
+  project_id: string | null;
+  holiday_type: "emergency";
+  status: "active" | "cancelled";
+  created_at: string;
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -165,6 +177,7 @@ export interface Employee {
   shift_type?: EmployeeShiftType;
 
   // Retained project settings for employees on bench.
+  retained_project_id?: string | null;
   retained_calendar_id?: string | null;
   retained_shift_start_time?: string | null;
   retained_shift_end_time?: string | null;
