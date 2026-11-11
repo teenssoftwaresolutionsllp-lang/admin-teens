@@ -15,6 +15,172 @@ import {
 } from "./types";
 import { calculateSalaryBreakdown, evaluateAttendancePunch } from "./calculations";
 
+type EffectiveShift = {
+  startTime: string;
+  endTime: string;
+  timezone: string;
+  gracePeriodMinutes: number;
+  halfDayCutoffMinutes: number;
+};
+
+function getEffectiveShift(employee: Employee): EffectiveShift {
+  // An assigned project always takes priority.
+  if (employee.project_id) {
+    if (!employee.project) {
+      throw new Error(
+        "Employee has a project assignment, but the project could not be found."
+      );
+    }
+
+    return {
+      startTime: employee.project.shift_start_time,
+      endTime: employee.project.shift_end_time,
+      timezone: employee.project.timezone || "Asia/Kolkata",
+      gracePeriodMinutes: employee.project.grace_period_minutes,
+      halfDayCutoffMinutes: employee.project.half_day_cutoff_minutes,
+    };
+  }
+
+    // Bench employees retain their previous project's shift settings.
+  if (
+    employee.retained_shift_start_time &&
+    employee.retained_shift_end_time
+  ) {
+    return {
+      startTime: employee.retained_shift_start_time,
+      endTime: employee.retained_shift_end_time,
+      timezone: "Asia/Kolkata",
+      gracePeriodMinutes:
+        employee.retained_grace_period_minutes ?? 30,
+      halfDayCutoffMinutes:
+        employee.retained_half_day_cutoff_minutes ?? 150,
+    };
+  }
+
+  // Employee-level shifts apply only when there is no project.
+  if (employee.shift_type === "night") {
+    return {
+      startTime: "18:30",
+      endTime: "03:30",
+      timezone: "Asia/Kolkata",
+      gracePeriodMinutes: 30,
+      halfDayCutoffMinutes: 150,
+    };
+  }
+
+  return {
+    startTime: "09:00",
+    endTime: "18:00",
+    timezone: "Asia/Kolkata",
+    gracePeriodMinutes: 30,
+    halfDayCutoffMinutes: 150,
+  };
+}
+
+function getLocalDateTimeParts(date: Date, timezone: string) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+
+  const get = (type: string) =>
+    Number(parts.find((part) => part.type === type)?.value);
+
+  return {
+    year: get("year"),
+    month: get("month"),
+    day: get("day"),
+    hour: get("hour"),
+    minute: get("minute"),
+  };
+}
+
+function getLocalDateKey(date: Date, timezone: string): string {
+  const parts = getLocalDateTimeParts(date, timezone);
+
+  return [
+    parts.year,
+    String(parts.month).padStart(2, "0"),
+    String(parts.day).padStart(2, "0"),
+  ].join("-");
+}
+
+function addDaysToDateKey(dateKey: string, days: number): string {
+  const [year, month, day] = dateKey.split("-").map(Number);
+
+  const date = new Date(Date.UTC(year, month - 1, day));
+  date.setUTCDate(date.getUTCDate() + days);
+
+  return [
+    date.getUTCFullYear(),
+    String(date.getUTCMonth() + 1).padStart(2, "0"),
+    String(date.getUTCDate()).padStart(2, "0"),
+  ].join("-");
+}
+
+// Converts a local date/time in an IANA timezone into a UTC Date.
+function zonedDateTimeToUtc(
+  dateKey: string,
+  time: string,
+  timezone: string
+): Date {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  const [hour, minute] = time.split(":").map(Number);
+
+  const targetUtc = Date.UTC(year, month - 1, day, hour, minute);
+  let result = targetUtc;
+
+  for (let i = 0; i < 4; i++) {
+    const local = getLocalDateTimeParts(new Date(result), timezone);
+
+    const representedUtc = Date.UTC(
+      local.year,
+      local.month - 1,
+      local.day,
+      local.hour,
+      local.minute
+    );
+
+    const difference = targetUtc - representedUtc;
+
+    result += difference;
+
+    if (difference === 0) break;
+  }
+
+  return new Date(result);
+}
+
+function getShiftAttendanceDate(
+  now: Date,
+  shift: EffectiveShift
+): string {
+  const local = getLocalDateTimeParts(now, shift.timezone);
+  const today = getLocalDateKey(now, shift.timezone);
+
+  const [startHour, startMinute] = shift.startTime.split(":").map(Number);
+  const [endHour, endMinute] = shift.endTime.split(":").map(Number);
+
+  const startMinutes = startHour * 60 + startMinute;
+  const endMinutes = endHour * 60 + endMinute;
+  const currentMinutes = local.hour * 60 + local.minute;
+
+  const isOvernight = endMinutes <= startMinutes;
+
+  // An overnight shift before its end belongs to the previous start date.
+  if (isOvernight && currentMinutes < endMinutes) {
+    return addDaysToDateKey(today, -1);
+  }
+
+  return today;
+}
+
+
 // Global in-memory singleton state cache
 declare global {
   // eslint-disable-next-line no-var
@@ -162,7 +328,7 @@ export class DataStore {
     // Return from in-memory cache
     return cache.employees.map((emp) => ({
       ...emp,
-      project: emp.project || cache.projects.find((p) => p.id === emp.project_id) || cache.projects[0],
+      project: emp.project || cache.projects.find((p) => p.id === emp.project_id) || undefined,
     }));
   }
 
@@ -196,9 +362,9 @@ export class DataStore {
 
         const result: Employee = {
           ...data,
-          project:
-            cache.projects.find((p) => p.id === data.project_id) ||
-            cache.projects[0],
+          project: data.project_id
+            ? (await this.getProjects()).find((p) => p.id === data.project_id)
+            : undefined,
         };
 
         this.seedEmployeeToCache(result);
@@ -217,12 +383,12 @@ export class DataStore {
     if (cached) {
       return {
         ...cached,
-        project:
-          cached.project ||
-          cache.projects.find(
-            (project) => project.id === cached.project_id
-          ) ||
-          cache.projects[0],
+        project: cached.project_id
+          ? cached.project ||
+            cache.projects.find(
+              (project) => project.id === cached.project_id
+            )
+          : undefined,
       };
     }
 
@@ -262,12 +428,18 @@ export class DataStore {
     const cache = getCache();
 
     // Check in-memory cache first
-    const cached = cache.employees.find((e) => e.email?.toLowerCase() === email?.toLowerCase());
+    const cached = cache.employees.find(
+      (e) => e.email?.toLowerCase() === email?.toLowerCase()
+    );
+
     if (cached) {
       const projects = await this.getProjects();
+
       return {
         ...cached,
-        project: cached.project || cache.projects.find((project) => project.id === cached.project_id) || projects[0],
+        project: cached.project ||
+          projects.find((project) => project.id === cached.project_id) ||
+          undefined,
       };
     }
 
@@ -281,9 +453,12 @@ export class DataStore {
         .single();
 
       if (!error && data) {
-        const result = {
+        const projects = await this.getProjects();
+        const result: Employee = {
           ...data,
-          project: cache.projects.find((p) => p.id === data.project_id) || cache.projects[0],
+          project: data.project_id
+            ? projects.find((project) => project.id === data.project_id)
+            : undefined,
         };
         this.seedEmployeeToCache(result);
         return result;
@@ -304,7 +479,12 @@ export class DataStore {
       if (cachedByUserId) {
         return {
           ...cachedByUserId,
-          project: cachedByUserId.project || cache.projects.find((p) => p.id === cachedByUserId.project_id) || cache.projects[0],
+          project: cachedByUserId.project_id
+            ? cachedByUserId.project ||
+              cache.projects.find(
+                (project) => project.id === cachedByUserId.project_id
+              )
+            : undefined,
         };
       }
     }
@@ -321,7 +501,12 @@ export class DataStore {
           cachedByEmail.user_id = userId;
           return {
             ...cachedByEmail,
-            project: cachedByEmail.project || cache.projects.find((p) => p.id === cachedByEmail.project_id) || cache.projects[0],
+            project: cachedByEmail.project_id
+              ? cachedByEmail.project ||
+                cache.projects.find(
+                  (project) => project.id === cachedByEmail.project_id
+                )
+              : undefined,
           };
         }
       }
@@ -335,9 +520,13 @@ export class DataStore {
 
       const { data, error } = await query.limit(1).single();
       if (!error && data) {
-        const result = {
+        const projects = await this.getProjects();
+
+        const result: Employee = {
           ...data,
-          project: cache.projects.find((p) => p.id === data.project_id) || cache.projects[0],
+          project: data.project_id
+            ? projects.find((project) => project.id === data.project_id)
+            : undefined,
         };
         this.seedEmployeeToCache(result);
         return result;
@@ -406,6 +595,7 @@ export class DataStore {
       // =========================
       department_id: empData.department_id || null,
       designation: empData.designation || null,
+      shift_type: empData.shift_type || "general",
       employment_type: empData.employment_type || "full-time",
       joining_date: empData.joining_date || new Date().toISOString().split("T")[0],
       probation_end_date: empData.probation_end_date || null,
@@ -462,7 +652,9 @@ export class DataStore {
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
 
-      project: cache.projects[0],
+      project: empData.project_id
+        ? cache.projects.find((p) => p.id === empData.project_id)
+        : undefined,
     };
 
     const { project: _project, ...employeeRow } = newEmp;
@@ -985,19 +1177,31 @@ export class DataStore {
 
   static async getHolidayCalendars(): Promise<HolidayCalendar[]> {
     const cache = getCache();
+
     try {
       const supabase = await createAdminClient();
+
       const { data, error } = await supabase
         .from("holiday_calendars")
         .select("*, holidays(*)")
-        .order("country_name");
+        .order("country_name", { ascending: true })
+        .order("calendar_year", { ascending: true })
+        .order("shift_type", { ascending: true });
+
       if (error) throw error;
-      if (data && data.length > 0) return data as HolidayCalendar[];
+
+      if (data) {
+        const calendars = data as HolidayCalendar[];
+        cache.holidayCalendars = calendars;
+        return calendars;
+      }
     } catch (error) {
       console.warn("getHolidayCalendars database warning:", error);
     }
+
     return cache.holidayCalendars;
   }
+
 
   // ==========================================
 // PAYROLL WORKING SATURDAYS
@@ -1297,66 +1501,44 @@ export class DataStore {
   return (data || []) as AttendanceLog[];
 }
 
+
   static async getTodayAttendance(employeeId: string): Promise<AttendanceLog | null> {
-  const supabase = await createAdminClient();
+    const supabase = await createAdminClient();
 
-  const todayStr = new Date().toISOString().split("T")[0];
+    const employee = await this.getEmployeeById(employeeId);
+    if (!employee) return null;
 
-  // employeeId can be TSS001 or a UUID
-  const isUuid =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-      employeeId
-    );
+    const shift = getEffectiveShift(employee);
+    const attendanceDate = getShiftAttendanceDate(new Date(), shift);
 
-  let employee: { id: string } | null = null;
-
-  if (isUuid) {
+    // Check the current shift's attendance date first.
     const { data, error } = await supabase
-      .from("employees")
-      .select("id")
-      .eq("id", employeeId)
+      .from("attendance_logs")
+      .select("*")
+      .eq("employee_id", employee.id)
+      .eq("attendance_date", attendanceDate)
       .maybeSingle();
 
-    if (error) {
-      throw new Error(error.message);
-    }
+    if (error) throw new Error(error.message);
 
-    employee = data;
-  } else {
-    const { data, error } = await supabase
-      .from("employees")
-      .select("id")
-      .eq("employee_id", employeeId)
+    if (data) return data as AttendanceLog;
+
+    // Also check the previous date for an active overnight session.
+    const previousDate = addDaysToDateKey(attendanceDate, -1);
+
+    const { data: previousLog, error: previousError } = await supabase
+      .from("attendance_logs")
+      .select("*")
+      .eq("employee_id", employee.id)
+      .eq("attendance_date", previousDate)
+      .is("check_out_time", null)
+      .not("check_in_time", "is", null)
       .maybeSingle();
 
-    if (error) {
-      throw new Error(error.message);
-    }
+    if (previousError) throw new Error(previousError.message);
 
-    employee = data;
+    return previousLog as AttendanceLog | null;
   }
-
-  if (!employee) {
-    return null;
-  }
-
-  // IMPORTANT:
-  // attendance_logs.employee_id expects the employee UUID,
-  // not TSS001/TSS002/etc.
-  const { data, error } = await supabase
-    .from("attendance_logs")
-    .select("*")
-    .eq("employee_id", employee.id)
-    .eq("attendance_date", todayStr)
-    .maybeSingle();
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return data as AttendanceLog | null;
-}
-
 
   static async clockIn(employeeId: string): Promise<AttendanceLog> {
     const supabase = await createAdminClient();
@@ -1365,29 +1547,28 @@ export class DataStore {
     const employee = await this.getEmployeeById(employeeId);
     if (!employee) throw new Error("Employee not found");
 
-    const project = employee.project;
-    if (!project) throw new Error("Employee project not found");
+    const shift = getEffectiveShift(employee);
+    const attendanceDate = getShiftAttendanceDate(now, shift);
+
+    const shiftStartInstant = zonedDateTimeToUtc(
+      attendanceDate,
+      shift.startTime,
+      shift.timezone
+    );
 
     const evaluation = evaluateAttendancePunch(
       now,
-      project.shift_start_time,
-      project.grace_period_minutes,
-      project.half_day_cutoff_minutes
+      shift.startTime,
+      shift.gracePeriodMinutes,
+      shift.halfDayCutoffMinutes,
+      shiftStartInstant
     );
-    const parts = new Intl.DateTimeFormat("en-CA", {
-      timeZone: "Asia/Kolkata",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).formatToParts(now);
-
-    const todayStr = `${parts.find(p => p.type === "year")!.value}-${parts.find(p => p.type === "month")!.value}-${parts.find(p => p.type === "day")!.value}`;
 
     const { data: wfhRequest, error: wfhError } = await supabase
       .from("wfh_requests")
       .select("id")
       .eq("employee_id", employee.id)
-      .eq("request_date", todayStr)
+      .eq("request_date", attendanceDate)
       .eq("status", "approved")
       .maybeSingle();
 
@@ -1399,13 +1580,12 @@ export class DataStore {
       .from("attendance_logs")
       .select("*")
       .eq("employee_id", employee.id)
-      .eq("attendance_date", todayStr)
+      .eq("attendance_date", attendanceDate)
       .maybeSingle();
 
     if (findError) throw new Error(findError.message);
 
     if (existingLog) {
-      // Prevent a second clock-in while a session is still active.
       if (
         existingLog.check_out_time == null &&
         existingLog.check_in_time != null
@@ -1422,7 +1602,7 @@ export class DataStore {
           total_hours: Number(existingLog.total_hours ?? 0),
           status: existingLog.status,
           is_late: existingLog.is_late || evaluation.isLate,
-          work_mode: existingLog.work_mode ?? "WFO",
+          work_mode: existingLog.work_mode ?? workMode,
         })
         .eq("id", existingLog.id)
         .select()
@@ -1436,7 +1616,7 @@ export class DataStore {
       .from("attendance_logs")
       .insert({
         employee_id: employee.id,
-        attendance_date: todayStr,
+        attendance_date: attendanceDate,
         check_in_time: now.toISOString(),
         session_check_in_time: now.toISOString(),
         check_out_time: null,
@@ -1453,36 +1633,38 @@ export class DataStore {
     return data as AttendanceLog;
   }
 
+
   static async clockOut(employeeId: string): Promise<AttendanceLog> {
     const supabase = await createAdminClient();
     const now = new Date();
-    const parts = new Intl.DateTimeFormat("en-CA", {
-      timeZone: "Asia/Kolkata",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).formatToParts(now);
 
-const todayStr = `${parts.find(p => p.type === "year")!.value}-${parts.find(p => p.type === "month")!.value}-${parts.find(p => p.type === "day")!.value}`;
     const employee = await this.getEmployeeById(employeeId);
     if (!employee) throw new Error("Employee not found");
 
-    const { data: log, error: findError } = await supabase
+    const shift = getEffectiveShift(employee);
+    const currentDate = getLocalDateKey(now, shift.timezone);
+    const previousDate = addDaysToDateKey(currentDate, -1);
+
+    // Search today and yesterday to support overnight sessions.
+    const { data: logs, error: findError } = await supabase
       .from("attendance_logs")
       .select("*")
       .eq("employee_id", employee.id)
-      .eq("attendance_date", todayStr)
-      .maybeSingle();
+      .in("attendance_date", [previousDate, currentDate])
+      .is("check_out_time", null)
+      .not("check_in_time", "is", null)
+      .order("attendance_date", { ascending: false });
 
     if (findError) throw new Error(findError.message);
 
-    if (!log) {
-      throw new Error("You are not checked in.");
-    }
+    const log = logs?.find(
+      (entry) =>
+        entry.check_out_time == null &&
+        (entry.session_check_in_time != null ||
+          entry.check_in_time != null)
+    );
 
-    // A non-null session start with no checkout indicates an active session.
-    // Fall back to check_in_time for legacy records created before this column.
-    if (log.check_out_time != null) {
+    if (!log) {
       throw new Error("You are not currently checked in.");
     }
 
@@ -1494,17 +1676,43 @@ const todayStr = `${parts.find(p => p.type === "year")!.value}-${parts.find(p =>
     }
 
     const sessionStart = new Date(sessionStartValue);
+
+    if (Number.isNaN(sessionStart.getTime())) {
+      throw new Error("Invalid check-in time.");
+    }
+
+    // Never count more than 9 hours for one session.
+    const AUTO_CHECKOUT_HOURS = 9;
+    const AUTO_CHECKOUT_MS = AUTO_CHECKOUT_HOURS * 60 * 60 * 1000;
+
+    const autoCheckoutTime = new Date(
+      sessionStart.getTime() + AUTO_CHECKOUT_MS
+    );
+
+    // If manual checkout happens after 9 hours,
+    // record the exact 9-hour deadline instead.
+    const effectiveCheckoutTime =
+      now.getTime() >= autoCheckoutTime.getTime()
+        ? autoCheckoutTime
+        : now;
+
     const sessionHours = Math.max(
       0,
-      (now.getTime() - sessionStart.getTime()) / (1000 * 60 * 60)
+      (effectiveCheckoutTime.getTime() - sessionStart.getTime()) /
+        (1000 * 60 * 60)
     );
 
     const previousHours = Number(log.total_hours ?? 0);
-    const hours = Number((previousHours + sessionHours).toFixed(2));
 
-    // Keep the existing half-day rule for short attendance.
-    // If a later session brings total hours to 4.5 or more,
-    // restore "present" unless HR has regularized the record.
+    if (!Number.isFinite(previousHours) || previousHours < 0) {
+      throw new Error("Invalid existing total hours.");
+    }
+
+    const hours = Number(
+      (previousHours + sessionHours).toFixed(2)
+    );
+
+    // Preserve existing half-day and regularization rules.
     let status = log.status;
 
     if (!log.is_regularized) {
@@ -1515,23 +1723,36 @@ const todayStr = `${parts.find(p => p.type === "year")!.value}-${parts.find(p =>
       }
     }
 
-    const { data: updatedLog, error: updateError } = await supabase
+
+    let updateQuery = supabase
       .from("attendance_logs")
       .update({
-        // Preserve the first clock-in and record the latest clock-out.
-        check_out_time: now.toISOString(),
+        check_out_time: effectiveCheckoutTime.toISOString(),
         session_check_in_time: null,
         total_hours: hours,
         status,
       })
       .eq("id", log.id)
-      .select()
-      .single();
+      .is("check_out_time", null);
+
+    updateQuery =
+      log.session_check_in_time == null
+        ? updateQuery.is("session_check_in_time", null)
+        : updateQuery.eq(
+            "session_check_in_time",
+            log.session_check_in_time
+          );
+
+    const { data: updatedLog, error: updateError } =
+      await updateQuery.select().single();
 
     if (updateError) throw new Error(updateError.message);
 
     return updatedLog as AttendanceLog;
+
   }
+
+
 
 
   // ==========================================
@@ -2817,6 +3038,8 @@ const todayStr = `${parts.find(p => p.type === "year")!.value}-${parts.find(p =>
 
     let calendarId: string | null = null;
 
+    // Priority 1: Assigned project calendar.
+
     if (selectedEmployee.project_id) {
       const {
         data: project,
@@ -2833,9 +3056,39 @@ const todayStr = `${parts.find(p => p.type === "year")!.value}-${parts.find(p =>
         );
       }
 
-      calendarId =
-        project?.calendar_id || null;
+      calendarId = project?.calendar_id || null;
     }
+
+    // Priority 2: Retained project calendar for bench employees.
+    else if (selectedEmployee.retained_calendar_id) {
+      calendarId = selectedEmployee.retained_calendar_id;
+    }
+
+    // Priority 3: India calendar based on employee-level shift.
+    else {
+      const shiftType =
+        selectedEmployee.shift_type === "night" ? "night" : "general";
+
+      const {
+        data: defaultCalendar,
+        error: calendarError,
+      } = await supabase
+        .from("holiday_calendars")
+        .select("id")
+        .eq("country_code", "IN")
+        .eq("shift_type", shiftType)
+        .eq("calendar_year", year)
+        .maybeSingle();
+
+      if (calendarError) {
+        throw new Error(
+          `Failed to load default India holiday calendar: ${calendarError.message}`
+        );
+      }
+
+      calendarId = defaultCalendar?.id || null;
+    }
+
 
     // =========================================================
     // GET WORKING SATURDAYS

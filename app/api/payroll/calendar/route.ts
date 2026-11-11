@@ -32,18 +32,16 @@ function getMonthDates(
 // RESOLVE EMPLOYEE CALENDAR
 // =========================================================
 
-async function getEmployeeCalendarId(
-  employeeId: string
-): Promise<string | null> {
-  const supabase =
-    await createAdminClient();
 
-  const {
-    data: employee,
-    error: employeeError,
-  } = await supabase
+async function getEmployeeCalendarId(
+  employeeId: string,
+  calendarYear: number
+): Promise<string | null> {
+  const supabase = await createAdminClient();
+
+  const { data: employee, error: employeeError } = await supabase
     .from("employees")
-    .select("id, project_id")
+    .select("id, project_id, retained_calendar_id, shift_type")
     .eq("id", employeeId)
     .maybeSingle();
 
@@ -54,32 +52,52 @@ async function getEmployeeCalendarId(
   }
 
   if (!employee) {
-    throw new Error(
-      "Employee not found"
-    );
+    throw new Error("Employee not found");
   }
 
-  if (!employee.project_id) {
-    return null;
+  // Priority 1: Assigned project's calendar.
+  if (employee.project_id) {
+    const { data: project, error: projectError } = await supabase
+      .from("projects")
+      .select("calendar_id")
+      .eq("id", employee.project_id)
+      .maybeSingle();
+
+    if (projectError) {
+      throw new Error(
+        `Failed to load project calendar: ${projectError.message}`
+      );
+    }
+
+    return project?.calendar_id || null;
   }
 
-  const {
-    data: project,
-    error: projectError,
-  } = await supabase
-    .from("projects")
-    .select("calendar_id")
-    .eq("id", employee.project_id)
+  // Priority 2: Retained project calendar for bench employees.
+  if (employee.retained_calendar_id) {
+    return employee.retained_calendar_id;
+  }
+
+  // Priority 3: India calendar matching employee-level shift.
+  const shiftType =
+    employee.shift_type === "night" ? "night" : "general";
+
+  const { data: calendar, error: calendarError } = await supabase
+    .from("holiday_calendars")
+    .select("id")
+    .eq("country_code", "IN")
+    .eq("shift_type", shiftType)
+    .eq("calendar_year", calendarYear)
     .maybeSingle();
 
-  if (projectError) {
+  if (calendarError) {
     throw new Error(
-      `Failed to load project calendar: ${projectError.message}`
+      `Failed to load default India calendar: ${calendarError.message}`
     );
   }
 
-  return project?.calendar_id || null;
+  return calendar?.id || null;
 }
+
 
 // =========================================================
 // GET
@@ -186,7 +204,8 @@ export async function GET(
 
     const calendarId =
       await getEmployeeCalendarId(
-        employeeId
+        employeeId,
+        year
       );
 
     // -------------------------------------------------------
@@ -568,10 +587,10 @@ export async function POST(
     // GET EMPLOYEE CALENDAR
     // -------------------------------------------------------
 
-    const calendarId =
-      await getEmployeeCalendarId(
-        employeeId
-      );
+    const calendarId = await getEmployeeCalendarId(
+      employeeId,
+      Number(date.slice(0,4))
+    );
 
     // -------------------------------------------------------
     // SAVE

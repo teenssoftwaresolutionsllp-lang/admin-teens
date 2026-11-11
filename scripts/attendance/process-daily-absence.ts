@@ -3,7 +3,6 @@ import "dotenv/config";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const defaultCalendarId = process.env.DEFAULT_HOLIDAY_CALENDAR_ID;
 
 const execute = process.argv.includes("--execute");
 const dateArgument = process.argv.find((arg) => arg.startsWith("--date="));
@@ -28,6 +27,10 @@ type Employee = {
   exit_date: string | null;
   planned_last_working_date: string | null;
   project_id: string | null;
+  retained_calendar_id: string | null;
+  shift_type: string | null;
+  retained_shift_start_time: string | null;
+  retained_shift_end_time: string | null;
 };
 
 type AttendanceRow = {
@@ -43,6 +46,7 @@ type LeaveRow = {
   start_date: string;
   end_date: string;
   total_days: number | string | null;
+  leave_duration: "first_half" | "second_half" | null;
 };
 
 type InsertRow = {
@@ -97,9 +101,7 @@ async function main() {
     throw new Error("Only previous dates can be processed.");
   }
 
-  if (!defaultCalendarId) {
-    throw new Error("Missing DEFAULT_HOLIDAY_CALENDAR_ID.");
-  }
+
 
   console.log("====================================");
   console.log("DAILY ATTENDANCE ABSENCE PROCESS");
@@ -112,7 +114,7 @@ async function main() {
   const { data: employees, error: employeeError } = await supabase
     .from("employees")
     .select(
-      "id, employee_id, first_name, last_name, status, joining_date, exit_date, planned_last_working_date, project_id"
+      "id, employee_id, first_name, last_name, status, joining_date, exit_date, planned_last_working_date, project_id, retained_calendar_id,retained_shift_start_time, retained_shift_end_time, shift_type"
     )
     .in("status", ["active", "on_notice"])
     .lte("joining_date", attendanceDate)
@@ -151,7 +153,9 @@ async function main() {
     ),
   ];
 
-  // 2. Resolve project calendars.
+  // 2. Resolve project, retained and default employee calendars.
+
+  // Priority 1: Assigned project calendars.
   const projectCalendarMap = new Map<string, string>();
 
   if (projectIds.length > 0) {
@@ -171,12 +175,65 @@ async function main() {
     }
   }
 
+  // Priority 3: India calendars for employees without retained settings.
+  const { data: indiaCalendars, error: indiaCalendarError } =
+    await supabase
+      .from("holiday_calendars")
+      .select("id, shift_type")
+      .eq("country_code", "IN")
+      .eq("calendar_year", Number(attendanceDate.slice(0, 4)));
+
+  if (indiaCalendarError) {
+    throw new Error(
+      `India calendar query failed: ${indiaCalendarError.message}`
+    );
+  }
+
+  const indiaCalendarMap = new Map<string, string>();
+
+  for (const calendar of indiaCalendars ?? []) {
+    if (calendar.shift_type) {
+      indiaCalendarMap.set(calendar.shift_type, calendar.id);
+    }
+  }
+
+  // Resolve one calendar for each employee.
   const employeeCalendarMap = new Map<string, string | null>();
 
   for (const employee of eligibleEmployees) {
-    const calendarId = employee.project_id
-      ? projectCalendarMap.get(employee.project_id) ?? null
-      : defaultCalendarId;
+    let calendarId: string | null = null;
+
+    // Priority 1: Assigned project calendar.
+    if (employee.project_id) {
+      calendarId =
+        projectCalendarMap.get(employee.project_id) ?? null;
+    }
+
+    // Priority 2: Retained project settings for bench employees.
+    else if (
+      employee.retained_calendar_id ||
+      employee.retained_shift_start_time ||
+      employee.retained_shift_end_time
+    ) {
+      // Retained settings must be complete.
+      // Incomplete settings remain null and will require HR review.
+      if (
+        employee.retained_calendar_id &&
+        employee.retained_shift_start_time &&
+        employee.retained_shift_end_time
+      ) {
+        calendarId = employee.retained_calendar_id;
+      }
+    }
+
+    // Priority 3: India fallback only when no project or retained
+    // project settings exist.
+    else {
+      const shiftType =
+        employee.shift_type === "night" ? "night" : "general";
+
+      calendarId = indiaCalendarMap.get(shiftType) ?? null;
+    }
 
     employeeCalendarMap.set(employee.id, calendarId);
   }
@@ -253,7 +310,7 @@ async function main() {
   // 5. Fetch approved leave overlapping the target date.
   const { data: leaves, error: leaveError } = await supabase
     .from("leave_requests")
-    .select("id, employee_id, is_half_day, start_date, end_date, total_days")
+    .select("id, employee_id, is_half_day, start_date, end_date, total_days, leave_duration")
     .in("employee_id", employeeIds)
     .eq("status", "approved")
     .lte("start_date", attendanceDate)
@@ -340,9 +397,12 @@ async function main() {
         // Half-day leave is automatic only when it covers exactly
         // one date and the approved duration is exactly 0.5 day.
         const isValidSingleDayHalfLeave =
-            leave.start_date === attendanceDate &&
-            leave.end_date === attendanceDate &&
-            Number(leave.total_days) === 0.5;
+          leave.start_date === attendanceDate &&
+          leave.end_date === attendanceDate &&
+          Number(leave.total_days) === 0.5 &&
+          ["first_half", "second_half"].includes(
+            leave.leave_duration ?? ""
+          );
 
         if (!isValidSingleDayHalfLeave) {
             reviewRequired++;

@@ -72,6 +72,7 @@ export default function EmployeeForm({ employee, departments, projects, generate
     employee_id: employee?.employee_id || "",
     department_id: employee?.department_id || "",
     project_id: employee?.project_id || "",
+    shift_type: employee?.shift_type || "general",
     designation: employee?.designation || "",
     employment_type: employee?.employment_type || null,
     joining_date: employee?.joining_date?.split("T")[0] || "",
@@ -1259,6 +1260,27 @@ const handleSubmit = async (e: React.FormEvent) => {
               </div>
             )}
 
+            {/* Employee Shift - Used When No Project Is Assigned */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                Employee Shift
+              </label>
+
+              <select
+                name="shift_type"
+                value={formData.shift_type || "general"}
+                onChange={handleChange}
+                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
+              >
+                <option value="general">General (09:00 AM – 06:00 PM)</option>
+                <option value="night">Night (06:30 PM – 03:30 AM)</option>
+              </select>
+
+              <p className="text-[11px] text-slate-500 mt-1.5">
+                Applies when no project is assigned. An assigned project's shift settings always take priority.
+              </p>
+            </div>
+
             {/* Project - Only In-House */}
             {formData.client_type === "in-house" && (
               <div className="md:col-span-2">
@@ -1270,10 +1292,9 @@ const handleSubmit = async (e: React.FormEvent) => {
                   name="project_id"
                   value={formData.project_id || ""}
                   onChange={handleChange}
-                  required
                   className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
                 >
-                  <option value="">Select Project</option>
+                  <option value="">No Project Assigned</option>
 
                   {projects.map((project) => (
                     <option key={project.id} value={project.id}>
@@ -1284,8 +1305,8 @@ const handleSubmit = async (e: React.FormEvent) => {
                 </select>
 
                 <p className="text-[11px] text-slate-500 mt-1.5">
-                  The selected project's timezone, shift rules, and linked holiday
-                  calendar will apply to this employee.
+                  Project assignment is optional. When assigned, the project's timezone,
+                  shift rules, and linked holiday calendar take priority over the employee shift.
                 </p>
               </div>
             )}
@@ -2273,12 +2294,12 @@ const handleSubmit = async (e: React.FormEvent) => {
                   }
 
                   // Project required ONLY for In-House
-                  if (
-                    formData.client_type === "in-house" &&
-                    !formData.project_id
-                  ) {
-                    missingFields.push("Project");
-                  }
+                  // if (
+                  //   formData.client_type === "in-house" &&
+                  //   !formData.project_id
+                  // ) {
+                  //   missingFields.push("Project");
+                  // }
                 }
 
                 // TAB 5 - Statutory

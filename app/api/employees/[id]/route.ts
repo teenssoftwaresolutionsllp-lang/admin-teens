@@ -63,6 +63,13 @@ export async function PUT(
       ])
     );
 
+    // Retained shift/calendar settings are managed only by the server.
+    delete updateData.retained_calendar_id;
+    delete updateData.retained_shift_start_time;
+    delete updateData.retained_shift_end_time;
+    delete updateData.retained_grace_period_minutes;
+    delete updateData.retained_half_day_cutoff_minutes;
+
     const adminClient = await createAdminClient();
 
     // Validate department_id against the departments table.
@@ -110,6 +117,12 @@ export async function PUT(
             notice_status,
             early_release_date,
             early_release_reason,
+            project_id,
+            retained_calendar_id,
+            retained_shift_start_time,
+            retained_shift_end_time,
+            retained_grace_period_minutes,
+            retained_half_day_cutoff_minutes,
             early_release_by,
             early_release_recorded_at
           `
@@ -174,6 +187,7 @@ export async function PUT(
 
     // Fields that only HR and CEO can change.
     const adminOnlyFields = [
+      'project_id',
       'status',
       'notice_status',
       'resignation_date',
@@ -211,6 +225,81 @@ export async function PUT(
         { status: 403 }
       );
     }
+
+
+    // ---------------------------------------------------------
+    // RETAIN PROJECT CALENDAR AND SHIFT SETTINGS
+    // Preserve the latest project settings when an employee
+    // moves to bench or changes project assignments.
+    // ---------------------------------------------------------
+
+    const isProjectAssignmentUpdate =
+      Object.prototype.hasOwnProperty.call(updateData, 'project_id');
+
+    const projectAssignmentChanged =
+      isProjectAssignmentUpdate &&
+      String(currentEmployee.project_id ?? '') !==
+        String(updateData.project_id ?? '');
+
+    if (projectAssignmentChanged) {
+      // When assigning a new project, retain its settings.
+      // When removing the project, retain the previous project's settings.
+      const projectIdToRetain =
+        updateData.project_id || currentEmployee.project_id;
+
+      if (projectIdToRetain) {
+        const { data: project, error: projectError } =
+          await adminClient
+            .from('projects')
+            .select(`
+              id,
+              calendar_id,
+              shift_start_time,
+              shift_end_time,
+              grace_period_minutes,
+              half_day_cutoff_minutes
+            `)
+            .eq('id', projectIdToRetain)
+            .maybeSingle();
+
+        if (projectError) {
+          throw new Error(
+            `Failed to fetch project shift settings: ${projectError.message}`
+          );
+        }
+
+        if (!project) {
+          return NextResponse.json(
+            { error: 'Selected project was not found.' },
+            { status: 400 }
+          );
+        }
+
+        if (
+          !project.calendar_id ||
+          !project.shift_start_time ||
+          !project.shift_end_time
+        ) {
+          return NextResponse.json(
+            {
+              error:
+                'The project must have a holiday calendar and shift timings configured.',
+            },
+            { status: 400 }
+          );
+        }
+
+        updateData.retained_calendar_id = project.calendar_id;
+        updateData.retained_shift_start_time = project.shift_start_time;
+        updateData.retained_shift_end_time = project.shift_end_time;
+        updateData.retained_grace_period_minutes =
+          project.grace_period_minutes;
+        updateData.retained_half_day_cutoff_minutes =
+          project.half_day_cutoff_minutes;
+      }
+    }
+
+
 
     const oldStatus = String(currentEmployee.status ?? '').toLowerCase();
 
