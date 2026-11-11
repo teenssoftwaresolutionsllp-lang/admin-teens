@@ -43,28 +43,80 @@ export default async function EmployeeAttendancePage() {
     DataStore.getProjects(),
     DataStore.getHolidayCalendars(),
   ]);
+  // Resolve the employee's actual project context.
+  // Assigned project takes priority over retained bench settings.
+  const assignedProject =
+    projects.find(
+      (item) => item.id === employee.project_id
+    ) || employee.project || null;
+
+  const retainedProject = employee.retained_project_id
+    ? projects.find(
+        (item) => item.id === employee.retained_project_id
+      ) || null
+    : null;
+
+  // Compatibility fallback for existing bench employees
+  // whose retained_project_id has not yet been populated.
+  const retainedCalendarProject =
+    !assignedProject && !retainedProject && employee.retained_calendar_id
+      ? projects.find(
+          (item) =>
+            item.calendar_id === employee.retained_calendar_id
+        ) || null
+      : null;
 
   const baseProject =
-    employee.project ||
-    projects.find((project) => project.id === employee.project_id) ||
-    projects[0];
+    assignedProject ||
+    retainedProject ||
+    retainedCalendarProject;
 
   if (!baseProject) {
     return (
       <div className="p-8 text-center text-slate-500">
-        No project or holiday calendar is configured.
+        No assigned or retained project/holiday calendar is configured.
+        Please contact HR.
       </div>
     );
   }
 
+  const isUsingRetainedSettings = !assignedProject;
+
+  const calendarId = isUsingRetainedSettings
+    ? employee.retained_calendar_id || baseProject.calendar_id
+    : baseProject.calendar_id;
+
   const calendar = calendars.find(
-    (item) => item.id === baseProject.calendar_id
+    (item) => item.id === calendarId
   );
 
   const project = {
     ...baseProject,
+
+    // Preserve retained bench shift settings.
+    ...(isUsingRetainedSettings
+      ? {
+          shift_start_time:
+            employee.retained_shift_start_time ||
+            baseProject.shift_start_time,
+
+          shift_end_time:
+            employee.retained_shift_end_time ||
+            baseProject.shift_end_time,
+
+          grace_period_minutes:
+            employee.retained_grace_period_minutes ??
+            baseProject.grace_period_minutes,
+
+          half_day_cutoff_minutes:
+            employee.retained_half_day_cutoff_minutes ??
+            baseProject.half_day_cutoff_minutes,
+        }
+      : {}),
+
     calendar: calendar || baseProject.calendar,
   };
+
 
   const [
     todayLog,
