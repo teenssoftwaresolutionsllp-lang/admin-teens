@@ -1,4 +1,3 @@
-
 "use client";
 
 import Image from "next/image";
@@ -474,7 +473,7 @@ export default function Sidebar({ role }: SidebarProps) {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-3 py-4">
+      <div className="flex-1 overflow-y-auto px-3 py-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <div className="space-y-1">
           {visibleItems.map((item) => renderNavItem(item))}
         </div>

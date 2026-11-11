@@ -1,5 +1,6 @@
 "use client";
 
+import { useEmployeeDashboardFilter } from "@/components/dashboard/EmployeeFilterProvider";
 import { useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -91,12 +92,59 @@ export default function DashboardKpiCards({
   todayDate,
 }: Props) {
   const router = useRouter();
+  const { applyDashboardFilter } = useEmployeeDashboardFilter();
+  const handleActiveEmployeesClick = () => {
+    applyDashboardFilter({
+      status: "active",
+      departmentId: "all",
+      departmentName: "All Departments",
+    });
+
+    router.push("/dashboard/employees");
+  };
+
+  const handleLeaveNavigation = (leaveType: "ALL" | "CL" | "SL" | "ML" | "PL" = "ALL") => {
+  const params = new URLSearchParams({
+      status: "pending",
+      tab: "leaves",
+    });
+
+    if (leaveType !== "ALL") {
+      params.set("leaveType", leaveType);
+    }
+    router.push(`/dashboard/approvals?${params.toString()}`);
+  };
+
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
   const [selectedMonth, setSelectedMonth] = useState(currentMonth);
   const [selectedYear, setSelectedYear] = useState(currentYear);
   const [selectedDepartment, setSelectedDepartment] = useState("all");
+
+  const handleNewJoiningsClick = () => {
+    const month = String(selectedMonth).padStart(2, "0");
+
+    const firstDay = `${selectedYear}-${month}-01`;
+
+    const lastDayNumber = new Date(
+      selectedYear,
+      selectedMonth,
+      0
+    ).getDate();
+
+    const lastDay = `${selectedYear}-${month}-${String(lastDayNumber).padStart(2, "0")}`;
+
+    applyDashboardFilter({
+      status: "all",
+      departmentId: "all",
+      departmentName: "All Departments",
+      joiningDateFrom: firstDay,
+      joiningDateTo: lastDay,
+    });
+
+    router.push("/dashboard/employees");
+  };
 
   const years = useMemo(() => {
     const availableYears = new Set(
@@ -176,7 +224,17 @@ export default function DashboardKpiCards({
 
       {/* ACTIVE EMPLOYEES */}
       <section
-        className={`${cardBase} border-indigo-100 bg-gradient-to-br from-indigo-50 via-white to-blue-50`}
+          role="link"
+          tabIndex={0}
+          aria-label="View all active employees"
+          onClick={handleActiveEmployeesClick}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              handleActiveEmployeesClick();
+            }
+          }}
+        className={`${cardBase} cursor-pointer border-indigo-100 bg-gradient-to-br from-indigo-50 via-white to-blue-50 focus:outline-none focus:ring-2 focus:ring-indigo-400`}
       >
         <div className="pointer-events-none absolute -right-12 -top-12 h-32 w-32 rounded-full bg-indigo-200/30 blur-2xl transition-transform duration-500 group-hover:scale-125" />
 
@@ -227,7 +285,17 @@ export default function DashboardKpiCards({
 
       {/* NEW JOININGS */}
       <section
-        className={`${cardBase} border-teal-100 bg-gradient-to-br from-teal-50 via-white to-cyan-50`}
+        role="link"
+        tabIndex={0}
+        aria-label="View employees joined in selected month"
+        onClick={handleNewJoiningsClick}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            handleNewJoiningsClick();
+          }
+        }}
+        className={`${cardBase} cursor-pointer border-teal-100 bg-gradient-to-br from-teal-50 via-white to-cyan-50 focus:outline-none focus:ring-2 focus:ring-teal-400`}
       >
         <div className="pointer-events-none absolute -right-12 -top-12 h-32 w-32 rounded-full bg-teal-200/30 blur-2xl transition-transform duration-500 group-hover:scale-125" />
 
@@ -263,6 +331,7 @@ export default function DashboardKpiCards({
               <select
                 aria-label="Joining month"
                 value={selectedMonth}
+                onClick={(event) => event.stopPropagation()}
                 onChange={(event) =>
                   setSelectedMonth(Number(event.target.value))
                 }
@@ -286,6 +355,7 @@ export default function DashboardKpiCards({
               <select
                 aria-label="Joining year"
                 value={selectedYear}
+                onClick={(event) => event.stopPropagation()}
                 onChange={(event) =>
                   setSelectedYear(Number(event.target.value))
                 }
@@ -306,7 +376,17 @@ export default function DashboardKpiCards({
 
       {/* LEAVE REQUESTS */}
       <section
-        className={`${cardBase} border-amber-100 bg-gradient-to-br from-amber-50 via-white to-orange-50`}
+        role="link"
+        tabIndex={0}
+        aria-label="View all pending leave requests"
+        onClick={() => handleLeaveNavigation("ALL")}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            handleLeaveNavigation("ALL");
+          }
+        }}
+        className={`${cardBase} cursor-pointer border-amber-100 bg-gradient-to-br from-amber-50 via-white to-orange-50`}
       >
         <div className="pointer-events-none absolute -right-12 -top-12 h-32 w-32 rounded-full bg-amber-200/30 blur-2xl transition-transform duration-500 group-hover:scale-125" />
 
@@ -343,17 +423,23 @@ export default function DashboardKpiCards({
                 ["PL", pendingLeaveBreakdown.PL],
               ] as const
             ).map(([type, count]) => (
-              <div
-                key={type}
-                className="rounded-lg border border-amber-100 bg-white/80 px-1 py-2 text-center"
-              >
-                <p className="text-[10px] font-bold text-slate-500">
-                  {type}
-                </p>
-                <p className="mt-1 text-sm font-bold text-amber-800">
-                  {numberFormat(count)}
-                </p>
-              </div>
+             <button
+              key={type}
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                handleLeaveNavigation(type);
+              }}
+              aria-label={`View pending ${type} leave requests`}
+              className="rounded-lg cursor-pointer border border-amber-100 bg-white/80 px-1 py-2 text-center transition-all duration-200 hover:border-amber-400 hover:bg-amber-100/70 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+            >
+              <p className="text-[10px] font-bold text-slate-500">
+                {type}
+              </p>
+              <p className="mt-1 text-sm font-bold text-amber-800">
+                {numberFormat(count)}
+              </p>
+            </button>
             ))}
           </div>
         </div>
@@ -372,7 +458,23 @@ export default function DashboardKpiCards({
 
       {/* TODAY PRESENT */}
       <section
-        className={`${cardBase} border-violet-100 bg-gradient-to-br from-violet-50 via-white to-purple-50`}
+        role="link"
+        tabIndex={0}
+        aria-label="View attendance details"
+        onClick={() =>
+          router.push(
+            `/dashboard/attendance${selectedAttendanceDate !== todayDate ? `?date=${selectedAttendanceDate}` : ""}`
+          )
+        }
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            router.push(
+              `/dashboard/attendance${selectedAttendanceDate !== todayDate ? `?date=${selectedAttendanceDate}` : ""}`
+            );
+          }
+        }}
+        className={`${cardBase} cursor-pointer border-violet-100 bg-gradient-to-br from-violet-50 via-white to-purple-50`}
       >
         <div className="pointer-events-none absolute -right-12 -top-12 h-32 w-32 rounded-full bg-violet-200/30 blur-2xl transition-transform duration-500 group-hover:scale-125" />
 
@@ -447,6 +549,7 @@ export default function DashboardKpiCards({
               aria-label="Select attendance date"
               value={selectedAttendanceDate}
               max={todayDate}
+              onClick={(event) => event.stopPropagation()}
               onChange={(event) =>
                 handleAttendanceDateChange(event.target.value)
               }
@@ -460,6 +563,7 @@ export default function DashboardKpiCards({
             <div className="relative">
               <select
                 aria-label="Attendance department"
+                onClick={(event) => event.stopPropagation()}
                 value={selectedDepartment}
                 onChange={(event) =>
                   setSelectedDepartment(event.target.value)

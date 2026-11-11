@@ -51,8 +51,10 @@ export default function ApprovalsHub({
   const searchParams = useSearchParams();
   const requestedView = (searchParams.get("status")  ?? initialLeaveStatus ?? "pending").toLowerCase();
   const isHistoryView = requestedView === "history";
-  const [activeTab, setActiveTab] = useState<"profile" | "leaves" | "attendance" | "documents" | "resignations" | "revert_resignations" | "wfh">(selectedLeaveId ? "leaves" : "profile");
-
+  const requestedLeaveType = (searchParams.get("leaveType") ?? "all").toUpperCase();
+  const requestedTab = searchParams.get("tab");
+  const [leaveTypeFilter, setLeaveTypeFilter] = useState(requestedLeaveType);
+  const [activeTab, setActiveTab] = useState <"profile" | "leaves" | "attendance" | "documents" | "resignations" | "revert_resignations" | "wfh"> (selectedLeaveId || requestedTab === "leaves" || requestedLeaveType !== "ALL"? "leaves": "profile");
   const [profileRequests, setProfileRequests] = useState<ProfileChangeRequest[]>(initialProfileRequests);
   const [profileStatusFilter, setProfileStatusFilter] = useState("all");
   const [profileEmployeeSearch, setProfileEmployeeSearch] = useState("");
@@ -112,7 +114,7 @@ export default function ApprovalsHub({
 
 
   useEffect(() => {
-    setActiveTab(selectedLeaveId ? "leaves" : "profile");
+    setActiveTab(selectedLeaveId || requestedTab === "leaves" || requestedLeaveType !== "ALL" ? "leaves" : "profile");
     setProfileStatusFilter("all");
     setLeaveDepartmentFilter("all");
     setLeaveDurationFilter("all");
@@ -120,12 +122,13 @@ export default function ApprovalsHub({
     setLeaveHistoryStatusFilter("all");
     setLeaveFromDate("");
     setLeaveToDate("");
+    setLeaveTypeFilter(requestedLeaveType);
     setResignationDepartmentFilter("all");
     setResignationHistoryStatusFilter("all");
     setResignationEmployeeSearch("");
     setResignationFromDate("");
     setResignationToDate("");
-  }, [isHistoryView, selectedLeaveId]);
+  }, [isHistoryView, selectedLeaveId, requestedLeaveType, requestedTab]);
 
 
   useEffect(() => {
@@ -844,10 +847,7 @@ export default function ApprovalsHub({
 
   const filteredLeaveRequests = leaveRequests.filter((leave) => {
     const status = String(leave.status ?? "").toLowerCase();
-    const statusMatches = isHistoryView
-      ? (status === "approved" || status === "rejected") &&
-        (leaveHistoryStatusFilter === "all" || status === leaveHistoryStatusFilter)
-      : status === "pending";
+    const statusMatches = isHistoryView ? (status === "approved" || status === "rejected") && (leaveHistoryStatusFilter === "all" || status === leaveHistoryStatusFilter) : status === "pending";
     const departmentMatches = leaveDepartmentFilter === "all" || getDepartmentKey(leave) === leaveDepartmentFilter;
     const employeeName = `${leave.employee?.first_name ?? ""} ${leave.employee?.last_name ?? ""}`.trim().toLowerCase();
     const employeeMatches = !leaveEmployeeSearch.trim() || employeeName.includes(leaveEmployeeSearch.trim().toLowerCase()) || String(leave.employee?.employee_id ?? "").toLowerCase().includes(leaveEmployeeSearch.trim().toLowerCase());
@@ -860,8 +860,9 @@ export default function ApprovalsHub({
     const leaveDate = leave.start_date ? new Date(`${leave.start_date}T00:00:00`) : null;
     const leaveFrom = leaveFromDate ? new Date(`${leaveFromDate}T00:00:00`) : null;
     const leaveTo = leaveToDate ? new Date(`${leaveToDate}T23:59:59.999`) : null;
-    const dateMatches = (!leaveFrom || (leaveDate !== null && leaveDate >= leaveFrom)) &&
-      (!leaveTo || (leaveDate !== null && leaveDate <= leaveTo));
+    const dateMatches = (!leaveFrom || (leaveDate !== null && leaveDate >= leaveFrom)) && (!leaveTo || (leaveDate !== null && leaveDate <= leaveTo));
+    const leaveCode = String(leave.leave_type?.code ?? "").toUpperCase();
+    const leaveTypeMatches = leaveTypeFilter === "ALL" || leaveCode === leaveTypeFilter;
 
     // Expired requests must never appear in Pending or History.
     if (status === "expired") {
@@ -870,7 +871,7 @@ export default function ApprovalsHub({
     if (selectedLeaveId && leave.id === selectedLeaveId) {
       return true;
     }
-    return statusMatches && departmentMatches && employeeMatches && durationMatches && dateMatches;
+    return statusMatches && departmentMatches && employeeMatches && durationMatches && dateMatches && leaveTypeMatches;
   });
 
   useEffect(() => {
@@ -907,7 +908,7 @@ export default function ApprovalsHub({
     const toDate = resignationToDate ? new Date(`${resignationToDate}T23:59:59.999`) : null;
     const dateMatches = (!fromDate || (resignationDate !== null && resignationDate >= fromDate)) &&
       (!toDate || (resignationDate !== null && resignationDate <= toDate));
-    return statusMatches && departmentMatches && employeeMatches && dateMatches;
+    return statusMatches && departmentMatches && employeeMatches && dateMatches ;
   });
 
   const pendingProfileCount = profileRequests.filter(
@@ -1094,6 +1095,34 @@ export default function ApprovalsHub({
           {activeTab === "leaves" && (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <div>
+                <label className="mb-1.5 block text-xs font-semibold text-slate-600">
+                  Leave type
+                </label>
+
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { label: "All", value: "ALL" },
+                    { label: "CL", value: "CL" },
+                    { label: "SL", value: "SL" },
+                    { label: "ML", value: "ML" },
+                    { label: "PL", value: "PL" },
+                  ].map((type) => (
+                    <button
+                      key={type.value}
+                      type="button"
+                      onClick={() => setLeaveTypeFilter(type.value)}
+                      className={`rounded-lg border px-4 py-2.5 text-sm font-semibold transition ${
+                        leaveTypeFilter === type.value
+                          ? "border-indigo-600 bg-indigo-600 text-white shadow-sm"
+                          : "border-slate-200 bg-white text-slate-600 hover:border-indigo-300 hover:bg-indigo-50"
+                      }`}
+                    >
+                      {type.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
                 <label className="mb-1.5 block text-xs font-semibold text-slate-600">Department</label>
                 <select value={leaveDepartmentFilter} onChange={(event) => setLeaveDepartmentFilter(event.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-indigo-500">
                   <option value="all">All departments</option>{leaveDepartmentOptions.map((department) => <option key={department} value={department}>{department}</option>)}
@@ -1121,7 +1150,7 @@ export default function ApprovalsHub({
                 <label className="mb-1.5 block text-xs font-semibold text-slate-600">To leave date</label>
                 <input type="date" value={leaveToDate} min={leaveFromDate || undefined} onChange={(event) => setLeaveToDate(event.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-indigo-500" />
               </div>
-              <div className="flex items-end"><button type="button" onClick={() => { setLeaveDepartmentFilter("all"); setLeaveDurationFilter("all"); setLeaveEmployeeSearch(""); setLeaveHistoryStatusFilter("all"); setLeaveFromDate(""); setLeaveToDate(""); }} className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">Clear filters</button></div>
+              <div className="flex items-end"><button type="button" onClick={() => { setLeaveDepartmentFilter("all"); setLeaveTypeFilter("ALL"); setLeaveDurationFilter("all"); setLeaveEmployeeSearch(""); setLeaveHistoryStatusFilter("all"); setLeaveFromDate(""); setLeaveToDate(""); }} className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">Clear filters</button></div>
             </div>
           )}
 
@@ -1147,7 +1176,7 @@ export default function ApprovalsHub({
                 <label className="mb-1.5 block text-xs font-semibold text-slate-600">To resignation date</label>
                 <input type="date" value={resignationToDate} min={resignationFromDate || undefined} onChange={(event) => setResignationToDate(event.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-indigo-500" />
               </div>
-              <div className="flex items-end"><button type="button" onClick={() => { setResignationDepartmentFilter("all"); setResignationHistoryStatusFilter("all"); setResignationEmployeeSearch(""); setResignationFromDate(""); setResignationToDate(""); }} className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">Clear filters</button></div>
+              <div className="flex items-end"><button type="button" onClick={() => { setResignationDepartmentFilter("all");setLeaveTypeFilter("ALL"); setResignationHistoryStatusFilter("all"); setResignationEmployeeSearch(""); setResignationFromDate(""); setResignationToDate(""); }} className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">Clear filters</button></div>
             </div>
           )}
 

@@ -28,8 +28,11 @@ function isValidDate(value: string): boolean {
 }
 
 // Calendar days: includes Saturdays and Sundays.
-// Used for Maternity and Paternity leave.
-function getInclusiveDays(startDate: string, endDate: string): number {
+// Used for CL, SL, EL, ML and PL.
+function getInclusiveDays(
+  startDate: string,
+  endDate: string
+): number {
   const start = new Date(`${startDate}T00:00:00.000Z`).getTime();
   const end = new Date(`${endDate}T00:00:00.000Z`).getTime();
 
@@ -37,8 +40,11 @@ function getInclusiveDays(startDate: string, endDate: string): number {
 }
 
 // Working days: excludes Saturdays and Sundays.
-// Used for regular leave types such as CL, SL, and LOP.
-function getWorkingDays(startDate: string, endDate: string): number {
+// Used only for LOP.
+function getWorkingDays(
+  startDate: string,
+  endDate: string
+): number {
   const start = new Date(`${startDate}T00:00:00.000Z`);
   const end = new Date(`${endDate}T00:00:00.000Z`);
 
@@ -58,8 +64,12 @@ function getWorkingDays(startDate: string, endDate: string): number {
   return totalDays;
 }
 
-function addCalendarDays(startDate: string, days: number): string {
+function addCalendarDays(
+  startDate: string,
+  days: number
+): string {
   const date = new Date(`${startDate}T00:00:00.000Z`);
+
   date.setUTCDate(date.getUTCDate() + days);
 
   return date.toISOString().slice(0, 10);
@@ -77,7 +87,11 @@ async function ensureSupportingDocumentBucket(
     );
   }
 
-  if (buckets?.some((bucket) => bucket.name === SUPPORTING_DOCUMENT_BUCKET)) {
+  if (
+    buckets?.some(
+      (bucket) => bucket.name === SUPPORTING_DOCUMENT_BUCKET
+    )
+  ) {
     return;
   }
 
@@ -155,7 +169,8 @@ export async function GET(request: Request) {
 
     const { searchParams } = new URL(request.url);
 
-    const employeeId = searchParams.get("employeeId") || undefined;
+    const employeeId =
+      searchParams.get("employeeId") || undefined;
 
     const requests = await DataStore.getLeaveRequests(employeeId);
     const leaveTypes = await DataStore.getLeaveTypes();
@@ -196,7 +211,8 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   let uploadedPath: string | null = null;
 
-  let admin: Awaited<ReturnType<typeof createAdminClient>> | null = null;
+  let admin: Awaited<ReturnType<typeof createAdminClient>> | null =
+    null;
 
   try {
     const supabase = await createClient();
@@ -255,8 +271,6 @@ export async function POST(request: Request) {
 
     const submittedDays = Number(body.totalDays);
 
-    // This value is normalized to calendar days for maternity leave
-    // after the leave type is identified.
     let days = submittedDays;
 
     const halfDayDuration =
@@ -329,7 +343,9 @@ export async function POST(request: Request) {
 
     if (!employee) {
       return NextResponse.json(
-        { error: "Employee record not found. Please contact HR." },
+        {
+          error: "Employee record not found. Please contact HR.",
+        },
         { status: 404 }
       );
     }
@@ -366,7 +382,8 @@ export async function POST(request: Request) {
 
       return NextResponse.json(
         {
-          error: "You are not authorized to submit leave for this employee.",
+          error:
+            "You are not authorized to submit leave for this employee.",
         },
         { status: 403 }
       );
@@ -380,7 +397,8 @@ export async function POST(request: Request) {
     if (!isValidDate(joiningDate)) {
       return NextResponse.json(
         {
-          error: "Your joining date is not available. Please contact HR.",
+          error:
+            "Your joining date is not available. Please contact HR.",
         },
         { status: 400 }
       );
@@ -398,11 +416,12 @@ export async function POST(request: Request) {
     admin = await createAdminClient();
 
     // Read leave type from database.
-    const { data: leaveType, error: leaveTypeError } = await admin
-      .from("leave_types")
-      .select("id, name, code, is_active")
-      .eq("id", leaveTypeId)
-      .maybeSingle();
+    const { data: leaveType, error: leaveTypeError } =
+      await admin
+        .from("leave_types")
+        .select("id, name, code, is_active")
+        .eq("id", leaveTypeId)
+        .maybeSingle();
 
     if (leaveTypeError) {
       throw new Error(leaveTypeError.message);
@@ -417,7 +436,7 @@ export async function POST(request: Request) {
 
     const code = String(leaveType.code).toUpperCase();
 
-    // Calculate both calendar days and working days.
+    // Calculate calendar days and working days.
     const inclusiveDays = getInclusiveDays(startDate, endDate);
     const workingDays = getWorkingDays(startDate, endDate);
 
@@ -439,18 +458,20 @@ export async function POST(request: Request) {
       if (isHalfDay) {
         return NextResponse.json(
           {
-            error: "Maternity and paternity leave cannot be half-day.",
+            error:
+              "Maternity and paternity leave cannot be half-day.",
           },
           { status: 400 }
         );
       }
 
       // Always read gender from the database.
-      const { data: employeeRecord, error: employeeError } = await admin
-        .from("employees")
-        .select("gender")
-        .eq("id", employeeId)
-        .maybeSingle();
+      const { data: employeeRecord, error: employeeError } =
+        await admin
+          .from("employees")
+          .select("gender")
+          .eq("id", employeeId)
+          .maybeSingle();
 
       if (employeeError) {
         throw new Error(employeeError.message);
@@ -495,32 +516,31 @@ export async function POST(request: Request) {
           );
         }
 
-        // Calculate the expected end date using calendar days.
         const expectedEndDate = addCalendarDays(
           startDate,
           maternityDays - 1
         );
 
-        // Validate the selected dates against the duration.
         if (
           inclusiveDays !== maternityDays ||
-          endDate !== expectedEndDate
+          endDate !== expectedEndDate ||
+          submittedDays !== maternityDays
         ) {
           return NextResponse.json(
             {
-              error: `For ${maternityDays} days of maternity leave, the end date must be ${expectedEndDate}.`,
+              error: `For ${maternityDays} days of maternity leave, the end date must be ${expectedEndDate} and the total duration must be ${maternityDays} days.`,
             },
             { status: 400 }
           );
         }
 
-        // Store maternity leave using calendar days,
-        // not working days.
         days = maternityDays;
       }
 
       // =====================================================
       // PATERNITY LEAVE
+      // 2, 7, 14, 21 or 28 calendar days.
+      // Weekends are included.
       // =====================================================
 
       if (code === "PL") {
@@ -551,7 +571,7 @@ export async function POST(request: Request) {
           return NextResponse.json(
             {
               error:
-                "Paternity leave duration must match the selected dates.",
+                "Paternity leave duration must match the selected calendar dates.",
             },
             { status: 400 }
           );
@@ -559,17 +579,36 @@ export async function POST(request: Request) {
 
         days = paternityDuration;
       }
-    } else if (
-      !isHalfDay &&
-      Math.abs(days - workingDays) > 0.001
-    ) {
-      return NextResponse.json(
-        {
-          error:
-            "Leave duration must match the selected working days (excluding Saturday and Sunday).",
-        },
-        { status: 400 }
-      );
+    } else if (!isHalfDay) {
+      // =====================================================
+      // REGULAR LEAVE VALIDATION
+      // LOP = working days only.
+      // CL, SL and EL = calendar days.
+      // =====================================================
+
+      const expectedDays =
+        code === "LOP" ? workingDays : inclusiveDays;
+
+      if (Math.abs(submittedDays - expectedDays) > 0.001) {
+        return NextResponse.json(
+          {
+            error:
+              code === "LOP"
+                ? "LOP duration must match the working days (excluding Saturday and Sunday)."
+                : "Leave duration must match the calendar days (including Saturday and Sunday).",
+            expectedDays,
+            submittedDays,
+          },
+          { status: 400 }
+        );
+      }
+
+      days = expectedDays;
+    }
+
+    // Half-day always counts as 0.5.
+    if (isHalfDay) {
+      days = 0.5;
     }
 
     // =====================================================
@@ -627,8 +666,6 @@ export async function POST(request: Request) {
 
     // =====================================================
     // CREATE LEAVE REQUEST
-    // Document URL and special leave duration are saved
-    // directly by DataStore.createLeaveRequest().
     // =====================================================
 
     const leaveReq = await DataStore.createLeaveRequest({
@@ -656,10 +693,11 @@ export async function POST(request: Request) {
     // =====================================================
 
     try {
-      const { data: hrProfiles, error: hrProfilesError } = await admin
-        .from("profiles")
-        .select("id")
-        .eq("role", "hr");
+      const { data: hrProfiles, error: hrProfilesError } =
+        await admin
+          .from("profiles")
+          .select("id")
+          .eq("role", "hr");
 
       if (hrProfilesError) {
         throw new Error(hrProfilesError.message);
@@ -674,9 +712,10 @@ export async function POST(request: Request) {
           is_read: false,
         }));
 
-        const { error: notificationInsertError } = await admin
-          .from("notifications")
-          .insert(notificationRows);
+        const { error: notificationInsertError } =
+          await admin
+            .from("notifications")
+            .insert(notificationRows);
 
         if (notificationInsertError) {
           throw new Error(notificationInsertError.message);

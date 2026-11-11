@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { exportToExcel } from "@/lib/excel/exportToExcel";
 import { createPortal } from "react-dom";
 import {
   Play,
@@ -25,7 +26,7 @@ import {
 } from "lucide-react";
 import StandardPayslip from "@/components/payroll/StandardPayslip";
 import { numberToWordsIndian } from "@/lib/calculations";
-import {MasterPayrollRow,MasterRegisterTotals,generateExcelCsv} from "@/lib/payroll/master-payroll-engine";
+import {MasterPayrollRow,MasterRegisterTotals} from "@/lib/payroll/master-payroll-engine";
 
 interface Props {
   role: "ceo" | "hr" | "admin";
@@ -343,28 +344,28 @@ export default function PayrollMasterData({ role }: Props) {
   };
 
   // Export to Excel (CSV) matching exact format
-  const handleExportCsv = () => {
+  const handleExportCsv = async () => {
     if (!rows.length) return;
-    const csvContent = generateExcelCsv(
-      rows,
-      MONTHS[selectedMonth - 1],
-      selectedYear,
-      "Teens Software Solutions LLP",
-      "Hyderabad",
-      "info@teenss.com, www.teenss.com"
-    );
 
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute(
-      "download",
-      `Payroll_Master_Register_${MONTHS[selectedMonth - 1]}_${selectedYear}.csv`
-    );
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    try {
+      const columns = REGISTER_COLUMNS.map((column) => ({
+        header: column.label,
+        key: column.key,
+        width: column.key === "employee_name" ? 24 : 18,
+        ...(column.currency ? { numFmt: '"₹"#,##0.00' } : {}),
+      }));
+
+      await exportToExcel({
+        fileName: `Payroll_Master_Register_${MONTHS[selectedMonth - 1]}_${selectedYear}.xlsx`,
+        sheetName: "Payroll Register",
+        title: "TEENS SOFTWARE SOLUTIONS LLP",
+        subtitle: `Payroll Master Register - ${MONTHS[selectedMonth - 1]} ${selectedYear} | Hyderabad | info@teenss.com | www.teenss.com`,
+        columns,
+        rows: rows.map((row) => ({ ...row })),
+      });
+    } catch (error) {
+      console.error("Failed to export payroll Excel:", error);
+    }
   };
 
   // Open adjustment modal
@@ -639,7 +640,7 @@ export default function PayrollMasterData({ role }: Props) {
                 className="inline-flex items-center gap-2 rounded border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
               >
                 <Download className="h-4 w-4 text-emerald-600" />
-                Export to Excel (CSV)
+                Export to Excel 
               </button>
 
               <button

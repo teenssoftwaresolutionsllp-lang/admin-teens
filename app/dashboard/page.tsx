@@ -316,6 +316,17 @@ export default async function DashboardPage({
     (request) => request.status === 'pending'
   ).length;
 
+  console.log(
+    "PENDING LEAVE TYPES:",
+    leaveRequests
+      .filter((request) => request.status === "pending")
+      .map((request) => ({
+        id: request.id,
+        leaveType: request.leave_type?.name,
+        leaveTypeData: request.leave_type,
+      }))
+  );
+
   // Pending leave requests grouped by leave category.
   const pendingLeaveBreakdown = {
     CL: 0,
@@ -327,31 +338,27 @@ export default async function DashboardPage({
   for (const request of leaveRequests) {
     if (request.status !== 'pending') continue;
 
-    const leaveType = (request.leave_type?.name ?? '')
-      .trim()
-      .toLowerCase();
+      const leaveCode = (
+      request.leave_type?.code ??
+      ''
+    ).trim().toUpperCase();
 
-    if (
-      leaveType === 'cl' ||
-      leaveType.includes('casual')
-    ) {
-      pendingLeaveBreakdown.CL += 1;
-    } else if (
-      leaveType === 'sl' ||
-      leaveType.includes('sick')
-    ) {
-      pendingLeaveBreakdown.SL += 1;
-    } else if (
-      leaveType === 'ml' ||
-      leaveType.includes('maternity')
-    ) {
-      pendingLeaveBreakdown.ML += 1;
-    } else if (
-      leaveType === 'pl' ||
-      leaveType.includes('privilege') ||
-      leaveType.includes('earned leave')
-    ) {
-      pendingLeaveBreakdown.PL += 1;
+    switch (leaveCode) {
+      case 'CL':
+        pendingLeaveBreakdown.CL += 1;
+        break;
+
+      case 'SL':
+        pendingLeaveBreakdown.SL += 1;
+        break;
+
+      case 'ML':
+        pendingLeaveBreakdown.ML += 1;
+        break;
+
+      case 'PL':
+        pendingLeaveBreakdown.PL += 1;
+        break;
     }
   }
 
@@ -621,40 +628,6 @@ export default async function DashboardPage({
               </div>
             </div>
           </div>
-
-          {/* Pending Approval Alert */}
-          {/* {totalPendingActions > 0 && (
-            <div className="flex flex-col justify-between gap-4 rounded-2xl border border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50 p-4 sm:flex-row sm:items-center sm:p-5">
-              <div className="flex min-w-0 items-center gap-3">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
-                  <ShieldAlert className="h-5 w-5" />
-                </div>
-
-                <div className="min-w-0">
-                  <p className="text-sm font-bold text-slate-900">
-                    {totalPendingActions} pending request
-                    {totalPendingActions === 1 ? '' : 's'} require your review
-                  </p>
-
-                  <p className="mt-1 text-xs leading-5 text-slate-600">
-                    {pendingProfileCount} profile changes
-                    <span className="mx-2 text-amber-400">•</span>
-                    {pendingLeaveCount} leave requests
-                    <span className="mx-2 text-amber-400">•</span>
-                    {pendingRegCount} attendance regularizations
-                  </p>
-                </div>
-              </div>
-
-              <Link
-                href="/dashboard/approvals"
-                className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-amber-600 px-4 py-2.5 text-xs font-semibold text-white shadow-sm transition hover:bg-amber-700"
-              >
-                Review Requests
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </div>
-          )} */}
 
           {/* Interactive KPI cards */}
           <DashboardKpiCards

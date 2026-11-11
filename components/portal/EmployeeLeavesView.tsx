@@ -76,10 +76,15 @@ export default function EmployeeLeavesView({
   const [alertMessage, setAlertMessage] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
+
   const [monthFilter, setMonthFilter] = useState(() => {
     const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+
+    return `${now.getFullYear()}-${String(
+      now.getMonth() + 1
+    ).padStart(2, "0")}`;
   });
+
   const pageSize = 10;
 
   const [supportingDocument, setSupportingDocument] =
@@ -89,6 +94,7 @@ export default function EmployeeLeavesView({
     () =>
       requests.filter((request) => {
         const status = String(request.status).toLowerCase();
+
         const appliedMonth = String(
           request.created_at || request.start_date || ""
         ).slice(0, 7);
@@ -100,15 +106,22 @@ export default function EmployeeLeavesView({
       }),
     [requests, statusFilter, monthFilter]
   );
-  const pageCount = Math.max(1, Math.ceil(filteredRequests.length / pageSize));
+
+  const pageCount = Math.max(
+    1,
+    Math.ceil(filteredRequests.length / pageSize)
+  );
+
   const paginatedRequests = filteredRequests.slice(
     (currentPage - 1) * pageSize,
     currentPage * pageSize
   );
+
   const formatLeaveDate = (value?: string | null) => {
     if (!value) return "--";
 
     const date = new Date(`${value.slice(0, 10)}T00:00:00`);
+
     return Number.isNaN(date.getTime())
       ? value
       : date.toLocaleDateString("en-GB", {
@@ -163,6 +176,7 @@ export default function EmployeeLeavesView({
 
   const visibleBalances = useMemo(() => {
     const specialCode = isFemale ? "ML" : isMale ? "PL" : null;
+
     const order = ["CL", "SL", "EL", specialCode].filter(
       (code): code is string => Boolean(code)
     );
@@ -307,25 +321,30 @@ export default function EmployeeLeavesView({
   const isMaternityLeave = selectedLeaveCode === "ML";
   const isPaternityLeave = selectedLeaveCode === "PL";
   const isSpecialLeave = isMaternityLeave || isPaternityLeave;
+  const isLOP = selectedLeaveCode === "LOP";
 
-const getSpecialDurationOptions = () => {
-  if (isMaternityLeave) {
-    return [
-      { label: "3 Months (90 Days)", value: "90" },
-      { label: "6 Months (180 Days)", value: "180" },
-    ];
-  }
+  // ML: 90 or 180 calendar days.
+  // PL: 2, 7, 14, 21 or 28 calendar days.
+  const getSpecialDurationOptions = () => {
+    if (isMaternityLeave) {
+      return [
+        { label: "3 Months (90 Days)", value: "90" },
+        { label: "6 Months (180 Days)", value: "180" },
+      ];
+    }
 
-  if (isPaternityLeave) {
-    return [
-      { label: "1 Week (7 Days)", value: "7" },
-      { label: "15 Days", value: "15" },
-      { label: "30 Days", value: "30" },
-    ];
-  }
+    if (isPaternityLeave) {
+      return [
+        { label: "2 Days", value: "2" },
+        { label: "1 Week (7 Days)", value: "7" },
+        { label: "2 Weeks (14 Days)", value: "14" },
+        { label: "3 Weeks (21 Days)", value: "21" },
+        { label: "4 Weeks (28 Days)", value: "28" },
+      ];
+    }
 
-  return [];
-};
+    return [];
+  };
 
   const calculateEndDate = (startDate: string, duration: number) => {
     if (!startDate || duration <= 0) return startDate;
@@ -343,48 +362,47 @@ const getSpecialDurationOptions = () => {
     return `${year}-${month}-${day}`;
   };
 
- const calculateDays = () => {
-  if (!formData.startDate || !formData.endDate) return 0;
+  // Leave day calculation:
+  // CL, SL, EL, ML, PL = calendar days.
+  // LOP = weekdays only (Saturday and Sunday excluded).
+  // Half-day = 0.5.
+  const calculateDays = () => {
+    if (!formData.startDate || !formData.endDate) return 0;
 
-  if (formData.isHalfDay) return 0.5;
+    if (formData.isHalfDay) return 0.5;
 
-  const start = new Date(`${formData.startDate}T00:00:00`);
-  const end = new Date(`${formData.endDate}T00:00:00`);
+    const start = new Date(`${formData.startDate}T00:00:00`);
+    const end = new Date(`${formData.endDate}T00:00:00`);
 
-  if (
-    Number.isNaN(start.getTime()) ||
-    Number.isNaN(end.getTime()) ||
-    end < start
-  ) {
-    return 0;
-  }
-
-  // Maternity and Paternity leave use calendar days
-  if (isSpecialLeave) {
-    return (
-      Math.floor(
-        (end.getTime() - start.getTime()) /
-          (1000 * 60 * 60 * 24)
-      ) + 1
-    );
-  }
-
-  // Other leave types exclude Saturday and Sunday
-  let totalDays = 0;
-  const current = new Date(start);
-
-  while (current <= end) {
-    const day = current.getDay();
-
-    if (day !== 0 && day !== 6) {
-      totalDays++;
+    if (
+      Number.isNaN(start.getTime()) ||
+      Number.isNaN(end.getTime()) ||
+      end < start
+    ) {
+      return 0;
     }
 
-    current.setDate(current.getDate() + 1);
-  }
+    let totalDays = 0;
+    const current = new Date(start);
 
-  return totalDays;
-};
+    while (current <= end) {
+      const day = current.getDay();
+
+      if (isLOP) {
+        // LOP excludes Saturday and Sunday.
+        if (day !== 0 && day !== 6) {
+          totalDays++;
+        }
+      } else {
+        // All other leave types include weekends.
+        totalDays++;
+      }
+
+      current.setDate(current.getDate() + 1);
+    }
+
+    return totalDays;
+  };
 
   const openLeaveModal = () => {
     setSuccessMsg(null);
@@ -432,6 +450,7 @@ const getSpecialDurationOptions = () => {
             ? previous.startDate
             : previous.endDate,
         isHalfDay: special ? false : previous.isHalfDay,
+        leaveDuration: special ? "" : previous.leaveDuration,
         specialLeaveDuration: "",
       };
     });
@@ -550,70 +569,71 @@ const getSpecialDurationOptions = () => {
         return;
       }
     }
+
     if (!formData.reason.trim()) {
       setAlertMessage("Please enter a reason for leave.");
       return;
     }
-if (isMaternityLeave) {
-  const maternityDays = Number(formData.specialLeaveDuration);
 
-  if (![90, 180].includes(maternityDays)) {
-    throw new Error(
-      "Select maternity leave for 3 months (90 days) or 6 months (180 days)."
-    );
-  }
-}
+    if (isMaternityLeave && !isFemale) {
+      setAlertMessage(
+        "Maternity Leave is available only for female employees."
+      );
+      return;
+    }
 
     if (isPaternityLeave && !isMale) {
       setAlertMessage(
         "Paternity Leave is available only for male employees."
       );
-
       return;
     }
-if (isSpecialLeave) {
-  if (!formData.specialLeaveDuration) {
-    setAlertMessage(
-      `Please select the duration for ${
-        isMaternityLeave ? "Maternity Leave" : "Paternity Leave"
-      }.`
-    );
-    return;
-  }
 
-  const selectedDuration = Number(formData.specialLeaveDuration);
+    // Validate ML and PL durations.
+    if (isSpecialLeave) {
+      if (!formData.specialLeaveDuration) {
+        setAlertMessage(
+          `Please select the duration for ${
+            isMaternityLeave ? "Maternity Leave" : "Paternity Leave"
+          }.`
+        );
+        return;
+      }
 
-  const allowedDurations = isMaternityLeave
-    ? [90, 180]
-    : [2, 7, 14, 21, 28];
+      const selectedDuration = Number(
+        formData.specialLeaveDuration
+      );
 
-  if (!allowedDurations.includes(selectedDuration)) {
-    setAlertMessage(
-      isMaternityLeave
-        ? "Select maternity leave for 3 months (90 days) or 6 months (180 days)."
-        : "Please select a valid paternity leave duration."
-    );
-    return;
-  }
+      const allowedDurations = isMaternityLeave
+        ? [90, 180]
+        : [2, 7, 14, 21, 28];
 
-  const expectedEndDate = calculateEndDate(
-    formData.startDate,
-    selectedDuration
-  );
+      if (!allowedDurations.includes(selectedDuration)) {
+        setAlertMessage(
+          isMaternityLeave
+            ? "Select maternity leave for 3 months (90 days) or 6 months (180 days)."
+            : "Please select a valid paternity leave duration."
+        );
+        return;
+      }
 
-  if (formData.endDate !== expectedEndDate) {
-    setAlertMessage(
-      "The leave end date does not match the selected duration. Please select the duration again."
-    );
-    return;
-  }
-}
+      const expectedEndDate = calculateEndDate(
+        formData.startDate,
+        selectedDuration
+      );
+
+      if (formData.endDate !== expectedEndDate) {
+        setAlertMessage(
+          "The leave end date does not match the selected duration. Please select the duration again."
+        );
+        return;
+      }
+    }
 
     if (isSpecialLeave && formData.isHalfDay) {
       setAlertMessage(
         "Maternity Leave and Paternity Leave cannot be applied as half-day leave."
       );
-
       return;
     }
 
@@ -627,18 +647,21 @@ if (isSpecialLeave) {
     const totalDays = calculateDays();
 
     if (totalDays <= 0) {
-      setAlertMessage("Please select a valid leave duration.");
+      setAlertMessage(
+        isLOP
+          ? "LOP cannot be applied for Saturday and Sunday only."
+          : "Please select a valid leave duration."
+      );
       return;
     }
 
     if (
-      isPaternityLeave &&
+      isSpecialLeave &&
       totalDays !== Number(formData.specialLeaveDuration)
     ) {
       setAlertMessage(
-        "The total leave days do not match the selected paternity leave duration."
+        "The total leave days do not match the selected leave duration."
       );
-
       return;
     }
 
@@ -653,10 +676,12 @@ if (isSpecialLeave) {
       requestBody.append("endDate", formData.endDate);
       requestBody.append("totalDays", String(totalDays));
       requestBody.append("isHalfDay", String(formData.isHalfDay));
+
       requestBody.append(
         "leaveDuration",
         formData.isHalfDay ? formData.leaveDuration : ""
       );
+
       requestBody.append("reason", formData.reason.trim());
 
       if (isMaternityLeave) {
@@ -747,6 +772,7 @@ if (isSpecialLeave) {
               Submit a new leave request to your manager.
             </p>
           </div>
+
           <nav
             aria-label="Leave pages"
             className="inline-flex w-fit rounded-lg border border-slate-200 bg-white p-1"
@@ -758,6 +784,7 @@ if (isSpecialLeave) {
             >
               Apply Leave
             </Link>
+
             <Link
               href="/portal/leaves"
               className="rounded-md px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
@@ -773,7 +800,9 @@ if (isSpecialLeave) {
             className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"
           >
             <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+
             <p className="flex-1">{alertMessage}</p>
+
             <button
               type="button"
               onClick={() => setAlertMessage(null)}
@@ -805,6 +834,7 @@ if (isSpecialLeave) {
                   Submit a new leave application.
                 </p>
               </div>
+
               <Link
                 href="/portal/leaves"
                 aria-label="Close leave application"
@@ -813,220 +843,297 @@ if (isSpecialLeave) {
                 <X className="h-4 w-4" />
               </Link>
             </div>
-            <div className="px-5 py-4">
-            <form onSubmit={handleApplySubmit} className="space-y-4">
-              <div>
-                <label
-                  htmlFor="leave-type"
-                  className="mb-1 block text-xs font-medium text-slate-700"
-                >
-                  Leave Type
-                </label>
-                <select
-                  id="leave-type"
-                  value={formData.leaveTypeId}
-                  onChange={(event) =>
-                    handleLeaveTypeChange(event.target.value)
-                  }
-                  disabled={genderLoading}
-                  required
-                  className="h-9 w-full rounded-lg border border-slate-300 bg-white px-3 text-xs text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100"
-                >
-                  <option value="">
-                    {genderLoading
-                      ? "Loading leave types..."
-                      : "Select leave type"}
-                  </option>
-                  {leaveTypeOptions.map((option) => (
-                    <option key={option.id} value={option.id}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-                {!genderLoading && !isFemale && !isMale && (
-                  <p className="mt-1.5 text-[10px] text-amber-700">
-                    Contact HR to update your profile if you need
-                    maternity or paternity leave options.
-                  </p>
-                )}
-              </div>
 
-              {isSpecialLeave && (
+            <div className="px-5 py-4">
+              <form
+                onSubmit={handleApplySubmit}
+                className="space-y-4"
+              >
                 <div>
                   <label
-                    htmlFor="special-leave-duration"
+                    htmlFor="leave-type"
                     className="mb-1 block text-xs font-medium text-slate-700"
                   >
-                    {isMaternityLeave
-                      ? "Maternity Leave Duration"
-                      : "Paternity Leave Duration"}
+                    Leave Type
                   </label>
+
                   <select
-                    id="special-leave-duration"
-                    value={formData.specialLeaveDuration}
+                    id="leave-type"
+                    value={formData.leaveTypeId}
                     onChange={(event) =>
-                      handleSpecialDurationChange(event.target.value)
+                      handleLeaveTypeChange(event.target.value)
                     }
+                    disabled={genderLoading}
                     required
-                    className="h-9 w-full rounded-lg border border-slate-300 bg-white px-3 text-xs text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                    className="h-9 w-full rounded-lg border border-slate-300 bg-white px-3 text-xs text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100"
                   >
-                    <option value="">Select duration</option>
-                    {getSpecialDurationOptions().map((option) => (
-                      <option key={option.value} value={option.value}>
+                    <option value="">
+                      {genderLoading
+                        ? "Loading leave types..."
+                        : "Select leave type"}
+                    </option>
+
+                    {leaveTypeOptions.map((option) => (
+                      <option key={option.id} value={option.id}>
                         {option.label}
                       </option>
                     ))}
                   </select>
-                </div>
-              )}
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label
-                    htmlFor="leave-start-date"
-                    className="mb-1 block text-xs font-medium text-slate-700"
-                  >
-                    From Date
-                  </label>
-                  <input
-                    id="leave-start-date"
-                    type="date"
-                    required
-                    min={joiningDate || undefined}
-                    value={formData.startDate}
-                    onChange={(event) =>
-                      handleStartDateChange(event.target.value)
-                    }
-                    className="h-9 w-full rounded-lg border border-slate-300 px-3 text-xs text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
-                  />
+                  {!genderLoading && !isFemale && !isMale && (
+                    <p className="mt-1.5 text-[10px] text-amber-700">
+                      Contact HR to update your profile if you need
+                      maternity or paternity leave options.
+                    </p>
+                  )}
                 </div>
-                <div>
-                  <label
-                    htmlFor="leave-end-date"
-                    className="mb-1 block text-xs font-medium text-slate-700"
-                  >
-                    To Date
-                  </label>
+
+                {isSpecialLeave && (
+                  <div>
+                    <label
+                      htmlFor="special-leave-duration"
+                      className="mb-1 block text-xs font-medium text-slate-700"
+                    >
+                      {isMaternityLeave
+                        ? "Maternity Leave Duration"
+                        : "Paternity Leave Duration"}
+                    </label>
+
+                    <select
+                      id="special-leave-duration"
+                      value={formData.specialLeaveDuration}
+                      onChange={(event) =>
+                        handleSpecialDurationChange(event.target.value)
+                      }
+                      required
+                      className="h-9 w-full rounded-lg border border-slate-300 bg-white px-3 text-xs text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                    >
+                      <option value="">Select duration</option>
+
+                      {getSpecialDurationOptions().map((option) => (
+                        <option
+                          key={option.value}
+                          value={option.value}
+                        >
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label
+                      htmlFor="leave-start-date"
+                      className="mb-1 block text-xs font-medium text-slate-700"
+                    >
+                      From Date
+                    </label>
+
+                    <input
+                      id="leave-start-date"
+                      type="date"
+                      required
+                      min={joiningDate || undefined}
+                      value={formData.startDate}
+                      onChange={(event) =>
+                        handleStartDateChange(event.target.value)
+                      }
+                      className="h-9 w-full rounded-lg border border-slate-300 px-3 text-xs text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                    />
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="leave-end-date"
+                      className="mb-1 block text-xs font-medium text-slate-700"
+                    >
+                      To Date
+                    </label>
+
+                    <input
+                      id="leave-end-date"
+                      type="date"
+                      required
+                      min={formData.startDate || joiningDate || undefined}
+                      value={formData.endDate}
+                      readOnly={isSpecialLeave}
+                      onChange={(event) =>
+                        setFormData((previous) => ({
+                          ...previous,
+                          endDate: event.target.value,
+                        }))
+                      }
+                      className={`h-9 w-full rounded-lg border border-slate-300 px-3 text-xs text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100 ${
+                        isSpecialLeave ? "bg-slate-100" : "bg-white"
+                      }`}
+                    />
+                  </div>
+                </div>
+
+                <label className="flex items-center gap-2 text-xs text-slate-700">
                   <input
-                    id="leave-end-date"
-                    type="date"
-                    required
-                    min={formData.startDate || joiningDate || undefined}
-                    value={formData.endDate}
-                    readOnly={isSpecialLeave}
+                    type="checkbox"
+                    checked={formData.isHalfDay}
+                    disabled={isSpecialLeave}
                     onChange={(event) =>
                       setFormData((previous) => ({
                         ...previous,
-                        endDate: event.target.value,
+                        isHalfDay: event.target.checked,
+                        leaveDuration: event.target.checked
+                          ? previous.leaveDuration
+                          : "",
                       }))
                     }
-                    className={`h-9 w-full rounded-lg border border-slate-300 px-3 text-xs text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100 ${
-                      isSpecialLeave ? "bg-slate-100" : "bg-white"
-                    }`}
+                    className="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 disabled:opacity-50"
                   />
-                </div>
-              </div>
 
-              <label className="flex items-center gap-2 text-xs text-slate-700">
-                <input
-                  type="checkbox"
-                  checked={formData.isHalfDay}
-                  disabled={isSpecialLeave}
-                  onChange={(event) =>
-                    setFormData((previous) => ({
-                      ...previous,
-                      isHalfDay: event.target.checked,
-                    }))
-                  }
-                  className="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 disabled:opacity-50"
-                />
-                Applying for Half Day (0.5 day)
-              </label>
-
-              <div>
-                <label
-                  htmlFor="supporting-document"
-                  className="mb-1 flex items-center gap-2 text-xs font-medium text-indigo-900"
-                >
-                  <FileUp className="h-3.5 w-3.5 text-indigo-600" />
-                  Supporting Document {isSpecialLeave ? "(Required)" : "(Optional)"}
+                  Applying for Half Day (0.5 day)
                 </label>
-                <input
-                  id="supporting-document"
-                  type="file"
-                  accept=".pdf,.jpg,.jpeg,.png"
-                  required={isSpecialLeave && !supportingDocument}
-                  disabled={submitting}
-                  onChange={(event) =>
-                    handleDocumentChange(event.target.files?.[0] || null)
-                  }
-                  className="w-full rounded-lg border border-slate-300 px-2.5 py-2 text-xs file:mr-2 file:border-0 file:bg-transparent file:p-0 file:text-xs"
-                />
-                <p className="mt-1 text-[10px] leading-4 text-slate-500">
-                  Upload a PDF, JPG, JPEG or PNG. Maximum size: 5 MB.
-                  {isSpecialLeave
-                    ? " Required for maternity and paternity leave."
-                    : " Optional."}
-                </p>
-                {supportingDocument && (
-                  <div className="mt-2 flex items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
-                    <span className="truncate">{supportingDocument.name}</span>
-                    <button
-                      type="button"
-                      disabled={submitting}
-                      onClick={() => setSupportingDocument(null)}
-                      className="shrink-0 font-semibold text-rose-700 hover:text-rose-900"
-                    >
-                      Remove
-                    </button>
+
+                {formData.isHalfDay && (
+                  <div className="space-y-2">
+                    <label className="block text-xs font-semibold text-slate-700">
+                      Select Half-Day Leave
+                    </label>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      {(
+                        [
+                          ["first_half", "First Half"],
+                          ["second_half", "Second Half"],
+                        ] as const
+                      ).map(([value, label]) => (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() =>
+                            setFormData((previous) => ({
+                              ...previous,
+                              leaveDuration: value,
+                            }))
+                          }
+                          className={`rounded-lg border px-3 py-2 text-xs font-semibold ${
+                            formData.leaveDuration === value
+                              ? "border-indigo-600 bg-indigo-50 text-indigo-700"
+                              : "border-slate-300 text-slate-700"
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 )}
-              </div>
 
-              <div>
-                <label
-                  htmlFor="leave-reason"
-                  className="mb-1 block text-xs font-medium text-slate-700"
-                >
-                  Reason for Leave
-                </label>
-                <textarea
-                  id="leave-reason"
-                  required
-                  rows={3}
-                  maxLength={500}
-                  value={formData.reason}
-                  onChange={(event) =>
-                    setFormData((previous) => ({
-                      ...previous,
-                      reason: event.target.value,
-                    }))
-                  }
-                  placeholder="Explain the reason for leave"
-                  className="w-full resize-y rounded-lg border border-slate-300 px-3 py-2.5 text-xs text-slate-800 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
-                />
-              </div>
+                <div>
+                  <label
+                    htmlFor="supporting-document"
+                    className="mb-1 flex items-center gap-2 text-xs font-medium text-indigo-900"
+                  >
+                    <FileUp className="h-3.5 w-3.5 text-indigo-600" />
 
-              <div className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-3 text-xs">
-                <span className="font-semibold text-slate-700">
-                  Total Duration:
-                </span>
-                <span className="font-bold text-indigo-700">
-                  {calculateDays()} {calculateDays() === 1 ? "day" : "days"}
-                </span>
-              </div>
+                    Supporting Document{" "}
+                    {isSpecialLeave ? "(Required)" : "(Optional)"}
+                  </label>
 
-              <div className="flex justify-end border-t border-slate-900 pt-3">
-                <button
-                  type="submit"
-                  disabled={submitting || genderLoading}
-                  className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-5 py-2.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
-                  {submitting ? "Submitting..." : "Submit Application"}
-                </button>
-              </div>
-            </form>
+                  <input
+                    id="supporting-document"
+                    type="file"
+                    accept=".pdf,.jpg,.jpeg,.png"
+                    required={isSpecialLeave && !supportingDocument}
+                    disabled={submitting}
+                    onChange={(event) =>
+                      handleDocumentChange(
+                        event.target.files?.[0] || null
+                      )
+                    }
+                    className="w-full rounded-lg border border-slate-300 px-2.5 py-2 text-xs file:mr-2 file:border-0 file:bg-transparent file:p-0 file:text-xs"
+                  />
+
+                  <p className="mt-1 text-[10px] leading-4 text-slate-500">
+                    Upload a PDF, JPG, JPEG or PNG. Maximum size: 5 MB.
+                    {isSpecialLeave
+                      ? " Required for maternity and paternity leave."
+                      : " Optional."}
+                  </p>
+
+                  {supportingDocument && (
+                    <div className="mt-2 flex items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+                      <span className="truncate">
+                        {supportingDocument.name}
+                      </span>
+
+                      <button
+                        type="button"
+                        disabled={submitting}
+                        onClick={() => setSupportingDocument(null)}
+                        className="shrink-0 font-semibold text-rose-700 hover:text-rose-900"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="leave-reason"
+                    className="mb-1 block text-xs font-medium text-slate-700"
+                  >
+                    Reason for Leave
+                  </label>
+
+                  <textarea
+                    id="leave-reason"
+                    required
+                    rows={3}
+                    maxLength={500}
+                    value={formData.reason}
+                    onChange={(event) =>
+                      setFormData((previous) => ({
+                        ...previous,
+                        reason: event.target.value,
+                      }))
+                    }
+                    placeholder="Explain the reason for leave"
+                    className="w-full resize-y rounded-lg border border-slate-300 px-3 py-2.5 text-xs text-slate-800 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-3 text-xs">
+                  <span className="font-semibold text-slate-700">
+                    Total Duration:
+                  </span>
+
+                  <span className="font-bold text-indigo-700">
+                    {calculateDays()}{" "}
+                    {calculateDays() === 1 ? "day" : "days"}
+                    {!formData.isHalfDay && (
+                      <span className="ml-1 font-normal text-slate-500">
+                        ({isLOP ? "Working Days" : "Calendar Days"})
+                      </span>
+                    )}
+                  </span>
+                </div>
+
+                <div className="flex justify-end border-t border-slate-900 pt-3">
+                  <button
+                    type="submit"
+                    disabled={submitting || genderLoading}
+                    className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-5 py-2.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {submitting && (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    )}
+
+                    {submitting
+                      ? "Submitting..."
+                      : "Submit Application"}
+                  </button>
+                </div>
+              </form>
             </div>
           </section>
 
@@ -1035,6 +1142,7 @@ if (isSpecialLeave) {
               <h2 className="text-lg font-bold text-slate-900">
                 Leave Balance
               </h2>
+
               <div className="mt-3 divide-y divide-slate-100">
                 {balances.length === 0 ? (
                   <p className="py-4 text-sm text-slate-500">
@@ -1048,10 +1156,12 @@ if (isSpecialLeave) {
                     >
                       <div className="flex min-w-0 items-center gap-2">
                         <Calendar className="h-4 w-4 shrink-0 text-blue-600" />
+
                         <span className="truncate text-sm font-medium text-slate-700">
                           {balance.leave_type?.name || "Leave"}
                         </span>
                       </div>
+
                       <span className="whitespace-nowrap text-sm font-semibold text-slate-900">
                         {balance.balance_days} / {balance.allocated_days} days
                       </span>
@@ -1065,11 +1175,19 @@ if (isSpecialLeave) {
               <h2 className="text-sm font-bold text-slate-900">
                 Important Notes
               </h2>
+
               <ul className="mt-3 list-disc space-y-2 pl-4 text-sm leading-5 text-slate-600">
-                <li>Your request will be sent to your manager for approval.</li>
-                <li>You will be notified when it is approved or rejected.</li>
-                <li>Please provide a valid reason for your leave.</li>
+                <li>
+                  Your request will be sent to your manager for approval.
+                </li>
+                <li>
+                  You will be notified when it is approved or rejected.
+                </li>
+                <li>
+                  Please provide a valid reason for your leave.
+                </li>
               </ul>
+
               <p className="mt-4 border-t border-blue-100 pt-3 text-xs text-slate-500">
                 Project calendar: {project.name} ({project.client_country})
               </p>
@@ -1080,6 +1198,7 @@ if (isSpecialLeave) {
                 <h2 className="text-base font-bold text-slate-900">
                   Recent Leave Requests
                 </h2>
+
                 <Link
                   href="/portal/leaves"
                   className="text-xs font-semibold text-blue-600 hover:text-blue-800"
@@ -1087,6 +1206,7 @@ if (isSpecialLeave) {
                   View All
                 </Link>
               </div>
+
               {requests.length === 0 ? (
                 <p className="mt-4 text-sm text-slate-500">
                   No leave requests yet.
@@ -1102,10 +1222,12 @@ if (isSpecialLeave) {
                         <p className="truncate text-sm font-semibold text-slate-800">
                           {request.leave_type?.name || "Leave"}
                         </p>
+
                         <p className="mt-0.5 text-xs text-slate-500">
                           {request.start_date} · {request.total_days} days
                         </p>
                       </div>
+
                       <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-semibold capitalize text-amber-800">
                         {request.status}
                       </span>
@@ -1161,10 +1283,12 @@ if (isSpecialLeave) {
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">
             My Leaves
           </h1>
+
           <p className="mt-1 text-xs text-slate-500">
             View and track all your leave requests.
           </p>
         </div>
+
         <nav aria-label="Breadcrumb">
           <Link
             href="/portal"
@@ -1194,11 +1318,18 @@ if (isSpecialLeave) {
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {visibleBalances.map((balance) => {
-          const code = String(balance.leave_type?.code ?? "").toUpperCase();
+          const code = String(
+            balance.leave_type?.code ?? ""
+          ).toUpperCase();
+
           const remainingDays = Number(balance.balance_days) || 0;
           const usedDays = Number(balance.used_days) || 0;
           const allocatedDays = Number(balance.allocated_days) || 0;
-          const themes: Record<string, { card: string; icon: string; badge: string }> = {
+
+          const themes: Record<
+            string,
+            { card: string; icon: string; badge: string }
+          > = {
             CL: {
               card: "border-emerald-100 bg-emerald-50/50",
               icon: "bg-emerald-100 text-emerald-600",
@@ -1225,7 +1356,9 @@ if (isSpecialLeave) {
               badge: "text-sky-700",
             },
           };
+
           const theme = themes[code] ?? themes.CL;
+
           const Icon =
             code === "SL"
               ? HeartPulse
@@ -1254,16 +1387,22 @@ if (isSpecialLeave) {
                     <Icon className="h-4 w-4" />
                   )}
                 </span>
+
                 <div className="min-w-0">
-                  <p className={`truncate text-[10px] font-semibold ${theme.badge}`}>
+                  <p
+                    className={`truncate text-[10px] font-semibold ${theme.badge}`}
+                  >
                     {balance.leave_type?.name}
                   </p>
+
                   <p className="mt-1 text-lg font-bold leading-5 text-slate-900">
                     {remainingDays}
                   </p>
+
                   <p className="mt-0.5 text-[9px] text-slate-500">
                     days remaining
                   </p>
+
                   <p className="mt-1 text-[9px] text-slate-500">
                     {usedDays} used of {allocatedDays} days
                   </p>
@@ -1304,6 +1443,7 @@ if (isSpecialLeave) {
 
           <label className="flex items-center gap-2 text-[10px] font-medium text-slate-500">
             <CalendarDays className="h-3.5 w-3.5" />
+
             <input
               type="month"
               value={monthFilter}
@@ -1351,9 +1491,11 @@ if (isSpecialLeave) {
               ) : (
                 paginatedRequests.map((request, index) => {
                   const status = String(request.status).toLowerCase();
+
                   const leaveCode = String(
                     request.leave_type?.code ?? ""
                   ).toUpperCase();
+
                   const leaveIcon =
                     leaveCode === "SL"
                       ? HeartPulse
@@ -1362,6 +1504,7 @@ if (isSpecialLeave) {
                         : leaveCode === "PL"
                           ? Baby
                           : CalendarDays;
+
                   const LeaveIcon = leaveIcon;
 
                   return (
@@ -1372,6 +1515,7 @@ if (isSpecialLeave) {
                       <td className="px-3 py-2.5 text-slate-400">
                         {(currentPage - 1) * pageSize + index + 1}
                       </td>
+
                       <td className="px-3 py-2.5 font-medium text-slate-800">
                         <div className="flex items-center gap-2 whitespace-nowrap">
                           <span className="rounded-md bg-blue-50 p-1 text-blue-700">
@@ -1387,7 +1531,9 @@ if (isSpecialLeave) {
                               <LeaveIcon className="h-3 w-3" />
                             )}
                           </span>
+
                           {request.leave_type?.name || "Leave"}
+
                           {request.is_half_day && (
                             <span className="text-[10px] font-medium text-slate-400">
                               {request.leave_duration === "first_half"
@@ -1399,52 +1545,63 @@ if (isSpecialLeave) {
                           )}
                         </div>
                       </td>
+
                       <td className="whitespace-nowrap px-3 py-2.5">
                         {formatLeaveDate(request.start_date)}
                       </td>
+
                       <td className="whitespace-nowrap px-3 py-2.5">
                         {formatLeaveDate(request.end_date)}
                       </td>
+
                       <td className="whitespace-nowrap px-3 py-2.5 font-semibold text-slate-700">
                         {request.total_days}
                         {request.is_half_day ? " (½)" : ""}
                       </td>
+
                       <td
                         className="max-w-36 truncate px-3 py-2.5"
                         title={request.reason || ""}
                       >
                         {request.reason || "--"}
                       </td>
+
                       <td className="px-3 py-2.5">
-                      <span
-                        className={`rounded-md px-2 py-1 text-[9px] font-semibold capitalize ${
-                          status === "approved"
-                            ? "bg-emerald-100 text-emerald-800"
-                            : status === "rejected"
-                              ? "bg-red-100 text-red-800"
-                              : status === "cancelled"
-                                ? "bg-slate-100 text-slate-700"
-                                : "bg-amber-100 text-amber-800"
-                        }`}
-                      >
-                        {status}
-                      </span>
+                        <span
+                          className={`rounded-md px-2 py-1 text-[9px] font-semibold capitalize ${
+                            status === "approved"
+                              ? "bg-emerald-100 text-emerald-800"
+                              : status === "rejected"
+                                ? "bg-red-100 text-red-800"
+                                : status === "cancelled"
+                                  ? "bg-slate-100 text-slate-700"
+                                  : "bg-amber-100 text-amber-800"
+                          }`}
+                        >
+                          {status}
+                        </span>
                       </td>
+
                       <td className="whitespace-nowrap px-3 py-2.5">
                         {formatLeaveDate(request.created_at)}
                       </td>
+
                       <td className="px-3 py-2.5">
                         <details className="relative">
                           <summary
-                            aria-label={`View details for ${request.leave_type?.name || "leave"} request`}
+                            aria-label={`View details for ${
+                              request.leave_type?.name || "leave"
+                            } request`}
                             className="flex h-7 w-7 cursor-pointer list-none items-center justify-center rounded-md text-slate-500 hover:bg-blue-50 hover:text-blue-700"
                           >
                             <Eye className="h-3.5 w-3.5" />
                           </summary>
+
                           <div className="absolute right-0 top-full z-10 mt-1 w-52 rounded-lg border border-slate-200 bg-white p-3 text-[10px] font-normal text-slate-600 shadow-lg">
                             <p className="font-semibold text-slate-800">
                               {request.reason || "No reason provided"}
                             </p>
+
                             {request.rejection_reason && (
                               <p className="mt-2 border-t border-slate-100 pt-2">
                                 HR note: {request.rejection_reason}
@@ -1467,42 +1624,59 @@ if (isSpecialLeave) {
             {filteredRequests.length === 0
               ? 0
               : (currentPage - 1) * pageSize + 1}{" "}
-            to {Math.min(currentPage * pageSize, filteredRequests.length)} of{" "}
-            {filteredRequests.length} entries
+            to{" "}
+            {Math.min(
+              currentPage * pageSize,
+              filteredRequests.length
+            )}{" "}
+            of {filteredRequests.length} entries
           </p>
-          <nav aria-label="Leave request pages" className="flex items-center gap-1">
+
+          <nav
+            aria-label="Leave request pages"
+            className="flex items-center gap-1"
+          >
             <button
               type="button"
               aria-label="Previous page"
               disabled={currentPage === 1}
-              onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+              onClick={() =>
+                setCurrentPage((page) => Math.max(1, page - 1))
+              }
               className="rounded-md border border-slate-200 p-1.5 text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
             >
               <ChevronLeft className="h-3.5 w-3.5" />
             </button>
-            {Array.from({ length: pageCount }, (_, index) => index + 1).map(
-              (page) => (
-                <button
-                  key={page}
-                  type="button"
-                  aria-current={currentPage === page ? "page" : undefined}
-                  onClick={() => setCurrentPage(page)}
-                  className={`min-w-7 rounded-md px-2 py-1.5 text-[10px] font-semibold ${
-                    currentPage === page
-                      ? "bg-blue-600 text-white"
-                      : "text-slate-600 hover:bg-slate-100"
-                  }`}
-                >
-                  {page}
-                </button>
-              )
-            )}
+
+            {Array.from(
+              { length: pageCount },
+              (_, index) => index + 1
+            ).map((page) => (
+              <button
+                key={page}
+                type="button"
+                aria-current={
+                  currentPage === page ? "page" : undefined
+                }
+                onClick={() => setCurrentPage(page)}
+                className={`min-w-7 rounded-md px-2 py-1.5 text-[10px] font-semibold ${
+                  currentPage === page
+                    ? "bg-blue-600 text-white"
+                    : "text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                {page}
+              </button>
+            ))}
+
             <button
               type="button"
               aria-label="Next page"
               disabled={currentPage === pageCount}
               onClick={() =>
-                setCurrentPage((page) => Math.min(pageCount, page + 1))
+                setCurrentPage((page) =>
+                  Math.min(pageCount, page + 1)
+                )
               }
               className="rounded-md border border-slate-200 p-1.5 text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
             >
@@ -1517,6 +1691,7 @@ if (isSpecialLeave) {
           <span className="mt-0.5 rounded-full bg-blue-100 p-1 text-blue-600">
             <CalendarDays className="h-3.5 w-3.5" />
           </span>
+
           <p>
             You can apply for leave from the{" "}
             <Link
@@ -1528,6 +1703,7 @@ if (isSpecialLeave) {
             page. All leave requests are subject to manager approval.
           </p>
         </div>
+
         <Link
           href="/portal/leaves?view=apply"
           className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-blue-600 px-3 py-2 text-[10px] font-semibold text-white hover:bg-blue-700"
@@ -1623,7 +1799,7 @@ if (isSpecialLeave) {
                     onChange={(e) =>
                       handleSpecialDurationChange(e.target.value)
                     }
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                     required
                   >
                     <option value="">Select Duration</option>
@@ -1766,7 +1942,9 @@ if (isSpecialLeave) {
                   className="mb-1 flex items-center gap-2 font-semibold text-slate-700"
                 >
                   <FileUp className="h-4 w-4 text-indigo-600" />
-                  Supporting Document {isSpecialLeave ? "(Required)" : "(Optional)"}
+
+                  Supporting Document{" "}
+                  {isSpecialLeave ? "(Required)" : "(Optional)"}
                 </label>
 
                 <input
@@ -1836,6 +2014,11 @@ if (isSpecialLeave) {
                 <span className="text-sm font-bold text-indigo-700">
                   {calculateDays()}{" "}
                   {calculateDays() === 1 ? "day" : "days"}
+                  {!formData.isHalfDay && (
+                    <span className="ml-1 text-[10px] font-normal text-slate-500">
+                      ({isLOP ? "Working Days" : "Calendar Days"})
+                    </span>
+                  )}
                 </span>
               </div>
 

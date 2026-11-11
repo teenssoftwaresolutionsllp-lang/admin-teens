@@ -1293,9 +1293,23 @@ export default function EmployeeProfileView({
   ) => {
     e.preventDefault();
 
-    if (loading || requestDocumentUploading) {
-      return;
-    }
+    if (
+  loading ||
+  requestDocumentUploading ||
+  isProfilePhotoUploading
+) {
+  return;
+}
+
+if (!profilePhotoUrl?.trim()) {
+  const message =
+    "Please upload your passport-size profile photo before submitting. Maximum file size is 5 MB.";
+
+  setErrorMessage(message);
+  toast.error(message);
+  return;
+}
+
 
     setLoading(true);
     setSuccessMessage(null);
@@ -1931,8 +1945,16 @@ export default function EmployeeProfileView({
               </button>
             </div>
             {isProfilePhotoUploading && (
-              <p className="mt-2 text-xs text-slate-500" role="status">
-                JPG, PNG, or WEBP · max 5 MB
+             <p
+                className={`mt-2 text-xs font-medium ${
+                  profilePhotoUrl
+                    ? "text-emerald-600"
+                    : "text-rose-600"
+                }`}
+              >
+                {profilePhotoUrl
+                  ? "Passport-size photo uploaded · Max 5 MB"
+                  : "Required: Upload passport-size photo · Max 5 MB"}
               </p>
             )}
             <h2 className="mt-3 text-lg font-bold text-slate-900">
@@ -2655,6 +2677,12 @@ export default function EmployeeProfileView({
                     "Employment Status",
                     employeeData.status,
                   ],
+                  [
+                  "Annual CTC",
+                  employeeData.annual_ctc
+                    ? `₹${Number(employeeData.annual_ctc).toLocaleString("en-IN")} per annum`
+                    : "Not specified",
+                ],
                 ].map(
                   ([label, value]) => (
                     <div

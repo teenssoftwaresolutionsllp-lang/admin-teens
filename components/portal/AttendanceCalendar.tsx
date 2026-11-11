@@ -50,48 +50,6 @@ interface AttendanceCalendarProps {
 }
 
 /* =========================================================
-   EXISTING DUMMY DATA
-   ========================================================= */
-
-// const dummyAttendance: Record<string, SelectedAttendance> = {
-//   "2026-09-10": {
-//     date: "2026-09-10",
-//     status: "leave",
-//   },
-//   "2026-09-11": {
-//     date: "2026-09-11",
-//     status: "leave",
-//   },
-//   "2026-09-22": {
-//     date: "2026-09-22",
-//     status: "half_day",
-//     clockIn: "09:20 AM",
-//     clockOut: "01:15 PM",
-//     worked: "3h 55m",
-//   },
-//   "2026-09-23": {
-//     date: "2026-09-23",
-//     status: "present",
-//     clockIn: "09:18 AM",
-//     clockOut: "06:12 PM",
-//     worked: "8h 54m",
-//   },
-//   "2026-09-24": {
-//     date: "2026-09-24",
-//     status: "present",
-//     clockIn: "09:42 AM",
-//     clockOut: "06:05 PM",
-//     worked: "8h 23m",
-//   },
-//   "2026-09-25": {
-//     date: "2026-09-25",
-//     status: "present",
-//     clockIn: "02:35 PM",
-//     worked: "1h 07m",
-//   },
-// };
-
-/* =========================================================
    HELPERS
    ========================================================= */
 
@@ -145,7 +103,12 @@ function isPastWorkingDay(date: string): boolean {
 
   today.setHours(0, 0, 0, 0);
 
-  return selected < today && !isWeekend(date);
+  // Saturday and Sunday must never be automatically absent.
+  if (isWeekend(date)) {
+    return false;
+  }
+
+  return selected < today;
 }
 
 function getJoiningDateOnly(
@@ -155,32 +118,42 @@ function getJoiningDateOnly(
 
   const date = joiningDate.slice(0, 10);
 
-  return /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null;
+  return /^\d{4}-\d{2}-\d{2}$/.test(date)
+    ? date
+    : null;
 }
 
-   function isWorkFromHome(log: AttendanceLog): boolean {
-     const values = log as AttendanceLog & Record<string, unknown>;
-     const mode = [
-       values.work_mode,
-       values.work_location,
-       values.location_mode,
-       values.attendance_mode,
-       values.mode,
-       log.status,
-     ]
-       .filter((value): value is string => typeof value === "string")
-       .join(" ")
-       .toLowerCase()
-       .replaceAll("-", "_")
-       .replaceAll(" ", "_");
+function isWorkFromHome(log: AttendanceLog): boolean {
+  const values = log as AttendanceLog &
+    Record<string, unknown>;
 
-     return ["work_from_home", "wfh", "remote", "home"].some((value) =>
-       mode.includes(value)
-     );
-   }
+  const mode = [
+    values.work_mode,
+    values.work_location,
+    values.location_mode,
+    values.attendance_mode,
+    values.mode,
+    log.status,
+  ]
+    .filter(
+      (value): value is string =>
+        typeof value === "string"
+    )
+    .join(" ")
+    .toLowerCase()
+    .replaceAll("-", "_")
+    .replaceAll(" ", "_");
 
-   /* =========================================================
-      COMPONENT
+  return [
+    "work_from_home",
+    "wfh",
+    "remote",
+    "home",
+  ].some((value) => mode.includes(value));
+}
+
+/* =========================================================
+   COMPONENT
    ========================================================= */
 
 export default function AttendanceCalendar({
@@ -198,13 +171,19 @@ export default function AttendanceCalendar({
 }: AttendanceCalendarProps) {
   const today = new Date();
 
-  const joiningDate = getJoiningDateOnly(employeeJoiningDate);
+  const joiningDate = getJoiningDateOnly(
+    employeeJoiningDate
+  );
+
   const joiningMonth = joiningDate
     ? joiningDate.slice(0, 7)
     : undefined;
 
-  const initialCalendarYear = initialYear ?? today.getFullYear();
-  const initialCalendarMonth = initialMonth ?? today.getMonth();
+  const initialCalendarYear =
+    initialYear ?? today.getFullYear();
+
+  const initialCalendarMonth =
+    initialMonth ?? today.getMonth();
 
   const initialMonthValue = `${initialCalendarYear}-${String(
     initialCalendarMonth + 1
@@ -223,35 +202,48 @@ export default function AttendanceCalendar({
     () => Number(startingMonth.slice(5, 7)) - 1
   );
 
-  const [selectedDate, setSelectedDate] = useState<string>(() => {
-    if (
-      initialSelectedDate?.startsWith(startingMonth) &&
-      (!joiningDate || initialSelectedDate >= joiningDate)
-    ) {
-      return initialSelectedDate;
+  const [selectedDate, setSelectedDate] = useState<string>(
+    () => {
+      if (
+        initialSelectedDate?.startsWith(startingMonth) &&
+        (!joiningDate ||
+          initialSelectedDate >= joiningDate)
+      ) {
+        return initialSelectedDate;
+      }
+
+      const currentMonthValue = `${today.getFullYear()}-${String(
+        today.getMonth() + 1
+      ).padStart(2, "0")}`;
+
+      if (
+        currentMonthValue === startingMonth &&
+        (!joiningDate ||
+          formatDate(today) >= joiningDate)
+      ) {
+        return formatDate(today);
+      }
+
+      return "";
     }
-
-    const currentMonthValue = `${today.getFullYear()}-${String(
-      today.getMonth() + 1
-    ).padStart(2, "0")}`;
-
-    if (
-      currentMonthValue === startingMonth &&
-      (!joiningDate || formatDate(today) >= joiningDate)
-    ) {
-      return formatDate(today);
-    }
-
-    return "";
-  });
+  );
 
   /* =======================================================
      CALENDAR DAYS
      ======================================================= */
 
   const { days, firstDay, totalCells } = useMemo(() => {
-    const totalDays = new Date(year, month + 1, 0).getDate();
-    const firstDayOfMonth = new Date(year, month, 1).getDay();
+    const totalDays = new Date(
+      year,
+      month + 1,
+      0
+    ).getDate();
+
+    const firstDayOfMonth = new Date(
+      year,
+      month,
+      1
+    ).getDay();
 
     return {
       days: Array.from(
@@ -259,63 +251,86 @@ export default function AttendanceCalendar({
         (_, index) => index + 1
       ),
       firstDay: firstDayOfMonth,
-      totalDays,
       totalCells:
-        Math.ceil((firstDayOfMonth + totalDays) / 7) * 7,
+        Math.ceil(
+          (firstDayOfMonth + totalDays) / 7
+        ) * 7,
     };
   }, [year, month]);
 
   /* =======================================================
      APPROVED LEAVE DATES
+
+     IMPORTANT:
+     Include all calendar dates in approved leave.
+     Do not exclude Saturday and Sunday here.
      ======================================================= */
 
-/* =======================================================
-   APPROVED LEAVE DATES
-   ======================================================= */
+  const leaveDates = useMemo(() => {
+    const dates = new Set<string>();
 
-const leaveDates = useMemo(() => {
-  const dates = new Set<string>();
-
-  leaveRequests
-    .filter(
-      (request) => String(request.status).toLowerCase() === "approved"
-    )
-    .forEach((request) => {
-      if (!request.start_date || !request.end_date) return;
-
-      const startValue = request.start_date.slice(0, 10);
-      const endValue = request.end_date.slice(0, 10);
-
-      const start = new Date(`${startValue}T00:00:00`);
-      const end = new Date(`${endValue}T00:00:00`);
-
-      if (
-        Number.isNaN(start.getTime()) ||
-        Number.isNaN(end.getTime()) ||
-        start > end
-      ) {
-        return;
-      }
-
-      const current = new Date(start);
-
-      while (current <= end) {
-        const date = formatDate(current);
-
-        // Do not show leave before the employee joined.
-        if (!joiningDate || date >= joiningDate) {
-          // Do not mark Saturday or Sunday as leave.
-          if (!isWeekend(date)) {
-            dates.add(date);
-          }
+    leaveRequests
+      .filter(
+        (request) =>
+          String(request.status).toLowerCase() ===
+          "approved"
+      )
+      .forEach((request) => {
+        if (
+          !request.start_date ||
+          !request.end_date
+        ) {
+          return;
         }
 
-        current.setDate(current.getDate() + 1);
-      }
-    });
+        const startValue =
+          request.start_date.slice(0, 10);
 
-  return dates;
-}, [leaveRequests, joiningDate]);
+        const endValue =
+          request.end_date.slice(0, 10);
+
+        const start = new Date(
+          `${startValue}T00:00:00`
+        );
+
+        const end = new Date(
+          `${endValue}T00:00:00`
+        );
+
+        if (
+          Number.isNaN(start.getTime()) ||
+          Number.isNaN(end.getTime()) ||
+          start > end
+        ) {
+          return;
+        }
+
+        const current = new Date(start);
+
+        while (current <= end) {
+          const date = formatDate(current);
+
+          // Do not show leave before joining.
+          if (
+            !joiningDate ||
+            date >= joiningDate
+          ) {
+            // Include Friday, Saturday, Sunday and Monday.
+            dates.add(date);
+          }
+
+          current.setDate(
+            current.getDate() + 1
+          );
+        }
+      });
+
+    return dates;
+  }, [leaveRequests, joiningDate]);
+
+  /* =======================================================
+     HOLIDAYS
+     ======================================================= */
 
   const holidaysByDate = useMemo(() => {
     const map = new Map<string, string>();
@@ -327,7 +342,10 @@ const leaveDates = useMemo(() => {
         /^\d{4}-\d{2}-\d{2}$/.test(date) &&
         holiday.is_working_day !== true
       ) {
-        map.set(date, holiday.title || "Holiday");
+        map.set(
+          date,
+          holiday.title || "Holiday"
+        );
       }
     });
 
@@ -346,8 +364,10 @@ const leaveDates = useMemo(() => {
 
       const date = log.attendance_date.slice(0, 10);
 
-      // Ignore any stored attendance before joining.
-      if (joiningDate && date < joiningDate) return;
+      // Ignore attendance before joining.
+      if (joiningDate && date < joiningDate) {
+        return;
+      }
 
       map.set(date, log);
     });
@@ -360,61 +380,86 @@ const leaveDates = useMemo(() => {
      ======================================================= */
 
   const getDayState = (day: number): DayState => {
-  const date = `${year}-${String(month + 1).padStart(
-    2,
-    "0"
-  )}-${String(day).padStart(2, "0")}`;
+    const date = `${year}-${String(
+      month + 1
+    ).padStart(2, "0")}-${String(day).padStart(
+      2,
+      "0"
+    )}`;
 
-  if (joiningDate && date < joiningDate) {
-    return "empty";
-  }
+    // Before joining date.
+    if (joiningDate && date < joiningDate) {
+      return "empty";
+    }
 
-  if (holidaysByDate.has(date)) {
-    return "holiday";
-  }
-
-  if (leaveDates.has(date)) {
-    return "leave";
-  }
-
-  const log = logByDate.get(date);
-
-  if (log) {
-    const status = String(log.status).toLowerCase();
-
-    if (status === "on_leave" || status === "leave") {
+    // Approved leave has priority, including weekends.
+    if (leaveDates.has(date)) {
       return "leave";
     }
 
-    if (isWorkFromHome(log)) {
-      return "work_from_home";
+    // Holiday.
+    if (holidaysByDate.has(date)) {
+      return "holiday";
     }
 
-    // Late employees remain Present in attendance data.
-    // Only their calendar color changes to orange.
-    if (status === "half_day") {
-      return "half_day";
+    const log = logByDate.get(date);
+
+    if (log) {
+      const status = String(
+        log.status
+      ).toLowerCase();
+
+      if (
+        status === "on_leave" ||
+        status === "leave"
+      ) {
+        return "leave";
+      }
+
+      if (isWorkFromHome(log)) {
+        return "work_from_home";
+      }
+
+      if (status === "half_day") {
+        return "half_day";
+      }
+
+      if (
+        status === "present" &&
+        log.is_late
+      ) {
+        return "late";
+      }
+
+      if (status === "present") {
+        return "present";
+      }
+
+      if (
+        status === "absent" ||
+        status === "not_present"
+      ) {
+        // Never show absent on weekends.
+        if (isWeekend(date)) {
+          return "empty";
+        }
+
+        return "absent";
+      }
     }
 
-    if (status === "present" && log.is_late) {
-      return "late";
+    // Do not automatically mark weekends absent.
+    if (isWeekend(date)) {
+      return "empty";
     }
 
-    if (status === "present") {
-      return "present";
-    }
-
-    if (status === "absent" || status === "not_present") {
+    // Past working days without attendance become absent.
+    if (isPastWorkingDay(date)) {
       return "absent";
     }
-  }
 
-  if (isPastWorkingDay(date)) {
-    return "absent";
-  }
-
-  return "empty";
-};
+    return "empty";
+  };
 
   /* =======================================================
      GET ATTENDANCE DETAILS
@@ -423,10 +468,12 @@ const leaveDates = useMemo(() => {
   const getAttendanceDetails = (
     day: number
   ): SelectedAttendance => {
-    const date = `${year}-${String(month + 1).padStart(
+    const date = `${year}-${String(
+      month + 1
+    ).padStart(2, "0")}-${String(day).padStart(
       2,
       "0"
-    )}-${String(day).padStart(2, "0")}`;
+    )}`;
 
     if (joiningDate && date < joiningDate) {
       return {
@@ -434,10 +481,6 @@ const leaveDates = useMemo(() => {
         status: "empty",
       };
     }
-
-    // if (dummyAttendance[date]) {
-    //   return dummyAttendance[date];
-    // }
 
     const state = getDayState(day);
 
@@ -467,7 +510,9 @@ const leaveDates = useMemo(() => {
       status: state,
       clockIn: formatTime(log.check_in_time),
       clockOut: formatTime(log.check_out_time),
-      worked: formatWorkedHours(log.total_hours),
+      worked: formatWorkedHours(
+        log.total_hours
+      ),
     };
   };
 
@@ -475,29 +520,43 @@ const leaveDates = useMemo(() => {
      CHANGE MONTH
      ======================================================= */
 
-  const changeMonth = (newYear: number, newMonth: number) => {
+  const changeMonth = (
+    newYear: number,
+    newMonth: number
+  ) => {
     const newMonthValue = `${newYear}-${String(
       newMonth + 1
     ).padStart(2, "0")}`;
 
-    // Do not allow a month before the joining month.
-    if (joiningMonth && newMonthValue < joiningMonth) {
+    if (
+      joiningMonth &&
+      newMonthValue < joiningMonth
+    ) {
       return;
     }
 
     setYear(newYear);
     setMonth(newMonth);
-    const firstDate = `${newYear}-${String(newMonth + 1).padStart(
-      2,
-      "0"
-    )}-01`;
+
+    const firstDate = `${newYear}-${String(
+      newMonth + 1
+    ).padStart(2, "0")}-01`;
+
     const nextSelectedDate =
       joiningDate && firstDate < joiningDate
         ? joiningDate
         : firstDate;
+
     setSelectedDate(nextSelectedDate);
-    onSelectedDateChange?.(nextSelectedDate);
-    onMonthChange?.(newYear, newMonth);
+
+    onSelectedDateChange?.(
+      nextSelectedDate
+    );
+
+    onMonthChange?.(
+      newYear,
+      newMonth
+    );
   };
 
   /* =======================================================
@@ -505,19 +564,27 @@ const leaveDates = useMemo(() => {
      ======================================================= */
 
   const handleDateClick = (day: number) => {
-    const date = `${year}-${String(month + 1).padStart(
+    const date = `${year}-${String(
+      month + 1
+    ).padStart(2, "0")}-${String(day).padStart(
       2,
       "0"
-    )}-${String(day).padStart(2, "0")}`;
+    )}`;
 
-    // Ignore clicks on dates before joining.
-    if (joiningDate && date < joiningDate) {
+    if (
+      joiningDate &&
+      date < joiningDate
+    ) {
       return;
     }
 
     setSelectedDate(date);
+
     onSelectedDateChange?.(date);
-    onDateSelect?.(getAttendanceDetails(day));
+
+    onDateSelect?.(
+      getAttendanceDetails(day)
+    );
   };
 
   /* =======================================================
@@ -525,31 +592,47 @@ const leaveDates = useMemo(() => {
      ======================================================= */
 
   const goToPreviousMonth = () => {
-    const newDate = new Date(year, month - 1, 1);
-    changeMonth(newDate.getFullYear(), newDate.getMonth());
+    const newDate = new Date(
+      year,
+      month - 1,
+      1
+    );
+
+    changeMonth(
+      newDate.getFullYear(),
+      newDate.getMonth()
+    );
   };
 
   const goToNextMonth = () => {
-    const newDate = new Date(year, month + 1, 1);
-    changeMonth(newDate.getFullYear(), newDate.getMonth());
+    const newDate = new Date(
+      year,
+      month + 1,
+      1
+    );
+
+    changeMonth(
+      newDate.getFullYear(),
+      newDate.getMonth()
+    );
   };
 
   /* =======================================================
      MONTH LABEL
      ======================================================= */
 
-  const monthLabel = new Date(year, month, 1).toLocaleDateString(
-    "en-US",
-    {
-      month: "long",
-      year: "numeric",
-    }
-  );
+  const monthLabel = new Date(
+    year,
+    month,
+    1
+  ).toLocaleDateString("en-US", {
+    month: "long",
+    year: "numeric",
+  });
 
-  const selectedMonth = `${year}-${String(month + 1).padStart(
-    2,
-    "0"
-  )}`;
+  const selectedMonth = `${year}-${String(
+    month + 1
+  ).padStart(2, "0")}`;
 
   /* =======================================================
      DAY STYLE
@@ -579,11 +662,13 @@ const leaveDates = useMemo(() => {
       case "late":
         return `${base} bg-amber-200 text-amber-900 hover:bg-amber-300${selectedRing}`;
 
+      // Approved leave = RED.
       case "leave":
-  return `${base} bg-orange-200 text-orange-900 hover:bg-orange-300${selectedRing}`;
+        return `${base} bg-red-200 text-red-900 hover:bg-red-300${selectedRing}`;
 
-case "absent":
-  return `${base} bg-red-200 text-red-900 hover:bg-red-300${selectedRing}`;
+      // Absent = ORANGE.
+      case "absent":
+        return `${base} bg-orange-200 text-orange-900 hover:bg-orange-300${selectedRing}`;
 
       case "work_from_home":
         return `${base} bg-purple-200 text-purple-900 hover:bg-purple-300${selectedRing}`;
@@ -613,12 +698,17 @@ case "absent":
         {!compact && (
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50">
-              <CalendarDays size={20} className="text-indigo-600" />
+              <CalendarDays
+                size={20}
+                className="text-indigo-600"
+              />
             </div>
+
             <div>
               <h2 className="text-lg font-bold text-slate-900">
                 Attendance Calendar
               </h2>
+
               <p className="mt-1 text-xs text-slate-500">
                 Click a date to view attendance
               </p>
@@ -628,7 +718,9 @@ case "absent":
 
         <div
           className={`flex items-center gap-2 ${
-            compact ? "w-full justify-between" : ""
+            compact
+              ? "w-full justify-between"
+              : ""
           }`}
         >
           <button
@@ -636,7 +728,8 @@ case "absent":
             onClick={goToPreviousMonth}
             aria-label="Previous month"
             disabled={
-              !!joiningMonth && selectedMonth <= joiningMonth
+              !!joiningMonth &&
+              selectedMonth <= joiningMonth
             }
             className="flex h-7 w-7 items-center justify-center rounded-md text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
           >
@@ -660,85 +753,126 @@ case "absent":
 
       {/* WEEK DAYS */}
       <div className="mb-1 grid grid-cols-7">
-        {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(
-          (day) => (
-            <div
-              key={day}
-              className="py-1 text-center text-[10px] font-medium text-slate-500"
-            >
-              {day}
-            </div>
-          )
-        )}
+        {[
+          "Sun",
+          "Mon",
+          "Tue",
+          "Wed",
+          "Thu",
+          "Fri",
+          "Sat",
+        ].map((day) => (
+          <div
+            key={day}
+            className="py-1 text-center text-[10px] font-medium text-slate-500"
+          >
+            {day}
+          </div>
+        ))}
       </div>
 
       {/* CALENDAR */}
       <div className="grid grid-cols-7 gap-y-1">
-        {Array.from({ length: totalCells }, (_, index) => {
-          const day = index - firstDay + 1;
-          const isOutsideMonth = day < 1 || day > days.length;
+        {Array.from(
+          { length: totalCells },
+          (_, index) => {
+            const day = index - firstDay + 1;
 
-          if (isOutsideMonth) {
-            const outsideDay =
-              day < 1
-                ? new Date(year, month, 0).getDate() + day
-                : day - days.length;
+            const isOutsideMonth =
+              day < 1 || day > days.length;
+
+            if (isOutsideMonth) {
+              const outsideDay =
+                day < 1
+                  ? new Date(
+                      year,
+                      month,
+                      0
+                    ).getDate() + day
+                  : day - days.length;
+
+              return (
+                <div
+                  key={`outside-${index}`}
+                  className="flex h-8 items-center justify-center text-xs text-slate-300"
+                  aria-hidden="true"
+                >
+                  {outsideDay}
+                </div>
+              );
+            }
+
+            const date = `${year}-${String(
+              month + 1
+            ).padStart(2, "0")}-${String(
+              day
+            ).padStart(2, "0")}`;
+
+            const state = getDayState(day);
+
+            const isSelected =
+              selectedDate === date;
+
+            const isBeforeJoiningDate =
+              !!joiningDate &&
+              date < joiningDate;
 
             return (
-              <div
-                key={`outside-${index}`}
-                className="flex h-8 items-center justify-center text-xs text-slate-300"
-                aria-hidden="true"
+              <button
+                key={day}
+                type="button"
+                onClick={() =>
+                  handleDateClick(day)
+                }
+                disabled={isBeforeJoiningDate}
+                aria-label={`${date}: ${
+                  isBeforeJoiningDate
+                    ? "before joining date"
+                    : state.replace("_", " ")
+                }`}
+                title={
+                  holidaysByDate.get(date)
+                }
+                aria-pressed={isSelected}
+                className={getDayClass(
+                  state,
+                  isSelected,
+                  isBeforeJoiningDate
+                )}
               >
-                {outsideDay}
-              </div>
+                {day}
+              </button>
             );
           }
-
-          const date = `${year}-${String(month + 1).padStart(
-            2,
-            "0"
-          )}-${String(day).padStart(2, "0")}`;
-
-          const state = getDayState(day);
-          const isSelected = selectedDate === date;
-
-          const isBeforeJoiningDate =
-            !!joiningDate && date < joiningDate;
-
-          return (
-            <button
-              key={day}
-              type="button"
-              onClick={() => handleDateClick(day)}
-              disabled={isBeforeJoiningDate}
-              aria-label={`${date}: ${
-                isBeforeJoiningDate
-                  ? "before joining date"
-                  : state.replace("_", " ")
-              }`}
-              title={holidaysByDate.get(date)}
-              aria-pressed={isSelected}
-              className={getDayClass(
-                state,
-                isSelected,
-                isBeforeJoiningDate
-              )}
-            >
-              {day}
-            </button>
-          );
-        })}
+        )}
       </div>
 
       {/* LEGEND */}
       <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 border-t border-slate-100 pt-2">
-        <Legend color="bg-emerald-500" label="Present" />
-        <Legend color="bg-red-500" label="Absent" />
-        <Legend color="bg-orange-600" label="Leave" />
-        {/* <Legend color="bg-amber-400" label="Late" /> */}
-        <Legend color="bg-purple-500" label="Work From Home" />
-        <Legend color="bg-[#94a3b8]" label="Holiday" />
+        <Legend
+          color="bg-emerald-500"
+          label="Present"
+        />
+
+        <Legend
+          color="bg-orange-500"
+          label="Absent"
+        />
+
+        <Legend
+          color="bg-red-500"
+          label="Leave"
+        />
+
+        <Legend
+          color="bg-purple-500"
+          label="Work From Home"
+        />
+
+        <Legend
+          color="bg-[#94a3b8]"
+          label="Holiday"
+        />
       </div>
     </section>
   );
@@ -757,7 +891,9 @@ function Legend({
 }) {
   return (
     <div className="flex items-center gap-2 text-xs text-slate-600">
-      <span className={`h-3 w-3 rounded-full ${color}`} />
+      <span
+        className={`h-3 w-3 rounded-full ${color}`}
+      />
       <span>{label}</span>
     </div>
   );
