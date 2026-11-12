@@ -47,7 +47,7 @@ export default async function EmployeePortalPage() {
     );
   }
 
-  const employeeId = employee?.id;
+  const employeeId = employee.id;
 
   const todayAttendance = employeeId
     ? await DataStore.getTodayAttendance(employeeId)
@@ -68,6 +68,7 @@ export default async function EmployeePortalPage() {
   const payslips = employeeId
     ? await DataStore.getPayslips(employeeId)
     : [];
+
   const latestPayslip = payslips[0] ?? null;
 
   const projects = await DataStore.getProjects();
@@ -77,6 +78,95 @@ export default async function EmployeePortalPage() {
     projects.find((p) => p.id === employee?.project_id) ||
     projects[0] ||
     null;
+
+  // --------------------------------------------------
+  // UPCOMING HOLIDAYS - FETCH FROM SUPABASE
+  // --------------------------------------------------
+
+  type HolidayItem = {
+    id: string;
+    title: string;
+    holiday_date: string;
+    calendar_id: string;
+  };
+
+  let holidays: HolidayItem[] = [];
+
+  const holidayCalendars = await DataStore.getHolidayCalendars();
+
+  // Get employee's assigned project calendar
+  const calendarId =
+    (project as any)?.calendar_id ||
+    (employee as any)?.project?.calendar_id ||
+    null;
+
+  if (calendarId) {
+    // Find the holiday calendar assigned to this project
+    const holidayCalendar = holidayCalendars.find(
+      (calendar: any) => calendar.id === calendarId
+    );
+
+    if (holidayCalendar) {
+      const timezone =
+        holidayCalendar.timezone ||
+        project?.timezone ||
+        "Asia/Kolkata";
+
+      // Get today's date according to calendar timezone
+      const todayParts = new Intl.DateTimeFormat("en-US", {
+        timeZone: timezone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).formatToParts(new Date());
+
+      const getDatePart = (type: string) =>
+        todayParts.find((part) => part.type === type)?.value || "";
+
+      const todayDate =
+        `${getDatePart("year")}-${getDatePart("month")}-${getDatePart("day")}`;
+
+      // Get upcoming holidays
+      holidays = ((holidayCalendar.holidays || []) as HolidayItem[])
+        .filter((holiday) => {
+          return (
+            holiday.holiday_date &&
+            holiday.holiday_date >= todayDate
+          );
+        })
+        .sort((a, b) =>
+          a.holiday_date.localeCompare(b.holiday_date)
+        );
+    }
+  }
+
+  // --------------------------------------------------
+  // DATE FORMATTING
+  // --------------------------------------------------
+
+  const formatHolidayDate = (dateStr: string) => {
+    const date = new Date(`${dateStr}T00:00:00Z`);
+
+    return date.toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+      timeZone: "UTC",
+    });
+  };
+
+  const formatHolidayDay = (dateStr: string) => {
+    const date = new Date(`${dateStr}T00:00:00Z`);
+
+    return date.toLocaleDateString("en-IN", {
+      weekday: "long",
+      timeZone: "UTC",
+    });
+  };
+
+  // --------------------------------------------------
+  // ATTENDANCE AND LEAVE STATISTICS
+  // --------------------------------------------------
 
   const now = new Date();
   const currentMonth = now.getMonth();
@@ -119,13 +209,9 @@ export default async function EmployeePortalPage() {
     )
   ).length;
 
-  const holidays = [
-    {
-      name: "Diwali",
-      date: "08 November 2026",
-      day: "Sunday",
-    },
-  ];
+  // --------------------------------------------------
+  // PROJECT SHIFT DETAILS
+  // --------------------------------------------------
 
   const shiftStart = project?.shift_start_time || "09:00";
   const shiftEnd = project?.shift_end_time || "18:00";
@@ -426,6 +512,7 @@ export default async function EmployeePortalPage() {
       {/* Upcoming Holiday */}
       <section className="rounded-2xl border border-[#eee8ff] bg-[#faf8ff] px-5 py-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
+
           <div className="flex items-center gap-3">
             <div className="rounded-xl bg-white p-3 text-violet-500 shadow-sm">
               <PartyPopper className="h-5 w-5" />
@@ -435,46 +522,86 @@ export default async function EmployeePortalPage() {
               <h2 className="text-sm font-bold text-slate-800">
                 Upcoming Holiday
               </h2>
+
               <p className="text-[11px] text-slate-400">
-                {project?.client_country
-                  ? `Holiday calendar • ${project.client_country}`
-                  : "Holiday calendar"}
+                {holidayCalendars.find(
+                  (calendar: any) => calendar.id === calendarId
+                )?.country_name ||
+                  project?.client_country ||
+                  "Holiday calendar"}
+                {" • Holiday calendar"}
               </p>
             </div>
           </div>
 
-          <div className="rounded-xl border border-[#eee8ff] bg-white px-4 py-3">
-            <p className="text-xs font-bold text-violet-600">
-              {holidays[0].name}
-            </p>
-            <p className="mt-1 text-[11px] text-slate-500">
-              {holidays[0].date} • {holidays[0].day}
-            </p>
-          </div>
+          {holidays.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-3">
+
+              {/* Nearest Holiday */}
+              <div className="rounded-xl border border-[#eee8ff] bg-white px-4 py-3">
+                <p className="text-xs font-bold text-violet-600">
+                  {holidays[0].title}
+                </p>
+
+                <p className="mt-1 text-[11px] text-slate-500">
+                  {formatHolidayDate(holidays[0].holiday_date)}
+                  {" • "}
+                  {formatHolidayDay(holidays[0].holiday_date)}
+                </p>
+              </div>
+
+              {/* Remaining Holidays */}
+              {holidays.length > 1 && (
+                <div className="rounded-xl border border-[#eee8ff] bg-white px-4 py-3">
+                  <p className="text-xs font-bold text-slate-700">
+                    +{holidays.length - 1} More
+                  </p>
+
+                  <p className="mt-1 text-[11px] text-slate-500">
+                    Upcoming holidays
+                  </p>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="rounded-xl border border-[#eee8ff] bg-white px-5 py-3">
+              <p className="text-xs font-semibold text-slate-500">
+                No Upcoming Holidays
+              </p>
+
+              <p className="mt-1 text-[11px] text-slate-400">
+                No holidays scheduled currently
+              </p>
+            </div>
+          )}
         </div>
       </section>
 
-      {/* Latest payslip snapshot */}
+      {/* Latest Payslip Snapshot */}
       <section className="flex flex-col justify-between gap-6 rounded-xl bg-gradient-to-r from-slate-900 to-indigo-950 p-6 text-white shadow-md md:flex-row md:items-center">
         <div className="flex items-center gap-4">
           <div className="shrink-0 rounded-xl bg-white/10 p-3">
             <FileText className="h-7 w-7 text-indigo-300" />
           </div>
+
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-lg font-bold text-white">
                 Latest Payslip: {latestPayslip?.month_name || "No payslip"}{" "}
                 {latestPayslip?.payroll_year || ""}
               </h2>
+
               <span className="rounded-full border border-emerald-500/30 bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-300">
                 {latestPayslip?.payment_status || "No Payslip"}
               </span>
             </div>
+
             <p className="mt-1 text-xs text-slate-300">
               Monthly CTC:{" "}
               {latestPayslip
                 ? `₹${Number(latestPayslip.gross_salary ?? 0).toLocaleString("en-IN")}`
                 : "Not available"}
+
               {latestPayslip && latestPayslip.lop_days > 0 && (
                 <span className="ml-1 font-semibold text-amber-300">
                   &bull; {latestPayslip.lop_days} day(s) LOP deduction (-₹
@@ -490,12 +617,14 @@ export default async function EmployeePortalPage() {
             <span className="block text-xs text-slate-400">
               Take-Home Net Salary
             </span>
+
             <span className="font-mono text-2xl font-bold text-emerald-400">
               {latestPayslip
                 ? `₹${Number(latestPayslip.net_salary ?? 0).toLocaleString("en-IN")}`
                 : "Not available"}
             </span>
           </div>
+
           <Link
             href="/portal/payslips"
             className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-white px-4 py-2.5 text-xs font-semibold text-slate-900 shadow-sm transition-colors hover:bg-slate-100"

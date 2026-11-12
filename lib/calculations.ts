@@ -88,7 +88,8 @@ export function evaluateAttendancePunch(
   checkInDate: Date,
   shiftStartTime: string = "09:00",
   gracePeriodMinutes: number = 30,
-  halfDayCutoffMinutes: number = 150
+  halfDayCutoffMinutes: number = 150,
+  shiftStartInstant?: Date
 ): {
   status: AttendanceStatus;
   isLate: boolean;
@@ -96,8 +97,13 @@ export function evaluateAttendancePunch(
 } {
   const [shiftHours, shiftMins] = shiftStartTime.split(":").map(Number);
 
-  const shiftStart = new Date(checkInDate);
-  shiftStart.setHours(shiftHours, shiftMins, 0, 0);
+  const shiftStart = shiftStartInstant
+    ? new Date(shiftStartInstant)
+    : new Date(checkInDate);
+
+  if (!shiftStartInstant) {
+    shiftStart.setHours(shiftHours, shiftMins, 0, 0);
+  }
 
   const diffMs = checkInDate.getTime() - shiftStart.getTime();
   const diffMinutes = Math.floor(diffMs / (1000 * 60));

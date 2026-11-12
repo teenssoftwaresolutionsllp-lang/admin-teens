@@ -515,6 +515,7 @@ export async function POST(
       // Do not pass employee_id. DataStore generates the next ID.
       const employee = await DataStore.createEmployee({
         user_id: authUser.id,
+        shift_type: "general",
         first_name: firstName,
         last_name: lastName,
         email,
