@@ -3,7 +3,6 @@ import { DataStore } from "@/lib/data-store";
 import AttendanceManager from "@/components/admin/AttendanceManager";
 import { redirect } from "next/navigation";
 import type { AttendanceLog } from "@/lib/types";
-import AttendanceReports from "@/components/admin/AttendanceReports";
 
 export default async function AdminAttendancePage() {
   const supabase = await createClient();
@@ -106,15 +105,6 @@ export default async function AdminAttendancePage() {
         canManageAttendanceSettings={canManageAttendanceSettings}
       />
 
-      {/* <AttendanceReports
-        logs={logs}
-        employees={employees}
-        projects={projects}
-        approvedLeaves={approvedLeaves ?? []}
-        attendanceSettings={attendanceSettings ?? []}
-        globalAttendanceSetting={globalAttendanceSetting}
-        holidayCalendars={holidayCalendars}
-      /> */}
     </>
   );
 }
