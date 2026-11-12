@@ -94,6 +94,10 @@ export default function Header({ profile }: HeaderProps) {
       return "Attendance";
     }
 
+    if (pathname === "/portal/timesheet") return "My Timesheet";
+
+    if (pathname === "/portal/team-report") return "My Team Report";
+
     if (pathname === "/portal/leaves") {
       return searchParams.get("view") === "apply"
         ? "Apply Leave"

@@ -6,6 +6,7 @@ import {
   calculateRegisterTotals,
   calculateEmployeeLopDays,
   MasterPayrollEmployee,
+  calculateEmployeePayrollDays,
   MasterPayrollRow,
 } from "@/lib/payroll/master-payroll-engine";
 
@@ -110,6 +111,7 @@ export async function GET(request: NextRequest) {
         joining_date,
         bank_name,
         bank_account_number,
+        ifsc_code,
         pan_number,
         uan_number,
         salary,
@@ -214,6 +216,9 @@ export async function GET(request: NextRequest) {
       lopDaysByEmployee.set(emp.id, empLop);
     }
 
+
+    
+
     // 4. Fetch previous month's pending PF/ESI contributions from when employee was absent
     const prevDate = new Date(year, month - 2, 1);
     const prevMonth = prevDate.getMonth() + 1;
@@ -234,11 +239,15 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    
+
     // 5. Calculate rows for all employees
     const rows: MasterPayrollRow[] = employees.map((emp) => {
       const existingSlip = payslipsByEmployee.get(emp.id);
       const calculatedLop = lopDaysByEmployee.get(emp.id) ?? 0;
       const pendingStatutory = pendingByEmployee.get(emp.id);
+
+      
 
       // Extract saved adjustments from existing payslip if present
       let adjustments;
@@ -280,13 +289,21 @@ export async function GET(request: NextRequest) {
         };
       }
 
+      const employeeDaysInPeriod = calculateEmployeePayrollDays(
+        emp.joining_date,
+        emp.exit_date,
+        monthStart,
+        monthEnd
+      );
+
       return calculateMasterPayrollRow(
         emp,
         daysInMonth,
         calculatedLop,
         adjustments,
         existingSlip,
-        pendingStatutory
+        pendingStatutory,
+        employeeDaysInPeriod
       );
     });
 

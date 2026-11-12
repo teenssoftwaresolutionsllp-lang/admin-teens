@@ -2246,7 +2246,7 @@ const totalWorkingDays = useMemo(() => {
 
       {/* SUMMARY CARDS */}
 
-      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 xl:grid-cols-5">
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
         {[
           {
             label: "Present",
@@ -2335,7 +2335,7 @@ const totalWorkingDays = useMemo(() => {
         </div>
 
         <div className="space-y-5">
-          <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <section className="flex h-[70vh] min-h-[360px] max-h-[560px] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
               <div>
                 <h2 className="text-lg font-bold text-slate-900">
@@ -2352,9 +2352,9 @@ const totalWorkingDays = useMemo(() => {
                 {showAllAttendanceLogs ? "Show Less" : "View All"}
               </button>
             </div>
-            <div className="overflow-x-auto">
+            <div className="min-h-0 flex-1 overflow-auto">
               <table className="w-full min-w-[670px] text-left">
-                <thead className="bg-slate-50 text-[10px] font-semibold text-slate-600">
+                <thead className="sticky top-0 z-10 bg-slate-50 text-[10px] font-semibold text-slate-600">
                   <tr>
                     <th className="px-4 py-3">Date</th>
                     <th className="px-4 py-3">Day</th>

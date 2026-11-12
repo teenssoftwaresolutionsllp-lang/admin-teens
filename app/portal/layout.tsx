@@ -37,7 +37,7 @@ export default async function PortalLayout({ children }: { children: React.React
   const { data: employeeByUserId, error: employeeLookupError } =
     await adminClient
       .from("employees")
-      .select("profile_photo_url")
+      .select("profile_photo_url, designation")
       .eq("user_id", user.id)
       .limit(1)
       .maybeSingle();
@@ -49,12 +49,13 @@ export default async function PortalLayout({ children }: { children: React.React
   }
 
   let employeePhotoUrl = employeeByUserId?.profile_photo_url ?? null;
+  let employeeDesignation = employeeByUserId?.designation ?? null;
 
   if (!employeePhotoUrl && profile.email) {
     const { data: employeeByEmail, error: employeeEmailLookupError } =
       await adminClient
         .from("employees")
-        .select("profile_photo_url")
+        .select("profile_photo_url, designation")
         .eq("email", profile.email)
         .limit(1)
         .maybeSingle();
@@ -66,13 +67,18 @@ export default async function PortalLayout({ children }: { children: React.React
     }
 
     employeePhotoUrl = employeeByEmail?.profile_photo_url ?? null;
+    employeeDesignation = employeeByEmail?.designation ?? employeeDesignation;
   }
 
   return (
     <EmployeeFilterProvider>
       <div className="flex flex-col md:flex-row h-screen overflow-hidden bg-slate-50">
         <div className="hidden md:block">
-          <Sidebar role="employee" avatarUrl={employeePhotoUrl} />
+          <Sidebar
+            role="employee"
+            avatarUrl={employeePhotoUrl}
+            designation={employeeDesignation}
+          />
         </div>
 
         <div className="flex-1 flex flex-col min-w-0 overflow-hidden">

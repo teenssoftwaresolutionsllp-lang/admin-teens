@@ -34,6 +34,7 @@ import {
 } from "lucide-react";
 
 import type { UserRole } from "@/lib/types";
+import { isTeamReportDesignation } from "@/lib/team-report-access";
 
 type SidebarNavItem = {
   name: string;
@@ -47,9 +48,10 @@ interface SidebarProps {
   role: UserRole;
   currentPath?: string;
   avatarUrl?: string | null;
+  designation?: string | null;
 }
 
-export default function Sidebar({ role }: SidebarProps) {
+export default function Sidebar({ role, designation }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -60,6 +62,7 @@ export default function Sidebar({ role }: SidebarProps) {
     "Employees",
     "Approval Hub",
     "Payroll",
+    "Attendance & Shifts",
   ]);
 
   useEffect(() => {
@@ -125,6 +128,16 @@ export default function Sidebar({ role }: SidebarProps) {
       icon: LayoutDashboard,
       roles: ["ceo", "hr"],
     },
+    ...(isTeamReportDesignation(designation)
+      ? [
+          {
+            name: "My Team Report",
+            href: "/portal/team-report",
+            icon: Users,
+            roles: ["ceo", "hr"] as UserRole[],
+          },
+        ]
+      : []),
     {
       name: "Employees",
       icon: Users,
@@ -214,9 +227,22 @@ export default function Sidebar({ role }: SidebarProps) {
     },
     {
       name: "Attendance & Shifts",
-      href: "/dashboard/attendance",
       icon: Clock,
       roles: ["ceo", "hr"],
+      children: [
+        {
+          name: "Attendance",
+          href: "/dashboard/attendance",
+          icon: CalendarCheck,
+          roles: ["ceo", "hr"],
+        },
+        {
+          name: "Reports",
+          href: "/dashboard/attendance/reports",
+          icon: FileText,
+          roles: ["ceo", "hr"],
+        },
+      ],
     },
     {
       name: "Leave Management",
@@ -276,6 +302,22 @@ export default function Sidebar({ role }: SidebarProps) {
       icon: Clock,
       roles: ["employee"],
     },
+    {
+      name: "Timesheet",
+      href: "/portal/timesheet",
+      icon: CalendarClock,
+      roles: ["employee"],
+    },
+    ...(isTeamReportDesignation(designation)
+      ? [
+          {
+            name: "My Team Report",
+            href: "/portal/team-report",
+            icon: Users,
+            roles: ["employee"] as UserRole[],
+          },
+        ]
+      : []),
     {
       name: "My Leaves",
       href: "/portal/leaves",

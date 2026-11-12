@@ -11,6 +11,7 @@
  * 4. CTC
  * 5. Designation
  * 6. Bank Account No
+ * "IFSC Code",
  * 7. Bank Name
  * 8. PF A/c No.
  * 9. PF UAN
@@ -41,6 +42,19 @@
  * 34. Remarks
  */
 
+
+/**
+ * Master Payroll Calculation Engine
+ *
+ * Payroll rules:
+ * - No. Of Days is based on the employee's active employment dates
+ *   within the selected payroll month.
+ * - Joining date and exit date are inclusive.
+ * - Dates before joining and after exit are not LOP.
+ * - Gross Salary and LOP use employee-eligible calendar days.
+ * - Existing salary components and statutory rules are preserved.
+ */
+
 export interface MasterPayrollEmployee {
   id: string;
   employee_id: string;
@@ -50,6 +64,7 @@ export interface MasterPayrollEmployee {
   designation: string | null;
   bank_name: string | null;
   bank_account_number: string | null;
+  ifsc_code: string | null;
   pan_number: string | null;
   uan_number: string | null;
   pf_number?: string | null;
@@ -85,12 +100,12 @@ export interface MasterPayrollRow {
   designation: string;
   department?: string;
   bank_account_number: string;
+  ifsc_code: string;
   bank_name: string;
   pf_account_number: string;
   uan_number: string;
   pan_number: string;
 
-  // Earnings
   basic: number;
   hra: number;
   conveyance: number;
@@ -100,15 +115,12 @@ export interface MasterPayrollRow {
   special_allowance: number;
   arrears: number;
 
-  // Working / Pay Days
   working_days: number;
   pay_days: number;
   gross_salary: number;
 
-  // Additions
   incentive: number;
 
-  // Deductions
   loss_of_pay: number;
   lop_days: number;
   advance: number;
@@ -118,22 +130,18 @@ export interface MasterPayrollRow {
   esic_emp: number;
   other_deduction: number;
 
-  // Pending statutory recovery (from previous absence months)
   has_pending_statutory?: boolean;
   pending_pf?: number;
   pending_esi?: number;
   recovered_statutory?: number;
 
-  // Employer & Admin Reference
   esic_empr: number;
   pf_admin: number;
 
-  // Totals
   total_deductions: number;
   net_payout: number;
   remarks: string;
 
-  // Status
   status: "draft" | "processed" | "paid";
   payslip_id?: string;
 }
@@ -169,111 +177,165 @@ export function round2(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
-/**
- * Normalizes salary to Monthly CTC.
- * If salary <= 100, it's treated as annual CTC in lakhs (e.g. 24 -> 24 * 100,000 / 12 = 200,000).
- * If salary > 1000000, it's treated as annual CTC in rupees (e.g. 2400000 / 12 = 200,000).
- * Otherwise it's already monthly CTC.
- */
-export function getMonthlyCtc(salary: number | string | null | undefined): number {
-  const num = Number(salary ?? 0);
-  if (!Number.isFinite(num) || num <= 0) return 0;
-  if (num <= 100) {
-    // Annual in Lakhs
-    return round2((num * 100000) / 12);
-  }
-  if (num >= 1000000) {
-    // Annual in Rupees
-    return round2(num / 12);
-  }
-  return round2(num);
+function normalizeDate(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const date = String(value).slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null;
 }
 
 /**
- * Calculates standard employee PF according to the company rules in the Excel sheet:
- * If CTC >= 50,000: ₹4,800 (12% of 40,000 cap)
- * If CTC 39,000: ₹4,200
- * If CTC 25,000: ₹3,000 (12% of 25,000)
- * Or standard 12% of Basic, max 4,800.
+ * Counts inclusive calendar days within the employee's employment period.
+ * Joining date and exit date are both included.
  */
-export function calculateStandardEpf(ctc: number, basic: number, pfEligible: boolean): number {
+export function calculateEmployeePayrollDays(
+  joiningDate: string | null | undefined,
+  exitDate: string | null | undefined,
+  monthStart: string,
+  monthEnd: string
+): number {
+  const normalizedJoin = normalizeDate(joiningDate);
+  const normalizedExit = normalizeDate(exitDate);
+
+  const start =
+    normalizedJoin && normalizedJoin > monthStart
+      ? normalizedJoin
+      : monthStart;
+
+  const end =
+    normalizedExit && normalizedExit < monthEnd
+      ? normalizedExit
+      : monthEnd;
+
+  if (start > end) return 0;
+
+  const startTime = Date.parse(`${start}T00:00:00Z`);
+  const endTime = Date.parse(`${end}T00:00:00Z`);
+
+  if (!Number.isFinite(startTime) || !Number.isFinite(endTime)) return 0;
+
+  return Math.floor((endTime - startTime) / 86400000) + 1;
+}
+
+/**
+ * Normalizes salary to Monthly CTC.
+ */
+export function getMonthlyCtc(
+  salary: number | string | null | undefined
+): number {
+  const num = Number(salary ?? 0);
+
+  if (!Number.isFinite(num) || num <= 0) return 0;
+
+  if (num <= 100) {
+    return round2((num * 100000) / 12);
+  }
+
+  if (num >= 1000000) {
+    return round2(num / 12);
+  }
+
+  return round2(num);
+}
+
+export function calculateStandardEpf(
+  ctc: number,
+  basic: number,
+  pfEligible: boolean
+): number {
   if (!pfEligible) return 0;
   if (ctc >= 50000) return 4800;
   if (ctc >= 35000) return 4200;
   if (ctc >= 20000) return 3000;
+
   return round2(Math.min(basic * 0.12, 4800));
 }
 
-/**
- * Calculates a single employee's row in the master payroll register.
- */
 export function calculateMasterPayrollRow(
   emp: MasterPayrollEmployee,
   daysInMonth: number,
   calculatedLopDays: number = 0,
   adjustments?: MasterPayrollAdjustments,
   existingPayslip?: any,
-  pendingStatutory?: { pf: number; esi: number }
+  pendingStatutory?: { pf: number; esi: number },
+  employeeDaysInPeriod?: number
 ): MasterPayrollRow {
   const ctc = getMonthlyCtc(emp.salary);
-  const fullName = [emp.first_name, emp.last_name].filter(Boolean).join(" ");
-  const joiningDate = emp.joining_date ? String(emp.joining_date).slice(0, 10) : "—";
 
-  // PF and statutory eligibility
+  const fullName = [emp.first_name, emp.last_name]
+    .filter(Boolean)
+    .join(" ");
+
+  const joiningDate = normalizeDate(emp.joining_date) || "—";
+
   const pfEligible = emp.pf_eligible !== false;
   const ptEligible = emp.pt_eligible !== false;
-  const esiEligible = Boolean(emp.esi_healthcare_eligible) && ctc <= 21000;
+  const esiEligible =
+    Boolean(emp.esi_healthcare_eligible) && ctc <= 21000;
 
-  // LOP Days override or calculated
-  const lopDays = Math.max(
+  const workingDays = Math.max(
+    0,
+    Math.floor(employeeDaysInPeriod ?? daysInMonth)
+  );
+
+  const requestedLopDays = Math.max(
     0,
     adjustments?.lopDays !== undefined
       ? Number(adjustments.lopDays)
       : calculatedLopDays !== undefined
-      ? Number(calculatedLopDays)
-      : Number(existingPayslip?.lop_days || 0)
+        ? Number(calculatedLopDays)
+        : Number(existingPayslip?.lop_days || 0)
   );
 
-  const workingDays = Math.max(daysInMonth, 1);
+  const lopDays = round2(Math.min(workingDays, requestedLopDays));
   const payDays = Math.max(0, workingDays - lopDays);
 
-  // Earnings Components
-  const basic = round2(ctc * 0.5); // 50% of CTC
-  const hra = round2(basic * 0.5); // 25% of CTC / 50% of Basic
+  // Earnings components
+  const basic = round2(ctc * 0.5);
+  const hra = round2(basic * 0.5);
   const conveyance = 1600;
   const medicalAllowance = 1250;
   const leaveTravelAllowance = 0;
 
-  // Employer PF: min(12% of Basic, 3000)
-  const employerPf = pfEligible ? round2(Math.min(basic * 0.12, 3000)) : 0;
+  const employerPf = pfEligible
+    ? round2(Math.min(basic * 0.12, 3000))
+    : 0;
 
-  // Special Allowance = CTC - (Basic + HRA + Conv + Med + LTA + Employer PF)
   const specialAllowance = Math.max(
     0,
-    round2(ctc - (basic + hra + conveyance + medicalAllowance + leaveTravelAllowance + employerPf))
+    round2(
+      ctc -
+        (basic +
+          hra +
+          conveyance +
+          medicalAllowance +
+          leaveTravelAllowance +
+          employerPf)
+    )
   );
 
-  // Arrears
   const arrears = round2(
     adjustments?.arrears !== undefined
       ? Number(adjustments.arrears)
       : Number(existingPayslip?.arrears || 0)
   );
 
-  // Gross Salary & Loss of Pay
-  // When there are LOP days: Gross Salary = CTC * (Pay Days / No. Of Days)
-  // Loss of pay amount = CTC * (LOP Days / No. Of Days)
-  const lossOfPay = round2((ctc * lopDays) / workingDays);
-  const grossSalary = round2((ctc * payDays) / workingDays);
+  // Gross and LOP use employee-eligible calendar days.
+  const lossOfPay =
+    workingDays > 0
+      ? round2((ctc * lopDays) / workingDays)
+      : 0;
 
-  // Incentive
+  const grossSalary =
+    workingDays > 0
+      ? round2((ctc * payDays) / workingDays)
+      : 0;
+
   const incentive = round2(
     adjustments?.incentive !== undefined
       ? Number(adjustments.incentive)
       : Number(existingPayslip?.incentive || 0)
   );
 
-  // Deductions
   const advance = round2(
     adjustments?.advance !== undefined
       ? Number(adjustments.advance)
@@ -290,56 +352,87 @@ export function calculateMasterPayrollRow(
     adjustments?.ptOverride !== undefined
       ? Number(adjustments.ptOverride)
       : ptEligible && grossSalary > 0
-      ? 200
-      : 0;
+        ? 200
+        : 0;
 
   const epf =
     adjustments?.epfOverride !== undefined
       ? Number(adjustments.epfOverride)
       : calculateStandardEpf(ctc, basic, pfEligible);
 
-  const esicEmp = esiEligible ? round2(grossSalary * 0.0075) : 0;
-  const esicEmpr = esiEligible ? round2(grossSalary * 0.0325) : 0;
+  const esicEmp = esiEligible
+    ? round2(grossSalary * 0.0075)
+    : 0;
+
+  const esicEmpr = esiEligible
+    ? round2(grossSalary * 0.0325)
+    : 0;
+
   const pfAdmin = pfEligible ? 150 : 0;
 
-  // Pending statutory recovery from previous absence months
   const pendingPf = pendingStatutory?.pf ?? 0;
   const pendingEsi = pendingStatutory?.esi ?? 0;
+
   const hasPendingStatutory = pendingPf > 0 || pendingEsi > 0;
 
   const shouldRecover =
     adjustments?.recoverPendingStatutory === true ||
-    (existingPayslip?.deductions_breakup &&
-      Array.isArray(existingPayslip.deductions_breakup) &&
-      existingPayslip.deductions_breakup.some((b: any) => b.code === "STATUTORY_RECOVERY"));
+    (Array.isArray(existingPayslip?.deductions_breakup) &&
+      existingPayslip.deductions_breakup.some(
+        (b: any) => b.code === "STATUTORY_RECOVERY"
+      ));
 
-  const recoveredStatutory = shouldRecover ? round2(pendingPf + pendingEsi) : 0;
+  const recoveredStatutory = shouldRecover
+    ? round2(pendingPf + pendingEsi)
+    : 0;
+
   const otherDeduction = round2(recoveredStatutory);
 
-  // Total Deductions = Advance + TDS + PT + EPF + ESIC-Emp + Other Deduction
-  // If payDays === 0 (full month absence), deductions cannot be recovered from 0 salary and are held pending
   const totalDeductions =
     payDays === 0
       ? 0
-      : round2(advance + tds + pt + epf + esicEmp + otherDeduction);
+      : round2(
+          advance +
+            tds +
+            pt +
+            epf +
+            esicEmp +
+            otherDeduction
+        );
 
-  // Net Payout = Gross Salary + Incentive + Arrears - Total Deduction
-  const netPayout = payDays === 0 ? 0 : round2(grossSalary + incentive + arrears - totalDeductions);
+  const netPayout =
+    payDays === 0
+      ? 0
+      : round2(
+          grossSalary +
+            incentive +
+            arrears -
+            totalDeductions
+        );
 
-  // Remarks
   let remarks =
     adjustments?.remarks !== undefined
       ? adjustments.remarks
       : existingPayslip?.remarks || "";
 
-  if (payDays === 0) {
-    const absenceNote = `Full month absence (Pay Days: 0, PF ₹${epf} carried to pending)`;
-    remarks = remarks ? `${remarks} · ${absenceNote}` : absenceNote;
+  if (payDays === 0 && workingDays > 0) {
+    const absenceNote =
+      `Full month absence (Pay Days: 0, PF ₹${epf} carried to pending)`;
+
+    remarks = remarks
+      ? `${remarks} · ${absenceNote}`
+      : absenceNote;
   }
 
   if (recoveredStatutory > 0 && !remarks.includes("recovered")) {
-    const recoveryNote = `Recovered previous pending statutory (PF: ₹${pendingPf}${pendingEsi > 0 ? `, ESI: ₹${pendingEsi}` : ""})`;
-    remarks = remarks ? `${remarks} · ${recoveryNote}` : recoveryNote;
+    const recoveryNote =
+      `Recovered previous pending statutory (PF: ₹${pendingPf}${
+        pendingEsi > 0 ? `, ESI: ₹${pendingEsi}` : ""
+      })`;
+
+    remarks = remarks
+      ? `${remarks} · ${recoveryNote}`
+      : recoveryNote;
   }
 
   const status: "draft" | "processed" | "paid" =
@@ -353,7 +446,9 @@ export function calculateMasterPayrollRow(
     ctc,
     designation: emp.designation || "—",
     department: emp.department || emp.department_name || "General",
+
     bank_account_number: emp.bank_account_number || "—",
+    ifsc_code: emp.ifsc_code || "—",
     bank_name: emp.bank_name || "—",
     pf_account_number: emp.pf_number || emp.uan_number || "—",
     uan_number: emp.uan_number || "—",
@@ -399,10 +494,9 @@ export function calculateMasterPayrollRow(
   };
 }
 
-/**
- * Calculates sum totals for each numeric column in the register.
- */
-export function calculateRegisterTotals(rows: MasterPayrollRow[]): MasterRegisterTotals {
+export function calculateRegisterTotals(
+  rows: MasterPayrollRow[]
+): MasterRegisterTotals {
   const totals: MasterRegisterTotals = {
     ctc: 0,
     basic: 0,
@@ -457,7 +551,6 @@ export function calculateRegisterTotals(rows: MasterPayrollRow[]): MasterRegiste
     totals.net_payout += row.net_payout;
   }
 
-  // Round all totals to 2 decimals
   for (const key of Object.keys(totals) as Array<keyof MasterRegisterTotals>) {
     totals[key] = round2(totals[key]);
   }
@@ -465,10 +558,6 @@ export function calculateRegisterTotals(rows: MasterPayrollRow[]): MasterRegiste
   return totals;
 }
 
-/**
- * Generates the CSV string with the company header, columns, rows, and total row
- * matching the user's Excel file.
- */
 export function generateExcelCsv(
   rows: MasterPayrollRow[],
   monthName: string,
@@ -490,6 +579,7 @@ export function generateExcelCsv(
       "CTC",
       "Designation",
       "Bank Account No",
+      "IFSC Code",
       "Bank Name",
       "PF A/c No.",
       "PF UAN",
@@ -529,6 +619,7 @@ export function generateExcelCsv(
       r.ctc,
       `"${r.designation}"`,
       `"${r.bank_account_number}"`,
+      `"${r.ifsc_code}"`,
       `"${r.bank_name}"`,
       `"${r.pf_account_number}"`,
       `"${r.uan_number}"`,
@@ -565,6 +656,7 @@ export function generateExcelCsv(
     "Total",
     "",
     totals.ctc,
+    0,
     0,
     0,
     0,
@@ -638,13 +730,6 @@ function formatDateStr(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
-/**
- * Check whether a leave request represents Loss of Pay (LOP)
- * Handles:
- * - Explicitly unpaid leaves (is_paid === false)
- * - LOP / UNPAID leave codes
- * - SL/CL leaves designated as LOP / Loss of Pay
- */
 export function isLeaveConsideredLop(leave: RawLeaveRequest): boolean {
   const lt = leave.leave_types;
   if (!lt) return false;
@@ -652,38 +737,29 @@ export function isLeaveConsideredLop(leave: RawLeaveRequest): boolean {
   if (lt.is_paid === false) return true;
 
   const code = String(lt.code || "").toUpperCase().trim();
+
   if (code === "LOP" || code === "UNPAID") return true;
 
   const name = String(lt.name || "").toLowerCase().trim();
-  if (
+
+  return (
     name.includes("loss of pay") ||
     name.includes("lop") ||
     name.includes("unpaid")
-  ) {
-    return true;
-  }
-
-  return false;
+  );
 }
 
 export interface LopCalculationOptions {
   joiningDate?: string | null;
   exitDate?: string | null;
-  holidays?: Array<{ holiday_date: string; is_working_day?: boolean; is_optional?: boolean }>;
+  holidays?: Array<{
+    holiday_date: string;
+    is_working_day?: boolean;
+    is_optional?: boolean;
+  }>;
   workingSaturdays?: number[];
 }
 
-/**
- * Calculates total LOP days for an employee according to company payroll policy:
- * 1. Absent: If an employee is absent on a working day (no punch/log, or status 'absent') and
- *    not covered by approved paid leave, it counts as LOP (+1.0 LOP per day).
- * 2. Half Day: If attendance status is 'half_day', there is NO LOP (0 LOP).
- * 3. Approved Leave:
- *    - Standard paid leaves (SL/CL/EL with is_paid !== false): NO LOP.
- *    - Unpaid / LOP leaves (or SL/CL marked as LOP): Counts as LOP (+1.0 day, or +0.5 if half-day).
- * 4. Full-Month Absence: If the employee attended 0 working days and had 0 paid leaves,
- *    all calendar days in the month are LOP (Pay Days = 0, Gross Salary = 0).
- */
 export function calculateEmployeeLopDays(
   employeeId: string,
   attendanceLogs: RawAttendanceLog[],
@@ -692,144 +768,162 @@ export function calculateEmployeeLopDays(
   monthEnd?: string,
   options?: LopCalculationOptions
 ): number {
-  if (monthStart && monthEnd) {
-    const holidayDates = new Set<string>();
-    if (options?.holidays) {
-      for (const h of options.holidays) {
-        if (h.is_working_day !== true && h.is_optional !== true && h.holiday_date) {
-          holidayDates.add(String(h.holiday_date).slice(0, 10));
-        }
-      }
+  if (!monthStart || !monthEnd) return 0;
+
+  const holidayDates = new Set<string>();
+
+  for (const h of options?.holidays ?? []) {
+    if (
+      h.is_working_day !== true &&
+      h.is_optional !== true &&
+      h.holiday_date
+    ) {
+      holidayDates.add(String(h.holiday_date).slice(0, 10));
     }
+  }
 
-    const workingSatSet = new Set(options?.workingSaturdays ?? []);
-    const joinDateStr = options?.joiningDate ? String(options.joiningDate).slice(0, 10) : null;
-    const exitDateStr = options?.exitDate ? String(options.exitDate).slice(0, 10) : null;
+  const workingSatSet = new Set(options?.workingSaturdays ?? []);
 
-    // 1. Gather all approved leaves for this employee
-    const empLeaves = leaveRequests.filter(
-      (l) =>
-        l.employee_id === employeeId &&
-        (l.status === undefined || l.status === "approved")
+  const joinDateStr = normalizeDate(options?.joiningDate);
+  const exitDateStr = normalizeDate(options?.exitDate);
+
+  const empLeaves = leaveRequests.filter(
+    (l) =>
+      l.employee_id === employeeId &&
+      (l.status === undefined || l.status === "approved")
+  );
+
+  const leaveCoveredDays = new Map<
+    string,
+    { isLop: boolean; isHalfDay: boolean }
+  >();
+
+  for (const leave of empLeaves) {
+    const isLop = isLeaveConsideredLop(leave);
+
+    const startDate = parseLocalDate(
+      String(leave.start_date).slice(0, 10)
     );
 
-    const leaveCoveredDays = new Map<string, { isLop: boolean; isHalfDay: boolean }>();
-    for (const leave of empLeaves) {
-      const isLop = isLeaveConsideredLop(leave);
-      const startDate = parseLocalDate(String(leave.start_date).slice(0, 10));
-      const endDate = parseLocalDate(String(leave.end_date || leave.start_date).slice(0, 10));
+    const endDate = parseLocalDate(
+      String(leave.end_date || leave.start_date).slice(0, 10)
+    );
 
-      const cur = new Date(startDate);
-      while (cur <= endDate) {
-        const dateStr = formatDateStr(cur);
-        if (dateStr >= monthStart && dateStr <= monthEnd) {
-          leaveCoveredDays.set(dateStr, {
-            isLop,
-            isHalfDay: Boolean(leave.is_half_day),
-          });
-        }
-        cur.setDate(cur.getDate() + 1);
-      }
-    }
+    const cur = new Date(startDate);
 
-    // 2. Map attendance logs by date for this employee
-    const empLogs = attendanceLogs.filter((a) => a.employee_id === employeeId);
-    const logByDate = new Map<string, RawAttendanceLog>();
-    for (const log of empLogs) {
-      if (log.attendance_date) {
-        logByDate.set(String(log.attendance_date).slice(0, 10), log);
-      }
-    }
-
-    // 3. Iterate over every calendar day of the month
-    let presentDays = 0;
-    let paidLeaveDays = 0;
-    let lopDays = 0;
-    let totalWorkingDays = 0;
-    let totalCalendarDays = 0;
-
-    const cur = parseLocalDate(monthStart);
-    const end = parseLocalDate(monthEnd);
-
-    while (cur <= end) {
-      totalCalendarDays++;
+    while (cur <= endDate) {
       const dateStr = formatDateStr(cur);
-      const dayOfWeek = cur.getDay(); // 0 = Sunday, 6 = Saturday
-      const dayOfMonth = cur.getDate();
 
-      // Check tenure bounds
-      if (joinDateStr && dateStr < joinDateStr) {
-        lopDays += 1;
-        cur.setDate(cur.getDate() + 1);
-        continue;
-      }
-      if (exitDateStr && dateStr > exitDateStr) {
-        lopDays += 1;
-        cur.setDate(cur.getDate() + 1);
-        continue;
-      }
-
-      // Check if weekend / holiday
-      const isSunday = dayOfWeek === 0;
-      const isSaturday = dayOfWeek === 6;
-      const isWorkingSaturday = isSaturday && workingSatSet.has(dayOfMonth);
-      const isHoliday = holidayDates.has(dateStr);
-
-      const isWorkingDay = !isSunday && (!isSaturday || isWorkingSaturday) && !isHoliday;
-
-      if (!isWorkingDay) {
-        cur.setDate(cur.getDate() + 1);
-        continue;
-      }
-
-      totalWorkingDays++;
-
-      // Check approved leave
-      if (leaveCoveredDays.has(dateStr)) {
-        const leaveInfo = leaveCoveredDays.get(dateStr)!;
-        if (leaveInfo.isLop) {
-          lopDays += leaveInfo.isHalfDay ? 0.5 : 1;
-        } else {
-          paidLeaveDays += leaveInfo.isHalfDay ? 0.5 : 1;
-        }
-        cur.setDate(cur.getDate() + 1);
-        continue;
-      }
-
-      // Check attendance punch
-      const log = logByDate.get(dateStr);
-      if (!log) {
-        // No punch on a working day = ABSENT = LOP
-        lopDays += 1;
-        cur.setDate(cur.getDate() + 1);
-        continue;
-      }
-
-      const st = String(log.status || "").toLowerCase().trim();
-      if (st === "present") {
-        presentDays += 1;
-      } else if (st === "half_day") {
-        // "if there is leave or half day then there will be no lop"
-        presentDays += 1;
-      } else if (st === "absent") {
-        lopDays += 1;
-      } else {
-        lopDays += 1;
+      if (dateStr >= monthStart && dateStr <= monthEnd) {
+        leaveCoveredDays.set(dateStr, {
+          isLop,
+          isHalfDay: Boolean(leave.is_half_day),
+        });
       }
 
       cur.setDate(cur.getDate() + 1);
     }
-
-    // Full-month absence rule:
-    // If the employee attended ZERO working days and had ZERO paid leaves,
-    // they were absent the entire month -> all calendar days count as LOP (Pay Days = 0).
-    if (totalWorkingDays > 0 && presentDays === 0 && paidLeaveDays === 0) {
-      return totalCalendarDays;
-    }
-
-    return Number(Math.max(0, lopDays).toFixed(1));
   }
 
-  return 0;
-}
+  const empLogs = attendanceLogs.filter(
+    (a) => a.employee_id === employeeId
+  );
 
+  const logByDate = new Map<string, RawAttendanceLog>();
+
+  for (const log of empLogs) {
+    if (log.attendance_date) {
+      logByDate.set(
+        String(log.attendance_date).slice(0, 10),
+        log
+      );
+    }
+  }
+
+  let presentDays = 0;
+  let paidLeaveDays = 0;
+  let lopDays = 0;
+  let totalWorkingDays = 0;
+  let totalCalendarDays = 0;
+
+  const cur = parseLocalDate(monthStart);
+  const end = parseLocalDate(monthEnd);
+
+  while (cur <= end) {
+    const dateStr = formatDateStr(cur);
+    const dayOfWeek = cur.getDay();
+    const dayOfMonth = cur.getDate();
+
+    // Dates outside the employee's employment period are ignored.
+    if (
+      (joinDateStr && dateStr < joinDateStr) ||
+      (exitDateStr && dateStr > exitDateStr)
+    ) {
+      cur.setDate(cur.getDate() + 1);
+      continue;
+    }
+
+    totalCalendarDays++;
+
+    const isSunday = dayOfWeek === 0;
+    const isSaturday = dayOfWeek === 6;
+    const isWorkingSaturday =
+      isSaturday && workingSatSet.has(dayOfMonth);
+    const isHoliday = holidayDates.has(dateStr);
+
+    const isWorkingDay =
+      !isSunday &&
+      (!isSaturday || isWorkingSaturday) &&
+      !isHoliday;
+
+    if (!isWorkingDay) {
+      cur.setDate(cur.getDate() + 1);
+      continue;
+    }
+
+    totalWorkingDays++;
+
+    if (leaveCoveredDays.has(dateStr)) {
+      const leaveInfo = leaveCoveredDays.get(dateStr)!;
+
+      if (leaveInfo.isLop) {
+        lopDays += leaveInfo.isHalfDay ? 0.5 : 1;
+      } else {
+        paidLeaveDays += leaveInfo.isHalfDay ? 0.5 : 1;
+      }
+
+      cur.setDate(cur.getDate() + 1);
+      continue;
+    }
+
+    const log = logByDate.get(dateStr);
+
+    if (!log) {
+      lopDays += 1;
+      cur.setDate(cur.getDate() + 1);
+      continue;
+    }
+
+    const st = String(log.status || "").toLowerCase().trim();
+
+    if (st === "present" || st === "half_day") {
+      presentDays += 1;
+    } else {
+      lopDays += 1;
+    }
+
+    cur.setDate(cur.getDate() + 1);
+  }
+
+  // Full-month absence: count only eligible calendar days,
+  // never dates before joining or after exit.
+  if (
+    totalWorkingDays > 0 &&
+    presentDays === 0 &&
+    paidLeaveDays === 0
+  ) {
+    return Number(totalCalendarDays.toFixed(1));
+  }
+
+  return Number(Math.max(0, lopDays).toFixed(1));
+}
