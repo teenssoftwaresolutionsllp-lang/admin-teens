@@ -26,7 +26,6 @@ const TESSERACT_WORKER_PATH = path.join(
   'index.js'
 );
 
-
 // ======================================================
 // CLOUDINARY
 // ======================================================
@@ -42,11 +41,11 @@ cloudinary.config({
 // ======================================================
 
 const HR_VERIFICATION_DOCUMENT_TYPES = [
-  "Aadhar Card",
-  "Aadhaar Card",
-  "PAN Card",
-  "Passport",
-  "Bank Passbook",
+  'Aadhar Card',
+  'Aadhaar Card',
+  'PAN Card',
+  'Passport',
+  'Bank Passbook',
 ];
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
@@ -58,13 +57,11 @@ const ALLOWED_FILE_TYPES = [
   'image/jpg',
 ];
 
-// These document types can have multiple files
 const MULTIPLE_DOCUMENT_TYPES = [
   'Experience Letter',
   'Other',
 ];
 
-// These documents require number extraction
 const ID_DOCUMENT_TYPES = [
   'Aadhar Card',
   'PAN Card',
@@ -81,14 +78,6 @@ function extractAadhaar(text: string): string | null {
     .replace(/[^\S\r\n]+/g, ' ')
     .trim();
 
-  // --------------------------------------------------
-  // 1. Standard format
-  //
-  // 1234 5678 9012
-  // 1234-5678-9012
-  // 123456789012
-  // --------------------------------------------------
-
   const standardMatches = normalized.match(
     /\b\d{4}\s*[-]?\s*\d{4}\s*[-]?\s*\d{4}\b/g
   );
@@ -103,20 +92,12 @@ function extractAadhaar(text: string): string | null {
     }
   }
 
-  // --------------------------------------------------
-  // 2. Aadhaar-related text nearby
-  // --------------------------------------------------
-
   const lines = normalized.split('\n');
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    if (
-      /aadhaar|aadhar|uidai|unique identification/i.test(
-        line
-      )
-    ) {
+    if (/aadhaar|aadhar|uidai|unique identification/i.test(line)) {
       const nearbyText = lines
         .slice(
           Math.max(0, i - 2),
@@ -129,8 +110,7 @@ function extractAadhaar(text: string): string | null {
       );
 
       if (nearbyMatch) {
-        const digits =
-          nearbyMatch[0].replace(/\D/g, '');
+        const digits = nearbyMatch[0].replace(/\D/g, '');
 
         if (digits.length === 12) {
           return digits;
@@ -139,18 +119,9 @@ function extractAadhaar(text: string): string | null {
     }
   }
 
-  // --------------------------------------------------
-  // 3. Three separate 4-digit groups
-  //
-  // We DO NOT automatically accept these.
-  // This prevents DOB and unrelated numbers from
-  // becoming Aadhaar numbers.
-  // --------------------------------------------------
-
   const groups = normalized.match(/\b\d{4}\b/g) || [];
 
-  for (let i = 0;i < groups.length - 2;i++) 
-  {
+  for (let i = 0; i < groups.length - 2; i++) {
     const candidate =
       groups[i] +
       groups[i + 1] +
@@ -170,9 +141,7 @@ function extractAadhaar(text: string): string | null {
     }
   }
 
-  console.log(
-    'NO RELIABLE AADHAAR NUMBER FOUND'
-  );
+  console.log('NO RELIABLE AADHAAR NUMBER FOUND');
 
   return null;
 }
@@ -186,10 +155,6 @@ function extractPAN(text: string): string | null {
     .toUpperCase()
     .replace(/\r/g, '\n');
 
-  // --------------------------------------------------
-  // PAN near PAN label
-  // --------------------------------------------------
-
   const contextMatch = normalized.match(
     /(?:PAN|PERMANENT ACCOUNT NUMBER)[\s:#-]*([A-Z]{5}[\s-]?\d{4}[\s-]?[A-Z])/i
   );
@@ -200,14 +165,9 @@ function extractPAN(text: string): string | null {
       .toUpperCase();
 
     if (/^[A-Z]{5}\d{4}[A-Z]$/.test(pan)) {
-
       return pan;
     }
   }
-
-  // --------------------------------------------------
-  // Standard PAN format
-  // --------------------------------------------------
 
   const matches = normalized.match(
     /\b[A-Z]{5}[\s-]?\d{4}[\s-]?[A-Z]\b/g
@@ -220,14 +180,13 @@ function extractPAN(text: string): string | null {
         .toUpperCase();
 
       if (/^[A-Z]{5}\d{4}[A-Z]$/.test(pan)) {
+        console.log('PAN found - standard:', pan);
         return pan;
       }
     }
   }
 
-  console.log(
-    'NO RELIABLE PAN NUMBER FOUND'
-  );
+  console.log('NO RELIABLE PAN NUMBER FOUND');
 
   return null;
 }
@@ -236,23 +195,12 @@ function extractPAN(text: string): string | null {
 // EXTRACT PASSPORT NUMBER
 // ======================================================
 
-function extractPassport(
-  text: string
-): string | null {
+function extractPassport(text: string): string | null {
   const normalized = text
     .replace(/\r/g, '\n')
     .replace(/[ \t]+/g, ' ')
     .toUpperCase()
     .trim();
-
-  // --------------------------------------------------
-  // Passport number near passport label
-  // Indian passport format generally:
-  //
-  // A1234567
-  // B1234567
-  // etc.
-  // --------------------------------------------------
 
   const contextMatch = normalized.match(
     /(?:PASSPORT|PASSPORT NO|PASSPORT NUMBER|DOCUMENT NO)[\s:#-]*([A-Z]\d{7})/i
@@ -264,17 +212,12 @@ function extractPassport(
       .toUpperCase();
 
     if (/^[A-Z]\d{7}$/.test(passport)) {
+      console.log('Passport found - context:', passport);
       return passport;
     }
   }
 
-  // --------------------------------------------------
-  // Standard passport number
-  // --------------------------------------------------
-
-  const matches = normalized.match(
-    /\b[A-Z]\d{7}\b/g
-  );
+  const matches = normalized.match(/\b[A-Z]\d{7}\b/g);
 
   if (matches) {
     for (const match of matches) {
@@ -283,15 +226,12 @@ function extractPassport(
         .toUpperCase();
 
       if (/^[A-Z]\d{7}$/.test(passport)) {
-
         return passport;
       }
     }
   }
 
-  console.log(
-    'NO RELIABLE PASSPORT NUMBER FOUND'
-  );
+  console.log('NO RELIABLE PASSPORT NUMBER FOUND');
 
   return null;
 }
@@ -320,9 +260,8 @@ function extractDocumentNumber(
 }
 
 // ======================================================
-// Bank Account NUMBER BASED ON DOCUMENT TYPE
+// EXTRACT BANK DETAILS
 // ======================================================
-
 
 function extractIFSC(text: string): string | null {
   const match = text
@@ -332,9 +271,7 @@ function extractIFSC(text: string): string | null {
   return match?.[0] ?? null;
 }
 
-function extractBankAccountNumber(
-  text: string
-): string | null {
+function extractBankAccountNumber(text: string): string | null {
   const normalized = text
     .replace(/\r/g, '\n')
     .replace(/[ \t]+/g, ' ');
@@ -391,9 +328,6 @@ function extractBankName(text: string): string | null {
     'RBL BANK',
     'TAMILNAD MERCANTILE BANK',
     'JAMMU AND KASHMIR BANK',
-    'BANK OF INDIA',
-
-    // Fictional banks for OCR testing
     'UNITY BANK',
     'SUNRISE BANK',
     'GLOBAL TRUST BANK',
@@ -437,8 +371,6 @@ function validateBankPassbook(text: string): boolean {
   );
 }
 
-
-
 // ======================================================
 // DOCUMENT TYPE VALIDATION
 // ======================================================
@@ -461,19 +393,11 @@ function validateDocumentType(
     return false;
   }
 
-
-  // ==================================================
-  // HELPER
-  // ==================================================
-
-  const containsAny = (
-    keywords: string[]
-  ): boolean => {
+  const containsAny = (keywords: string[]): boolean => {
     return keywords.some((keyword) =>
       normalized.includes(keyword)
     );
   };
-
 
   const hasKeywordGroups = (
     groups: string[][],
@@ -497,681 +421,205 @@ function validateDocumentType(
     return matchedGroups >= minimumGroups;
   };
 
-  // ==================================================
-  // AADHAAR CARD
-  // ==================================================
-
   switch (documentType) {
     case 'Aadhar Card': {
-      const aadhaarNumber =
-        extractAadhaar(normalized);
+      const aadhaarNumber = extractAadhaar(normalized);
 
       const aadhaarGroups = [
-        [
-          'AADHAAR',
-          'AADHAR',
-          'UIDAI',
-          'UNIQUE IDENTIFICATION',
-        ],
-        [
-          'GOVERNMENT OF INDIA',
-          'GOVERNMENT OF INDIA',
-        ],
-        [
-          'DATE OF BIRTH',
-          'DOB',
-          'YEAR OF BIRTH',
-        ],
-        [
-          'MALE',
-          'FEMALE',
-          'TRANSGENDER',
-        ],
+        ['AADHAAR', 'AADHAR', 'UIDAI', 'UNIQUE IDENTIFICATION'],
+        ['GOVERNMENT OF INDIA'],
+        ['DATE OF BIRTH', 'DOB', 'YEAR OF BIRTH'],
+        ['MALE', 'FEMALE', 'TRANSGENDER'],
       ];
 
-      const matched =
-        aadhaarGroups.filter((group) =>
-          containsAny(group)
-        );
-
-      console.log(
-        'Aadhaar number found:',
-        !!aadhaarNumber
+      const matched = aadhaarGroups.filter((group) =>
+        containsAny(group)
       );
 
-      console.log(
-        'Aadhaar matched groups:',
-        matched.length
-      );
+      console.log('Aadhaar number found:', !!aadhaarNumber);
+      console.log('Aadhaar matched groups:', matched.length);
 
-      /*
-       * Strict requirement:
-       *
-       * 1. Valid Aadhaar number
-       * 2. At least 2 Aadhaar document indicators
-       */
-
-      return (
-        !!aadhaarNumber &&
-        matched.length >= 2
-      );
+      return !!aadhaarNumber && matched.length >= 2;
     }
-
-    // ==================================================
-    // PAN CARD
-    // ==================================================
 
     case 'PAN Card': {
-      const panNumber =
-        extractPAN(normalized);
+      const panNumber = extractPAN(normalized);
 
       const panGroups = [
-        [
-          'PERMANENT ACCOUNT NUMBER',
-          'PAN',
-        ],
-        [
-          'INCOME TAX DEPARTMENT',
-          'INCOME TAX',
-        ],
-        [
-          'GOVERNMENT OF INDIA',
-          'GOVT OF INDIA',
-        ],
-        [
-          'NAME',
-          'FATHER',
-          "FATHER'S NAME",
-        ],
-        [
-          'DATE OF BIRTH',
-          'DOB',
-        ],
+        ['PERMANENT ACCOUNT NUMBER', 'PAN'],
+        ['INCOME TAX DEPARTMENT', 'INCOME TAX'],
+        ['GOVERNMENT OF INDIA', 'GOVT OF INDIA'],
+        ['NAME', 'FATHER', "FATHER'S NAME"],
+        ['DATE OF BIRTH', 'DOB'],
       ];
 
-      const matched =
-        panGroups.filter((group) =>
-          containsAny(group)
-        );
-
-      console.log(
-        'PAN number found:',
-        !!panNumber
+      const matched = panGroups.filter((group) =>
+        containsAny(group)
       );
 
-      console.log(
-        'PAN matched groups:',
-        matched.length
-      );
+      console.log('PAN number found:', !!panNumber);
+      console.log('PAN matched groups:', matched.length);
 
-      /*
-       * Strict:
-       * Valid PAN number
-       * + at least 2 PAN-specific groups
-       */
-
-      return (
-        !!panNumber &&
-        matched.length >= 2
-      );
+      return !!panNumber && matched.length >= 2;
     }
-
-    // ==================================================
-    // PASSPORT
-    // ==================================================
 
     case 'Passport': {
-      const passportNumber =
-        extractPassport(normalized);
+      const passportNumber = extractPassport(normalized);
 
       const passportGroups = [
-        [
-          'PASSPORT',
-        ],
-        [
-          'REPUBLIC OF INDIA',
-          'REPUBLIC OF INDIA',
-        ],
-        [
-          'SURNAME',
-          'GIVEN NAME',
-        ],
-        [
-          'NATIONALITY',
-          'INDIAN',
-        ],
-        [
-          'DATE OF BIRTH',
-          'DATE OF ISSUE',
-          'DATE OF EXPIRY',
-        ],
-        [
-          'PLACE OF BIRTH',
-          'PLACE OF ISSUE',
-        ],
+        ['PASSPORT'],
+        ['REPUBLIC OF INDIA'],
+        ['SURNAME', 'GIVEN NAME'],
+        ['NATIONALITY', 'INDIAN'],
+        ['DATE OF BIRTH', 'DATE OF ISSUE', 'DATE OF EXPIRY'],
+        ['PLACE OF BIRTH', 'PLACE OF ISSUE'],
       ];
 
-      const matched =
-        passportGroups.filter((group) =>
-          containsAny(group)
-        );
-
-      console.log(
-        'Passport number found:',
-        !!passportNumber
+      const matched = passportGroups.filter((group) =>
+        containsAny(group)
       );
 
-      console.log(
-        'Passport matched groups:',
-        matched.length
-      );
+      console.log('Passport number found:', !!passportNumber);
+      console.log('Passport matched groups:', matched.length);
 
-      /*
-       * Strict:
-       * Valid passport number
-       * + at least 3 passport groups
-       */
-
-      return (
-        !!passportNumber &&
-        matched.length >= 3
-      );
+      return !!passportNumber && matched.length >= 3;
     }
-
-    // ==================================================
-    // RESUME
-    // ==================================================
 
     case 'Resume': {
       const resumeGroups = [
-        [
-          'RESUME',
-          'CURRICULUM VITAE',
-          'CV',
-        ],
-        [
-          'CAREER OBJECTIVE',
-          'OBJECTIVE',
-          'PROFESSIONAL SUMMARY',
-          'SUMMARY',
-        ],
-        [
-          'WORK EXPERIENCE',
-          'PROFESSIONAL EXPERIENCE',
-          'EMPLOYMENT HISTORY',
-          'EXPERIENCE',
-        ],
-        [
-          'EDUCATION',
-          'EDUCATIONAL QUALIFICATION',
-          'ACADEMIC QUALIFICATION',
-        ],
-        [
-          'SKILLS',
-          'TECHNICAL SKILLS',
-          'CORE SKILLS',
-        ],
-        [
-          'PROJECTS',
-          'PROJECT EXPERIENCE',
-        ],
-        [
-          'CERTIFICATIONS',
-          'CERTIFICATION',
-        ],
+        ['RESUME', 'CURRICULUM VITAE', 'CV'],
+        ['CAREER OBJECTIVE', 'OBJECTIVE', 'PROFESSIONAL SUMMARY', 'SUMMARY'],
+        ['WORK EXPERIENCE', 'PROFESSIONAL EXPERIENCE', 'EMPLOYMENT HISTORY', 'EXPERIENCE'],
+        ['EDUCATION', 'EDUCATIONAL QUALIFICATION', 'ACADEMIC QUALIFICATION'],
+        ['SKILLS', 'TECHNICAL SKILLS', 'CORE SKILLS'],
+        ['PROJECTS', 'PROJECT EXPERIENCE'],
+        ['CERTIFICATIONS', 'CERTIFICATION'],
       ];
 
-      const result =
-        hasKeywordGroups(
-          resumeGroups,
-          4
-        );
+      const result = hasKeywordGroups(resumeGroups, 4);
 
-      console.log(
-        'Resume validation:',
-        result
-      );
+      console.log('Resume validation:', result);
 
       return result;
     }
-
-    // ==================================================
-    // 10TH CERTIFICATE
-    // ==================================================
 
     case '10th Certificate': {
       const tenthGroups = [
-        [
-          'SECONDARY SCHOOL CERTIFICATE',
-          'SECONDARY SCHOOL',
-          'SECONDARY EDUCATION',
-          'SSC',
-        ],
-        [
-          '10TH CLASS',
-          '10TH STANDARD',
-          'TENTH CLASS',
-          'TENTH STANDARD',
-          'CLASS X',
-          'STANDARD X',
-          'X STANDARD',
-        ],
-        [
-          'MATRICULATION',
-          'HIGH SCHOOL CERTIFICATE',
-        ],
-        [
-          'BOARD OF SECONDARY EDUCATION',
-          'BOARD OF EDUCATION',
-          'SECONDARY EDUCATION BOARD',
-        ],
-        [
-          'MARKS',
-          'MARKS OBTAINED',
-          'MARKSHEET',
-          'MARK SHEET',
-          'GRADE',
-          'PERCENTAGE',
-        ],
-        [
-          'CERTIFICATE',
-          'CERTIFIED',
-        ],
+        ['SECONDARY SCHOOL CERTIFICATE', 'SECONDARY SCHOOL', 'SECONDARY EDUCATION', 'SSC'],
+        ['10TH CLASS', '10TH STANDARD', 'TENTH CLASS', 'TENTH STANDARD', 'CLASS X', 'STANDARD X', 'X STANDARD'],
+        ['MATRICULATION', 'HIGH SCHOOL CERTIFICATE'],
+        ['BOARD OF SECONDARY EDUCATION', 'BOARD OF EDUCATION', 'SECONDARY EDUCATION BOARD'],
+        ['MARKS', 'MARKS OBTAINED', 'MARKSHEET', 'MARK SHEET', 'GRADE', 'PERCENTAGE'],
+        ['CERTIFICATE', 'CERTIFIED'],
       ];
 
-      const result =
-        hasKeywordGroups(
-          tenthGroups,
-          3
-        );
-
-
-      return result;
+      return hasKeywordGroups(tenthGroups, 3);
     }
-
-    // ==================================================
-    // 12TH CERTIFICATE
-    // ==================================================
 
     case '12th Certificate': {
       const twelfthGroups = [
-        [
-          'HIGHER SECONDARY CERTIFICATE',
-          'HIGHER SECONDARY',
-          'HIGHER SECONDARY EDUCATION',
-          'HSC',
-        ],
-        [
-          '12TH CLASS',
-          '12TH STANDARD',
-          'TWELFTH CLASS',
-          'TWELFTH STANDARD',
-          'CLASS XII',
-          'STANDARD XII',
-          'XII STANDARD',
-        ],
-        [
-          'INTERMEDIATE',
-          'SENIOR SECONDARY',
-          'SENIOR SECONDARY CERTIFICATE',
-        ],
-        [
-          'BOARD OF INTERMEDIATE EDUCATION',
-          'BOARD OF SECONDARY EDUCATION',
-          'BOARD OF EDUCATION',
-        ],
-        [
-          'MARKS',
-          'MARKS OBTAINED',
-          'MARKSHEET',
-          'MARK SHEET',
-          'GRADE',
-          'PERCENTAGE',
-        ],
-        [
-          'CERTIFICATE',
-          'CERTIFIED',
-        ],
+        ['HIGHER SECONDARY CERTIFICATE', 'HIGHER SECONDARY', 'HIGHER SECONDARY EDUCATION', 'HSC'],
+        ['12TH CLASS', '12TH STANDARD', 'TWELFTH CLASS', 'TWELFTH STANDARD', 'CLASS XII', 'STANDARD XII', 'XII STANDARD'],
+        ['INTERMEDIATE', 'SENIOR SECONDARY', 'SENIOR SECONDARY CERTIFICATE'],
+        ['BOARD OF INTERMEDIATE EDUCATION', 'BOARD OF SECONDARY EDUCATION', 'BOARD OF EDUCATION'],
+        ['MARKS', 'MARKS OBTAINED', 'MARKSHEET', 'MARK SHEET', 'GRADE', 'PERCENTAGE'],
+        ['CERTIFICATE', 'CERTIFIED'],
       ];
 
-      const result =
-        hasKeywordGroups(
-          twelfthGroups,
-          3
-        );
+      const result = hasKeywordGroups(twelfthGroups, 3);
 
-      console.log(
-        '12th Certificate validation:',
-        result
-      );
+      console.log('12th Certificate validation:', result);
 
       return result;
     }
-    // ==================================================
-    // BANK PASSBOOK
-    // ==================================================
-     case 'Bank Passbook': {
-        const result = validateBankPassbook(normalized);
-        return result;
-      }
-    
 
-    // ==================================================
-    // GRADUATION CERTIFICATE
-    // ==================================================
+    case 'Bank Passbook': {
+      return validateBankPassbook(normalized);
+    }
 
     case 'Graduation Certificate': {
       const graduationGroups = [
-        [
-          'BACHELOR',
-          'BACHELOR OF TECHNOLOGY',
-          'BACHELOR OF ENGINEERING',
-          'BACHELOR OF SCIENCE',
-          'BACHELOR OF COMMERCE',
-          'BACHELOR OF ARTS',
-          'BACHELOR OF COMPUTER APPLICATIONS',
-          'BACHELOR OF BUSINESS ADMINISTRATION',
-          'B.TECH',
-          'B.E.',
-          'B.SC',
-          'B.COM',
-          'B.A.',
-          'BCA',
-          'BBA',
-        ],
-        [
-          'DEGREE',
-          'GRADUATION',
-          'UNDERGRADUATE',
-        ],
-        [
-          'UNIVERSITY',
-          'COLLEGE',
-          'INSTITUTE',
-        ],
-        [
-          'DEGREE CERTIFICATE',
-          'PROVISIONAL CERTIFICATE',
-          'CONVOCATION',
-          'CERTIFICATE',
-        ],
-        [
-          'AWARDED',
-          'CONFERRED',
-          'SUCCESSFULLY COMPLETED',
-          'COMPLETED',
-        ],
+        ['BACHELOR', 'BACHELOR OF TECHNOLOGY', 'BACHELOR OF ENGINEERING', 'BACHELOR OF SCIENCE', 'BACHELOR OF COMMERCE', 'BACHELOR OF ARTS', 'BACHELOR OF COMPUTER APPLICATIONS', 'BACHELOR OF BUSINESS ADMINISTRATION', 'B.TECH', 'B.E.', 'B.SC', 'B.COM', 'B.A.', 'BCA', 'BBA'],
+        ['DEGREE', 'GRADUATION', 'UNDERGRADUATE'],
+        ['UNIVERSITY', 'COLLEGE', 'INSTITUTE'],
+        ['DEGREE CERTIFICATE', 'PROVISIONAL CERTIFICATE', 'CONVOCATION', 'CERTIFICATE'],
+        ['AWARDED', 'CONFERRED', 'SUCCESSFULLY COMPLETED', 'COMPLETED'],
       ];
 
-      const result =
-        hasKeywordGroups(
-          graduationGroups,
-          3
-        );
-
-      return result;
+      return hasKeywordGroups(graduationGroups, 3);
     }
-
-    // ==================================================
-    // POST-GRADUATION CERTIFICATE
-    // ==================================================
 
     case 'Post-Graduation Certificate': {
       const postGraduationGroups = [
-        [
-          'MASTER',
-          'MASTER OF TECHNOLOGY',
-          'MASTER OF ENGINEERING',
-          'MASTER OF SCIENCE',
-          'MASTER OF COMMERCE',
-          'MASTER OF ARTS',
-          'MASTER OF COMPUTER APPLICATIONS',
-          'MASTER OF BUSINESS ADMINISTRATION',
-          'M.TECH',
-          'M.E.',
-          'M.SC',
-          'M.COM',
-          'M.A.',
-          'MCA',
-          'MBA',
-        ],
-        [
-          'POST GRADUATION',
-          'POSTGRADUATION',
-          'POST-GRADUATE',
-          'POST GRADUATE',
-        ],
-        [
-          'DEGREE',
-          'MASTER DEGREE',
-          'POSTGRADUATE DEGREE',
-        ],
-        [
-          'UNIVERSITY',
-          'COLLEGE',
-          'INSTITUTE',
-        ],
-        [
-          'DEGREE CERTIFICATE',
-          'PROVISIONAL CERTIFICATE',
-          'CONVOCATION',
-          'CERTIFICATE',
-        ],
-        [
-          'AWARDED',
-          'CONFERRED',
-          'SUCCESSFULLY COMPLETED',
-          'COMPLETED',
-        ],
+        ['MASTER', 'MASTER OF TECHNOLOGY', 'MASTER OF ENGINEERING', 'MASTER OF SCIENCE', 'MASTER OF COMMERCE', 'MASTER OF ARTS', 'MASTER OF COMPUTER APPLICATIONS', 'MASTER OF BUSINESS ADMINISTRATION', 'M.TECH', 'M.E.', 'M.SC', 'M.COM', 'M.A.', 'MCA', 'MBA'],
+        ['POST GRADUATION', 'POSTGRADUATION', 'POST-GRADUATE', 'POST GRADUATE'],
+        ['DEGREE', 'MASTER DEGREE', 'POSTGRADUATE DEGREE'],
+        ['UNIVERSITY', 'COLLEGE', 'INSTITUTE'],
+        ['DEGREE CERTIFICATE', 'PROVISIONAL CERTIFICATE', 'CONVOCATION', 'CERTIFICATE'],
+        ['AWARDED', 'CONFERRED', 'SUCCESSFULLY COMPLETED', 'COMPLETED'],
       ];
 
-      const result =
-        hasKeywordGroups(
-          postGraduationGroups,
-          3
-        );
+      const result = hasKeywordGroups(postGraduationGroups, 3);
 
-      console.log(
-        'Post-Graduation Certificate validation:',
-        result
-      );
+      console.log('Post-Graduation Certificate validation:', result);
 
       return result;
     }
-
-    // ==================================================
-    // EXPERIENCE LETTER
-    // ==================================================
 
     case 'Experience Letter': {
       const experienceGroups = [
-        [
-          'EXPERIENCE LETTER',
-          'CERTIFICATE OF EXPERIENCE',
-          'EMPLOYMENT CERTIFICATE',
-          'EXPERIENCE CERTIFICATE',
-        ],
-        [
-          'WORK EXPERIENCE',
-          'EMPLOYED WITH',
-          'WORKED WITH',
-          'DURING HIS EMPLOYMENT',
-          'DURING HER EMPLOYMENT',
-          'DURING THE PERIOD OF EMPLOYMENT',
-        ],
-        [
-          'DESIGNATION',
-          'POSITION',
-          'ROLE',
-          'JOB TITLE',
-        ],
-        [
-          'DATE OF JOINING',
-          'JOINING DATE',
-          'DATE OF COMMENCEMENT',
-        ],
-        [
-          'DATE OF RELIEVING',
-          'RELIEVING DATE',
-          'LAST WORKING DAY',
-          'LAST WORKING DATE',
-        ],
-        [
-          'TENURE',
-          'PERIOD',
-          'YEARS',
-          'MONTHS',
-        ],
-        [
-          'TO WHOMSOEVER IT MAY CONCERN',
-          'TO WHOM IT MAY CONCERN',
-        ],
+        ['EXPERIENCE LETTER', 'CERTIFICATE OF EXPERIENCE', 'EMPLOYMENT CERTIFICATE', 'EXPERIENCE CERTIFICATE'],
+        ['WORK EXPERIENCE', 'EMPLOYED WITH', 'WORKED WITH', 'DURING HIS EMPLOYMENT', 'DURING HER EMPLOYMENT', 'DURING THE PERIOD OF EMPLOYMENT'],
+        ['DESIGNATION', 'POSITION', 'ROLE', 'JOB TITLE'],
+        ['DATE OF JOINING', 'JOINING DATE', 'DATE OF COMMENCEMENT'],
+        ['DATE OF RELIEVING', 'RELIEVING DATE', 'LAST WORKING DAY', 'LAST WORKING DATE'],
+        ['TENURE', 'PERIOD', 'YEARS', 'MONTHS'],
+        ['TO WHOMSOEVER IT MAY CONCERN', 'TO WHOM IT MAY CONCERN'],
       ];
 
-      const result =
-        hasKeywordGroups(
-          experienceGroups,
-          4
-        );
+      const result = hasKeywordGroups(experienceGroups, 4);
 
-      console.log(
-        'Experience Letter validation:',
-        result
-      );
+      console.log('Experience Letter validation:', result);
 
       return result;
     }
-
-    // ==================================================
-    // RELIEVING LETTER
-    // ==================================================
 
     case 'Relieving Letter': {
       const relievingGroups = [
-        [
-          'RELIEVING LETTER',
-          'RELIEVING CERTIFICATE',
-        ],
-        [
-          'RELIEVED FROM',
-          'RELIEVED OF',
-          'RELIEVED FROM SERVICES',
-          'RELIEVED',
-        ],
-        [
-          'LAST WORKING DAY',
-          'LAST WORKING DATE',
-          'DATE OF RELIEVING',
-          'RELIEVING DATE',
-        ],
-        [
-          'EMPLOYMENT',
-          'EMPLOYED',
-          'SERVICES',
-          'TENURE',
-        ],
-        [
-          'FULL AND FINAL',
-          'NO DUES',
-          'HANDOVER',
-        ],
-        [
-          'DESIGNATION',
-          'POSITION',
-          'ROLE',
-        ],
+        ['RELIEVING LETTER', 'RELIEVING CERTIFICATE'],
+        ['RELIEVED FROM', 'RELIEVED OF', 'RELIEVED FROM SERVICES', 'RELIEVED'],
+        ['LAST WORKING DAY', 'LAST WORKING DATE', 'DATE OF RELIEVING', 'RELIEVING DATE'],
+        ['EMPLOYMENT', 'EMPLOYED', 'SERVICES', 'TENURE'],
+        ['FULL AND FINAL', 'NO DUES', 'HANDOVER'],
+        ['DESIGNATION', 'POSITION', 'ROLE'],
       ];
 
-      const result =
-        hasKeywordGroups(
-          relievingGroups,
-          4
-        );
+      const result = hasKeywordGroups(relievingGroups, 4);
 
-      console.log(
-        'Relieving Letter validation:',
-        result
-      );
+      console.log('Relieving Letter validation:', result);
 
       return result;
     }
-
-    // ==================================================
-    // OFFER LETTER
-    // ==================================================
 
     case 'Offer Letter': {
       const offerGroups = [
-        [
-          'OFFER LETTER',
-          'LETTER OF OFFER',
-          'OFFER OF EMPLOYMENT',
-          'EMPLOYMENT OFFER',
-        ],
-        [
-          'EMPLOYMENT',
-          'APPOINTMENT',
-          'EMPLOYMENT TERMS',
-          'TERMS OF EMPLOYMENT',
-        ],
-        [
-          'JOINING DATE',
-          'DATE OF JOINING',
-          'START DATE',
-        ],
-        [
-          'CTC',
-          'COMPENSATION',
-          'SALARY',
-          'REMUNERATION',
-        ],
-        [
-          'DESIGNATION',
-          'POSITION',
-          'JOB TITLE',
-          'ROLE',
-        ],
-        [
-          'TERMS AND CONDITIONS',
-          'TERMS & CONDITIONS',
-          'CONDITIONS OF EMPLOYMENT',
-        ],
+        ['OFFER LETTER', 'LETTER OF OFFER', 'OFFER OF EMPLOYMENT', 'EMPLOYMENT OFFER'],
+        ['EMPLOYMENT', 'APPOINTMENT', 'EMPLOYMENT TERMS', 'TERMS OF EMPLOYMENT'],
+        ['JOINING DATE', 'DATE OF JOINING', 'START DATE'],
+        ['CTC', 'COMPENSATION', 'SALARY', 'REMUNERATION'],
+        ['DESIGNATION', 'POSITION', 'JOB TITLE', 'ROLE'],
+        ['TERMS AND CONDITIONS', 'TERMS & CONDITIONS', 'CONDITIONS OF EMPLOYMENT'],
       ];
 
-      const result =
-        hasKeywordGroups(
-          offerGroups,
-          4
-        );
+      const result = hasKeywordGroups(offerGroups, 4);
 
-      console.log(
-        'Offer Letter validation:',
-        result
-      );
+      console.log('Offer Letter validation:', result);
 
       return result;
     }
 
-    // ==================================================
-    // OTHER
-    // ==================================================
-
     case 'Other': {
-      /*
-       * "Other" is intentionally not tied to one
-       * document format.
-       *
-       * But it still cannot be completely empty.
-       *
-       * Require enough readable OCR text so that a
-       * random/blank image is rejected.
-       */
-
-      const meaningfulText =
-        normalized.replace(
-          /[^A-Z0-9]/g,
-          ''
-        );
+      const meaningfulText = normalized.replace(/[^A-Z0-9]/g, '');
 
       console.log(
         'Other document meaningful text length:',
@@ -1181,16 +629,8 @@ function validateDocumentType(
       return meaningfulText.length >= 30;
     }
 
-    // ==================================================
-    // UNKNOWN DOCUMENT TYPE
-    // ==================================================
-
     default:
-      console.log(
-        'Unknown document type:',
-        documentType
-      );
-
+      console.log('Unknown document type:', documentType);
       return false;
   }
 }
@@ -1199,86 +639,48 @@ function validateDocumentType(
 // OCR IMAGE
 // ======================================================
 
-async function runOCR(
-  imageBuffer: Buffer
-): Promise<string> {
-  console.log(
-    'Starting Tesseract OCR...'
-  );
-
+async function runOCR(imageBuffer: Buffer): Promise<string> {
+  console.log('Starting Tesseract OCR...');
 
   const worker = await createWorker(
     'eng',
     1,
     {
-      workerPath:
-        TESSERACT_WORKER_PATH,
+      workerPath: TESSERACT_WORKER_PATH,
     }
   );
 
   try {
-    // ==================================================
-    // OCR PASS 1 - NORMAL
-    // ==================================================
-
-    await worker.setParameters({tessedit_pageseg_mode: PSM.AUTO,});
+    await worker.setParameters({
+      tessedit_pageseg_mode: PSM.AUTO,
+    });
 
     const normalResult = await worker.recognize(imageBuffer);
-
     const normalText = normalResult.data.text || '';
-
 
     console.log(
       'Normal OCR confidence:',
       normalResult.data.confidence
     );
 
-    // ==================================================
-    // OCR PASS 2 - SPARSE
-    // ==================================================
-
     await worker.setParameters({
-      tessedit_pageseg_mode:
-        PSM.SPARSE_TEXT,
+      tessedit_pageseg_mode: PSM.SPARSE_TEXT,
     });
 
-    const sparseResult =
-      await worker.recognize(
-        imageBuffer
-      );
-
-    const sparseText =
-      sparseResult.data.text || '';
-
-
+    const sparseResult = await worker.recognize(imageBuffer);
+    const sparseText = sparseResult.data.text || '';
 
     console.log(
       'Sparse OCR confidence:',
       sparseResult.data.confidence
     );
 
-    // ==================================================
-    // COMBINE OCR
-    // ==================================================
-
-    const combinedText = [
-      normalText,
-      sparseText,
-    ]
+    return [normalText, sparseText]
       .filter(Boolean)
       .join('\n');
-
-
-    return combinedText;
-
   } catch (error) {
-    console.error(
-      'OCR failed:',
-      error
-    );
-
+    console.error('OCR failed:', error);
     return '';
-
   } finally {
     await worker.terminate();
   }
@@ -1288,85 +690,55 @@ async function runOCR(
 // EXTRACT PDF TEXT
 // ======================================================
 
-async function extractTextFromPDF(
-  buffer: Buffer
-): Promise<string> {
+async function extractTextFromPDF(buffer: Buffer): Promise<string> {
   const parser = new PDFParse({
     data: buffer,
   });
 
   try {
-    // ==================================================
-    // 1. NORMAL PDF TEXT EXTRACTION
-    // ==================================================
+    const textResult = await parser.getText();
 
-    const textResult =
-      await parser.getText();
+    const extractedText = (textResult.text || '')
+      .replace(/--\s*\d+\s+of\s+\d+\s*--/gi, '')
+      .trim();
 
-    const extractedText =
-      (textResult.text || '')
-        .replace(
-          /--\s*\d+\s+of\s+\d+\s*--/gi,
-          ''
-        )
-        .trim();
-
-    const meaningfulText =
-      extractedText.replace(
-        /[^A-Za-z0-9]/g,
-        ''
-      );
-
+    const meaningfulText = extractedText.replace(
+      /[^A-Za-z0-9]/g,
+      ''
+    );
 
     console.log(
       'Meaningful PDF text length:',
       meaningfulText.length
     );
 
-    if (
-      meaningfulText.length > 10
-    ) {
-
+    if (meaningfulText.length > 10) {
       return extractedText;
     }
 
-    console.log(
-      'PDF contains no real text. Starting OCR...'
-    );
-
-    // ==================================================
-    // 2. OCR EMBEDDED IMAGES
-    // ==================================================
+    console.log('PDF contains no real text. Starting OCR...');
 
     let ocrText = '';
 
     try {
-      const imageResult =
-        await parser.getImage({
-          imageThreshold: 0,
-          imageBuffer: true,
-          imageDataUrl: false,
-        });
+      const imageResult = await parser.getImage({
+        imageThreshold: 0,
+        imageBuffer: true,
+        imageDataUrl: false,
+      });
 
       console.log(
         'PDF image pages:',
-        imageResult.pages?.length ||
-          0
+        imageResult.pages?.length || 0
       );
 
-      for (
-        const page of
-        imageResult.pages || []
-      ) {
+      for (const page of imageResult.pages || []) {
         console.log(
           `Page ${page.pageNumber}: images =`,
           page.images?.length || 0
         );
 
-        for (
-          const image of
-          page.images || []
-        ) {
+        for (const image of page.images || []) {
           if (!image.data) {
             continue;
           }
@@ -1375,22 +747,15 @@ async function extractTextFromPDF(
             `Running OCR on embedded image from page ${page.pageNumber}`
           );
 
-          const pageText =
-            await runOCR(
-              Buffer.from(
-                image.data
-              )
-            );
+          const pageText = await runOCR(
+            Buffer.from(image.data)
+          );
 
-          if (
-            pageText.trim()
-          ) {
-            ocrText +=
-              `\n${pageText}`;
+          if (pageText.trim()) {
+            ocrText += `\n${pageText}`;
           }
         }
       }
-
     } catch (imageError) {
       console.error(
         'Embedded image extraction failed:',
@@ -1398,38 +763,24 @@ async function extractTextFromPDF(
       );
     }
 
-    // ==================================================
-    // 3. RENDER PDF AND OCR
-    // ==================================================
-
     if (!ocrText.trim()) {
-      console.log(
-        'Embedded image OCR returned no text.'
-      );
-
-      console.log(
-        'Rendering PDF pages for OCR...'
-      );
+      console.log('Embedded image OCR returned no text.');
+      console.log('Rendering PDF pages for OCR...');
 
       try {
-        const screenshotResult =
-          await parser.getScreenshot({
-            first: 3,
-            desiredWidth: 3000,
-            imageBuffer: true,
-            imageDataUrl: false,
-          });
+        const screenshotResult = await parser.getScreenshot({
+          first: 3,
+          desiredWidth: 3000,
+          imageBuffer: true,
+          imageDataUrl: false,
+        });
 
         console.log(
           'Screenshot pages:',
-          screenshotResult.pages
-            ?.length || 0
+          screenshotResult.pages?.length || 0
         );
 
-        for (
-          const page of
-          screenshotResult.pages || []
-        ) {
+        for (const page of screenshotResult.pages || []) {
           if (!page.data) {
             continue;
           }
@@ -1438,21 +789,14 @@ async function extractTextFromPDF(
             `Running OCR on rendered page ${page.pageNumber}`
           );
 
-          const pageText =
-            await runOCR(
-              Buffer.from(
-                page.data
-              )
-            );
+          const pageText = await runOCR(
+            Buffer.from(page.data)
+          );
 
-          if (
-            pageText.trim()
-          ) {
-            ocrText +=
-              `\n${pageText}`;
+          if (pageText.trim()) {
+            ocrText += `\n${pageText}`;
           }
         }
-
       } catch (screenshotError) {
         console.error(
           'PDF screenshot OCR failed:',
@@ -1462,7 +806,6 @@ async function extractTextFromPDF(
     }
 
     return ocrText.trim();
-
   } finally {
     await parser.destroy();
   }
@@ -1472,9 +815,7 @@ async function extractTextFromPDF(
 // POST
 // ======================================================
 
-export async function POST(
-  request: Request
-) {
+export async function POST(request: Request) {
   let uploadResult: any = null;
 
   try {
@@ -1482,18 +823,11 @@ export async function POST(
     // FORM DATA
     // ==================================================
 
-    const formData =
-      await request.formData();
+    const formData = await request.formData();
 
-    const file =
-      formData.get(
-        'file'
-      ) as File;
+    const file = formData.get('file') as File;
 
-    const employee_id =
-      formData.get(
-        'employee_id'
-      ) as string;
+    const employee_id = formData.get('employee_id') as string;
 
     const rawDocumentType = formData.get('document_type') as string;
 
@@ -1501,11 +835,8 @@ export async function POST(
       rawDocumentType?.trim() === 'Aadhaar Card'
         ? 'Aadhar Card'
         : rawDocumentType?.trim();
-        
-    const document_name =
-      formData.get(
-        'document_name'
-      ) as string;
+
+    const document_name = formData.get('document_name') as string;
 
     // ==================================================
     // REQUIRED FIELDS
@@ -1522,9 +853,7 @@ export async function POST(
           error:
             'File, employee, document type, and document name are required',
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
 
@@ -1532,18 +861,12 @@ export async function POST(
     // FILE SIZE
     // ==================================================
 
-    if (
-      file.size >
-      MAX_FILE_SIZE
-    ) {
+    if (file.size > MAX_FILE_SIZE) {
       return NextResponse.json(
         {
-          error:
-            'File size exceeds 5MB limit',
+          error: 'File size exceeds 5MB limit',
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
 
@@ -1551,19 +874,13 @@ export async function POST(
     // FILE TYPE
     // ==================================================
 
-    if (
-      !ALLOWED_FILE_TYPES.includes(
-        file.type
-      )
-    ) {
+    if (!ALLOWED_FILE_TYPES.includes(file.type)) {
       return NextResponse.json(
         {
           error:
             'Unsupported file type. Please upload a PDF, JPG, JPEG, or PNG file.',
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
 
@@ -1581,44 +898,20 @@ export async function POST(
     let fileBuffer: Buffer;
 
     try {
-      fileBuffer =
-        Buffer.from(
-          await file.arrayBuffer()
-        );
+      fileBuffer = Buffer.from(
+        await file.arrayBuffer()
+      );
 
       const isPDF =
-        file.type ===
-          'application/pdf' ||
-        file.name
-          .toLowerCase()
-          .endsWith('.pdf');
+        file.type === 'application/pdf' ||
+        file.name.toLowerCase().endsWith('.pdf');
 
       if (isPDF) {
-        // PDF:
-        //
-        // 1. Normal PDF text
-        // 2. Embedded images
-        // 3. Rendered page OCR
-
-        extractedText =
-          await extractTextFromPDF(
-            fileBuffer
-          );
-
+        extractedText = await extractTextFromPDF(fileBuffer);
       } else {
-        // JPG / PNG
-        //
-        // Direct OCR
-
-        extractedText =
-          await runOCR(
-            fileBuffer
-          );
+        extractedText = await runOCR(fileBuffer);
       }
-
-    } catch (
-      extractionError
-    ) {
+    } catch (extractionError) {
       console.error(
         'Document text extraction error:',
         extractionError
@@ -1629,9 +922,7 @@ export async function POST(
           error:
             `Could not read the uploaded ${document_type}. Please upload a clear PDF or image.`,
         },
-        {
-          status: 422,
-        }
+        { status: 422 }
       );
     }
 
@@ -1639,24 +930,18 @@ export async function POST(
     // DOCUMENT TYPE VALIDATION
     // ==================================================
 
-    const isDocumentMatching =
-      validateDocumentType(
-        document_type,
-        extractedText
-      );
+    const isDocumentMatching = validateDocumentType(
+      document_type,
+      extractedText
+    );
 
-
-    if (
-      !isDocumentMatching
-    ) {
+    if (!isDocumentMatching) {
       return NextResponse.json(
         {
           error:
             `Invalid document. The uploaded file does not appear to be a ${document_type}. Please upload the correct document.`,
         },
-        {
-          status: 422,
-        }
+        { status: 422 }
       );
     }
 
@@ -1664,16 +949,11 @@ export async function POST(
     // ID DOCUMENT NUMBER
     // ==================================================
 
-    if (
-      ID_DOCUMENT_TYPES.includes(
-        document_type
-      )
-    ) {
-      identityNumber =
-        extractDocumentNumber(
-          document_type,
-          extractedText
-        );
+    if (ID_DOCUMENT_TYPES.includes(document_type)) {
+      identityNumber = extractDocumentNumber(
+        document_type,
+        extractedText
+      );
 
       if (!identityNumber) {
         return NextResponse.json(
@@ -1681,37 +961,56 @@ export async function POST(
             error:
               `Could not find a valid ${document_type} number in the uploaded document.`,
           },
-          {
-            status: 422,
-          }
+          { status: 422 }
         );
       }
-      console.log(`${document_type} number extracted successfully.`);
+
+      console.log(
+        `${document_type} number extracted successfully.`
+      );
     }
 
-// ====================================================== 
-// // EXTRACT BANK DETAILS FROM A VALIDATED PASSBOOK 
-// // ====================================================== 
-  const isBankPassbook = document_type.trim().toLowerCase() === 'bank passbook';
-   if (isBankPassbook) { 
-    bankIFSC = extractIFSC(extractedText); 
-    bankAccountNumber = extractBankAccountNumber(extractedText); 
-    bankName = extractBankName(extractedText); 
-    if (!bankIFSC || !bankAccountNumber || !bankName) 
-      { 
-        console.error('Bank details extraction incomplete:', { bankNameFound: !!bankName, accountNumberFound: !!bankAccountNumber, ifscFound: !!bankIFSC, });
-        return NextResponse.json( { error: 'Passbook uploaded, but the bank name, account number, or IFSC code could not be reliably extracted. Please upload a clearer document.', }, { status: 422 } );
-      } }
+    // ==================================================
+    // EXTRACT BANK DETAILS FROM A VALIDATED PASSBOOK
+    // ==================================================
+
+    const isBankPassbook =
+      document_type.trim().toLowerCase() === 'bank passbook';
+
+    if (isBankPassbook) {
+      bankIFSC = extractIFSC(extractedText);
+      bankAccountNumber = extractBankAccountNumber(extractedText);
+      bankName = extractBankName(extractedText);
+
+      if (!bankIFSC || !bankAccountNumber || !bankName) {
+        console.error('Bank details extraction incomplete:', {
+          bankNameFound: !!bankName,
+          accountNumberFound: !!bankAccountNumber,
+          ifscFound: !!bankIFSC,
+        });
+
+        return NextResponse.json(
+          {
+            error:
+              'Passbook uploaded, but the bank name, account number, or IFSC code could not be reliably extracted. Please upload a clearer document.',
+          },
+          { status: 422 }
+        );
+      }
+    }
+
     // ==================================================
     // SUPABASE
     // ==================================================
 
     const supabase = await createClient();
 
-    
-    const allowsMultiple = MULTIPLE_DOCUMENT_TYPES.includes(document_type);
+    const allowsMultiple = MULTIPLE_DOCUMENT_TYPES.includes(
+      document_type
+    );
 
-    const verificationRequired = HR_VERIFICATION_DOCUMENT_TYPES.includes(document_type);
+    const verificationRequired =
+      HR_VERIFICATION_DOCUMENT_TYPES.includes(document_type);
 
     let requiresApproval = false;
 
@@ -1719,7 +1018,6 @@ export async function POST(
 
     if (!allowsMultiple) {
       if (verificationRequired) {
-        // Find the currently approved document, if one exists.
         const { data, error } = await supabase
           .from('employee_documents')
           .select('*')
@@ -1731,7 +1029,11 @@ export async function POST(
           .maybeSingle();
 
         if (error) {
-          console.error('Failed to find approved document:', error);
+          console.error(
+            'Failed to find approved document:',
+            error
+          );
+
           return NextResponse.json(
             { message: 'Failed to check the existing document' },
             { status: 500 }
@@ -1740,10 +1042,13 @@ export async function POST(
 
         existingDocument = data;
 
-        requiresApproval = verificationRequired ;
+        requiresApproval = verificationRequired;
 
         // Prevent duplicate uploads while HR verification is pending.
-        const { data: pendingDocument, error: pendingError } = await supabase
+        const {
+          data: pendingDocument,
+          error: pendingError,
+        } = await supabase
           .from('employee_documents')
           .select('id')
           .eq('employee_id', employee_id)
@@ -1753,7 +1058,11 @@ export async function POST(
           .maybeSingle();
 
         if (pendingError) {
-          console.error('Failed to check pending document:', pendingError);
+          console.error(
+            'Failed to check pending document:',
+            pendingError
+          );
+
           return NextResponse.json(
             { message: 'Failed to check pending verification' },
             { status: 500 }
@@ -1762,12 +1071,14 @@ export async function POST(
 
         if (pendingDocument) {
           return NextResponse.json(
-            { message: 'A document of this type is already awaiting HR approval.' },
+            {
+              message:
+                'A document of this type is already awaiting HR approval.',
+            },
             { status: 409 }
           );
         }
       } else {
-        // Preserve the existing behavior for documents not requiring HR approval.
         const { data, error } = await supabase
           .from('employee_documents')
           .select('*')
@@ -1776,7 +1087,11 @@ export async function POST(
           .maybeSingle();
 
         if (error) {
-          console.error('Failed to find existing document:', error);
+          console.error(
+            'Failed to find existing document:',
+            error
+          );
+
           return NextResponse.json(
             { message: 'Failed to check the existing document' },
             { status: 500 }
@@ -1791,7 +1106,10 @@ export async function POST(
     // AUTHENTICATE USER AND AUTHORIZE EMPLOYEE ACCESS
     // ======================================================
 
-    const {data: { user },error: authError} = await supabase.auth.getUser();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
 
     if (authError || !user) {
       return NextResponse.json(
@@ -1815,12 +1133,14 @@ export async function POST(
 
     const role = String(profile.role || '').toLowerCase();
 
-    const { data: targetEmployee, error: employeeError } =
-      await supabase
-        .from('employees')
-        .select('id, user_id')
-        .eq('id', employee_id)
-        .maybeSingle();
+    const {
+      data: targetEmployee,
+      error: employeeError,
+    } = await supabase
+      .from('employees')
+      .select('id, user_id')
+      .eq('id', employee_id)
+      .maybeSingle();
 
     if (employeeError || !targetEmployee) {
       return NextResponse.json(
@@ -1830,23 +1150,26 @@ export async function POST(
     }
 
     if (role === 'employee') {
-      // Adjust this comparison if your schema links employees
-      // to profiles using a different column.
       if (targetEmployee.user_id !== user.id) {
         return NextResponse.json(
-          { error: 'You can only upload documents for your own profile.' },
+          {
+            error:
+              'You can only upload documents for your own profile.',
+          },
           { status: 403 }
         );
       }
     } else if (role === 'hr' || role === 'ceo') {
-
+      // HR and CEO can upload documents for employees.
     } else {
       return NextResponse.json(
-        { error: 'You do not have permission to upload documents.' },
+        {
+          error:
+            'You do not have permission to upload documents.',
+        },
         { status: 403 }
       );
     }
-
 
     // ======================================================
     // FIND AN EXISTING REQUEST FOR A REJECTED DOCUMENT
@@ -1855,11 +1178,11 @@ export async function POST(
     const normalizedUploadType = document_type.trim().toLowerCase();
 
     const isSensitiveUpload = [
-      "aadhar card",
-      "aadhaar card",
-      "pan card",
-      "passport",
-      "bank passbook",
+      'aadhar card',
+      'aadhaar card',
+      'pan card',
+      'passport',
+      'bank passbook',
     ].includes(normalizedUploadType);
 
     let replacementProfileRequest: {
@@ -1873,65 +1196,78 @@ export async function POST(
       const admin = await createAdminClient();
 
       const identityField =
-        ["aadhar card", "aadhaar card"].includes(normalizedUploadType)
-          ? "aadhar_number"
-          : normalizedUploadType === "pan card"
-            ? "pan_number"
-            : normalizedUploadType === "passport"
-              ? "passport_number"
+        ['aadhar card', 'aadhaar card'].includes(normalizedUploadType)
+          ? 'aadhar_number'
+          : normalizedUploadType === 'pan card'
+            ? 'pan_number'
+            : normalizedUploadType === 'passport'
+              ? 'passport_number'
               : null;
 
       if (identityField) {
-        const { data: requests, error: requestLookupError } = await admin
-          .from("profile_change_requests")
-          .select("id, employee_id, requested_changes, status")
-          .eq("employee_id", employee_id)
-          .eq("status", "pending");
+        const {
+          data: requests,
+          error: requestLookupError,
+        } = await admin
+          .from('profile_change_requests')
+          .select('id, employee_id, requested_changes, status')
+          .eq('employee_id', employee_id)
+          .eq('status', 'pending');
 
         if (requestLookupError) {
           console.error(
-            "Failed to look up existing profile-change requests:",
+            'Failed to look up existing profile-change requests:',
             requestLookupError
           );
 
           return NextResponse.json(
-            { error: "Could not check the existing profile-change request." },
+            {
+              error:
+                'Could not check the existing profile-change request.',
+            },
             { status: 500 }
           );
         }
 
-        const matchingRequests = (requests ?? []).filter((item: any) => {
-          const changes = item.requested_changes;
+        const matchingRequests = (requests ?? []).filter(
+          (item: any) => {
+            const changes = item.requested_changes;
 
-          return (
-            changes &&
-            typeof changes === "object" &&
-            String(changes[identityField] ?? "").trim().toUpperCase() ===
-              identityNumber!.trim().toUpperCase()
-          );
-        });
+            return (
+              changes &&
+              typeof changes === 'object' &&
+              String(changes[identityField] ?? '')
+                .trim()
+                .toUpperCase() ===
+                identityNumber!.trim().toUpperCase()
+            );
+          }
+        );
 
-        // Reuse only an unambiguous pending request that already has a
-        // rejected document of this type linked to it.
         for (const candidate of matchingRequests as any[]) {
-          const { data: rejectedDocs, error: rejectedLookupError } =
-            await admin
-              .from("employee_documents")
-              .select("id")
-              .eq("employee_id", employee_id)
-              .eq("profile_change_request_id", candidate.id)
-              .eq("verification_status", "rejected")
-              .ilike("document_type", document_type)
-              .limit(2);
+          const {
+            data: rejectedDocs,
+            error: rejectedLookupError,
+          } = await admin
+            .from('employee_documents')
+            .select('id')
+            .eq('employee_id', employee_id)
+            .eq('profile_change_request_id', candidate.id)
+            .eq('verification_status', 'rejected')
+            .ilike('document_type', document_type)
+            .limit(2);
 
           if (rejectedLookupError) {
             console.error(
-              "Failed to inspect rejected replacement documents:",
+              'Failed to inspect rejected replacement documents:',
               rejectedLookupError
             );
 
             return NextResponse.json(
-              { error: "Could not validate the rejected document." },
+              {
+                error:
+                  'Could not validate the rejected document.',
+              },
               { status: 500 }
             );
           }
@@ -1941,7 +1277,7 @@ export async function POST(
               return NextResponse.json(
                 {
                   error:
-                    "Multiple pending requests match this document. Ask HR to resolve them before uploading a replacement.",
+                    'Multiple pending requests match this document. Ask HR to resolve them before uploading a replacement.',
                 },
                 { status: 409 }
               );
@@ -1953,62 +1289,43 @@ export async function POST(
       }
     }
 
-
-
     // ==================================================
     // CLOUDINARY RESOURCE TYPE
     // ==================================================
 
     const cloudinaryResourceType =
-      file.type ===
-      'application/pdf'
-        ? 'raw'
-        : 'image';
+      file.type === 'application/pdf' ? 'raw' : 'image';
 
     // ==================================================
     // CLOUDINARY DATA URI
     // ==================================================
 
-    const base64Data =
-      fileBuffer.toString(
-        'base64'
-      );
+    const base64Data = fileBuffer.toString('base64');
 
-    const dataURI =
-      `data:${file.type};base64,${base64Data}`;
+    const dataURI = `data:${file.type};base64,${base64Data}`;
 
     // ==================================================
     // CLOUDINARY UPLOAD
     // ==================================================
 
-    uploadResult =
-      await new Promise<any>(
-        (
-          resolve,
-          reject
-        ) => {
-          cloudinary.uploader.upload(
-            dataURI,
-            {
-              folder:
-                'teens-hr/documents',
-
-              resource_type:
-                cloudinaryResourceType,
-            },
-            (
-              error,
-              result
-            ) => {
-              if (error) {
-                reject(error);
-              } else {
-                resolve(result);
-              }
+    uploadResult = await new Promise<any>(
+      (resolve, reject) => {
+        cloudinary.uploader.upload(
+          dataURI,
+          {
+            folder: 'teens-hr/documents',
+            resource_type: cloudinaryResourceType,
+          },
+          (error, result) => {
+            if (error) {
+              reject(error);
+            } else {
+              resolve(result);
             }
-          );
-        }
-      );
+          }
+        );
+      }
+    );
 
     // ==================================================
     // IDENTITY DATABASE FIELDS
@@ -2027,22 +1344,10 @@ export async function POST(
     if (document_type === 'Passport' && identityNumber) {
       identityFields.passport_number = identityNumber;
     }
-    
-    // Save extracted bank details to the employee record
-
-                
 
     // ======================================================
-    // SYNC VERIFIED IDENTITY NUMBER TO EMPLOYEES TABLE
-    // ======================================================
-    // 
-    // Aadhaar, PAN and Passport numbers will be synced to
-    // employees only after HR approves the uploaded document.
-
-
-    // ==================================================
     // SAVE DOCUMENTS THAT REQUIRE HR APPROVAL
-    // ==================================================
+    // ======================================================
 
     if (requiresApproval) {
       const pendingDocumentFields: Record<string, any> = {
@@ -2078,8 +1383,6 @@ export async function POST(
           pendingInsertError
         );
 
-        
-
         try {
           await cloudinary.uploader.destroy(
             uploadResult.public_id,
@@ -2098,14 +1401,17 @@ export async function POST(
 
         return NextResponse.json(
           {
-            error: 'The document was uploaded but could not be submitted for HR approval.',
+            error:
+              'The document was uploaded but could not be submitted for HR approval.',
           },
           { status: 500 }
         );
       }
 
-      // Automatically create and link a database-backed profile request.
-      // Reuse the existing pending request when replacing a rejected ID document.
+      // ======================================================
+      // CREATE AND LINK PROFILE CHANGE REQUEST
+      // ======================================================
+
       const normalizedDocumentType = String(document_type)
         .trim()
         .toLowerCase();
@@ -2131,7 +1437,9 @@ export async function POST(
         const requestedChanges: Record<string, string> = {};
 
         if (
-          ['aadhar card', 'aadhaar card'].includes(normalizedDocumentType) &&
+          ['aadhar card', 'aadhaar card'].includes(
+            normalizedDocumentType
+          ) &&
           identityNumber
         ) {
           requestedChanges.aadhar_number = identityNumber;
@@ -2152,30 +1460,37 @@ export async function POST(
         }
 
         if (normalizedDocumentType === 'bank passbook') {
-          if (bankName) requestedChanges.bank_name = bankName;
-          if (bankAccountNumber) {
-            requestedChanges.bank_account_number = bankAccountNumber;
+          if (bankName) {
+            requestedChanges.bank_name = bankName;
           }
-          if (bankIFSC) requestedChanges.ifsc_code = bankIFSC;
+
+          if (bankAccountNumber) {
+            requestedChanges.bank_account_number =
+              bankAccountNumber;
+          }
+
+          if (bankIFSC) {
+            requestedChanges.ifsc_code = bankIFSC;
+          }
         }
 
-        // Reuse the existing request for a replacement document.
-        // Otherwise, create a new request for the first upload.
         let profileRequest = replacementProfileRequest;
         let createdNewProfileRequest = false;
 
         if (!profileRequest) {
-          const { data: newProfileRequest, error: requestInsertError } =
-            await admin
-              .from('profile_change_requests')
-              .insert({
-                employee_id,
-                requested_changes: requestedChanges,
-                previous_values: {},
-                status: 'pending',
-              })
-              .select('id, employee_id, requested_changes, status')
-              .single();
+          const {
+            data: newProfileRequest,
+            error: requestInsertError,
+          } = await admin
+            .from('profile_change_requests')
+            .insert({
+              employee_id,
+              requested_changes: requestedChanges,
+              previous_values: {},
+              status: 'pending',
+            })
+            .select('id, employee_id, requested_changes, status')
+            .single();
 
           if (requestInsertError || !newProfileRequest) {
             console.error(
@@ -2195,7 +1510,10 @@ export async function POST(
                 { resource_type: uploadResult.resource_type }
               );
             } catch (cleanupError) {
-              console.error('Cloudinary cleanup failed:', cleanupError);
+              console.error(
+                'Cloudinary cleanup failed:',
+                cleanupError
+              );
             }
 
             uploadResult = null;
@@ -2213,8 +1531,11 @@ export async function POST(
           createdNewProfileRequest = true;
         }
 
-        // Link only the newly uploaded pending document.
-        const { data: linkedDocument, error: linkError } = await admin
+        // Link the newly uploaded pending document.
+        const {
+          data: linkedDocument,
+          error: linkError,
+        } = await admin
           .from('employee_documents')
           .update({
             profile_change_request_id: profileRequest.id,
@@ -2233,8 +1554,6 @@ export async function POST(
             linkError
           );
 
-          // Delete a request only if this upload created it.
-          // Never delete a pre-existing request being reused.
           if (createdNewProfileRequest) {
             await admin
               .from('profile_change_requests')
@@ -2256,7 +1575,10 @@ export async function POST(
               { resource_type: uploadResult.resource_type }
             );
           } catch (cleanupError) {
-            console.error('Cloudinary cleanup failed:', cleanupError);
+            console.error(
+              'Cloudinary cleanup failed:',
+              cleanupError
+            );
           }
 
           uploadResult = null;
@@ -2273,7 +1595,63 @@ export async function POST(
         linkedProfileChangeRequest = profileRequest;
       }
 
+      // ======================================================
+      // NEW: SEND DOCUMENT UPLOAD NOTIFICATION TO HR
+      // ======================================================
 
+      try {
+        const notificationAdmin = await createAdminClient();
+
+        const {
+          data: hrProfiles,
+          error: hrError,
+        } = await notificationAdmin
+          .from('profiles')
+          .select('id')
+          .eq('role', 'hr');
+
+        if (hrError) {
+          console.error(
+            'Failed to fetch HR profiles for document notification:',
+            hrError
+          );
+        } else if (hrProfiles && hrProfiles.length > 0) {
+          const notificationRows = hrProfiles.map((hrProfile) => ({
+            recipient_user_id: hrProfile.id,
+            employee_id: employee_id,
+            title: 'New Document Uploaded',
+            message: `A ${document_type} document (${document_name.trim()}) has been uploaded and is waiting for HR verification.`,
+            type: 'document_upload',
+            is_read: false,
+          }));
+
+          const {
+            error: notificationError,
+          } = await notificationAdmin
+            .from('notifications')
+            .insert(notificationRows);
+
+          if (notificationError) {
+            console.error(
+              'Document upload notification failed:',
+              notificationError
+            );
+          } else {
+            console.log(
+              'Document upload notifications sent to HR successfully.'
+            );
+          }
+        }
+      } catch (notificationError) {
+        console.error(
+          'Document notification error:',
+          notificationError
+        );
+      }
+
+      // ==================================================
+      // REVALIDATE
+      // ==================================================
 
       revalidatePath(`/dashboard/employees/${employee_id}`);
 
@@ -2282,10 +1660,10 @@ export async function POST(
         {
           message: `${document_type} uploaded and submitted for HR approval.`,
           document: {
-          ...pendingDocument,
-          profile_change_request_id:
-            linkedProfileChangeRequest?.id ?? null,
-        },
+            ...pendingDocument,
+            profile_change_request_id:
+              linkedProfileChangeRequest?.id ?? null,
+          },
           profileChangeRequest: linkedProfileChangeRequest,
           verificationStatus: 'pending',
           replaced: Boolean(existingDocument),
@@ -2293,47 +1671,27 @@ export async function POST(
         { status: 201 }
       );
     }
+
     // ==================================================
     // REPLACE EXISTING DOCUMENT
     // ==================================================
 
-    if (
-      existingDocument
-    ) {
+    if (existingDocument) {
       const {
-        data:
-          updatedDocument,
-        error:
-          updateError,
+        data: updatedDocument,
+        error: updateError,
       } = await supabase
-        .from(
-          'employee_documents'
-        )
+        .from('employee_documents')
         .update({
-          document_name:
-            document_name.trim(),
-
-          document_url:
-            uploadResult.secure_url,
-
-          cloudinary_public_id:
-            uploadResult.public_id,
-
-          cloudinary_resource_type:
-            uploadResult.resource_type,
-
+          document_name: document_name.trim(),
+          document_url: uploadResult.secure_url,
+          cloudinary_public_id: uploadResult.public_id,
+          cloudinary_resource_type: uploadResult.resource_type,
           ...identityFields,
         })
-        .eq(
-          'id',
-          existingDocument.id
-        )
+        .eq('id', existingDocument.id)
         .select()
         .single();
-
-      // ==================================================
-      // UPDATE FAILED
-      // ==================================================
 
       if (updateError) {
         console.error(
@@ -2345,13 +1703,10 @@ export async function POST(
           await cloudinary.uploader.destroy(
             uploadResult.public_id,
             {
-              resource_type:
-                uploadResult.resource_type,
+              resource_type: uploadResult.resource_type,
             }
           );
-        } catch (
-          cleanupError
-        ) {
+        } catch (cleanupError) {
           console.error(
             'Cloudinary cleanup error:',
             cleanupError
@@ -2363,9 +1718,7 @@ export async function POST(
             error:
               `File uploaded but document record could not be updated: ${updateError.message}`,
           },
-          {
-            status: 500,
-          }
+          { status: 500 }
         );
       }
 
@@ -2373,21 +1726,16 @@ export async function POST(
       // DELETE OLD CLOUDINARY FILE
       // ==================================================
 
-      if (
-        existingDocument.cloudinary_public_id
-      ) {
+      if (existingDocument.cloudinary_public_id) {
         try {
           await cloudinary.uploader.destroy(
             existingDocument.cloudinary_public_id,
             {
               resource_type:
-                existingDocument.cloudinary_resource_type ||
-                'raw',
+                existingDocument.cloudinary_resource_type || 'raw',
             }
           );
-        } catch (
-          cloudinaryError
-        ) {
+        } catch (cloudinaryError) {
           console.error(
             'Error deleting old Cloudinary file:',
             cloudinaryError
@@ -2399,9 +1747,7 @@ export async function POST(
       // REVALIDATE
       // ==================================================
 
-      revalidatePath(
-        `/dashboard/employees/${employee_id}`
-      );
+      revalidatePath(`/dashboard/employees/${employee_id}`);
 
       return NextResponse.json({
         message: `${document_type} replaced successfully`,
@@ -2412,16 +1758,25 @@ export async function POST(
         extractedDetails: {
           ...(identityNumber
             ? {
-                ...(document_type === "Aadhar Card" || document_type === "Aadhaar Card" ? { aadhar_number: identityNumber }: {}),
-                ...(document_type === "PAN Card" ? { pan_number: identityNumber }: {}),
-                ...(document_type === "Passport" ? { passport_number: identityNumber } : {}),
-              } : {}),
-          ...(isBankPassbook? 
-              {
+                ...(document_type === 'Aadhar Card' ||
+                document_type === 'Aadhaar Card'
+                  ? { aadhar_number: identityNumber }
+                  : {}),
+                ...(document_type === 'PAN Card'
+                  ? { pan_number: identityNumber }
+                  : {}),
+                ...(document_type === 'Passport'
+                  ? { passport_number: identityNumber }
+                  : {}),
+              }
+            : {}),
+          ...(isBankPassbook
+            ? {
                 bank_name: bankName,
                 bank_account_number: bankAccountNumber,
                 ifsc_code: bankIFSC,
-              }: {}),
+              }
+            : {}),
         },
       });
     }
@@ -2431,14 +1786,10 @@ export async function POST(
     // ==================================================
 
     const {
-      data:
-        documentRecord,
-      error:
-        insertError,
+      data: documentRecord,
+      error: insertError,
     } = await supabase
-      .from(
-        'employee_documents'
-      )
+      .from('employee_documents')
       .insert({
         employee_id,
         document_type,
@@ -2448,7 +1799,6 @@ export async function POST(
         cloudinary_resource_type: uploadResult.resource_type,
         ...identityFields,
 
-        // First-time verification documents are approved immediately.
         ...(verificationRequired
           ? {
               verification_status: 'pending',
@@ -2456,7 +1806,6 @@ export async function POST(
             }
           : {}),
 
-        // Save extracted bank details with the first upload.
         ...(isBankPassbook
           ? {
               bank_name: bankName,
@@ -2482,13 +1831,10 @@ export async function POST(
         await cloudinary.uploader.destroy(
           uploadResult.public_id,
           {
-            resource_type:
-              uploadResult.resource_type,
+            resource_type: uploadResult.resource_type,
           }
         );
-      } catch (
-        cleanupError
-      ) {
+      } catch (cleanupError) {
         console.error(
           'Cloudinary cleanup error:',
           cleanupError
@@ -2500,9 +1846,7 @@ export async function POST(
           error:
             `File uploaded but document record could not be saved: ${insertError.message}`,
         },
-        {
-          status: 500,
-        }
+        { status: 500 }
       );
     }
 
@@ -2510,10 +1854,7 @@ export async function POST(
     // SUCCESS
     // ==================================================
 
-    revalidatePath(
-      `/dashboard/employees/${employee_id}`
-    );
-
+    revalidatePath(`/dashboard/employees/${employee_id}`);
 
     return NextResponse.json({
       message: `${document_type} uploaded successfully`,
@@ -2523,48 +1864,45 @@ export async function POST(
       replaced: false,
 
       extractedDetails: {
-        ...(identityNumber ?
-          {
-            ...(document_type === "Aadhar Card" || document_type === "Aadhaar Card" ? { aadhar_number: identityNumber } : {}),
-            ...(document_type === "PAN Card" ? { pan_number: identityNumber } : {}),
-            ...(document_type === "Passport" ? { passport_number: identityNumber } : {}),
-          } : {}),
-        ...(isBankPassbook? 
-          {
+        ...(identityNumber
+          ? {
+              ...(document_type === 'Aadhar Card' ||
+              document_type === 'Aadhaar Card'
+                ? { aadhar_number: identityNumber }
+                : {}),
+              ...(document_type === 'PAN Card'
+                ? { pan_number: identityNumber }
+                : {}),
+              ...(document_type === 'Passport'
+                ? { passport_number: identityNumber }
+                : {}),
+            }
+          : {}),
+        ...(isBankPassbook
+          ? {
               bank_name: bankName,
               bank_account_number: bankAccountNumber,
               ifsc_code: bankIFSC,
-          }: {}),
+            }
+          : {}),
       },
     });
-
-  } catch (
-    error: any
-  ) {
-    console.error(
-      'Upload error:',
-      error
-    );
+  } catch (error: any) {
+    console.error('Upload error:', error);
 
     // ==================================================
     // FINAL CLOUDINARY CLEANUP
     // ==================================================
 
-    if (
-      uploadResult?.public_id
-    ) {
+    if (uploadResult?.public_id) {
       try {
         await cloudinary.uploader.destroy(
           uploadResult.public_id,
           {
-            resource_type:
-              uploadResult.resource_type ||
-              'raw',
+            resource_type: uploadResult.resource_type || 'raw',
           }
         );
-      } catch (
-        cleanupError
-      ) {
+      } catch (cleanupError) {
         console.error(
           'Final Cloudinary cleanup error:',
           cleanupError
@@ -2578,9 +1916,7 @@ export async function POST(
           error?.message ||
           'An error occurred during file upload',
       },
-      {
-        status: 500,
-      }
+      { status: 500 }
     );
   }
 }

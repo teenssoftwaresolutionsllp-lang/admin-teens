@@ -18,7 +18,15 @@ import { AttendanceLog, Project } from "@/lib/types";
 
 export interface SelectedAttendance {
   date: string;
-  status: "present" | "half_day" | "leave" | "empty" | "absent";
+  status:
+    | "present"
+    | "half_day"
+    | "late"
+    | "work_from_home"
+    | "holiday"
+    | "leave"
+    | "empty"
+    | "absent";
   clockIn?: string;
   clockOut?: string;
   worked?: string;
@@ -63,14 +71,16 @@ export default function ClockInWidget({
   onAttendanceUpdate,
 }: ClockInWidgetProps) {
   const [log, setLog] = useState<AttendanceLog | null>(initialLog);
+
   const [regularizationRequests, setRegularizationRequests] =
     useState<AttendanceRegularizationRequest[]>([]);
+
   const [loading, setLoading] = useState(false);
-  const [currentTime, setCurrentTime] = useState("");
   const [workedMinutes, setWorkedMinutes] = useState(0);
 
   const getTodayString = () => {
     const now = new Date();
+
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, "0");
     const day = String(now.getDate()).padStart(2, "0");
@@ -82,7 +92,7 @@ export default function ClockInWidget({
   const activeDate = selectedDate || todayString;
   const isToday = activeDate === todayString;
 
-  // Load regularization requests and refresh after HR approval.
+  // Load regularization requests.
   useEffect(() => {
     let active = true;
 
@@ -132,11 +142,14 @@ export default function ClockInWidget({
     return () => {
       active = false;
       window.clearInterval(interval);
-      window.removeEventListener("focus", loadRegularizations);
+      window.removeEventListener(
+        "focus",
+        loadRegularizations
+      );
     };
   }, [employeeId, todayString]);
 
-  // Show today's attendance only when today is selected.
+  // Update attendance when the selected date changes.
   useEffect(() => {
     if (isToday) {
       setLog(initialLog);
@@ -150,22 +163,15 @@ export default function ClockInWidget({
     const update = () => {
       const now = new Date();
 
-      setCurrentTime(
-        now.toLocaleTimeString("en-US", {
-          hour: "2-digit",
-          minute: "2-digit",
-          second: "2-digit",
-          hour12: true,
-        })
-      );
-
       if (isToday && log) {
         const previousMinutes = Math.round(
           Number(log.total_hours ?? 0) * 60
         );
 
         if (log.check_in_time) {
-          const start = new Date(log.check_in_time);
+          const start = new Date(
+            log.session_check_in_time ?? log.check_in_time
+          );
           const end = log.check_out_time
             ? new Date(log.check_out_time)
             : now;
@@ -176,7 +182,6 @@ export default function ClockInWidget({
               (end.getTime() - start.getTime()) / 60000
             )
           );
-
           const totalMinutes = log.check_out_time
             ? previousMinutes
             : previousMinutes + sessionMinutes;
@@ -219,18 +224,18 @@ export default function ClockInWidget({
       const data = await response.json().catch(() => null);
 
       if (!response.ok) {
-        console.error("Attendance punch failed:", {
-          status: response.status,
-          statusText: response.statusText,
-          response: data,
-        });
+       console.error("Attendance punch failed:", {
+  status: response.status,
+  statusText: response.statusText,
+  response: data,
+});
 
-        const message =
+        alert(
           data?.error ||
-          data?.message ||
-          `Attendance punch failed (${response.status})`;
+            data?.message ||
+            `Attendance punch failed (${response.status}). Please try again.`
+        );
 
-        alert(message);
         return;
       }
 
@@ -240,14 +245,16 @@ export default function ClockInWidget({
       }
     } catch (error) {
       console.error("Punch error:", error);
-      alert("Unable to process attendance. Please try again.");
+      alert("Unable to record attendance. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
   const isCheckedIn =
-    isToday && !!log?.check_in_time && !log?.check_out_time;
+    isToday &&
+    !!log?.check_in_time &&
+    !log?.check_out_time;
 
   const isCheckedOut =
     isToday && !!log?.check_out_time;
@@ -268,14 +275,17 @@ export default function ClockInWidget({
         new Date(a.created_at).getTime()
     )[0];
 
-  const requestCreatedTimestamp = latestRegularization?.created_at
-    ? new Date(latestRegularization.created_at).getTime()
-    : 0;
+  const requestCreatedTimestamp =
+    latestRegularization?.created_at
+      ? new Date(latestRegularization.created_at).getTime()
+      : 0;
 
-  const requestReviewedTimestamp = latestRegularization?.reviewed_at
-    ? new Date(latestRegularization.reviewed_at).getTime()
-    : 0;
+  const requestReviewedTimestamp =
+    latestRegularization?.reviewed_at
+      ? new Date(latestRegularization.reviewed_at).getTime()
+      : 0;
 
+  // Allow another login only after a valid HR approval.
   const regularizationApproved =
     latestRegularization?.status === "approved" &&
     requestCreatedTimestamp > checkoutTimestamp &&
@@ -285,22 +295,22 @@ export default function ClockInWidget({
     latestRegularization?.status === "pending" &&
     requestCreatedTimestamp > checkoutTimestamp;
 
-  const canLogin =
-    isToday &&
-    !isCheckedIn &&
-    !isApprovedLeave &&
-    !regularizationPending &&
-    (!isCheckedOut || regularizationApproved);
+const canLogin =
+  isToday &&
+  !isCheckedIn &&
+  !isApprovedLeave;
 
-  const canLogout =
-    isToday &&
-    isCheckedIn &&
-    !isApprovedLeave;
+const canLogout =
+  isToday &&
+  isCheckedIn &&
+  !isApprovedLeave;
 
   const shiftStart = project?.shift_start_time || "09:00";
   const shiftEnd = project?.shift_end_time || "18:00";
 
-  const previousDateStatus = selectedAttendance?.status || "empty";
+  const previousDateStatus =
+    selectedAttendance?.status || "empty";
+
   const previousClockIn = selectedAttendance?.clockIn;
   const previousClockOut = selectedAttendance?.clockOut;
   const previousWorked = selectedAttendance?.worked;
@@ -374,17 +384,34 @@ export default function ClockInWidget({
   const renderPreviousStatus = () => {
     if (previousDateStatus === "present") {
       return (
-        <span className="font-semibold text-emerald-900 bg-emerald-100 px-3 py-1 rounded-full flex items-center gap-1.5 text-[11px]">
-          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+        <span className="flex items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-1 text-[11px] font-semibold text-emerald-900">
+          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
           Present
+        </span>
+      );
+    }
+
+    if (previousDateStatus === "late") {
+      return (
+        <span className="flex items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1 text-[11px] font-semibold text-amber-900">
+          <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
+          Late
+        </span>
+      );
+    }
+
+    if (previousDateStatus === "work_from_home") {
+      return (
+        <span className="rounded-full bg-blue-100 px-3 py-1 text-[11px] font-semibold text-blue-900">
+          Work From Home
         </span>
       );
     }
 
     if (previousDateStatus === "half_day") {
       return (
-        <span className="font-semibold text-amber-900 bg-amber-100 px-3 py-1 rounded-full flex items-center gap-1.5 text-[11px]">
-          <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+        <span className="flex items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1 text-[11px] font-semibold text-amber-900">
+          <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
           Half Day
         </span>
       );
@@ -392,18 +419,34 @@ export default function ClockInWidget({
 
     if (previousDateStatus === "leave") {
       return (
-        <span className="font-semibold text-rose-900 bg-rose-100 px-3 py-1 rounded-full text-[11px]">
+        <span className="rounded-full bg-rose-100 px-3 py-1 text-[11px] font-semibold text-rose-900">
           Leave
         </span>
       );
     }
 
+    if (previousDateStatus === "holiday") {
+      return (
+        <span className="rounded-full bg-slate-200 px-3 py-1 text-[11px] font-semibold text-slate-800">
+          Holiday
+        </span>
+      );
+    }
+
     return (
-      <span className="font-semibold text-slate-700 bg-slate-100 px-3 py-1 rounded-full text-[11px]">
+      <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold text-slate-700">
         No Attendance
       </span>
     );
   };
+
+  const loginTime = log?.check_in_time
+    ? formatPunchTime(log.check_in_time)
+    : "--:--";
+
+  const logoutTime = log?.check_out_time
+    ? formatPunchTime(log.check_out_time)
+    : "--:--";
 
   return (
     <div
@@ -411,33 +454,21 @@ export default function ClockInWidget({
         compact
           ? "p-4 sm:p-5 space-y-4"
           : "p-6 sm:p-7 space-y-6"
-      } bg-white rounded-2xl border border-slate-200/90 shadow-sm flex flex-col justify-between`}
+      } flex flex-col justify-between rounded-2xl border border-slate-200/90 bg-white shadow-sm`}
     >
-      <div>
-        <div
-          className={`${
-            compact ? "pb-3 mb-3 gap-3" : "pb-5 mb-5 gap-4"
-          } flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100`}
-        >
+      {!compact && (
+        <div className="flex items-center justify-between gap-4 border-b border-slate-100 pb-5">
           <div className="flex items-center gap-3">
-            <div
-              className={`${
-                compact ? "p-2" : "p-3"
-              } bg-indigo-50 text-indigo-600 rounded-xl shadow-xs border border-indigo-100/80`}
-            >
-              <Clock className={compact ? "w-4 h-4" : "w-5 h-5"} />
+            <div className="rounded-xl border border-indigo-100 bg-indigo-50 p-3 text-indigo-600">
+              <Clock className="h-5 w-5" />
             </div>
 
             <div>
-              <h3
-                className={`${
-                  compact ? "text-sm" : "text-base"
-                } font-bold text-slate-900`}
-              >
+              <h3 className="text-base font-bold text-slate-900">
                 Attendance & Shift Punch
               </h3>
 
-              <p className="text-[11px] text-slate-500 mt-0.5">
+              <p className="mt-0.5 text-[11px] text-slate-500">
                 Shift:{" "}
                 <span className="font-semibold text-slate-700">
                   {shiftStart} - {shiftEnd}
@@ -447,188 +478,180 @@ export default function ClockInWidget({
             </div>
           </div>
         </div>
+      )}
 
-        {!isToday ? (
-          <div className="space-y-4">
-            <div className="flex items-center gap-3 bg-indigo-50/70 border border-indigo-100 rounded-xl p-3">
-              <div className="p-2 bg-white rounded-lg border border-indigo-100">
-                <CalendarDays className="w-4 h-4 text-indigo-600" />
-              </div>
-
-              <div>
-                <p className="text-[10px] uppercase tracking-wider font-bold text-indigo-500">
-                  Selected Date
-                </p>
-                <p className="text-sm font-bold text-slate-900">
-                  {formatSelectedDate(activeDate)}
-                </p>
-              </div>
+      {/* Previous Date Attendance */}
+      {!isToday ? (
+        <div className="space-y-4">
+          <div className="flex items-center gap-3 rounded-xl border border-indigo-100 bg-indigo-50/70 p-3">
+            <div className="rounded-lg border border-indigo-100 bg-white p-2">
+              <CalendarDays className="h-4 w-4 text-indigo-600" />
             </div>
 
-            <div className="flex items-center justify-between text-xs bg-slate-50/80 p-3 rounded-xl border border-slate-200/70">
-              <span className="text-slate-600 font-semibold">
-                Attendance:
-              </span>
-              {renderPreviousStatus()}
-            </div>
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-indigo-500">
+                Selected Date
+              </p>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="p-4 bg-emerald-50/60 rounded-xl border border-emerald-100">
-                <span className="block text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">
-                  Login Time
-                </span>
-                <span className="font-bold text-slate-900 text-sm font-mono">
-                  {previousClockIn
-                    ? formatPunchTime(previousClockIn)
-                    : "--"}
-                </span>
-              </div>
-
-              <div className="p-4 bg-rose-50/60 rounded-xl border border-rose-100">
-                <span className="block text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">
-                  Logout Time
-                </span>
-                <span className="font-bold text-slate-900 text-sm font-mono">
-                  {previousClockOut
-                    ? formatPunchTime(previousClockOut)
-                    : "--"}
-                </span>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
-                <span className="block text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">
-                  Shift
-                </span>
-                <span className="font-bold text-slate-900 text-sm">
-                  {shiftStart} - {shiftEnd}
-                </span>
-              </div>
-
-              <div className="p-4 bg-indigo-50/60 rounded-xl border border-indigo-100">
-                <span className="block text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">
-                  Total Worked
-                </span>
-                <span className="font-bold text-indigo-700 text-sm font-mono">
-                  {previousWorked || "--"}
-                </span>
-              </div>
-            </div>
-
-            <div className="text-center py-3 text-xs text-slate-500 font-medium bg-slate-50 rounded-xl border border-slate-200/70">
-              Previous date attendance is view-only.
+              <p className="text-sm font-bold text-slate-900">
+                {formatSelectedDate(activeDate)}
+              </p>
             </div>
           </div>
-        ) : (
-          <div className="space-y-4">
-            {renderWorkMode(
-              isCheckedIn || isCheckedOut
-                ? savedWorkMode
-                : "WFO"
-            )}
+          <div className="flex items-center justify-between rounded-xl border border-slate-200/70 bg-slate-50/80 p-3 text-xs">
+            <span className="font-semibold text-slate-600">
+              Attendance:
+            </span>
 
-            <div className="flex items-center justify-between text-xs bg-slate-50/80 p-3 rounded-xl border border-slate-200/70">
-              <span className="text-slate-600 font-semibold">
-                Today&apos;s Status:
-              </span>
-
-              {!isCheckedIn && !isCheckedOut ? (
-                <span className="font-semibold text-amber-800 bg-amber-50 px-3 py-1 rounded-full border border-amber-200/80 text-[11px]">
-                  Not Checked In
-                </span>
-              ) : isCheckedOut ? (
-                <span className="font-semibold text-slate-800 bg-slate-200 px-3 py-1 rounded-full text-[11px]">
-                  Completed ({log?.total_hours || 0} hrs)
-                </span>
-              ) : log?.status === "half_day" ? (
-                <span className="font-semibold text-amber-900 bg-amber-100 px-3 py-1 rounded-full flex items-center gap-1.5 text-[11px]">
-                  <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
-                  Half Day
-                </span>
-              ) : log?.is_late ? (
-                <span className="font-semibold text-orange-900 bg-orange-100 px-3 py-1 rounded-full text-[11px]">
-                  Present (Late Punch)
-                </span>
-              ) : (
-                <span className="font-semibold text-emerald-900 bg-emerald-100 px-3 py-1 rounded-full flex items-center gap-1.5 text-[11px]">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                  Present (On Time)
-                </span>
-              )}
-            </div>
-
-            {isCheckedIn && (
-              <div className="grid grid-cols-2 gap-3 text-xs text-slate-600">
-                <div className="p-3 bg-slate-50/90 rounded-xl border border-slate-200/70">
-                  <span className="block text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-0.5">
-                    Login
-                  </span>
-                  <span className="font-bold text-slate-900 text-sm font-mono">
-                    {log?.check_in_time
-                      ? formatPunchTime(log.check_in_time)
-                      : "--"}
-                  </span>
-                </div>
-
-                <div className="p-3 bg-slate-50/90 rounded-xl border border-slate-200/70">
-                  <span className="block text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-0.5">
-                    Logout
-                  </span>
-                  <span className="font-bold text-slate-900 text-sm font-mono">
-                    {log?.check_out_time
-                      ? formatPunchTime(log.check_out_time)
-                      : "Active Session"}
-                  </span>
-                </div>
-
-                <div className="p-3 bg-indigo-50/60 rounded-xl border border-indigo-100">
-                  <span className="block text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-0.5">
-                    Time Worked
-                  </span>
-                  <span className="font-bold text-indigo-700 text-lg font-mono">
-                    {Math.floor(workedMinutes / 60)}h{" "}
-                    {workedMinutes % 60}m
-                  </span>
-                </div>
-
-                <div className="p-3 bg-slate-50/90 rounded-xl border border-slate-200/70">
-                  <span className="block text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-0.5">
-                    Shift
-                  </span>
-                  <span className="font-bold text-slate-900 text-sm">
-                    {shiftStart} - {shiftEnd}
-                  </span>
-                </div>
-              </div>
-            )}
+            {renderPreviousStatus()}
           </div>
-        )}
-      </div>
 
-      {isToday && (
-        <div className="space-y-3 pt-1">
           <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-4">
+              <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Login Time
+              </span>
+
+              <span className="font-mono text-sm font-bold text-slate-900">
+                {previousClockIn
+                  ? formatPunchTime(previousClockIn)
+                  : "--"}
+              </span>
+            </div>
+
+            <div className="rounded-xl border border-rose-100 bg-rose-50/60 p-4">
+              <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Logout Time
+              </span>
+
+              <span className="font-mono text-sm font-bold text-slate-900">
+                {previousClockOut
+                  ? formatPunchTime(previousClockOut)
+                  : "--"}
+              </span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Shift
+              </span>
+
+              <span className="text-sm font-bold text-slate-900">
+                {shiftStart} - {shiftEnd}
+              </span>
+            </div>
+
+            <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 p-4">
+              <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Total Worked
+              </span>
+
+              <span className="font-mono text-sm font-bold text-indigo-700">
+                {previousWorked || "--"}
+              </span>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-slate-200/70 bg-slate-50 py-3 text-center text-xs font-medium text-slate-500">
+            Previous date attendance is view-only.
+          </div>
+        </div>
+      ) : (
+        <>
+          {(isCheckedIn || isCheckedOut) &&
+            renderWorkMode(savedWorkMode)}
+
+          {/* Today's Attendance Status */}
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs font-semibold text-slate-600">
+              Today&apos;s Status
+            </span>
+
+            {!isCheckedIn && !isCheckedOut ? (
+              <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-semibold text-amber-800">
+                Not Checked In
+              </span>
+            ) : isCheckedOut ? (
+              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-semibold text-slate-700">
+                Completed
+              </span>
+            ) : log?.status === "half_day" ? (
+              <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-semibold text-amber-900">
+                Half Day
+              </span>
+            ) : log?.is_late ? (
+              <span className="rounded-full bg-orange-100 px-2.5 py-1 text-[10px] font-semibold text-orange-900">
+                Present (Late)
+              </span>
+            ) : (
+              <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-semibold text-emerald-900">
+                Present
+              </span>
+            )}
+          </div>
+
+          {/* Compact Login and Logout Times */}
+          <div className="grid grid-cols-2 gap-2">
+            <div className="rounded-lg border border-emerald-100 bg-emerald-50/60 p-2.5">
+              <span className="block text-[10px] font-semibold uppercase text-slate-500">
+                Login Time
+              </span>
+
+              <span className="mt-1 block font-mono text-sm font-bold text-slate-900">
+                {loginTime}
+              </span>
+            </div>
+
+            <div className="rounded-lg border border-rose-100 bg-rose-50/60 p-2.5">
+              <span className="block text-[10px] font-semibold uppercase text-slate-500">
+                Logout Time
+              </span>
+
+              <span className="mt-1 block font-mono text-sm font-bold text-slate-900">
+                {logoutTime}
+              </span>
+            </div>
+          </div>
+
+          {/* Worked Time - Only in Full Mode */}
+          {!compact && isCheckedIn && (
+            <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 p-3">
+              <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Time Worked
+              </span>
+
+              <span className="font-mono text-lg font-bold text-indigo-700">
+                {Math.floor(workedMinutes / 60)}h{" "}
+                {workedMinutes % 60}m
+              </span>
+            </div>
+          )}
+
+          {/* Login and Logout Buttons */}
+          <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
               onClick={() => handlePunch("in")}
               disabled={loading || !canLogin}
               className={`
-                w-full flex items-center justify-center gap-2 py-3 px-4
-                rounded-xl text-sm font-bold transition-all border
+                flex w-full items-center justify-center gap-2 rounded-lg
+                border px-2 py-2.5 text-xs font-bold transition-all
                 ${
                   canLogin
-                    ? "bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700 shadow-sm"
-                    : "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
+                    ? "border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700"
+                    : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
                 }
               `}
             >
               {loading && !isCheckedIn ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
+                <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                <LogIn className="w-4 h-4" />
+                <LogIn className="h-4 w-4" />
               )}
-              <span>Login</span>
+
+              Login
             </button>
 
             <button
@@ -636,75 +659,72 @@ export default function ClockInWidget({
               onClick={() => handlePunch("out")}
               disabled={loading || !canLogout}
               className={`
-                w-full flex items-center justify-center gap-2 py-3 px-4
-                rounded-xl text-sm font-bold transition-all border
+                flex w-full items-center justify-center gap-2 rounded-lg
+                border px-2 py-2.5 text-xs font-bold transition-all
                 ${
                   canLogout
-                    ? "bg-rose-600 text-white border-rose-600 hover:bg-rose-700 shadow-sm"
-                    : "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
+                    ? "border-rose-600 bg-rose-600 text-white hover:bg-rose-700"
+                    : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
                 }
               `}
             >
               {loading && isCheckedIn && !isCheckedOut ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
+                <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                <LogOut className="w-4 h-4" />
+                <LogOut className="h-4 w-4" />
               )}
-              <span>Logout</span>
+
+              Logout
             </button>
           </div>
 
-          {isApprovedLeave && !isCheckedIn && !isCheckedOut ? (
-            <p className="text-center text-[11px] font-medium text-rose-600">
-              You have approved leave for today. Login is disabled.
-            </p>
-          ) : regularizationPending ? (
-            <p className="text-center text-[11px] font-medium text-amber-600">
-              Your regularization request is pending HR approval.
-            </p>
-          ) : isCheckedOut && !regularizationApproved ? (
-            <p className="text-center text-[11px] font-medium text-slate-500">
-              Attendance is completed for today.
-            </p>
-          ) : !isCheckedIn && !isCheckedOut ? (
-            <p className="text-center text-[11px] font-medium text-slate-500">
-              Click Login to start your attendance.
-            </p>
-          ) : null}
+          {/* Approved Leave Message */}
+          {isApprovedLeave &&
+            !isCheckedIn &&
+            !isCheckedOut && (
+              <p className="text-center text-[10px] font-medium text-rose-600">
+                Approved leave today. Login is disabled.
+              </p>
+            )}
 
-          {isCheckedIn && !isCheckedOut && (
-            <p className="text-center text-[11px] font-medium text-emerald-600">
-              You are currently logged in. Click Logout when you finish.
+          {/* Regularization Status */}
+          {/* {regularizationPending && (
+            <p className="text-center text-[10px] font-medium text-amber-600">
+              Your regularization request is awaiting HR approval.
             </p>
-          )}
+          )} */}
 
           {isCheckedOut && (
-            <div className="text-center py-2.5 text-xs text-slate-600 font-medium bg-slate-50 rounded-xl border border-slate-200/70">
-              Attendance recorded successfully for today.
-            </div>
+            <p className="text-center text-[10px] font-medium text-emerald-600">
+              Attendance recorded successfully.
+            </p>
           )}
 
-          <div className="text-center pt-0.5">
-            <button
-              type="button"
-              onClick={onRequestRegularization}
-              className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold inline-flex items-center gap-1 transition-colors"
-            >
-              <span>Missed punch? Request Regularization</span>
-              <ArrowUpRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        </div>
+          {/* Regularization Link - Full Mode Only */}
+          {!compact && (
+            <div className="text-center pt-1">
+              <button
+                type="button"
+                onClick={onRequestRegularization}
+                className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 transition-colors hover:text-indigo-800"
+              >
+                Missed punch? Request Regularization
+                <ArrowUpRight className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
+        </>
       )}
 
+      {/* Attendance History Link */}
       {!isToday && (
-        <div className="text-center pt-1">
+        <div className="pt-1 text-center">
           <Link
             href="/portal/attendance"
-            className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold inline-flex items-center gap-1 transition-colors"
+            className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-800"
           >
-            <span>View Attendance History</span>
-            <ArrowUpRight className="w-3.5 h-3.5" />
+            View Attendance History
+            <ArrowUpRight className="h-3.5 w-3.5" />
           </Link>
         </div>
       )}

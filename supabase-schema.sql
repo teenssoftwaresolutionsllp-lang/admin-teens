@@ -499,6 +499,7 @@ BEGIN
             WHEN 'confirmation_date' THEN 'confirmation_date'
             WHEN 'reporting_manager' THEN 'reporting_manager'
             WHEN 'work_location' THEN 'work_location'
+            WHEN 'pf' THEN 'uan_number'
             WHEN 'bank_name' THEN 'bank_name'
             WHEN 'bank_account_number' THEN 'bank_account_number'
             WHEN 'ifsc_code' THEN 'ifsc_code'
@@ -759,6 +760,7 @@ BEGIN
             WHEN 'confirmation_date' THEN 'confirmation_date'
             WHEN 'reporting_manager' THEN 'reporting_manager'
             WHEN 'work_location' THEN 'work_location'
+            WHEN 'pf' THEN 'uan_number'
             WHEN 'accessory_type' THEN 'accessory_type'
             WHEN 'accessory_serial' THEN 'accessory_serial'
             WHEN 'peripherals' THEN 'peripherals'
@@ -1357,6 +1359,41 @@ CREATE TABLE public.leave_types (
     description text,
     created_at timestamp with time zone DEFAULT now()
 );
+INSERT INTO public.leave_types
+    (name, code, annual_quota, is_paid, is_active, description)
+VALUES
+    (
+        'Earned Leave',
+        'EL',
+        20,
+        true,
+        true,
+        'Paid earned leave for eligible employees'
+    ),
+    (
+        'Maternity Leave',
+        'ML',
+        182,
+        true,
+        true,
+        'Maternity leave for eligible female employees'
+    ),
+    (
+        'Paternity Leave',
+        'PL',
+        28,
+        true,
+        true,
+        'Paternity leave for eligible male employees'
+    )
+ON CONFLICT (code)
+DO UPDATE SET
+    name = EXCLUDED.name,
+    annual_quota = EXCLUDED.annual_quota,
+    is_paid = EXCLUDED.is_paid,
+    is_active = true,
+    description = EXCLUDED.description;
+  
 
 
 --
@@ -2232,3 +2269,25 @@ ALTER TABLE public.salary_components ENABLE ROW LEVEL SECURITY;
 
 \unrestrict dJScbzaL2r0jxFv7fEsfSJNm6w31W0jw4xweTI05Os74ikcOXhxPcUQOTaa7a6z
 
+INSERT INTO public.leave_types
+    (name, code, description, is_paid, is_active)
+VALUES
+    (
+        'Maternity Leave',
+        'ML',
+        'Maternity leave for eligible female employees',
+        true,
+        true
+    ),
+    (
+        'Paternity Leave',
+        'PL',
+        'Paternity leave for eligible male employees',
+        true,
+        true
+    )
+ON CONFLICT (code)
+DO UPDATE SET
+    name = EXCLUDED.name,
+    description = EXCLUDED.description,
+    is_active = true;

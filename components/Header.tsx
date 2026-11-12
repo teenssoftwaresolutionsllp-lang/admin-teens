@@ -1,8 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { createPortal } from "react-dom";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Bell,
   LogOut,
@@ -34,6 +33,7 @@ interface NotificationItem {
 export default function Header({ profile }: HeaderProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -91,10 +91,18 @@ export default function Header({ profile }: HeaderProps) {
     if (pathname === "/portal/profile") return "My Employee Profile";
 
     if (pathname === "/portal/attendance") {
-      return "My Attendance & Check-In";
+      return "Attendance";
     }
 
-    if (pathname === "/portal/leaves") return "My Leaves & Holidays";
+    if (pathname === "/portal/timesheet") return "My Timesheet";
+
+    if (pathname === "/portal/team-report") return "My Team Report";
+
+    if (pathname === "/portal/leaves") {
+      return searchParams.get("view") === "apply"
+        ? "Apply Leave"
+        : "My Leaves";
+    }
 
     if (pathname === "/portal/payslips") return "My Salary & Payslips";
 
@@ -154,7 +162,7 @@ export default function Header({ profile }: HeaderProps) {
     const syncAvatar = () => {
       try {
         const savedAvatar = localStorage.getItem("profile-avatar-url");
-        setAvatarUrl(savedAvatar || profile.avatar_url || "");
+        setAvatarUrl(profile.avatar_url || savedAvatar || "");
       } catch {
         setAvatarUrl(profile.avatar_url || "");
       }
@@ -209,21 +217,32 @@ export default function Header({ profile }: HeaderProps) {
     setNotificationError("");
 
     try {
-      const response = await fetch("/api/notifications", {
-        method: "GET",
-        cache: "no-store",
-        headers: {
-          Accept: "application/json",
-        },
-      });
+     const response = await fetch("/api/notifications", {
+  method: "GET",
+  cache: "no-store",
+  credentials: "same-origin",
+  headers: {
+    Accept: "application/json",
+  },
+});
 
       const contentType = response.headers.get("content-type") || "";
 
-      if (!contentType.includes("application/json")) {
-        throw new Error(
-          "Notifications API did not return JSON. Check app/api/notifications/route.ts."
-        );
-      }
+      if (!contentType.toLowerCase().includes("application/json")) {
+  const responseText = await response.text();
+
+  console.error("Notifications API returned HTML or another format:", {
+    status: response.status,
+    url: response.url,
+    redirected: response.redirected,
+    contentType,
+    response: responseText.substring(0, 1000),
+  });
+
+  throw new Error(
+    `Notifications API error: HTTP ${response.status}. URL: ${response.url}. Check the browser console for the response.`
+  );
+}
 
       const data = await response.json();
 

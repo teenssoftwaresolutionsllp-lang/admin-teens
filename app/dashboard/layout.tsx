@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase-server";
+import { createAdminClient } from "@/lib/supabase-server";
 import { redirect } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
 import Header from "@/components/Header";
@@ -43,11 +44,46 @@ export default async function DashboardLayout({
     redirect("/portal");
   }
 
+  const adminClient = await createAdminClient();
+  const { data: employeeByUserId, error: employeeLookupError } =
+    await adminClient
+      .from("employees")
+      .select("designation")
+      .eq("user_id", user.id)
+      .limit(1)
+      .maybeSingle();
+
+  if (employeeLookupError) {
+    throw new Error(
+      `Unable to load employee designation: ${employeeLookupError.message}`
+    );
+  }
+
+  let employeeDesignation = employeeByUserId?.designation ?? null;
+
+  if (!employeeDesignation && profile.email) {
+    const { data: employeeByEmail, error: employeeEmailLookupError } =
+      await adminClient
+        .from("employees")
+        .select("designation")
+        .eq("email", profile.email)
+        .limit(1)
+        .maybeSingle();
+
+    if (employeeEmailLookupError) {
+      throw new Error(
+        `Unable to load employee designation: ${employeeEmailLookupError.message}`
+      );
+    }
+
+    employeeDesignation = employeeByEmail?.designation ?? null;
+  }
+
   return (
     <EmployeeFilterProvider>
       <div className="flex h-screen min-h-0 flex-col overflow-hidden bg-slate-50 md:flex-row">
         <div className="hidden md:block">
-          <Sidebar role={profile.role} />
+          <Sidebar role={profile.role} designation={employeeDesignation} />
         </div>
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">

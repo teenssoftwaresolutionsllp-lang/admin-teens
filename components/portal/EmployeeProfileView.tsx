@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { toast } from "react-hot-toast";
 import {
   useEffect,
@@ -41,6 +42,7 @@ import {
   Eye,
   LaptopMinimal,
   Landmark,
+  Home,
 } from "lucide-react";
 
 import ProfileProgressBar from "./ProfileProgressBar";
@@ -248,7 +250,6 @@ export default function EmployeeProfileView({
     useState(false);
   
 
-
   const [revealedNumbers, setRevealedNumbers] = useState<Record<string, boolean>>({});
 
   const toggleRevealedNumber = (field: string) => {
@@ -291,6 +292,9 @@ export default function EmployeeProfileView({
     useState<string | null>(
       employeeData.profile_photo_url || null
     );
+  const [isProfilePhotoUploading, setIsProfilePhotoUploading] =
+    useState(false);
+  const profilePhotoInputRef = useRef<HTMLInputElement | null>(null);
 
   const [documents, setDocuments] = useState<EmployeeDocument[]>([]);
 
@@ -472,16 +476,16 @@ export default function EmployeeProfileView({
         data.passport_number || "",
 
       pf:
-        data.pf || "",
+        data.uan_number || "",
 
       esi:
-        data.esi || "",
+        data.esi_number || "",
 
       pt:
-        data.pt || "",
+        data.pt_number || "",
 
       tds:
-        data.tds || "",
+        data.tds_eligible ? "Yes" : "",
 
       accessory_type:
         data.accessory_type || "",
@@ -582,9 +586,85 @@ export default function EmployeeProfileView({
   };
 }, [employeeData.profile_photo_url]);
 
-  /* ============================================================
-     LOAD DOCUMENTS
-  ============================================================ */
+ const handleProfilePhotoUpload = async (
+   event: ChangeEvent<HTMLInputElement>
+ ) => {
+   const input = event.currentTarget;
+   const file = input.files?.[0];
+   if (!file) return;
+
+   input.value = "";
+
+   if (
+     !["image/jpeg", "image/jpg", "image/png", "image/webp"].includes(
+       file.type
+     )
+   ) {
+     toast.error("Upload a JPG, PNG, or WEBP image.");
+     return;
+   }
+
+   if (file.size === 0 || file.size > 5 * 1024 * 1024) {
+     toast.error("Image size must be greater than 0 and less than 5 MB.");
+     return;
+   }
+
+   setIsProfilePhotoUploading(true);
+
+   try {
+     const formData = new FormData();
+     formData.append("file", file);
+
+     const response = await fetch("/api/profile/photo", {
+       method: "POST",
+       body: formData,
+       credentials: "include",
+       cache: "no-store",
+     });
+     const result = await response.json();
+
+     if (!response.ok || !result.avatarUrl) {
+       throw new Error(
+         result.error || "Failed to upload profile photo."
+       );
+     }
+
+     setProfilePhotoUrl(result.avatarUrl);
+
+     try {
+       window.localStorage.setItem(
+         "profile-avatar-url",
+         result.avatarUrl
+       );
+     } catch (error) {
+       console.error("Unable to save profile photo locally:", error);
+     }
+
+     const photoUpdatedEvent = new CustomEvent("profile-photo-updated", {
+       detail: { avatarUrl: result.avatarUrl },
+     });
+     window.dispatchEvent(photoUpdatedEvent);
+     window.dispatchEvent(
+       new CustomEvent("employee-profile-photo-updated", {
+         detail: { avatarUrl: result.avatarUrl },
+       })
+     );
+     toast.success("Profile photo updated successfully.");
+   } catch (error) {
+     console.error("Profile photo upload failed:", error);
+     toast.error(
+       error instanceof Error
+         ? error.message
+         : "Failed to upload profile photo."
+     );
+   } finally {
+     setIsProfilePhotoUploading(false);
+   }
+ };
+
+ /* ============================================================
+    LOAD DOCUMENTS
+ ============================================================ */
 
   useEffect(() => {
     let cancelled = false;
@@ -839,6 +919,7 @@ export default function EmployeeProfileView({
           "Document was uploaded but not saved"
         );
       }
+      closeEditModal();
 
       const newDocument = data.document as EmployeeDocument;
       const extracted = data?.extractedDetails;
@@ -1009,6 +1090,7 @@ export default function EmployeeProfileView({
 
       setDocumentName("");
       setDocumentError(null);
+      // setIsEditModalOpen(false);
     } catch (error: any) {
       console.error(
         "Document upload error:",
@@ -1211,9 +1293,23 @@ export default function EmployeeProfileView({
   ) => {
     e.preventDefault();
 
-    if (loading || requestDocumentUploading) {
-      return;
-    }
+    if (
+  loading ||
+  requestDocumentUploading ||
+  isProfilePhotoUploading
+) {
+  return;
+}
+
+if (!profilePhotoUrl?.trim()) {
+  const message =
+    "Please upload your passport-size profile photo before submitting. Maximum file size is 5 MB.";
+
+  setErrorMessage(message);
+  toast.error(message);
+  return;
+}
+
 
     setLoading(true);
     setSuccessMessage(null);
@@ -1315,9 +1411,9 @@ export default function EmployeeProfileView({
         pan_number: "pan_number",
         aadhar_number: "aadhar_number",
         passport_number: "passport_number",
-        pf: "pf",
-        esi: "esi",
-        pt: "pt",
+        pf: "uan_number",
+        esi: "esi_number",
+        pt: "pt_number",
         tds: "tds",
         accessory_type: "accessory_type",
         accessory_serial: "accessory_serial",
@@ -1669,25 +1765,25 @@ export default function EmployeeProfileView({
   const tabs = [
     {
       id: "personal" as const,
-      label: "Personal",
+      label: "Personal Information",
       icon: User,
     },
 
     {
       id: "address" as const,
-      label: "Address & Emergency",
+      label: "Contact Information",
       icon: MapPin,
     },
 
     {
       id: "bank" as const,
-      label: "Bank & Identity",
+      label: "Bank Details",
       icon: CreditCard,
     },
 
     {
       id: "employment" as const,
-      label: "Employment",
+      label: "Employment Details",
       icon: Briefcase,
     },
 
@@ -1699,7 +1795,7 @@ export default function EmployeeProfileView({
 
     {
       id: "statutory" as const,
-      label: "Statutory",
+      label: "Statutory Details",
       icon: CreditCard,
     },
 
@@ -1711,102 +1807,39 @@ export default function EmployeeProfileView({
   ];
 
   return (
-    <div className="w-full space-y-6">
-
-      {/* ============================================================
-          PROFILE HEADER
-      ============================================================ */}
-
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-
-        <div className="p-6">
-
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
-
-            <div className="flex items-center gap-5">
-
-              <div className="w-20 h-20 rounded-2xl bg-indigo-100 flex items-center justify-center overflow-hidden">
-
-                {profilePhotoUrl ? (
-                  <img
-                    src={profilePhotoUrl}
-                    alt={employeeFullName}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <UserRound className="w-10 h-10 text-indigo-600" />
-                )}
-
-              </div>
-
-              <div>
-
-                <h2 className="text-2xl font-bold text-slate-900">
-                  {employeeFullName}
-                </h2>
-
-                <p className="text-sm text-slate-500 mt-1">
-                  {employeeData.employee_id ||
-                    employeeData.id ||
-                    "Not specified"}
-                </p>
-
-                <div className="flex flex-wrap items-center gap-3 mt-3">
-
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-50 text-indigo-700 text-xs font-semibold">
-
-                    <Briefcase className="w-3.5 h-3.5" />
-
-                    {employeeData.designation ||
-                      "Not specified"}
-
-                  </span>
-
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-semibold">
-
-                    <Building className="w-3.5 h-3.5" />
-
-                    {departmentName()}
-
-                  </span>
-
-                </div>
-
-              </div>
-
-            </div>
-
-            <div>
-
-              <button
-                type="button"
-                onClick={() =>
-                  openEditSection("all")
-                }
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition"
-              >
-
-                <Edit3 className="w-4 h-4" />
-
-                Request Profile Edit
-
-              </button>
-
-            </div>
-
-          </div>
-
+    <div className="w-full space-y-5">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+            My Profile
+          </h1>
+          <p className="mt-1 text-sm text-slate-500">
+            View and manage your personal and professional information.
+          </p>
         </div>
-
-        <div className="px-6 pb-6">
-
-          <ProfileProgressBar
-            employee={employee}
-          />
-
+        <div className="flex flex-wrap items-center gap-3">
+          <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-xs text-slate-500">
+            <Link href="/portal" className="inline-flex items-center gap-1 hover:text-blue-600">
+              <Home className="h-3.5 w-3.5" />
+              Home
+            </Link>
+            <span aria-hidden="true">&gt;</span>
+            <span className="font-semibold text-slate-700" aria-current="page">
+              My Profile
+            </span>
+          </nav>
+          <button
+            type="button"
+            onClick={() => openEditSection("all")}
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3.5 py-2 text-xs font-semibold text-white transition hover:bg-blue-700"
+          >
+            <Edit3 className="h-3.5 w-3.5" />
+            Request Profile Edit
+          </button>
         </div>
+      </header>
 
-      </div>
+      <ProfileProgressBar employee={employee} />
 
       {/* ============================================================
           SUCCESS
@@ -1868,49 +1901,109 @@ export default function EmployeeProfileView({
           MAIN TABS
       ============================================================ */}
 
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+      <div className="grid items-start gap-4 lg:grid-cols-[270px_minmax(0,1fr)]">
+        <aside className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex flex-col items-center border-b border-slate-100 px-5 py-6 text-center">
+            <div className="relative h-28 w-28">
+              <div className="h-full w-full overflow-hidden rounded-full border-4 border-slate-100 bg-slate-100">
+                {profilePhotoUrl ? (
+                  <img
+                    src={profilePhotoUrl}
+                    alt={employeeFullName}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center">
+                    <UserRound className="h-12 w-12 text-slate-400" />
+                  </div>
+                )}
+              </div>
+              <input
+                ref={profilePhotoInputRef}
+                type="file"
+                accept="image/jpeg,image/jpg,image/png,image/webp"
+                onChange={handleProfilePhotoUpload}
+                className="hidden"
+              />
+              <button
+                type="button"
+                onClick={() => profilePhotoInputRef.current?.click()}
+                disabled={isProfilePhotoUploading}
+                className="absolute -bottom-1 -right-1 inline-flex h-9 w-9 items-center justify-center rounded-full border-2 border-white bg-blue-600 text-white shadow hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                aria-label={
+                  isProfilePhotoUploading
+                    ? "Uploading profile photo"
+                    : "Upload profile photo"
+                }
+                title="Upload profile photo"
+              >
+                {isProfilePhotoUploading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Upload className="h-4 w-4" />
+                )}
+              </button>
+            </div>
+            {isProfilePhotoUploading && (
+             <p
+                className={`mt-2 text-xs font-medium ${
+                  profilePhotoUrl
+                    ? "text-emerald-600"
+                    : "text-rose-600"
+                }`}
+              >
+                {profilePhotoUrl
+                  ? "Passport-size photo uploaded · Max 5 MB"
+                  : "Required: Upload passport-size photo · Max 5 MB"}
+              </p>
+            )}
+            <h2 className="mt-3 text-lg font-bold text-slate-900">
+              {employeeFullName}
+            </h2>
+            <p className="mt-0.5 text-sm text-slate-600">
+              {employeeData.designation || "Employee"}
+            </p>
+            <p className="mt-0.5 text-xs text-slate-500">
+              {employeeData.employee_id || employeeData.id || "Not specified"}
+            </p>
+            <span
+              className={`mt-3 rounded-full px-3 py-1 text-xs font-semibold capitalize ${
+                employeeData.status === "active"
+                  ? "bg-emerald-100 text-emerald-700"
+                  : "bg-slate-100 text-slate-600"
+              }`}
+            >
+              {employeeData.status || "Status unavailable"}
+            </span>
+          </div>
 
-        <div className="border-b border-slate-200 overflow-x-auto">
-
-          <div className="flex min-w-max">
-
+          <nav aria-label="Profile sections" className="space-y-1 p-3">
             {tabs.map((tab) => {
-              const Icon =
-                tab.icon;
-
-              const active =
-                activeTab ===
-                tab.id;
+              const Icon = tab.icon;
+              const active = activeTab === tab.id;
 
               return (
                 <button
                   key={tab.id}
                   type="button"
-                  onClick={() =>
-                    setActiveTab(
-                      tab.id
-                    )
-                  }
-                  className={`flex items-center gap-2 px-5 py-4 text-sm font-semibold border-b-2 transition ${
+                  onClick={() => setActiveTab(tab.id)}
+                  aria-current={active ? "page" : undefined}
+                  className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-xs font-semibold transition ${
                     active
-                      ? "text-indigo-600 border-indigo-600"
-                      : "text-slate-500 border-transparent hover:text-slate-800"
+                      ? "bg-blue-50 text-blue-700"
+                      : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
                   }`}
                 >
-
-                  <Icon className="w-4 h-4" />
-
-                  {tab.label}
-
+                  <Icon className="h-4 w-4 shrink-0" />
+                  <span>{tab.label}</span>
                 </button>
               );
             })}
+          </nav>
+        </aside>
 
-          </div>
-
-        </div>
-
-        <div className="p-6">
+        <section className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="p-5 sm:p-6">
 
           {/* ========================================================
               PERSONAL
@@ -1940,10 +2033,10 @@ export default function EmployeeProfileView({
                       "personal"
                     )
                   }
-                  className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 text-xs font-bold transition-colors shrink-0"
+                  className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-blue-700"
                 >
 
-                  <Edit3 className="w-4 h-4" />
+                  <Edit3 className="h-4 w-4" />
 
                   Edit
 
@@ -1951,69 +2044,78 @@ export default function EmployeeProfileView({
 
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5 text-sm">
+              <div className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
 
                 {[
                   [
-                    "Full Name",
-                    employeeFullName,
+                    "First Name",
+                    employeeData.first_name || "Not specified",
+                  ],
+
+                  [
+                    "Last Name",
+                    employeeData.last_name || "Not specified",
                   ],
 
                   [
                     "Employee ID",
-                    employeeData.employee_id ||
-                      employeeData.id ||
-                      "Not specified",
+                    employeeData.employee_id || employeeData.id || "Not specified",
                   ],
 
                   [
                     "Email",
-                    employeeData.email ||
-                      "Not specified",
-                  ],
-
-                  [
-                    "Phone",
-                    employeeData.phone ||
-                      "Not specified",
+                    employeeData.email || "Not specified",
                   ],
 
                   [
                     "Date of Birth",
-                    formatDate(
-                      employeeData.date_of_birth
-                    ),
+                    formatDate(employeeData.date_of_birth),
                   ],
 
                   [
                     "Gender",
-                    employeeData.gender ||
-                      "Not specified",
+                    employeeData.gender || "Not specified",
                   ],
 
                   [
+                    "Phone",
+                    employeeData.phone || "Not specified",
+                  ],
+
+                  // [
+                  //   "Address",
+                  //   [
+                  //     employeeData.permanent_address,
+                  //     employeeData.permanent_city,
+                  //     employeeData.permanent_state,
+                  //   ]
+                  //     .filter(Boolean)
+                  //     .join(", ") || "Not specified",
+                  // ],
+
+                  [
                     "Blood Group",
-                    employeeData.blood_group ||
-                      "Not specified",
+                    employeeData.blood_group || "Not specified",
                   ],
 
                   [
                     "Marital Status",
-                    employeeData.marital_status ||
-                      "Not specified",
+                    employeeData.marital_status || "Not specified",
                   ],
                 ].map(
                   ([label, value]) => (
                     <div
                       key={label}
-                      className="p-4 bg-slate-50/70 rounded-xl border border-slate-100"
+                      className={`min-w-0 rounded-lg border border-slate-200 bg-white px-3 py-2.5 ${
+                        label === "Address" ? "sm:col-span-2" : ""
+                      }`}
                     >
 
-                      <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
+                      <span className="mb-1 block text-xs font-medium text-slate-500">
                         {label}
                       </span>
 
-                      <span className="font-semibold text-slate-800 break-all capitalize">
+                      <span className="block break-words font-medium capitalize text-slate-800">
                         {value}
                       </span>
 
@@ -2149,6 +2251,7 @@ export default function EmployeeProfileView({
 
                     <span className="font-semibold text-slate-800">
                       {employeeData.communication_address ||
+                        employeeData.temporary_address ||
                         "Not specified"}
                     </span>
 
@@ -2157,17 +2260,23 @@ export default function EmployeeProfileView({
                   {[
                     [
                       "City",
-                      employeeData.communication_city,
+                      employeeData.communication_city ||
+                      employeeData.temporary_city ||
+                      "Not specified"
                     ],
 
                     [
                       "State",
-                      employeeData.communication_state,
+                      employeeData.communication_state ||
+                      employeeData.temporary_state ||
+                      "Not specified"
                     ],
 
                     [
                       "Pincode",
-                      employeeData.communication_pincode,
+                      employeeData.communication_pincode ||
+                      employeeData.temporary_pincode ||
+                      "Not specified"
                     ],
                   ].map(
                     ([label, value]) => (
@@ -2225,27 +2334,35 @@ export default function EmployeeProfileView({
                         "Emergency Contact 2",
 
                       name:
-                        employeeData.emergency_contact_2_name,
-
+                        employeeData.emergency_contact_2_name ||
+                          employeeData.emergency_contact_name_2 ||
+                          "Not specified",
                       phone:
-                        employeeData.emergency_contact_2_phone,
-
+                        employeeData.emergency_contact_2_phone ||
+                          employeeData.emergency_contact_phone_2 ||
+                          "Not specified",
                       relation:
-                        employeeData.emergency_contact_2_relation,
-                    },
+                        employeeData.emergency_contact_2_relation ||
+                          employeeData.emergency_contact_relation_2 ||
+                          "Not specified",                   
+                         },
 
                     {
                       title:
                         "Emergency Contact 3",
 
                       name:
-                        employeeData.emergency_contact_3_name,
-
+                        employeeData.emergency_contact_3_name ||
+                          employeeData.emergency_contact_name_3 ||
+                          "Not specified",
                       phone:
-                        employeeData.emergency_contact_3_phone,
-
+                        employeeData.emergency_contact_3_phone ||
+                          employeeData.emergency_contact_phone_3 ||
+                          "Not specified",
                       relation:
-                        employeeData.emergency_contact_3_relation,
+                       employeeData.emergency_contact_3_relation ||
+                        employeeData.emergency_contact_relation_3 ||
+                        "Not specified",
                     },
                   ].map(
                     (contact) => (
@@ -2547,11 +2664,25 @@ export default function EmployeeProfileView({
                     "Employment Type",
                     employeeData.employment_type,
                   ],
+                  [
+                  "Experience Level",
+                  employeeData.experience_level,
+                ],
+                [
+                  "Total Experience",
+                  employeeData.total_experience,
+                ],
 
                   [
                     "Employment Status",
                     employeeData.status,
                   ],
+                  [
+                  "Annual CTC",
+                  employeeData.annual_ctc
+                    ? `₹${Number(employeeData.annual_ctc).toLocaleString("en-IN")} per annum`
+                    : "Not specified",
+                ],
                 ].map(
                   ([label, value]) => (
                     <div
@@ -3056,7 +3187,7 @@ export default function EmployeeProfileView({
                         "No Main Accessory"}
                     </span>
 
-                  </div>
+                </div>
 
                   <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-100">
 
@@ -3146,12 +3277,12 @@ export default function EmployeeProfileView({
                 )}
 
               </div>
-
             </div>
           )}
 
         </div>
 
+        </section>
       </div>
 
       {/* ============================================================

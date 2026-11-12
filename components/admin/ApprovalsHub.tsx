@@ -131,6 +131,58 @@ export default function ApprovalsHub({
   }, [isHistoryView, selectedLeaveId, requestedLeaveType, requestedTab]);
 
 
+  useEffect(() => {
+    let active = true;
+
+    const refreshProfileRequests = async () => {
+      try {
+        const response = await fetch("/api/profile-change-requests", {
+          cache: "no-store",
+          headers: {
+            Accept: "application/json",
+          },
+        });
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(
+            data?.error || "Could not refresh profile change requests."
+          );
+        }
+
+        if (!Array.isArray(data)) {
+          throw new Error("The profile change request response was invalid.");
+        }
+
+        if (active) {
+          setProfileRequests(data);
+        }
+      } catch (error) {
+        if (active) {
+          setFeedback({
+            msg:
+              error instanceof Error
+                ? error.message
+                : "Could not refresh profile change requests.",
+            type: "error",
+          });
+        }
+      }
+    };
+
+    const handleFocus = () => {
+      void refreshProfileRequests();
+    };
+
+    void refreshProfileRequests();
+    window.addEventListener("focus", handleFocus);
+
+    return () => {
+      active = false;
+      window.removeEventListener("focus", handleFocus);
+    };
+  }, []);
+
   // Open rejection dialogs
   const openLeaveRejectionDialog = (id: string) => {
     setFeedback(null);
@@ -1389,6 +1441,14 @@ export default function ApprovalsHub({
                     state: "Contact Information",
                     country: "Contact Information",
                     pincode: "Contact Information",
+                    permanent_address: "Contact Information",
+                    permanent_city: "Contact Information",
+                    permanent_state: "Contact Information",
+                    permanent_pincode: "Contact Information",
+                    communication_address: "Contact Information",
+                    communication_city: "Contact Information",
+                    communication_state: "Contact Information",
+                    communication_pincode: "Contact Information",
 
                     employee_id: "Employment Information",
                     department_id: "Employment Information",
@@ -1410,20 +1470,35 @@ export default function ApprovalsHub({
                     bank_account_number: "Bank & Identity Information",
                     ifsc_code: "Bank & Identity Information",
                     pan_number: "Bank & Identity Information",
+                    aadhar_number: "Bank & Identity Information",
                     aadhaar_number: "Bank & Identity Information",
+                    passport_number: "Bank & Identity Information",
 
+                    pf: "Statutory Information",
                     pf_eligible: "Statutory Information",
                     pf_number: "Statutory Information",
+                    esi: "Statutory Information",
                     esi_eligible: "Statutory Information",
                     esi_number: "Statutory Information",
+                    pt: "Statutory Information",
                     pt_eligible: "Statutory Information",
                     pt_number: "Statutory Information",
+                    tds: "Statutory Information",
                     tds_eligible: "Statutory Information",
 
                     emergency_contact_name: "Emergency Contact Information",
                     emergency_contact_phone: "Emergency Contact Information",
+                    emergency_contact_relation: "Emergency Contact Information",
                     emergency_contact_relationship: "Emergency Contact Information",
                     emergency_contact_address: "Emergency Contact Information",
+                    emergency_contact_2_name: "Emergency Contact Information",
+                    emergency_contact_2_phone: "Emergency Contact Information",
+                    emergency_contact_2_relation: "Emergency Contact Information",
+                    emergency_contact_2_relationship: "Emergency Contact Information",
+                    emergency_contact_3_name: "Emergency Contact Information",
+                    emergency_contact_3_phone: "Emergency Contact Information",
+                    emergency_contact_3_relation: "Emergency Contact Information",
+                    emergency_contact_3_relationship: "Emergency Contact Information",
 
                     profile_photo: "Documents",
                     aadhaar_document: "Documents",
@@ -1432,6 +1507,9 @@ export default function ApprovalsHub({
                     address_proof: "Documents",
                     educational_documents: "Documents",
                     experience_documents: "Documents",
+                    accessory_type: "Accessory Information",
+                    accessory_serial: "Accessory Information",
+                    peripherals: "Accessory Information",
                   };
 
                   const sectionOrder = [
@@ -1441,38 +1519,54 @@ export default function ApprovalsHub({
                     "Bank & Identity Information",
                     "Statutory Information",
                     "Emergency Contact Information",
+                    "Accessory Information",
                     "Documents",
                   ];
 
-                  const changes = Object.entries(
-                    req.requested_changes ?? {}
-                  ).filter(([_, value]) => value !== null && value !== "");
+                  const changes = Object.entries(req.requested_changes ?? {});
 
                   const renderFields = (fields: [string, unknown][]) => (
-                    <table className="w-full text-left text-xs">
+                    <table className="w-full table-fixed text-left text-xs">
                       <thead className="border-b border-slate-100 bg-white font-bold text-slate-500">
                         <tr>
-                          <th className="w-1/2 px-4 py-2.5">
+                          <th className="w-1/3 px-4 py-2.5">
                             Information Type
                           </th>
-                          <th className="w-1/2 px-4 py-2.5 text-indigo-700">
-                            Employee Detail
+                          <th className="w-1/3 px-4 py-2.5">
+                            Current Detail
+                          </th>
+                          <th className="w-1/3 px-4 py-2.5 text-indigo-700">
+                            Requested Detail
                           </th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {fields.map(([key, value]) => (
-                          <tr key={key} className="hover:bg-slate-50/50">
-                            <td className="px-4 py-2.5 font-semibold capitalize text-slate-800">
-                              {key.replace(/_/g, " ")}
-                            </td>
-                            <td className="break-words bg-emerald-50/30 px-4 py-2.5 font-mono font-bold text-emerald-700">
-                              {typeof value === "object"
-                                ? JSON.stringify(value)
-                                : String(value)}
-                            </td>
-                          </tr>
-                        ))}
+                        {fields.map(([key, value]) => {
+                          const formatValue = (item: unknown) => {
+                            if (item === undefined) return "Not recorded";
+                            if (item === null) return "(not set)";
+                            if (typeof item === "string" && item.trim() === "") {
+                              return "(empty)";
+                            }
+                            return typeof item === "object"
+                              ? JSON.stringify(item, null, 2)
+                              : String(item);
+                          };
+
+                          return (
+                            <tr key={key} className="hover:bg-slate-50/50">
+                              <td className="break-words px-4 py-2.5 font-semibold capitalize text-slate-800">
+                                {key.replace(/_/g, " ")}
+                              </td>
+                              <td className="break-words px-4 py-2.5 font-mono text-slate-600">
+                                {formatValue(req.previous_values?.[key])}
+                              </td>
+                              <td className="break-words bg-emerald-50/30 px-4 py-2.5 font-mono font-bold text-emerald-700">
+                                {formatValue(value)}
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   );
