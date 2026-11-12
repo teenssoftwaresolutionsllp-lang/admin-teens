@@ -26,6 +26,11 @@ export default function EmployeeForm({ employee, departments, projects, generate
   const [isEmailEditing, setIsEmailEditing] = useState(false);
   const [emailWarning, setEmailWarning] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isReportingManager, setIsReportingManager] = useState(
+    employee?.is_reporting_manager === true
+  );
+  const [isManagerPermissionLoading, setIsManagerPermissionLoading] =
+    useState(false);
   const [esiEligible, setEsiEligible] = useState(false);
   const [esiNumber, setEsiNumber] = useState("");
   const [pfEligible, setPfEligible] = useState(false);
@@ -362,6 +367,49 @@ export default function EmployeeForm({ employee, departments, projects, generate
     }
   } catch (error) {
     console.error("Error checking employee name:", error);
+  }
+};
+
+const handleManagerPermission = async () => {
+  if (mode !== "edit" || !employee?.id) return;
+
+  const nextValue = !isReportingManager;
+
+  const confirmed = window.confirm(
+    nextValue
+      ? "Provision this employee as a Reporting Manager?"
+      : "Revoke Reporting Manager access?"
+  );
+
+  if (!confirmed) return;
+
+  setIsManagerPermissionLoading(true);
+
+  try {
+    const response = await fetch("/api/reporting-managers/permission", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        employeeId: employee.id,
+        isReportingManager: nextValue,
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || "Failed to update manager permission");
+    }
+
+    setIsReportingManager(nextValue);
+    toast.success(data.message || "Manager permission updated successfully");
+    router.refresh();
+  } catch (err: any) {
+    toast.error(err?.message || "Failed to update manager permission");
+  } finally {
+    setIsManagerPermissionLoading(false);
   }
 };
 
@@ -1312,26 +1360,43 @@ const handleSubmit = async (e: React.FormEvent) => {
             )}
 
             {/* Status - Edit Only */}
-            {mode === "edit" && (
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Status
-                </label>
+              {mode === "edit" && (role === "hr" || role === "ceo") && (
+                <div className="md:col-span-2 rounded-xl border border-indigo-200 bg-indigo-50/50 p-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-bold text-slate-800">
+                        Reporting Manager Access
+                      </p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {isReportingManager
+                          ? "This employee is provisioned as a Reporting Manager."
+                          : "This employee currently has normal employee access only."}
+                      </p>
+                    </div>
 
-                <select
-                  name="status"
-                  value={formData.status || "active"}
-                  onChange={handleChange}
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
-                >
-                  <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
-                  <option value="terminated">Terminated</option>
-                  <option value="on_notice">On Notice</option>
-                </select>
-              </div>
-            )}
+                    <button
+                      type="button"
+                      onClick={handleManagerPermission}
+                      disabled={isManagerPermissionLoading || isLoading}
+                      className={`inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                        isReportingManager
+                          ? "bg-rose-600 hover:bg-rose-700"
+                          : "bg-indigo-600 hover:bg-indigo-700"
+                      }`}
+                    >
+                      {isManagerPermissionLoading ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : null}
 
+                      {isManagerPermissionLoading
+                        ? "Updating..."
+                        : isReportingManager
+                          ? "Revoke Reporting Manager Access"
+                          : "Provision as Reporting Manager"}
+                    </button>
+                  </div>
+                </div>
+              )}
           </div>
         </div>
 

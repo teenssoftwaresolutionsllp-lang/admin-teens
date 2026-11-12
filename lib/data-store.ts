@@ -601,7 +601,10 @@ export class DataStore {
       probation_end_date: empData.probation_end_date || null,
       appointment_date: empData.appointment_date || null,
       confirmation_date: empData.confirmation_date || null,
-      reporting_manager: empData.reporting_manager || null,
+      // Reporting Manager
+      reporting_manager: empData.reporting_manager || null, // Preserve legacy field
+      reporting_manager_id: null, // Assigned through the secured manager workflow
+      is_reporting_manager: false, // HR/CEO must explicitly designate managers
       work_location: empData.work_location || null,
 
       client_type: empData.client_type || null,

@@ -52,7 +52,7 @@ export async function POST(request: Request) {
     const { data: employee, error: employeeError } = await supabase
       .from('employees')
       .select(
-        'id, status, notice_status, user_id, temporary_login_expires_at, planned_last_working_date'
+        'id, status, notice_status, user_id, temporary_login_expires_at, planned_last_working_date, is_reporting_manager'
       )
       .eq('user_id', authData.user.id)
       .maybeSingle();
@@ -183,13 +183,23 @@ export async function POST(request: Request) {
       'employee';
 
     // Preserve existing redirects.
+    // Preserve HR/CEO routing.
+    // Designated reporting managers get a workspace selector.
+    const isReportingManager =
+      role === 'employee' && employee?.is_reporting_manager === true;
+
     const redirectTo =
-      role === 'employee' ? '/portal/profile' : '/dashboard';
+      role === 'employee'
+        ? isReportingManager
+          ? '/workspace'
+          : '/portal'
+        : '/dashboard';
 
     return NextResponse.json({
       user: authData.user,
       profile: profile || null,
       role,
+      isReportingManager,
       redirectTo,
     });
   } catch (error) {
