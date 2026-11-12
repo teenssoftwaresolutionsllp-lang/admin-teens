@@ -6,6 +6,10 @@ const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 const execute = process.argv.includes("--execute");
 const dateArgument = process.argv.find((arg) => arg.startsWith("--date="));
+const employeeArgument = process.argv.find((arg) =>
+  arg.startsWith("--employee=")
+);
+const targetEmployeeId = employeeArgument?.replace("--employee=", "").trim();
 
 if (!supabaseUrl || !serviceRoleKey) {
   throw new Error(
@@ -31,6 +35,19 @@ type Employee = {
   shift_type: string | null;
   retained_shift_start_time: string | null;
   retained_shift_end_time: string | null;
+};
+
+type ProjectShift = {
+  calendar_id: string | null;
+  shift_start_time: string | null;
+  shift_end_time: string | null;
+  timezone: string | null;
+};
+
+type ShiftConfig = {
+  startTime: string;
+  endTime: string;
+  timezone: string;
 };
 
 type AttendanceRow = {
@@ -80,6 +97,79 @@ function isWeekend(date: string): boolean {
   return day === 0 || day === 6;
 }
 
+function addDays(date: string, days: number): string {
+  const value = new Date(`${date}T12:00:00.000Z`);
+  value.setUTCDate(value.getUTCDate() + days);
+  return value.toISOString().slice(0, 10);
+}
+
+function timeToMinutes(value: string): number | null {
+  const match = value.match(/^(\d{2}):(\d{2})/);
+  if (!match) return null;
+
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+
+  if (hours > 23 || minutes > 59) return null;
+  return hours * 60 + minutes;
+}
+
+function shiftHasEnded(
+  attendanceDate: string,
+  shiftStart: string,
+  shiftEnd: string,
+  timezone: string,
+  now = new Date()
+): boolean {
+  const startMinutes = timeToMinutes(shiftStart);
+  const endMinutes = timeToMinutes(shiftEnd);
+
+  if (
+    startMinutes === null ||
+    endMinutes === null ||
+    startMinutes === endMinutes
+  ) {
+    throw new Error(
+      `Invalid shift times: ${shiftStart} - ${shiftEnd}`
+    );
+  }
+
+  // If the shift ends at or before its start time, it ends the next day.
+  const shiftEndDate =
+    endMinutes <= startMinutes
+      ? addDays(attendanceDate, 1)
+      : attendanceDate;
+
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(now);
+
+  const values = Object.fromEntries(
+    parts
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, part.value])
+  );
+
+  const currentLocalDate =
+    `${values.year}-${values.month}-${values.day}`;
+  const currentLocalTime =
+    `${values.hour}:${values.minute}:${values.second}`;
+
+  const currentLocalDateTime =
+    `${currentLocalDate}T${currentLocalTime}`;
+  const shiftEndDateTime =
+    `${shiftEndDate}T${shiftEnd.slice(0, 8)}`;
+
+  return currentLocalDateTime >= shiftEndDateTime;
+}
+
 function employeeName(employee: Employee): string {
   return (
     [employee.first_name, employee.last_name]
@@ -125,7 +215,7 @@ async function main() {
     throw new Error(`Employee query failed: ${employeeError.message}`);
   }
 
-  const eligibleEmployees = (employees ?? []).filter((employee) => {
+  const dateEligibleEmployees = (employees ?? []).filter((employee) => {
     if (
       employee.status === "on_notice" &&
       employee.planned_last_working_date &&
@@ -137,6 +227,23 @@ async function main() {
     return true;
   }) as Employee[];
 
+  const eligibleEmployees = targetEmployeeId
+    ? dateEligibleEmployees.filter(
+        (employee) => employee.employee_id === targetEmployeeId
+      )
+    : dateEligibleEmployees;
+
+  if (targetEmployeeId && eligibleEmployees.length === 0) {
+    throw new Error(
+      `Employee ${targetEmployeeId} was not found in the eligible employee list for ${attendanceDate}.`
+    );
+  }
+
+  console.log(
+    targetEmployeeId
+      ? `Employee filter: ${targetEmployeeId}`
+      : "Employee filter: ALL"
+  );
   console.log(`Eligible employees: ${eligibleEmployees.length}`);
 
   if (eligibleEmployees.length === 0) {
@@ -157,11 +264,14 @@ async function main() {
 
   // Priority 1: Assigned project calendars.
   const projectCalendarMap = new Map<string, string>();
+  const projectShiftMap = new Map<string, ProjectShift>();
 
   if (projectIds.length > 0) {
     const { data: projects, error: projectError } = await supabase
       .from("projects")
-      .select("id, calendar_id")
+      .select(
+        "id, calendar_id, shift_start_time, shift_end_time, timezone"
+      )
       .in("id", projectIds);
 
     if (projectError) {
@@ -169,6 +279,13 @@ async function main() {
     }
 
     for (const project of projects ?? []) {
+      projectShiftMap.set(project.id, {
+        calendar_id: project.calendar_id,
+        shift_start_time: project.shift_start_time,
+        shift_end_time: project.shift_end_time,
+        timezone: project.timezone,
+      });
+
       if (project.calendar_id) {
         projectCalendarMap.set(project.id, project.calendar_id);
       }
@@ -246,13 +363,15 @@ async function main() {
     ),
   ];
 
-  // Verify that all referenced calendars actually exist.
+  // Verify that referenced calendars are imported and usable.
   const validCalendarIds = new Set<string>();
+  const calendarTimezoneMap = new Map<string, string>();
+  const calendarStatusMap = new Map<string, string>();
 
   if (calendarIds.length > 0) {
     const { data: calendars, error: calendarError } = await supabase
       .from("holiday_calendars")
-      .select("id")
+      .select("id, timezone, document_status")
       .in("id", calendarIds);
 
     if (calendarError) {
@@ -260,9 +379,21 @@ async function main() {
     }
 
     for (const calendar of calendars ?? []) {
-      validCalendarIds.add(calendar.id);
+      calendarStatusMap.set(
+        calendar.id,
+        calendar.document_status ?? "not_uploaded"
+      );
+
+      if (calendar.timezone) {
+        calendarTimezoneMap.set(calendar.id, calendar.timezone);
+      }
+
+      if (calendar.document_status === "imported") {
+        validCalendarIds.add(calendar.id);
+      }
     }
   }
+
 
   // 3. Fetch holidays for the target date.
   const holidayMap = new Map<
@@ -334,6 +465,7 @@ async function main() {
   let skippedExisting = 0;
   let skippedNonWorking = 0;
   let skippedFullDayLeave = 0;
+  let skippedBeforeShiftEnd = 0;
   let reviewRequired = 0;
 
   const markedAt = new Date().toISOString();
@@ -352,9 +484,108 @@ async function main() {
 
     const calendarId = employeeCalendarMap.get(employee.id);
 
+
     if (!calendarId || !validCalendarIds.has(calendarId)) {
       reviewRequired++;
-      console.log(`REVIEW: ${name} has no valid holiday calendar.`);
+
+      const calendarStatus = calendarId
+        ? calendarStatusMap.get(calendarId) ?? "calendar_not_found"
+        : "no_calendar_assigned";
+
+      console.log(
+        `REVIEW: ${name} cannot be processed. Calendar status: ${calendarStatus}.`
+      );
+
+      continue;
+    }
+
+
+    // Resolve the employee's actual shift before deciding absence.
+    let shiftConfig: ShiftConfig | null = null;
+
+    if (employee.project_id) {
+      const projectShift = projectShiftMap.get(employee.project_id);
+
+      if (
+        projectShift?.shift_start_time &&
+        projectShift.shift_end_time
+      ) {
+        const timezone =
+          projectShift.timezone ||
+          calendarTimezoneMap.get(calendarId) ||
+          null;
+
+        if (timezone) {
+          shiftConfig = {
+            startTime: projectShift.shift_start_time,
+            endTime: projectShift.shift_end_time,
+            timezone,
+          };
+        }
+      }
+    } else if (
+      employee.retained_calendar_id ||
+      employee.retained_shift_start_time ||
+      employee.retained_shift_end_time
+    ) {
+      if (
+        employee.retained_calendar_id &&
+        employee.retained_shift_start_time &&
+        employee.retained_shift_end_time
+      ) {
+        const timezone = calendarTimezoneMap.get(calendarId);
+
+        if (timezone) {
+          shiftConfig = {
+            startTime: employee.retained_shift_start_time,
+            endTime: employee.retained_shift_end_time,
+            timezone,
+          };
+        }
+      }
+    } else {
+      const isNightShift = employee.shift_type === "night";
+      const timezone = calendarTimezoneMap.get(calendarId) || "Asia/Kolkata";
+
+      shiftConfig = {
+        startTime: isNightShift ? "18:30:00" : "09:00:00",
+        endTime: isNightShift ? "03:30:00" : "18:00:00",
+        timezone,
+      };
+    }
+
+    if (!shiftConfig) {
+      reviewRequired++;
+      console.log(
+        `REVIEW: ${name} has incomplete shift timing or timezone settings.`
+      );
+      continue;
+    }
+
+    let hasShiftEnded = false;
+
+    try {
+      hasShiftEnded = shiftHasEnded(
+        attendanceDate,
+        shiftConfig.startTime,
+        shiftConfig.endTime,
+        shiftConfig.timezone
+      );
+    } catch (error) {
+      reviewRequired++;
+      console.log(
+        `REVIEW: ${name} has invalid shift settings: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+      continue;
+    }
+
+    if (!hasShiftEnded) {
+      skippedBeforeShiftEnd++;
+      console.log(
+        `WAIT: ${name}'s shift ends at ${shiftConfig.endTime} (${shiftConfig.timezone}); absence will not be marked yet.`
+      );
       continue;
     }
 
@@ -455,6 +686,7 @@ async function main() {
   console.log(`Existing attendance preserved: ${skippedExisting}`);
   console.log(`Non-working days skipped: ${skippedNonWorking}`);
   console.log(`Full-day leave skipped: ${skippedFullDayLeave}`);
+  console.log(`Waiting for shift end: ${skippedBeforeShiftEnd}`);
   console.log(`Review required: ${reviewRequired}`);
 
   if (!execute) {
