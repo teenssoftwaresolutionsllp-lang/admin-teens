@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       execute:
-        description: "Actually update attendance, notice-period and leave records"
+        description: "Actually update notice-period and leave records"
         required: true
         type: boolean
         default: false
@@ -22,7 +22,7 @@ permissions:
 
 jobs:
   daily-automation:
-    name: Attendance , Notice Period and Leave Expiry
+    name: Notice Period and Leave Expiry
     runs-on: ubuntu-latest
 
     steps:
@@ -39,24 +39,6 @@ jobs:
         run: npm ci
 
       # Scheduled run OR manually selected execution.
-      - name: Process previous-day attendance
-        if: github.event_name == 'schedule' || inputs.execute
-        env:
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          DEFAULT_HOLIDAY_CALENDAR_ID: ${{ secrets.DEFAULT_HOLIDAY_CALENDAR_ID }}
-        run: npx tsx scripts/attendance/process-daily-absence.ts --execute
-
-      # Manual run defaults to dry-run.
-      - name: Preview previous-day attendance
-        if: github.event_name == 'workflow_dispatch' && !inputs.execute
-        env:
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          DEFAULT_HOLIDAY_CALENDAR_ID: ${{ secrets.DEFAULT_HOLIDAY_CALENDAR_ID }}
-        run: npx tsx scripts/attendance/process-daily-absence.ts
-
-      # Runs only after the attendance step succeeds.
       - name: Complete due notice periods
         if: github.event_name == 'schedule' || inputs.execute
         env:
@@ -64,13 +46,13 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: npx tsx scripts/complete-notice-periods.ts --execute
 
+      # Manual run defaults to dry-run.
       - name: Preview notice-period completion
         if: github.event_name == 'workflow_dispatch' && !inputs.execute
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: npx tsx scripts/complete-notice-periods.ts
-
 
       # Automatically expire overdue pending leave requests.
       - name: Expire overdue pending leave requests

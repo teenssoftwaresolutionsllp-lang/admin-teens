@@ -66,6 +66,7 @@ export default function Sidebar({
     "Employees",
     "Approval Hub",
     "Payroll",
+    "Attendance & Shifts",
   ]);
 
   const [profileImage, setProfileImage] = useState<string | null>(
@@ -447,9 +448,22 @@ export default function Sidebar({
     },
     {
       name: "Attendance & Shifts",
-      href: "/dashboard/attendance",
       icon: Clock,
       roles: ["ceo", "hr"],
+      children: [
+        {
+          name: "Attendance",
+          href: "/dashboard/attendance",
+          icon: CalendarCheck,
+          roles: ["ceo", "hr"],
+        },
+        {
+          name: "Reports",
+          href: "/dashboard/attendance/reports",
+          icon: FileText,
+          roles: ["ceo", "hr"],
+        },
+      ],
     },
     {
       name: "Leave Management",
