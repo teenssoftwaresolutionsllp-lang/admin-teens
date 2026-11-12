@@ -175,6 +175,7 @@ export interface Employee {
   project_id?: string | null;
   designation?: string | null;
   shift_type?: EmployeeShiftType;
+  assigned_reporting_manager_name?: string;
 
   // Retained project settings for employees on bench.
   retained_project_id?: string | null;
@@ -200,7 +201,10 @@ export interface Employee {
   total_experience_years?: number | null;
   total_experience_months?: number | null;
 
-  reporting_manager?: string | null;
+  // Reporting Manager
+  reporting_manager?: string | null; 
+  reporting_manager_id?: string | null; // UUID referencing employees.id
+  is_reporting_manager?: boolean | null; // Manager permission flag
 
   // ==============================
   // Client / Work Assignment

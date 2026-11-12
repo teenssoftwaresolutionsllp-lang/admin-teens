@@ -1,3 +1,4 @@
+
 import { createClient, createAdminClient } from "@/lib/supabase-server";
 import { DataStore } from "@/lib/data-store";
 import EmployeeDetail from "@/components/EmployeeDetail";
@@ -13,50 +14,101 @@ type EmployeeDetailPageProps = {
 export default async function EmployeeDetailPage(
   props: EmployeeDetailPageProps
 ) {
-  const params = await props.params;
-  const { id } = params;
+  const { id } = await props.params;
 
+  // 1. Authenticate the current user.
   const supabase = await createClient();
+
   let user = null;
 
   try {
-    const { data } = await supabase.auth.getUser();
-    user = data?.user || null;
-  } catch {
-    // Ignore authentication lookup errors.
-  }
+    const { data, error } = await supabase.auth.getUser();
 
-  if (!user) {
-    try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
-      user = session?.user || null;
-    } catch {
-      // Ignore session lookup errors.
+    if (!error) {
+      user = data?.user ?? null;
     }
+  } catch {
+    // Authentication failed.
   }
 
   if (!user) {
     return notFound();
   }
 
-  const role = (user.user_metadata?.role as UserRole) || "hr";
+  // 2. Use the database role, never user_metadata.
+  const adminClient = await createAdminClient();
 
-  // Fetch employee.
+  const { data: profile, error: profileError } = await adminClient
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (
+    profileError ||
+    !profile ||
+    !["ceo", "hr", "employee"].includes(profile.role)
+  ) {
+    return notFound();
+  }
+
+  const role = profile.role as UserRole;
+
+  // 3. Employees can only access their own employee record.
+  if (role === "employee") {
+    const { data: currentEmployee, error: currentEmployeeError } =
+      await adminClient
+        .from("employees")
+        .select("id, employee_id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+    if (
+      currentEmployeeError ||
+      !currentEmployee ||
+      (id !== currentEmployee.id &&
+        id !== currentEmployee.employee_id)
+    ) {
+      return notFound();
+    }
+  }
+
+  // 4. Only after authorization, fetch the requested employee.
   const employee = await DataStore.getEmployeeById(id);
 
   if (!employee) {
-    notFound();
+    return notFound();
   }
 
-  // Fetch documents and enrich Bank Passbook with employee bank details.
+  // Fetch the assigned Reporting Manager's name.
+  let reportingManagerName = "Not Assigned";
+
+  if (employee.reporting_manager_id) {
+    const { data: manager, error: managerError } = await adminClient
+      .from("employees")
+      .select("first_name, last_name, employee_id")
+      .eq("id", employee.reporting_manager_id)
+      .maybeSingle();
+
+    if (managerError) {
+      console.error("Failed to fetch reporting manager:", managerError);
+    } else if (manager) {
+      reportingManagerName =
+        `${manager.first_name ?? ""} ${manager.last_name ?? ""}`.trim() ||
+        manager.employee_id ||
+        "Not Assigned";
+    }
+  }
+
+  const employeeWithManager = {
+    ...employee,
+    assigned_reporting_manager_name: reportingManagerName,
+  };
+
+  // 5. Fetch documents for the authorized employee.
   let documents: EmployeeDocument[] = [];
 
   try {
-    const adminClient = await createAdminClient();
-
     const { data: fetchedDocuments, error: documentsError } =
       await adminClient
         .from("employee_documents")
@@ -82,11 +134,12 @@ export default async function EmployeeDetailPage(
     };
 
     if (hasBankPassbook) {
-      const { data: bankEmployee, error: bankError } = await adminClient
-        .from("employees")
-        .select("bank_name, bank_account_number, ifsc_code")
-        .eq("id", employee.id)
-        .maybeSingle();
+      const { data: bankEmployee, error: bankError } =
+        await adminClient
+          .from("employees")
+          .select("bank_name, bank_account_number, ifsc_code")
+          .eq("id", employee.id)
+          .maybeSingle();
 
       if (bankError) {
         throw bankError;
@@ -140,11 +193,10 @@ export default async function EmployeeDetailPage(
       </nav>
 
       <EmployeeDetail
-        employee={employee as Employee}
+        employee={employeeWithManager as Employee}
         documents={documents}
         role={role}
       />
     </div>
   );
 }
-
