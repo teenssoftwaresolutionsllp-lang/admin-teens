@@ -66,6 +66,7 @@ type Employee = {
   account_number?: string | null;
 
   bank_name?: string | null;
+  ifsc_code?: string | null;
   payment_mode?: string | null;
 
   grade?: string | null;

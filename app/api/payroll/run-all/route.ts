@@ -7,6 +7,7 @@ import {
   calculateEmployeeLopDays,
   MasterPayrollEmployee,
   MasterPayrollAdjustments,
+  calculateEmployeePayrollDays
 } from "@/lib/payroll/master-payroll-engine";
 
 export const dynamic = "force-dynamic";
@@ -118,6 +119,7 @@ export async function POST(request: NextRequest) {
         joining_date,
         bank_name,
         bank_account_number,
+        ifsc_code,
         pan_number,
         uan_number,
         salary,
@@ -141,6 +143,8 @@ export async function POST(request: NextRequest) {
     }
 
     const employees = (employeeRows ?? []) as MasterPayrollEmployee[];
+
+    
 
     if (employees.length === 0) {
       return NextResponse.json(
@@ -182,6 +186,7 @@ export async function POST(request: NextRequest) {
         existingPayslipMap.set(p.employee_id, p.id);
       }
     }
+    
 
     // 3. Load attendance logs & approved leaves
     const { data: attendanceLogs } = await admin
@@ -212,6 +217,8 @@ export async function POST(request: NextRequest) {
       .select("holiday_date, is_working_day, is_optional")
       .gte("holiday_date", monthStart)
       .lte("holiday_date", monthEnd);
+
+    
 
     const workingSaturdays = await DataStore.getWorkingSaturdays(payrollYear, payrollMonth);
 
@@ -252,16 +259,27 @@ export async function POST(request: NextRequest) {
       const empAdjustments = adjustments[emp.id];
       const pendingStatutory = pendingByEmployee.get(emp.id);
 
+      const employeeDaysInPeriod = calculateEmployeePayrollDays(
+        emp.joining_date,
+        emp.exit_date,
+        monthStart,
+        monthEnd
+      );
+
       const row = calculateMasterPayrollRow(
         emp,
         daysInMonth,
         calculatedLop,
         empAdjustments,
         undefined,
-        pendingStatutory
+        pendingStatutory,
+        employeeDaysInPeriod
       );
 
       calculatedRows.push(row);
+
+
+
 
       if (row.recovered_statutory && row.recovered_statutory > 0) {
         employeesWithRecoveredStatutory.push(emp.id);
@@ -320,9 +338,9 @@ export async function POST(request: NextRequest) {
         present_days: row.pay_days,
         paid_leaves: 0,
         lop_days: row.lop_days,
-        gross_salary: row.ctc + row.incentive + row.arrears,
+        gross_salary: row.gross_salary + row.incentive + row.arrears,
         lop_deduction: row.loss_of_pay,
-        total_earnings: row.ctc + row.incentive + row.arrears,
+        total_earnings: row.gross_salary + row.incentive + row.arrears,
         total_deductions: row.total_deductions,
         net_salary: row.net_payout,
         pf_pending_amount: pendingPfForAbsence,
