@@ -1,88 +1,122 @@
+
 import { NextResponse } from "next/server";
 import {
-  createClient,
   createAdminClient,
+  createClient,
 } from "@/lib/supabase-server";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 const noCacheHeaders = {
-  "Cache-Control": "no-store, no-cache, must-revalidate",
+  "Content-Type": "application/json; charset=utf-8",
+  "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+  Pragma: "no-cache",
+  Expires: "0",
 };
 
+function jsonResponse(
+  data: Record<string, unknown>,
+  status = 200
+) {
+  return new NextResponse(JSON.stringify(data), {
+    status,
+    headers: noCacheHeaders,
+  });
+}
+
+async function getAuthenticatedUser() {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+    error,
+  } = await supabase.auth.getUser();
+
+  if (error || !user) return null;
+
+  return user;
+}
+
+async function getEmployeeId(
+  admin: Awaited<ReturnType<typeof createAdminClient>>,
+  userId: string,
+  email?: string
+): Promise<string | null> {
+  let employeeQuery = await admin
+    .from("employees")
+    .select("id")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (employeeQuery.error) {
+    throw new Error(employeeQuery.error.message);
+  }
+
+  if (!employeeQuery.data && email) {
+    employeeQuery = await admin
+      .from("employees")
+      .select("id")
+      .eq("email", email)
+      .maybeSingle();
+
+    if (employeeQuery.error) {
+      throw new Error(employeeQuery.error.message);
+    }
+  }
+
+  return employeeQuery.data?.id ?? null;
+}
+
+// GET: Fetch notifications for the logged-in user.
 export async function GET() {
   try {
-    const supabase = await createClient();
+    const user = await getAuthenticatedUser();
 
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json(
+    if (!user) {
+      return jsonResponse(
         {
           success: false,
           error: "Unauthorized",
           notifications: [],
           unreadCount: 0,
         },
-        { status: 401, headers: noCacheHeaders }
+        401
       );
     }
 
     const admin = await createAdminClient();
 
-    // Employee lookup is optional because an HR account may
-    // not have a linked employee record.
-    let employeeId: string | null = null;
+    const employeeId = await getEmployeeId(
+      admin,
+      user.id,
+      user.email
+    );
 
-    let employeeQuery = await admin
-      .from("employees")
-      .select("id")
-      .eq("user_id", user.id)
-      .maybeSingle();
-
-    if (employeeQuery.error) {
-      throw new Error(employeeQuery.error.message);
-    }
-
-    if (!employeeQuery.data && user.email) {
-      employeeQuery = await admin
-        .from("employees")
-        .select("id")
-        .eq("email", user.email)
-        .maybeSingle();
-
-      if (employeeQuery.error) {
-        throw new Error(employeeQuery.error.message);
-      }
-    }
-
-    employeeId = employeeQuery.data?.id ?? null;
-
-    // HR notifications are addressed to the authenticated
-    // Supabase user. Employee notifications retain employee_id.
-    let notificationQuery = admin
-      .from("notifications")
-      .select("id, title, message, type, is_read, created_at")
-      .eq("recipient_user_id", user.id)
-      .order("created_at", { ascending: false })
-      .limit(50);
-
+    // Notifications directly assigned to the logged-in user.
     const { data: recipientRows, error: recipientError } =
-      await notificationQuery;
+      await admin
+        .from("notifications")
+        .select(
+          "id, title, message, type, is_read, created_at"
+        )
+        .eq("recipient_user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(50);
 
     if (recipientError) {
       throw new Error(recipientError.message);
     }
 
+    // Notifications assigned through the employee record.
     let employeeRows: typeof recipientRows = [];
 
     if (employeeId) {
       const { data, error } = await admin
         .from("notifications")
-        .select("id, title, message, type, is_read, created_at")
+        .select(
+          "id, title, message, type, is_read, created_at"
+        )
         .eq("employee_id", employeeId)
         .is("recipient_user_id", null)
         .order("created_at", { ascending: false })
@@ -95,7 +129,7 @@ export async function GET() {
       employeeRows = data ?? [];
     }
 
-    // Avoid duplicate rows if an account has both recipient types.
+    // Remove duplicate notifications.
     const uniqueRows = new Map(
       [...(recipientRows ?? []), ...(employeeRows ?? [])].map(
         (item) => [item.id, item]
@@ -113,112 +147,108 @@ export async function GET() {
         id: item.id,
         title: item.title,
         message: item.message,
-        type: item.type,
+        type: item.type ?? "info",
         time: item.created_at,
         created_at: item.created_at,
-        read: item.is_read,
+        read: Boolean(item.is_read),
       }));
 
-    return NextResponse.json(
-      {
-        success: true,
-        notifications,
-        unreadCount: notifications.filter((item) => !item.read).length,
-      },
-      { headers: noCacheHeaders }
-    );
+    return jsonResponse({
+      success: true,
+      notifications,
+      unreadCount: notifications.filter(
+        (item) => !item.read
+      ).length,
+    });
   } catch (error: unknown) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : "Unable to fetch notifications.";
+    console.error("GET /api/notifications failed:", error);
 
-    console.error("Notifications API error:", message);
-
-    return NextResponse.json(
+    return jsonResponse(
       {
         success: false,
-        error: message,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to load notifications.",
         notifications: [],
         unreadCount: 0,
       },
-      { status: 500, headers: noCacheHeaders }
+      500
     );
   }
 }
 
+// PATCH: Mark one notification or all notifications as read.
 export async function PATCH(request: Request) {
   try {
-    const supabase = await createClient();
+    const user = await getAuthenticatedUser();
 
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json(
-        { success: false, error: "Unauthorized" },
-        { status: 401 }
+    if (!user) {
+      return jsonResponse(
+        {
+          success: false,
+          error: "Unauthorized",
+        },
+        401
       );
     }
 
     const admin = await createAdminClient();
 
-    let employeeId: string | null = null;
+    const employeeId = await getEmployeeId(
+      admin,
+      user.id,
+      user.email
+    );
 
-    let employeeQuery = await admin
-      .from("employees")
-      .select("id")
-      .eq("user_id", user.id)
-      .maybeSingle();
+    const requestBody = await request.text();
 
-    if (employeeQuery.error) {
-      throw new Error(employeeQuery.error.message);
-    }
+    let body: {
+      notificationId?: string | number;
+    } = {};
 
-    if (!employeeQuery.data && user.email) {
-      employeeQuery = await admin
-        .from("employees")
-        .select("id")
-        .eq("email", user.email)
-        .maybeSingle();
-
-      if (employeeQuery.error) {
-        throw new Error(employeeQuery.error.message);
+    if (requestBody.trim()) {
+      try {
+        body = JSON.parse(requestBody);
+      } catch {
+        return jsonResponse(
+          {
+            success: false,
+            error: "Invalid request body.",
+          },
+          400
+        );
       }
     }
 
-    employeeId = employeeQuery.data?.id ?? null;
-
-    // An optional notificationId marks one notification as read.
-    // An empty body preserves the existing mark-all-as-read behavior.
-    let body: { notificationId?: string | number } = {};
-    try {
-      body = await request.json();
-    } catch {
-      body = {};
-    }
-
-    if (body.notificationId !== undefined && body.notificationId !== null) {
-      const notificationId = String(body.notificationId).trim();
+    // Mark one notification as read.
+    if (
+      body.notificationId !== undefined &&
+      body.notificationId !== null
+    ) {
+      const notificationId = String(
+        body.notificationId
+      ).trim();
 
       if (!notificationId) {
-        return NextResponse.json(
-          { success: false, error: "Invalid notification ID." },
-          { status: 400, headers: noCacheHeaders }
+        return jsonResponse(
+          {
+            success: false,
+            error: "Invalid notification ID.",
+          },
+          400
         );
       }
 
-      // First check notifications addressed directly to this user.
-      const { data: recipientNotification, error: recipientError } = await admin
-        .from("notifications")
-        .update({ is_read: true })
-        .eq("id", notificationId)
-        .eq("recipient_user_id", user.id)
-        .eq("is_read", false)
-        .select("id")
-        .maybeSingle();
+      const { data: recipientNotification, error: recipientError } =
+        await admin
+          .from("notifications")
+          .update({ is_read: true })
+          .eq("id", notificationId)
+          .eq("recipient_user_id", user.id)
+          .eq("is_read", false)
+          .select("id")
+          .maybeSingle();
 
       if (recipientError) {
         throw new Error(recipientError.message);
@@ -226,7 +256,6 @@ export async function PATCH(request: Request) {
 
       let updatedNotification = recipientNotification;
 
-      // Otherwise, allow only this employee's legacy employee-scoped row.
       if (!updatedNotification && employeeId) {
         const { data, error } = await admin
           .from("notifications")
@@ -246,22 +275,23 @@ export async function PATCH(request: Request) {
       }
 
       if (!updatedNotification) {
-        return NextResponse.json(
+        return jsonResponse(
           {
             success: false,
-            error: "Notification not found or you do not have permission to update it.",
+            error:
+              "Notification not found or you do not have permission to update it.",
           },
-          { status: 404, headers: noCacheHeaders }
+          404
         );
       }
 
-      return NextResponse.json(
-        { success: true, notificationId },
-        { headers: noCacheHeaders }
-      );
+      return jsonResponse({
+        success: true,
+        notificationId,
+      });
     }
 
-    // Mark all notifications addressed to this user as read.
+    // Mark all user notifications as read.
     const { error: recipientError } = await admin
       .from("notifications")
       .update({ is_read: true })
@@ -272,7 +302,7 @@ export async function PATCH(request: Request) {
       throw new Error(recipientError.message);
     }
 
-    // Also mark this employee's legacy employee-scoped rows as read.
+    // Also update employee-linked notifications.
     if (employeeId) {
       const { error } = await admin
         .from("notifications")
@@ -286,21 +316,21 @@ export async function PATCH(request: Request) {
       }
     }
 
-    return NextResponse.json(
-      { success: true },
-      { headers: noCacheHeaders }
-    );
+    return jsonResponse({
+      success: true,
+    });
   } catch (error: unknown) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : "Unable to mark notifications as read.";
+    console.error("PATCH /api/notifications failed:", error);
 
-    console.error("Mark notifications as read error:", message);
-
-    return NextResponse.json(
-      { success: false, error: message },
-      { status: 500 }
+    return jsonResponse(
+      {
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to mark notifications as read.",
+      },
+      500
     );
   }
 }

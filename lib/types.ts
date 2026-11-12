@@ -333,6 +333,7 @@ export interface AttendanceLog {
   employee_id: string;
   attendance_date: string;
   check_in_time: string | null;
+  session_check_in_time?: string | null;
   check_out_time: string | null;
   total_hours: number | null;
   status: AttendanceStatus;
@@ -382,7 +383,7 @@ export interface WfhRequest {
 export interface LeaveType {
   id: string;
   name: string;
-  code: string; // CL, SL, EL, LOP
+  code: string; // CL, SL, EL, ML, PL
   annual_quota: number;
   is_paid: boolean;
   is_active: boolean;
@@ -418,7 +419,6 @@ export interface LeaveRequest {
   employee?: Employee;
   leave_duration?: "first_half" | "second_half" | null;
 }
-
 export interface ResignationRevertRequest {
   id: string;
   resignation_request_id: string;
