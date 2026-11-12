@@ -26,14 +26,34 @@ export default async function AddEmployeePage() {
     }
   }
 
-  const role = (user?.user_metadata?.role as UserRole) || "hr";
+  if (!user) {
+    redirect("/login");
+  }
+
+  const adminClient = await createAdminClient();
+
+  const { data: profile, error: profileError } = await adminClient
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (profileError || !profile) {
+    redirect("/dashboard");
+  }
+
+  const role = String(profile.role || "").toLowerCase() as UserRole;
+
+  if (!["hr", "ceo"].includes(role)) {
+    redirect("/dashboard");
+  }
+
   const projects = await DataStore.getProjects();
-  const generatedEmployeeId = await DataStore.getNextEmployeeId();
+  const generatedEmployeeId = await DataStore.getNextEmployeeId(); 
 
   let departments: Department[] = [];
 
   try {
-    const adminClient = await createAdminClient();
 
     const { data, error } = await adminClient
       .from("departments")

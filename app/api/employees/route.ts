@@ -23,6 +23,37 @@ export async function GET(request: Request) {
       }
     }
 
+        // Only HR and CEO can access the complete employee list.
+    if (!user) {
+      return NextResponse.json(
+        { error: "Unauthorized" },
+        { status: 401 }
+      );
+    }
+
+    const authAdminClient = await createAdminClient();
+
+    const { data: authProfile, error: authProfileError } =
+      await authAdminClient
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .maybeSingle();
+
+    if (authProfileError || !authProfile) {
+      return NextResponse.json(
+        { error: "Unable to verify user permissions." },
+        { status: 403 }
+      );
+    }
+
+    if (!["hr", "ceo"].includes(authProfile.role)) {
+      return NextResponse.json(
+        { error: "You are not authorized to access the employee list." },
+        { status: 403 }
+      );
+    }
+
 
 
     // Check for last-working-day reminders when HR/CEO loads employees.

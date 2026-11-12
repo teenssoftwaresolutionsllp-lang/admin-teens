@@ -40,9 +40,6 @@ export default function EmployeeDetail({ employee, documents, role }: EmployeeDe
   } | null>(null);
   const [showExitMenu, setShowExitMenu] = useState(false);
   const [exitAction, setExitAction] = useState< "resigned" | "laid_off" | "terminated" | null > (null);
-  const handleExitAction = (action: "resigned" | "laid_off" | "terminated" | "deleted")=>{
-    console.log("Selected action:", action);
-  }
   const [exitReason, setExitReason] = useState("");
   const [exitDate, setExitDate] = useState("");
   const [exitLoginDays, setExitLoginDays] = useState("45");
@@ -689,7 +686,7 @@ const getEmployeeStatusLabel = () => {
               <DetailTile label="Shift" value={ employee.shift_type === "night" ? "Night (06:30 PM – 03:30 AM)" : "General (09:00 AM – 06:00 PM)"}/>
               <DetailTile label="Experience Level" value={employee.experience_level === "fresher" ? "Fresher" : employee.experience_level === "experienced" ? "Experienced": "Not provided"}/>
               <DetailTile label="Total Experience" value={employee.experience_level === "fresher"? "0 Years, 0 Months" : employee.experience_level === "experienced" ? employee.total_experience_years == null && employee.total_experience_months == null ? "Not provided": `${employee.total_experience_years ?? 0} Years, ${employee.total_experience_months ?? 0} Months` : "Not provided"}/>
-              <DetailTile label="Reporting Manager" value={employee.reporting_manager} />
+              <DetailTile label="Reporting Manager" value={employee.assigned_reporting_manager_name || "Not Assigned"} />
               <DetailTile label="Work Location" value={employee.work_location} />
             </div>
           )}

@@ -110,6 +110,7 @@ export async function POST(request: Request) {
         joining_date,
         bank_name,
         bank_account_number,
+        ifsc_code,
         pan_number,
         uan_number,
         salary,

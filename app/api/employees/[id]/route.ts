@@ -2,51 +2,116 @@ import { NextResponse } from 'next/server';
 import { createClient, createAdminClient } from '@/lib/supabase-server';
 import { DataStore } from '@/lib/data-store';
 
+
 export async function GET(
   request: Request,
   props: { params: Promise<{ id: string }> }
 ) {
   try {
-    const params = await props.params;
-    const { id } = params;
+    const { id } = await props.params;
 
+    // 1. Authenticate the requester.
+    const supabase = await createClient();
+
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json(
+        { error: "Unauthorized. Please log in." },
+        { status: 401 }
+      );
+    }
+
+    const adminClient = await createAdminClient();
+
+    // 2. Verify the actual database role.
+    const { data: profile, error: profileError } = await adminClient
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (profileError || !profile) {
+      return NextResponse.json(
+        { error: "Unable to verify user permissions." },
+        { status: 403 }
+      );
+    }
+
+    const role = String(profile.role || "").toLowerCase();
+
+    if (!["hr", "ceo", "employee"].includes(role)) {
+      return NextResponse.json(
+        { error: "You are not authorized to access this employee record." },
+        { status: 403 }
+      );
+    }
+
+    // 3. Fetch the requested employee.
     const employee = await DataStore.getEmployeeById(id);
 
     if (!employee) {
       return NextResponse.json(
-        { error: 'Employee not found' },
+        { error: "Employee not found." },
         { status: 404 }
       );
     }
 
-    let documents: any[] = [];
+    // 4. Employees can only access their own records.
+    // Reporting managers must use a separate restricted team API.
+    if (role === "employee") {
+      const { data: currentEmployee, error: employeeError } =
+        await adminClient
+          .from("employees")
+          .select("id")
+          .eq("user_id", user.id)
+          .maybeSingle();
 
-    try {
-      const supabase = await createAdminClient();
+      if (
+        employeeError ||
+        !currentEmployee ||
+        currentEmployee.id !== employee.id
+      ) {
+        return NextResponse.json(
+          { error: "You are not authorized to access this employee record." },
+          { status: 403 }
+        );
+      }
+    }
 
-      const { data } = await supabase
-        .from('employee_documents')
-        .select('*')
-        .eq('employee_id', id);
+    // 5. Fetch documents only after authorization.
+    const { data: documents, error: documentsError } =
+      await adminClient
+        .from("employee_documents")
+        .select("*")
+        .eq("employee_id", employee.id);
 
-      documents = data || [];
-    } catch {
-      // Ignore document-fetch errors.
+    if (documentsError) {
+      console.error("Failed to fetch employee documents:", documentsError);
+
+      return NextResponse.json(
+        { error: "Failed to load employee documents." },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json({
       employee,
-      documents,
+      documents: documents || [],
     });
   } catch (error) {
-    console.error('API Error in GET /api/employees/[id]:', error);
+    console.error("API Error in GET /api/employees/[id]:", error);
 
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: "Internal server error" },
       { status: 500 }
     );
   }
 }
+
 
 export async function PUT(
   request: Request,
@@ -62,6 +127,27 @@ export async function PUT(
         typeof value === 'string' && value.trim() === '' ? null : value,
       ])
     );
+
+    // Reporting manager fields can only be changed through
+    // dedicated, authorized reporting-manager APIs.
+    const protectedManagerFields = [
+      'reporting_manager_id',
+      'is_reporting_manager',
+    ];
+
+    if (
+      protectedManagerFields.some((field) =>
+        Object.prototype.hasOwnProperty.call(updateData, field)
+      )
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            'Reporting manager assignments and permissions must be managed through the authorized reporting manager workflow.',
+        },
+        { status: 403 }
+      );
+    }
 
     // Retained shift/calendar settings are managed only by the server.
     delete updateData.retained_calendar_id;
@@ -635,27 +721,6 @@ export async function PUT(
 
     return NextResponse.json(
       { error: error?.message || 'Internal server error' },
-      { status: 500 }
-    );
-  }
-}
-
-export async function DELETE(
-  request: Request,
-  props: { params: Promise<{ id: string }> }
-) {
-  try {
-    const params = await props.params;
-    const { id } = params;
-
-    return NextResponse.json({
-      message: 'Employee deleted successfully',
-    });
-  } catch (error) {
-    console.error('API Error in DELETE /api/employees/[id]:', error);
-
-    return NextResponse.json(
-      { error: 'Internal server error' },
       { status: 500 }
     );
   }

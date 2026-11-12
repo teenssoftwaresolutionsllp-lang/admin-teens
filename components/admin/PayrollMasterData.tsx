@@ -61,6 +61,7 @@ export const REGISTER_COLUMNS: ColumnDef[] = [
   { key: "ctc", label: "CTC", currency: true },
   { key: "designation", label: "Designation" },
   { key: "bank_account_number", label: "Bank Account No" },
+  { key: "ifsc_code", label: "IFSC Code" },
   { key: "bank_name", label: "Bank Name" },
   { key: "pf_account_number", label: "PF A/c No." },
   { key: "uan_number", label: "PF UAN" },
@@ -368,6 +369,82 @@ export default function PayrollMasterData({ role }: Props) {
     }
   };
 
+  // Export Bank Import Excel
+  const handleImportBank = async () => {
+    if (!rows.length) return;
+
+    try {
+      const columns = [
+        { header: "Employee Name", key: "employee_name", width: 25 },
+        { header: "Bank Account Number", key: "bank_account_number", width: 25 },
+        { header: "IFSC Code", key: "ifsc_code", width: 18 },
+        { header: "Bank Name", key: "bank_name", width: 22 },
+        {
+          header: "Amount to Pay",
+          key: "net_payout",
+          width: 18,
+          numFmt: '"₹"#,##0.00',
+        },
+      ];
+
+      const exportRows = rows.map((row) => ({
+        employee_name: row.employee_name,
+        bank_account_number: row.bank_account_number,
+        ifsc_code: row.ifsc_code,
+        bank_name: row.bank_name,
+        net_payout: Number(row.net_payout || 0),
+      }));
+
+      await exportToExcel({
+        fileName: `Bank_Import_${MONTHS[selectedMonth - 1]}_${selectedYear}.xlsx`,
+        sheetName: "Bank Import",
+        title: "TEENS SOFTWARE SOLUTIONS LLP",
+        subtitle: `Bank Payment Import - ${MONTHS[selectedMonth - 1]} ${selectedYear}`,
+        columns,
+        rows: exportRows,
+      });
+    } catch (error) {
+      console.error("Bank import Excel export failed:", error);
+      setError("Failed to export bank import Excel.");
+    }
+  };
+
+  // Export PF Import Excel
+  const handleImportPF = async () => {
+    if (!rows.length) return;
+
+    try {
+      const columns = [
+        { header: "Employee Name", key: "employee_name", width: 25 },
+        { header: "UAN Number", key: "uan_number", width: 22 },
+        {
+          header: "PF Amount",
+          key: "epf",
+          width: 18,
+          numFmt: '"₹"#,##0.00',
+        },
+      ];
+
+      const exportRows = rows.map((row) => ({
+        employee_name: row.employee_name,
+        uan_number: row.uan_number,
+        epf: Number(row.epf || 0),
+      }));
+
+      await exportToExcel({
+        fileName: `PF_Import_${MONTHS[selectedMonth - 1]}_${selectedYear}.xlsx`,
+        sheetName: "PF Import",
+        title: "TEENS SOFTWARE SOLUTIONS LLP",
+        subtitle: `Employee PF Import - ${MONTHS[selectedMonth - 1]} ${selectedYear}`,
+        columns,
+        rows: exportRows,
+      });
+    } catch (error) {
+      console.error("PF import Excel export failed:", error);
+      setError("Failed to export PF import Excel.");
+    }
+  };
+
   // Open adjustment modal
   const openEditAdjustments = (row: MasterPayrollRow) => {
     setEditingRow(row);
@@ -641,6 +718,28 @@ export default function PayrollMasterData({ role }: Props) {
               >
                 <Download className="h-4 w-4 text-emerald-600" />
                 Export to Excel 
+              </button>
+
+              {/* Import Bank Button */}
+              <button
+                type="button"
+                onClick={handleImportBank}
+                disabled={loading || rows.length === 0}
+                className="inline-flex items-center gap-2 rounded bg-emerald-700 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Download className="h-4 w-4" />
+                Import Bank
+              </button>
+
+              {/* Import PF Button */}
+              <button
+                type="button"
+                onClick={handleImportPF}
+                disabled={loading || rows.length === 0}
+                className="inline-flex items-center gap-2 rounded bg-orange-600 px-3 py-2 text-xs font-semibold text-white hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Download className="h-4 w-4" />
+                Import PF
               </button>
 
               <button

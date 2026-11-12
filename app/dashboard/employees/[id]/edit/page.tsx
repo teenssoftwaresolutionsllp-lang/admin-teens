@@ -29,9 +29,25 @@ export default async function EditEmployeePage(props: any) {
     }
   }
 
-  const role = (user?.user_metadata?.role as UserRole) || "hr";
+  if (!user) {
+    redirect("/login");
+  }
 
-  if (role !== "ceo" && role !== "hr") {
+  const adminClient = await createAdminClient();
+
+  const { data: profile, error: profileError } = await adminClient
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (profileError || !profile) {
+    redirect("/dashboard");
+  }
+
+  const role = String(profile.role || "").toLowerCase() as UserRole;
+
+  if (!["hr", "ceo"].includes(role)) {
     redirect(`/dashboard/employees/${id}`);
   }
 
