@@ -1995,7 +1995,6 @@ static async getLeaveTypes(): Promise<LeaveType[]> {
     const { data, error } = await supabase
       .from("leave_types")
       .select("*")
-      .in("code", ["CL", "SL", "EL", "LOP", "ML", "PL"])
       .eq("is_active", true)
       .order("name");
 

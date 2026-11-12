@@ -69,6 +69,7 @@ export async function PUT(
     delete updateData.retained_shift_end_time;
     delete updateData.retained_grace_period_minutes;
     delete updateData.retained_half_day_cutoff_minutes;
+    delete updateData.retained_project_id;
 
     const adminClient = await createAdminClient();
 
@@ -119,6 +120,7 @@ export async function PUT(
             early_release_reason,
             project_id,
             retained_calendar_id,
+            retained_project_id,
             retained_shift_start_time,
             retained_shift_end_time,
             retained_grace_period_minutes,
@@ -289,6 +291,7 @@ export async function PUT(
           );
         }
 
+        updateData.retained_project_id = project.id;
         updateData.retained_calendar_id = project.calendar_id;
         updateData.retained_shift_start_time = project.shift_start_time;
         updateData.retained_shift_end_time = project.shift_end_time;

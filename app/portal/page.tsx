@@ -80,64 +80,90 @@ export default async function EmployeePortalPage() {
     null;
 
   // --------------------------------------------------
-  // UPCOMING HOLIDAYS - FETCH FROM SUPABASE
+  // SHIFT-WISE UPCOMING HOLIDAYS
   // --------------------------------------------------
 
   type HolidayItem = {
     id: string;
     title: string;
     holiday_date: string;
-    calendar_id: string;
+    calendar_id?: string;
+  };
+
+  type HolidayCalendar = {
+    id: string;
+    country_name?: string;
+    timezone?: string;
+    shift_type?: string;
+    calendar_year?: number;
+    holidays?: HolidayItem[];
   };
 
   let holidays: HolidayItem[] = [];
 
-  const holidayCalendars = await DataStore.getHolidayCalendars();
+  const holidayCalendars =
+    (await DataStore.getHolidayCalendars()) as HolidayCalendar[];
 
-  // Get employee's assigned project calendar
-  const calendarId =
-    (project as any)?.calendar_id ||
-    (employee as any)?.project?.calendar_id ||
-    null;
+  // Normalize shift names before comparing.
+  const normalizeShift = (value: unknown): string => {
+    return String(value ?? "")
+      .trim()
+      .toLowerCase()
+      .replace(/[_-]/g, " ")
+      .replace(/\s+/g, " ");
+  };
 
-  if (calendarId) {
-    // Find the holiday calendar assigned to this project
-    const holidayCalendar = holidayCalendars.find(
-      (calendar: any) => calendar.id === calendarId
-    );
+  // Get employee's assigned shift.
+  const employeeData = employee as any;
+  const projectData = project as any;
 
-    if (holidayCalendar) {
-      const timezone =
-        holidayCalendar.timezone ||
-        project?.timezone ||
-        "Asia/Kolkata";
+  const employeeShift =
+    employeeData?.shift_type ??
+    employeeData?.assigned_shift ??
+    employeeData?.shift?.shift_type ??
+    employeeData?.shift?.name ??
+    employeeData?.shift ??
+    projectData?.shift_type ??
+    projectData?.shift_name ??
+    "";
 
-      // Get today's date according to calendar timezone
-      const todayParts = new Intl.DateTimeFormat("en-US", {
-        timeZone: timezone,
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-      }).formatToParts(new Date());
+  const employeeShiftName = normalizeShift(employeeShift);
 
-      const getDatePart = (type: string) =>
-        todayParts.find((part) => part.type === type)?.value || "";
-
-      const todayDate =
-        `${getDatePart("year")}-${getDatePart("month")}-${getDatePart("day")}`;
-
-      // Get upcoming holidays
-      holidays = ((holidayCalendar.holidays || []) as HolidayItem[])
-        .filter((holiday) => {
-          return (
-            holiday.holiday_date &&
-            holiday.holiday_date >= todayDate
-          );
-        })
-        .sort((a, b) =>
-          a.holiday_date.localeCompare(b.holiday_date)
+  // Find the holiday calendar assigned to this shift.
+  const holidayCalendar = employeeShiftName
+    ? holidayCalendars.find((calendar) => {
+        return (
+          normalizeShift(calendar.shift_type) === employeeShiftName
         );
-    }
+      })
+    : null;
+
+  // Get today's date using the matched calendar timezone.
+  const holidayTimezone =
+    holidayCalendar?.timezone || "Asia/Kolkata";
+
+  const todayParts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: holidayTimezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+
+  const todayDate = todayParts;
+
+  // Get all upcoming holidays for the employee's shift.
+  if (holidayCalendar) {
+    holidays = (holidayCalendar.holidays || [])
+      .filter((holiday) => {
+        if (!holiday.holiday_date) return false;
+
+        const holidayDate = String(holiday.holiday_date).split("T")[0];
+
+        return holidayDate >= todayDate;
+      })
+      .sort((a, b) =>
+        String(a.holiday_date).localeCompare(String(b.holiday_date))
+      );
   }
 
   // --------------------------------------------------
@@ -231,8 +257,8 @@ export default async function EmployeePortalPage() {
   };
 
   const gracePeriod =
-    (project as any)?.grace_period_minutes ??
-    (project as any)?.grace_period ??
+    projectData?.grace_period_minutes ??
+    projectData?.grace_period ??
     30;
 
   const cardClass =
@@ -524,12 +550,11 @@ export default async function EmployeePortalPage() {
               </h2>
 
               <p className="text-[11px] text-slate-400">
-                {holidayCalendars.find(
-                  (calendar: any) => calendar.id === calendarId
-                )?.country_name ||
+                {holidayCalendar?.country_name ||
                   project?.client_country ||
                   "Holiday calendar"}
-                {" • Holiday calendar"}
+                {" • "}
+                {holidayCalendar?.shift_type || "Assigned shift"}
               </p>
             </div>
           </div>
@@ -570,7 +595,11 @@ export default async function EmployeePortalPage() {
               </p>
 
               <p className="mt-1 text-[11px] text-slate-400">
-                No holidays scheduled currently
+                {!employeeShiftName
+                  ? "Employee shift is not assigned"
+                  : !holidayCalendar
+                    ? "No holiday calendar found for your shift"
+                    : "No holidays scheduled currently"}
               </p>
             </div>
           )}

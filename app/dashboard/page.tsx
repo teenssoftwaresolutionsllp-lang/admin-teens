@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase-server';
+import { createClient,createAdminClient } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
 import DashboardStats from '@/components/DashboardStats';
 import Link from 'next/link';
@@ -23,8 +23,8 @@ import { Employee } from '@/lib/types';
 import DashboardCharts from '@/components/dashboard/DashboardCharts';
 import LeaveRequestsWidget from '@/components/dashboard/LeaveRequestsWidget';
 import RecentJoiningsWidget from '@/components/dashboard/RecentJoiningsWidget';
-import UpcomingBirthdaysWidget from '@/components/dashboard/UpcomingBirthdaysWidget';
 import QuickActions from '@/components/dashboard/QuickActions';
+import UpcomingHolidaysWidget from '@/components/dashboard/UpcomingHolidaysWidget';
 
 function getIndiaDate(date = new Date()) {
   return new Intl.DateTimeFormat('en-CA', {
@@ -41,35 +41,6 @@ function getDateOnly(value?: string | null) {
   return /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null;
 }
 
-function getNextBirthday(dateOfBirth: string, today: string) {
-  const dob = getDateOnly(dateOfBirth);
-  if (!dob) return null;
-
-  const [, month, day] = dob.split('-').map(Number);
-  const [year, todayMonth, todayDay] = today.split('-').map(Number);
-
-  let birthdayYear = year;
-  let birthday = `${birthdayYear}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-
-  if (birthday < today) {
-    birthdayYear += 1;
-    birthday = `${birthdayYear}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-  }
-
-  const todayUtc = Date.UTC(year, todayMonth - 1, todayDay);
-  const birthdayUtc = Date.UTC(birthdayYear, month - 1, day);
-  const daysUntil = Math.round((birthdayUtc - todayUtc) / 86400000);
-
-  return { date: birthday, daysUntil };
-}
-
-function formatDate(date: string) {
-  return new Date(`${date}T00:00:00`).toLocaleDateString('en-IN', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
-}
 
 export default async function DashboardPage({
   searchParams,
@@ -112,6 +83,20 @@ export default async function DashboardPage({
   const currentMonth = Number(todayIndia.slice(5, 7)) - 1;
   const currentYear = Number(todayIndia.slice(0, 4));
 
+  // Fetch upcoming regular and emergency holidays.
+  const admin = await createAdminClient();
+
+  const upcomingHolidaysPromise = admin
+    .from("holidays")
+    .select(
+      "id, holiday_date, title, holiday_type, scope, reason, project_id, status, is_working_day"
+    )
+    .gte("holiday_date", todayIndia)
+    .eq("status", "active")
+    .eq("is_working_day", false)
+    .order("holiday_date", { ascending: true })
+    .limit(100);
+
   // Fetch shared and role-specific dashboard data.
   const allEmployeesPromise = DataStore.getEmployees(false);
 
@@ -153,6 +138,7 @@ export default async function DashboardPage({
     projects,
     monthlyPayrollTotal,
     todayAttendanceResult,
+    upcomingHolidaysResult,
   ] = await Promise.all([
     allEmployeesPromise,
     profileRequestsPromise,
@@ -161,6 +147,7 @@ export default async function DashboardPage({
     projectsPromise,
     payrollPromise,
     todayAttendancePromise,
+    upcomingHolidaysPromise,
   ]);
 
   const activeEmployeesList = allEmployees.filter(
@@ -548,33 +535,66 @@ export default async function DashboardPage({
       joiningDate: employee.joining_date!,
     }));
 
-  // Upcoming birthdays, sorted by days remaining.
-  const upcomingBirthdays = allEmployees
-    .filter(
-      (employee) =>
-        employee.status === 'active' && Boolean(employee.date_of_birth)
-    )
-    .map((employee) => {
-      const birthday = getNextBirthday(
-        employee.date_of_birth!,
-        todayIndia
+  // =========================================================
+  // UPCOMING HOLIDAYS
+  // =========================================================
+
+  if (upcomingHolidaysResult.error) {
+    console.error(
+      "Unable to fetch upcoming holidays:",
+      upcomingHolidaysResult.error
+    );
+  }
+
+  const holidayRows = upcomingHolidaysResult.data ?? [];
+
+  const holidayMap = new Map<string, (typeof holidayRows)[number]>();
+
+  for (const holiday of holidayRows) {
+    const key =
+      holiday.holiday_type === "emergency"
+        ? `${holiday.holiday_date}|emergency|${holiday.scope}|${holiday.project_id || "company"}`
+        : `${holiday.holiday_date}|regular|${holiday.title}`;
+
+    if (!holidayMap.has(key)) {
+      holidayMap.set(key, holiday);
+    }
+  }
+
+  const todayUtcForHolidays = Date.UTC(
+    Number(todayIndia.slice(0, 4)),
+    Number(todayIndia.slice(5, 7)) - 1,
+    Number(todayIndia.slice(8, 10))
+  );
+
+  const upcomingHolidays = Array.from(holidayMap.values())
+    .map((holiday) => {
+      const holidayDate = getDateOnly(holiday.holiday_date);
+
+      if (!holidayDate) return null;
+
+      const [year, month, day] = holidayDate.split("-").map(Number);
+
+      const holidayUtc = Date.UTC(year, month - 1, day);
+
+      const daysUntil = Math.round(
+        (holidayUtc - todayUtcForHolidays) / 86400000
       );
 
-      if (!birthday) return null;
-
       return {
-        id: employee.id,
-        name: `${employee.first_name} ${employee.last_name}`.trim(),
-        photo: employee.profile_photo_url ?? null,
-        designation: employee.designation || 'Employee',
-        dateOfBirth: employee.date_of_birth!,
-        nextBirthday: birthday.date,
-        daysUntil: birthday.daysUntil,
+        id: holiday.id,
+        holiday_date: holidayDate,
+        title: holiday.title,
+        holiday_type: holiday.holiday_type as "regular" | "emergency",
+        scope: holiday.scope as "calendar" | "company" | "project",
+        reason: holiday.reason,
+        project_id: holiday.project_id,
+        daysUntil,
       };
     })
     .filter(
-      (birthday): birthday is NonNullable<typeof birthday> =>
-        birthday !== null
+      (holiday): holiday is NonNullable<typeof holiday> =>
+        holiday !== null
     )
     .sort((a, b) => a.daysUntil - b.daysUntil)
     .slice(0, 5);
@@ -654,14 +674,14 @@ export default async function DashboardPage({
             </div>
           </div>
 
-          {/* Recent joinings, birthdays and quick actions */}
+          {/* Recent joinings, upcoming holidays and quick actions */}
           <div className="grid grid-cols-1 items-stretch gap-5 xl:grid-cols-12">
             <div className="min-w-0 xl:col-span-5">
               <RecentJoiningsWidget employees={recentJoinings} />
             </div>
 
             <div className="min-w-0 xl:col-span-3">
-              <UpcomingBirthdaysWidget birthdays={upcomingBirthdays} />
+              <UpcomingHolidaysWidget holidays={upcomingHolidays} />
             </div>
 
             <div className="min-w-0 xl:col-span-4">
