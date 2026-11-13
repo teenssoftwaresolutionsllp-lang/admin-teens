@@ -8,6 +8,8 @@ import {
   MasterPayrollEmployee,
   calculateEmployeePayrollDays,
   MasterPayrollRow,
+  RawAttendanceLog,
+  RawLeaveRequest,
 } from "@/lib/payroll/master-payroll-engine";
 
 export const dynamic = "force-dynamic";
@@ -135,10 +137,24 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Failed to load employees" }, { status: 500 });
     }
 
-    const employees = (employeeRows ?? []).map((emp: any) => ({
-      ...emp,
-      department: emp.department?.name || "General",
-    })) as MasterPayrollEmployee[];
+    type RawEmployeeItem = Omit<MasterPayrollEmployee, "department"> & {
+      department?: { name?: string | null } | string | null;
+    };
+
+    const employees = (employeeRows ?? []).map((emp) => {
+      const e = emp as unknown as RawEmployeeItem;
+      const deptName =
+        typeof e.department === "object" && e.department !== null
+          ? (e.department as { name?: string | null }).name || "General"
+          : typeof e.department === "string"
+            ? e.department
+            : "General";
+
+      return {
+        ...e,
+        department: deptName,
+      };
+    }) as MasterPayrollEmployee[];
 
     // 2. Fetch existing saved payslips for this period
     const { data: payslipRows, error: payslipsError } = await admin
@@ -151,9 +167,9 @@ export async function GET(request: NextRequest) {
       console.error("[Master Register] Payslip query error:", payslipsError);
     }
 
-    const payslipsByEmployee = new Map<string, any>();
+    const payslipsByEmployee = new Map<string, Record<string, unknown>>();
     for (const p of payslipRows ?? []) {
-      payslipsByEmployee.set(p.employee_id, p);
+      payslipsByEmployee.set(p.employee_id, p as Record<string, unknown>);
     }
 
     // 3. Fetch attendance logs and approved leaves to calculate LOP
@@ -196,8 +212,8 @@ export async function GET(request: NextRequest) {
     // 4. Full month absence: 0 present days & 0 paid leaves -> all calendar days count as LOP (0 pay days).
     const lopDaysByEmployee = new Map<string, number>();
 
-    const safeAttendanceLogs = (attendanceLogs ?? []) as any[];
-    const safeLeaveRequests = (leaveRequests ?? []) as any[];
+    const safeAttendanceLogs = (attendanceLogs ?? []) as RawAttendanceLog[];
+    const safeLeaveRequests = (leaveRequests ?? []) as RawLeaveRequest[];
 
     for (const emp of employees) {
       const empLop = calculateEmployeeLopDays(
@@ -253,26 +269,26 @@ export async function GET(request: NextRequest) {
       let adjustments;
       if (existingSlip) {
         const earningsBreakup = Array.isArray(existingSlip.earnings_breakup)
-          ? existingSlip.earnings_breakup
+          ? (existingSlip.earnings_breakup as Array<Record<string, unknown>>)
           : [];
         const deductionsBreakup = Array.isArray(existingSlip.deductions_breakup)
-          ? existingSlip.deductions_breakup
+          ? (existingSlip.deductions_breakup as Array<Record<string, unknown>>)
           : [];
 
         const arrearsItem = earningsBreakup.find(
-          (b: any) => b.code === "ARREARS" || b.name === "Arrears"
+          (b) => b.code === "ARREARS" || b.name === "Arrears"
         );
         const advanceItem = deductionsBreakup.find(
-          (b: any) => b.code === "ADVANCE" || b.name === "Advance"
+          (b) => b.code === "ADVANCE" || b.name === "Advance"
         );
         const tdsItem = deductionsBreakup.find(
-          (b: any) => b.code === "TDS" || b.name === "TDS"
+          (b) => b.code === "TDS" || b.name === "TDS"
         );
         const remarkItem = deductionsBreakup.find(
-          (b: any) => b.type === "remark" || b.code === "REMARK"
+          (b) => b.type === "remark" || b.code === "REMARK"
         );
         const hasRecoveredStatutory = deductionsBreakup.some(
-          (b: any) => b.code === "STATUTORY_RECOVERY"
+          (b) => b.code === "STATUTORY_RECOVERY"
         );
 
         adjustments = {
@@ -284,7 +300,7 @@ export async function GET(request: NextRequest) {
             existingSlip.lop_days !== undefined && Number(existingSlip.lop_days) > 0
               ? Number(existingSlip.lop_days)
               : calculatedLop,
-          remarks: remarkItem?.text || existingSlip.remarks || "",
+          remarks: String(remarkItem?.text || existingSlip.remarks || ""),
           recoverPendingStatutory: hasRecoveredStatutory,
         };
       }

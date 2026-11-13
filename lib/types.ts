@@ -304,20 +304,23 @@ export interface EmployeeDocument {
   aadhaar_number?: string | null;
   pan_number?: string | null;
   passport_number?: string | null;
+  bank_name?: string | null;
+  bank_account_number?: string | null;
+  ifsc_code?: string | null;
 
 
   created_at?: string;
   updated_at?: string;
   uploaded_at?: string;
   
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export interface ProfileChangeRequest {
   id: string;
   employee_id: string;
-  requested_changes: Record<string, any>;
-  previous_values?: Record<string, any>;
+  requested_changes: Record<string, unknown>;
+  previous_values?: Record<string, unknown>;
   status: 'pending' | 'approved' | 'rejected';
   rejection_reason?: string | null;
   reviewed_by?: string | null;

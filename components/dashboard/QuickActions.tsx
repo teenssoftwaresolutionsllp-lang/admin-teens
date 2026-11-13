@@ -2,7 +2,6 @@ import Link from "next/link";
 import {
   UserPlus,
   BriefcaseBusiness,
-  ClipboardCheck,
   ClipboardList,
   FileText,
   ChartNoAxesCombined,

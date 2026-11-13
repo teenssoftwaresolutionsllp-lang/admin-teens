@@ -15,8 +15,9 @@ export async function POST(request: Request) {
 
     const project = await DataStore.saveProject(body);
     return NextResponse.json({ success: true, project }, { status: 201 });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Project creation error:", error);
-    return NextResponse.json({ error: error.message || "Failed to create project" }, { status: 500 });
+    const message = error instanceof Error ? error.message : "Failed to create project";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

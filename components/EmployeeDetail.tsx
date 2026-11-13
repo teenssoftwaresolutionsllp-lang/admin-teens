@@ -3,6 +3,7 @@
 import { Employee, EmployeeDocument, UserRole } from "@/lib/types";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase-browser";
+import Image from "next/image";
 import { toast } from "react-hot-toast";
 import { User, MapPin, Briefcase, CreditCard, FileText, Gift, Edit, DeleteIcon, LaptopMinimal, Phone, Eye, EyeOff, Copy, File } from "lucide-react";
 import Link from "next/link";
@@ -15,12 +16,34 @@ interface EmployeeDetailProps {
   role: UserRole;
 }
 
+interface GratuityInfo {
+  serviceYearsText?: string;
+  gratuityServiceYears?: number;
+  monthlyBasic?: number;
+  gratuity5YearTaken?: boolean;
+  gratuity5YearTakenDate?: string | null;
+  gratuity5YearTakenAmount?: number | null;
+  gratuityAmount?: number;
+  isEligible?: boolean;
+  gratuityAmountFormatted?: string;
+  [key: string]: unknown;
+}
+
+function DetailTile({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="bg-slate-50/70 p-4 rounded-xl border border-slate-100/90">
+      <dt className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">{label}</dt>
+      <dd className="text-sm font-semibold text-slate-900 break-words">{value || "N/A"}</dd>
+    </div>
+  );
+}
+
 export default function EmployeeDetail({ employee, documents, role }: EmployeeDetailProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
   const [revealedFields, setRevealedFields] = useState<Record<string, boolean>>({});
-  const [gratuity, setGratuity] = useState<any>(null);
+  const [gratuity, setGratuity] = useState<GratuityInfo | null>(null);
   const [gratuityLoading, setGratuityLoading] = useState(false);
   const [gratuityProcessing, setGratuityProcessing] = useState(false);
   const [gratuityConfirm, setGratuityConfirm] = useState(false);
@@ -162,10 +185,11 @@ export default function EmployeeDetail({ employee, documents, role }: EmployeeDe
       if (!response.ok) {
         throw new Error(result.error || "Failed to load gratuity");
       }
-      setGratuity(result);
-    } catch (error: any) {
+      setGratuity(result as GratuityInfo);
+    } catch (error: unknown) {
       console.error("Gratuity load error:", error);
-      toast.error(error.message || "Failed to load gratuity");
+      const msg = error instanceof Error ? error.message : "Failed to load gratuity";
+      toast.error(msg);
     } finally {
       setGratuityLoading(false);
     }
@@ -173,7 +197,8 @@ export default function EmployeeDetail({ employee, documents, role }: EmployeeDe
 
   useEffect(() => {
     if (activeTab === 7) {
-      loadGratuity();
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      void loadGratuity();
     }
   }, [activeTab]);
 
@@ -380,9 +405,10 @@ const getEmployeeStatusLabel = () => {
       setExitDocument(null);
 
       router.refresh();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Exit employee error:", error);
-      toast.error(error.message || "Failed to process employee exit");
+      const msg = error instanceof Error ? error.message : "Failed to process employee exit";
+      toast.error(msg);
     } finally {
       setIsLoading(false);
     }
@@ -439,8 +465,9 @@ const getEmployeeStatusLabel = () => {
       setEarlyReleaseDate("");
       setEarlyReleaseReason("");
       router.refresh();
-    } catch (error: any) {
-      toast.error(error.message || "Failed to record early release");
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : "Failed to record early release";
+      toast.error(msg);
     } finally {
       setIsLoading(false);
     }
@@ -483,8 +510,9 @@ const getEmployeeStatusLabel = () => {
       toast.success("Notice period completed successfully");
       setShowCompleteNoticeConfirm(false);
       router.refresh();
-    } catch (error: any) {
-      toast.error(error.message || "Failed to complete notice period");
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : "Failed to complete notice period";
+      toast.error(msg);
     } finally {
       setIsLoading(false);
     }
@@ -509,13 +537,6 @@ const getEmployeeStatusLabel = () => {
 
     ...(!isExitStatus ? [{ name: "Terminated", icon: DeleteIcon }] : []),
   ];
-
-  const DetailTile = ({ label, value }: { label: string; value: React.ReactNode }) => (
-    <div className="bg-slate-50/70 p-4 rounded-xl border border-slate-100/90">
-      <dt className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">{label}</dt>
-      <dd className="text-sm font-semibold text-slate-900 break-words">{value || "N/A"}</dd>
-    </div>
-  );
 
   const handleTakeGratuity = () => {
     setGratuityConfirm(true);
@@ -558,17 +579,16 @@ const getEmployeeStatusLabel = () => {
           minimumFractionDigits: 2,
         })} processed successfully.`,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(
         "Gratuity processing error:",
         error
       );
 
+      const msg = error instanceof Error ? error.message : "Failed to process gratuity";
       setGratuityMessage({
         type: "error",
-        message:
-          error.message ||
-          "Failed to process gratuity",
+        message: msg,
       });
     } finally {
       setGratuityProcessing(false);
@@ -583,7 +603,7 @@ const getEmployeeStatusLabel = () => {
           {/* Employee Profile Photo */}
           <div className="w-18 h-18 sm:w-20 sm:h-20 overflow-hidden rounded-2xl bg-indigo-100 shadow-md shadow-indigo-100">
             {employee.profile_photo_url ? (
-              <img
+              <Image
                 src={employee.profile_photo_url}
                 alt={`${employee.first_name} ${employee.last_name}`}
                 className="h-full w-full object-cover"
@@ -1140,14 +1160,14 @@ const getEmployeeStatusLabel = () => {
                         className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase border ${
                           gratuity.gratuity5YearTaken
                             ? "bg-blue-50 text-blue-700 border-blue-200"
-                            : gratuity.gratuityServiceYears >= 5
+                            : (gratuity.gratuityServiceYears ?? 0) >= 5
                             ? "bg-emerald-50 text-emerald-700 border-emerald-200"
                             : "bg-slate-50 text-slate-500 border-slate-200"
                         }`}
                       >
                         {gratuity.gratuity5YearTaken
                           ? "Taken"
-                          : gratuity.gratuityServiceYears >= 5
+                          : (gratuity.gratuityServiceYears ?? 0) >= 5
                           ? "Available"
                           : "Not Eligible"}
                       </span>
@@ -1160,7 +1180,7 @@ const getEmployeeStatusLabel = () => {
                       <DetailTile
                         label="Current Gratuity Amount"
                         value={
-                          gratuity.gratuityServiceYears >= 5
+                          (gratuity.gratuityServiceYears ?? 0) >= 5
                             ? `₹${Number(
                                 gratuity.gratuityAmount
                               ).toLocaleString("en-IN", {
@@ -1174,7 +1194,7 @@ const getEmployeeStatusLabel = () => {
                       <DetailTile
                         label="Calculation Service"
                         value={
-                          gratuity.gratuityServiceYears >= 5
+                          (gratuity.gratuityServiceYears ?? 0) >= 5
                             ? `${gratuity.gratuityServiceYears} ${
                                 gratuity.gratuityServiceYears === 1
                                   ? "Year"
@@ -1190,7 +1210,7 @@ const getEmployeeStatusLabel = () => {
                         value={
                           gratuity.gratuity5YearTaken
                             ? "Taken"
-                            : gratuity.gratuityServiceYears >= 5
+                            : (gratuity.gratuityServiceYears ?? 0) >= 5
                             ? "Available"
                             : "Not Eligible"
                         }
@@ -1224,7 +1244,7 @@ const getEmployeeStatusLabel = () => {
                         TAKE GRATUITY
                     =================================================== */}
                     {!gratuity.gratuity5YearTaken &&
-                      gratuity.gratuityServiceYears >= 5 &&
+                      (gratuity.gratuityServiceYears ?? 0) >= 5 &&
                       (role === "hr" || role === "ceo") && (
                         <button
                           type="button"
@@ -1401,7 +1421,7 @@ const getEmployeeStatusLabel = () => {
                       </h4>
 
                       <p className="text-sm text-slate-600">
-                        The employee's final exit date will be{" "}
+                        The employee&apos;s final exit date will be{" "}
                         <strong>{formatDate(plannedLastWorkingDate)}</strong>.
                       </p>
 

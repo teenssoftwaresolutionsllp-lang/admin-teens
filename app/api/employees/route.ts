@@ -398,7 +398,7 @@ export async function POST(request: Request) {
           } catch (pe) {
             console.warn('Profile role warning:', pe);
           }
-        } else if (createError && (createError.message.includes('already exists') || (createError as any).status === 422)) {
+        } else if (createError && (createError.message.includes('already exists') || (createError as { status?: number }).status === 422)) {
           // Look up existing user
           const { data: existingList } = await adminClient.auth.admin.listUsers();
           const found = existingList?.users?.find((u) => u.email === employeeData.email);
@@ -418,7 +418,7 @@ export async function POST(request: Request) {
   });
 
   // Save employee using DataStore and adminClient (bypassing RLS issues)
-  const saved = await DataStore.createEmployee(employeeData as any);
+  const saved = await DataStore.createEmployee(employeeData as Parameters<typeof DataStore.createEmployee>[0]);
 
   // =========================================================
   // INITIALIZE EMPLOYEE SALARY COMPONENTS
@@ -500,9 +500,10 @@ export async function POST(request: Request) {
       credentials_provisioned: !!authUserId,
       login_email: employeeData.email,
     }, { status: 201 });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('API Error creating employee:', error);
-    return NextResponse.json({ error: error.message || 'Failed to create employee' }, { status: 500 });
+    const message = error instanceof Error ? error.message : 'Failed to create employee';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 

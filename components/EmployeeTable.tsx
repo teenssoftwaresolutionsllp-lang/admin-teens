@@ -150,7 +150,6 @@ const formatOptionLabel = (value: string) =>
 export default function EmployeeTable({
   employees,
   departments,
-  role,
 }: EmployeeTableProps) {
   const searchParams = useSearchParams()
   const { dashboardFilter,clearDashboardFilter } = useEmployeeDashboardFilter();
@@ -213,19 +212,6 @@ export default function EmployeeTable({
   const [isDownloading, setIsDownloading] = useState(false)
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 10;
-
-  const statusLabels: Record<string, string> = {
-    all: "All Status",
-    joining: "Joining",
-    active: "Active",
-    terminated: "Terminated",
-    laid_off: "Layoff",
-    notice_period: "Notice Period",
-    notice_completed: "Notice Completed",
-    early_release: "Early Release",
-    resigned: "Resigned",
-    on_notice: "On Notice",
-  }
 
   const showExitDetails = [
     "terminated",
@@ -335,6 +321,7 @@ export default function EmployeeTable({
 
   useEffect(() => {
     if (dashboardFilter) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setStatusFilter(dashboardFilter.status);
       setDeptFilter(dashboardFilter.departmentId ?? "unassigned");
       setCurrentPage(1);
@@ -358,6 +345,7 @@ export default function EmployeeTable({
 
     if (!departmentFromUrl) {
       if (sidebarStatus === "all") {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setDeptFilter("all");
       }
       return;
@@ -1065,6 +1053,7 @@ export default function EmployeeTable({
 
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setCurrentPage(1);
   }, [
     searchTerm,

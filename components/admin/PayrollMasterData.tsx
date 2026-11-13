@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { exportToExcel } from "@/lib/excel/exportToExcel";
+import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
   Play,
@@ -20,17 +21,12 @@ import {
   Sliders,
   Building2,
   Calendar,
-  Check,
   ChevronDown,
   ChevronUp,
 } from "lucide-react";
 import StandardPayslip from "@/components/payroll/StandardPayslip";
-import { numberToWordsIndian } from "@/lib/calculations";
 import {MasterPayrollRow,MasterRegisterTotals} from "@/lib/payroll/master-payroll-engine";
 
-interface Props {
-  role: "ceo" | "hr" | "admin";
-}
 
 const MONTHS = [
   "January",
@@ -48,11 +44,26 @@ const MONTHS = [
 ];
 
 interface ColumnDef {
-  key: string;
+  key: keyof MasterPayrollRow;
   label: string;
   currency?: boolean;
   sticky?: boolean;
 }
+
+type SalaryComponent = {
+  id: string;
+  name: string;
+  code: string;
+  type: "earning" | "deduction";
+  calculation_type:
+    | "fixed"
+    | "percentage_of_basic"
+    | "percentage_of_gross";
+  value: number;
+  affects_lop: boolean;
+  is_active: boolean;
+  description: string | null;
+};
 
 export const REGISTER_COLUMNS: ColumnDef[] = [
   { key: "employee_code", label: "Emp. Code", sticky: true },
@@ -100,7 +111,7 @@ function formatRupee(val: number | null | undefined): string {
   });
 }
 
-export default function PayrollMasterData({ role }: Props) {
+export default function PayrollMasterData() {
   const today = new Date();
   const currentMonth = today.getMonth() + 1;
   const currentYear = today.getFullYear();
@@ -139,9 +150,9 @@ export default function PayrollMasterData({ role }: Props) {
   const [savingSaturday, setSavingSaturday] = useState<string | null>(null);
 
   // Salary Components state
-  const [salaryComponents, setSalaryComponents] = useState<any[]>([]);
+  const [salaryComponents, setSalaryComponents] = useState<SalaryComponent[]>([]);
   const [loadingComponents, setLoadingComponents] = useState(false);
-  const [editingComponent, setEditingComponent] = useState<any | null>(null);
+  const [editingComponent, setEditingComponent] = useState<SalaryComponent | null>(null);
   const [savingComponent, setSavingComponent] = useState(false);
 
   // Edit adjustments modal state
@@ -178,9 +189,10 @@ export default function PayrollMasterData({ role }: Props) {
       setRows(data.rows || []);
       setTotals(data.totals || null);
       setHasSavedRun(Boolean(data.hasSavedRun));
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "An unexpected error occurred";
       console.error("Master register load error:", err);
-      setError(err?.message || "Failed to load payroll master data.");
+      setError(message || "Failed to load payroll master data.");
       setRows([]);
       setTotals(null);
     } finally {
@@ -246,17 +258,25 @@ export default function PayrollMasterData({ role }: Props) {
   };
 
   useEffect(() => {
-    if (activeTab === "register") {
-      void loadRegister();
-    } else if (activeTab === "components") {
-      void loadSalaryComponents();
-    }
+    const timer = window.setTimeout(() => {
+      if (activeTab === "register") {
+        void loadRegister();
+      } else if (activeTab === "components") {
+        void loadSalaryComponents();
+      }
+    }, 0);
+
+    return () => window.clearTimeout(timer);
   }, [activeTab, loadRegister, loadSalaryComponents]);
 
   useEffect(() => {
-    if (showCalendarWidget) {
+    if (!showCalendarWidget) return;
+
+    const timer = window.setTimeout(() => {
       void loadCalendarSchedule();
-    }
+    }, 0);
+
+    return () => window.clearTimeout(timer);
   }, [showCalendarWidget, loadCalendarSchedule]);
 
   // Compute unique departments for dropdown
@@ -336,9 +356,10 @@ export default function PayrollMasterData({ role }: Props) {
         setTotals(data.totals);
       }
       setHasSavedRun(true);
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "An unexpected error occurred";
       console.error("Run all payroll error:", err);
-      setError(err?.message || "Failed to run payroll for all employees.");
+      setError(message || "Failed to run payroll for all employees.");
     } finally {
       setRunningAll(false);
     }
@@ -500,9 +521,10 @@ export default function PayrollMasterData({ role }: Props) {
 
       setEditingRow(null);
       setSuccessMessage(`Adjustments saved for ${editingRow.employee_name}.`);
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "An unexpected error occurred";
       console.error("Save adjustments error:", err);
-      setError(err?.message || "Failed to update employee adjustments.");
+      setError(message || "Failed to update employee adjustments.");
     } finally {
       setSavingAdjustments(false);
     }
@@ -532,8 +554,9 @@ export default function PayrollMasterData({ role }: Props) {
       await loadSalaryComponents();
       await loadRegister();
       setSuccessMessage("Salary component updated successfully.");
-    } catch (err: any) {
-      setError(err?.message || "Failed to update salary component.");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "An unexpected error occurred";
+      setError(message || "Failed to update salary component.");
     } finally {
       setSavingComponent(false);
     }
@@ -985,9 +1008,9 @@ export default function PayrollMasterData({ role }: Props) {
                         </td>
 
                         {REGISTER_COLUMNS.map((col, colIdx) => {
-                          const rawVal = (row as any)[col.key];
+                          const rawVal = row [col.key];
                           const isCurrency = col.currency;
-                          let cellContent = rawVal ?? "—";
+                          let cellContent: ReactNode = rawVal ?? "—";
 
                           if (col.key === "employee_name") {
                             cellContent = (
@@ -1021,7 +1044,7 @@ export default function PayrollMasterData({ role }: Props) {
                                 "0.00"
                               );
                           } else if (isCurrency) {
-                            cellContent = formatRupee(rawVal);
+                            cellContent = typeof rawVal === "number" ? formatRupee(rawVal) : "—";
                           }
 
                           return (
@@ -1250,9 +1273,8 @@ export default function PayrollMasterData({ role }: Props) {
                       </td>
                       <td className="px-3 py-2.5 text-center font-mono font-bold text-slate-900">
                         {comp.calculation_type === "percentage_of_basic" ||
-                        comp.calculation_type === "percentage_of_gross" ||
-                        comp.calculation_type === "percentage_of_ctc"
-                          ? `${comp.value}%`
+                        comp.calculation_type === "percentage_of_gross" 
+                        ? `${comp.value}%`
                           : `₹${Number(comp.value || 0).toLocaleString("en-IN")}`}
                       </td>
                       <td className="px-3 py-2.5 text-center">
@@ -1322,7 +1344,7 @@ export default function PayrollMasterData({ role }: Props) {
                   step="0.01"
                   value={editingComponent.value}
                   onChange={(e) =>
-                    setEditingComponent({ ...editingComponent, value: e.target.value })
+                    setEditingComponent({ ...editingComponent, value: Number(e.target.value), })
                   }
                   className="h-9 w-full rounded border border-slate-300 px-3 outline-none focus:border-indigo-600"
                 />
@@ -1335,7 +1357,7 @@ export default function PayrollMasterData({ role }: Props) {
                   onChange={(e) =>
                     setEditingComponent({
                       ...editingComponent,
-                      calculation_type: e.target.value,
+                      calculation_type: e.target.value as SalaryComponent["calculation_type"],
                     })
                   }
                   className="h-9 w-full rounded border border-slate-300 px-3 outline-none focus:border-indigo-600"

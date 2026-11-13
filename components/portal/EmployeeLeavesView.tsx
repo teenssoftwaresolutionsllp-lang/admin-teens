@@ -1,9 +1,8 @@
-
 "use client";
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   Employee,
   EmployeeLeaveBalance,
@@ -200,24 +199,27 @@ export default function EmployeeLeavesView({
 
   const genderLoading = false;
 
-  const getLeaveTypeId = (...namesOrCodes: string[]) => {
-    const found = leaveTypes.find((type) => {
-      const typeName = type.name?.trim().toLowerCase();
-      const typeCode = type.code?.trim().toLowerCase();
+  const getLeaveTypeId = useCallback(
+    (...namesOrCodes: string[]) => {
+      const found = leaveTypes.find((type) => {
+        const typeName = type.name?.trim().toLowerCase();
+        const typeCode = type.code?.trim().toLowerCase();
 
-      return namesOrCodes.some((value) => {
-        const searchValue = value.trim().toLowerCase();
+        return namesOrCodes.some((value) => {
+          const searchValue = value.trim().toLowerCase();
 
-        return (
-          typeName === searchValue ||
-          typeCode === searchValue ||
-          typeName?.includes(searchValue)
-        );
+          return (
+            typeName === searchValue ||
+            typeCode === searchValue ||
+            typeName?.includes(searchValue)
+          );
+        });
       });
-    });
 
-    return found?.id ?? "";
-  };
+      return found?.id ?? "";
+    },
+    [leaveTypes]
+  );
 
   const leaveTypeOptions = useMemo<LeaveOption[]>(() => {
     const options: LeaveOption[] = [
@@ -266,12 +268,15 @@ export default function EmployeeLeavesView({
     }
 
     return options.filter((option) => Boolean(option.id));
-  }, [leaveTypes, isFemale, isMale]);
+  }, [getLeaveTypeId, isFemale, isMale]);
 
-  const getDefaultLeaveTypeId = () =>
-    getLeaveTypeId("SL", "Sick Leave") ||
-    leaveTypeOptions[0]?.id ||
-    "";
+  const getDefaultLeaveTypeId = useCallback(
+    () =>
+      getLeaveTypeId("SL", "Sick Leave") ||
+      leaveTypeOptions[0]?.id ||
+      "",
+    [getLeaveTypeId, leaveTypeOptions]
+  );
 
   const [formData, setFormData] = useState({
     leaveTypeId: "",
@@ -283,7 +288,12 @@ export default function EmployeeLeavesView({
     specialLeaveDuration: "",
   });
 
-  useEffect(() => {
+  const [previousLeaveTypeOptions, setPreviousLeaveTypeOptions] =
+    useState(leaveTypeOptions);
+
+  if (previousLeaveTypeOptions !== leaveTypeOptions) {
+    setPreviousLeaveTypeOptions(leaveTypeOptions);
+
     setFormData((previous) => {
       const selectedOptionExists = leaveTypeOptions.some(
         (option) => option.id === previous.leaveTypeId
@@ -302,7 +312,7 @@ export default function EmployeeLeavesView({
         endDate: previous.startDate,
       };
     });
-  }, [leaveTypeOptions]);
+  }
 
   const selectedType = useMemo(
     () => leaveTypes.find((type) => type.id === formData.leaveTypeId),
@@ -404,23 +414,6 @@ export default function EmployeeLeavesView({
     return totalDays;
   };
 
-  const openLeaveModal = () => {
-    setSuccessMsg(null);
-    setAlertMessage(null);
-    setSupportingDocument(null);
-
-    setFormData({
-      leaveTypeId: getDefaultLeaveTypeId(),
-      startDate: defaultLeaveDate,
-      endDate: defaultLeaveDate,
-      isHalfDay: false,
-      leaveDuration: "",
-      reason: "",
-      specialLeaveDuration: "",
-    });
-
-    setIsModalOpen(true);
-  };
 
   const closeLeaveModal = () => {
     if (submitting) return;

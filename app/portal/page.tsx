@@ -1,4 +1,3 @@
-
 import { createClient } from "@/lib/supabase-server";
 import { DataStore } from "@/lib/data-store";
 import ClockInWidget from "@/components/portal/ClockInWidget";
@@ -114,20 +113,20 @@ export default async function EmployeePortalPage() {
   };
 
   // Get employee's assigned shift.
-  const employeeData = employee as any;
-  const projectData = project as any;
+  const employeeData = employee as unknown as Record<string, unknown>;
+  const projectData = project as unknown as Record<string, unknown> | null;
 
   const employeeShift =
     employeeData?.shift_type ??
     employeeData?.assigned_shift ??
-    employeeData?.shift?.shift_type ??
-    employeeData?.shift?.name ??
+    (employeeData?.shift as Record<string, unknown> | undefined)?.shift_type ??
+    (employeeData?.shift as Record<string, unknown> | undefined)?.name ??
     employeeData?.shift ??
     projectData?.shift_type ??
     projectData?.shift_name ??
     "";
 
-  const employeeShiftName = normalizeShift(employeeShift);
+  const employeeShiftName = normalizeShift(String(employeeShift ?? ""));
 
   // Find the holiday calendar assigned to this shift.
   const holidayCalendar = employeeShiftName
@@ -198,7 +197,7 @@ export default async function EmployeePortalPage() {
   const currentMonth = now.getMonth();
   const currentYear = now.getFullYear();
 
-  const presentThisMonth = attendanceLogs.filter((item: any) => {
+  const presentThisMonth = attendanceLogs.filter((item: { attendance_date?: string; date?: string; created_at?: string; status?: string }) => {
     const rawDate =
       item.attendance_date || item.date || item.created_at;
 
@@ -229,7 +228,7 @@ export default async function EmployeePortalPage() {
       return total + Math.min(availableDays, annualAllocation);
     }, 0);
 
-  const pendingRequests = leaveRequests.filter((item: any) =>
+  const pendingRequests = leaveRequests.filter((item: { status?: string }) =>
     ["pending", "submitted", "under_review"].includes(
       String(item.status || "").toLowerCase()
     )
@@ -256,10 +255,11 @@ export default async function EmployeePortalPage() {
     return `${String(formattedHour).padStart(2, "0")}:${minutes || "00"} ${period}`;
   };
 
-  const gracePeriod =
+  const gracePeriod = Number(
     projectData?.grace_period_minutes ??
     projectData?.grace_period ??
-    30;
+    30
+  );
 
   const cardClass =
     "rounded-2xl border border-slate-100 bg-white shadow-[0_3px_14px_rgba(15,23,42,0.04)]";
@@ -278,7 +278,7 @@ export default async function EmployeePortalPage() {
           </h1>
 
           <p className="mt-1 text-xs text-slate-500">
-            Welcome back! Here's your overview for today.
+            Welcome back! Here&apos;s your overview for today.
           </p>
 
           <p className="mt-1 text-[11px] text-indigo-500">
@@ -394,7 +394,7 @@ export default async function EmployeePortalPage() {
           <div className="flex items-center justify-between border-b border-slate-100 px-4 py-4">
             <div>
               <h2 className="text-sm font-bold text-slate-800">
-                Today's Attendance
+                Today&apos;s Attendance
               </h2>
               <p className="mt-1 text-[11px] text-slate-400">
                 Daily login and logout

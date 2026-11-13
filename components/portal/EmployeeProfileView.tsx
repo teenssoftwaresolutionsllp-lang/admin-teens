@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { toast } from "react-hot-toast";
+import Image from "next/image";
 import {
   useEffect,
   useRef,
@@ -34,7 +35,6 @@ import {
   XCircle,
   Loader2,
   Phone,
-  Building,
   UserRound,
   MapPinned,
   Upload,
@@ -52,6 +52,57 @@ interface EmployeeProfileViewProps {
   pendingRequest: ProfileChangeRequest | null;
   departments: Department[];
 }
+
+type EmployeeProfileData = Employee & {
+  full_name?: string | null;
+  name?: string | null;
+  role?: string | null;
+  department_name?: string | null;
+  communication_address?: string | null;
+  communication_city?: string | null;
+  communication_state?: string | null;
+  communication_pincode?: string | null;
+  annual_ctc?: number | string | null;
+  total_experience?: string | null;
+  emergency_contact_2_name?: string | null;
+  emergency_contact_2_phone?: string | null;
+  emergency_contact_2_relation?: string | null;
+
+  emergency_contact_3_name?: string | null;
+  emergency_contact_3_phone?: string | null;
+  emergency_contact_3_relation?: string | null;
+  pf?: string | null;
+  esi?: string | null;
+  pt?: string | null;
+  tds?: string | null;
+};
+
+type PeripheralItem = {
+  type?: string | null;
+  serial?: string | null;
+};
+
+type ExtractedDocumentDetails = {
+  aadhar_number?: string;
+  pan_number?: string;
+  passport_number?: string;
+  bank_name?: string;
+  bank_account_number?: string;
+  ifsc_code?: string;
+};
+
+type UploadApiResponse = {
+  error?: string;
+  message?: string;
+  document?: EmployeeDocument;
+  extractedDetails?: ExtractedDocumentDetails;
+};
+
+type ProfileChangeApiResponse = {
+  error?: string;
+  request?: ProfileChangeRequest;
+} & Partial<ProfileChangeRequest>;
+
 
 type EditFormData = {
   phone: string;
@@ -208,8 +259,7 @@ export default function EmployeeProfileView({
   pendingRequest: initialPendingRequest,
   departments,
 }: EmployeeProfileViewProps) {
-  const employeeData =
-    employee as Employee & Record<string, any>;
+  const employeeData = employee as EmployeeProfileData;
 
   const employeeFullName =
     employeeData.full_name ||
@@ -342,13 +392,73 @@ export default function EmployeeProfileView({
      OPEN PROFILE EDIT
   ============================================================ */
 
-  const openEditSection = (
-    section: EditSection
-  ) => {
+  const openEditSection = (section: EditSection) => {
+    const data = employeeData;
+
+    setEditFormData({
+      phone: data.phone || "",
+      date_of_birth: data.date_of_birth || "",
+      gender: data.gender || "",
+      blood_group: data.blood_group || "",
+      marital_status: data.marital_status || "single",
+
+      address: data.permanent_address || "",
+      city: data.permanent_city || "",
+      state: data.permanent_state || "",
+      pincode: data.permanent_pincode || "",
+
+      communication_address: data.communication_address || "",
+      communication_city: data.communication_city || "",
+      communication_state: data.communication_state || "",
+      communication_pincode: data.communication_pincode || "",
+
+      emergency_contact_name: data.emergency_contact_name || "",
+      emergency_contact_phone: data.emergency_contact_phone || "",
+      emergency_contact_relation: data.emergency_contact_relation || "",
+
+      emergency_contact_2_name: data.emergency_contact_2_name || "",
+      emergency_contact_2_phone: data.emergency_contact_2_phone || "",
+      emergency_contact_2_relation: data.emergency_contact_2_relation || "",
+
+      emergency_contact_3_name: data.emergency_contact_3_name || "",
+      emergency_contact_3_phone: data.emergency_contact_3_phone || "",
+      emergency_contact_3_relation: data.emergency_contact_3_relation || "",
+
+      department_id: data.department_id || "",
+      designation: data.designation || "",
+      probation_end_date: data.probation_end_date || "",
+      confirmation_date: data.confirmation_date || "",
+      reporting_manager: data.reporting_manager || "",
+      work_location: data.work_location || "",
+
+      bank_name: data.bank_name || "",
+      bank_account_number: data.bank_account_number || "",
+      ifsc_code: data.ifsc_code || "",
+      pan_number: data.pan_number || "",
+      aadhar_number: data.aadhar_number || "",
+      passport_number: data.passport_number || "",
+
+      pf: data.uan_number || "",
+      esi: data.esi_number || "",
+      pt: data.pt_number || "",
+      tds: data.tds_eligible ? "Yes" : "",
+
+      accessory_type: data.accessory_type || "",
+      accessory_serial: data.accessory_serial || "",
+
+      peripherals: Array.isArray(data.peripherals)
+        ? data.peripherals.map((item) => ({
+            type: item.type || "",
+            serial: item.serial || "",
+          }))
+        : [],
+    });
+
     setSuccessMessage(null);
     setErrorMessage(null);
     setDocumentError(null);
     setEditSection(section);
+
     sensitiveDocumentIdsRef.current = {};
     setSensitiveDocumentIds({});
     setIsEditModalOpen(true);
@@ -365,150 +475,6 @@ export default function EmployeeProfileView({
     setErrorMessage(null);
   };
 
-  /* ============================================================
-     RESET EDIT FORM
-  ============================================================ */
-
-  useEffect(() => {
-    const data =
-      employee as Employee & Record<string, any>;
-
-    setEditFormData({
-      phone: data.phone || "",
-
-      date_of_birth:
-        data.date_of_birth || "",
-
-      gender:
-        data.gender || "",
-
-      blood_group:
-        data.blood_group || "",
-
-      marital_status:
-        data.marital_status || "single",
-
-      address:
-        data.permanent_address || "",
-
-      city:
-        data.permanent_city || "",
-
-      state:
-        data.permanent_state || "",
-
-      pincode:
-        data.permanent_pincode || "",
-
-      communication_address:
-        data.communication_address || "",
-
-      communication_city:
-        data.communication_city || "",
-
-      communication_state:
-        data.communication_state || "",
-
-      communication_pincode:
-        data.communication_pincode || "",
-
-      emergency_contact_name:
-        data.emergency_contact_name || "",
-
-      emergency_contact_phone:
-        data.emergency_contact_phone || "",
-
-      emergency_contact_relation:
-        data.emergency_contact_relation || "",
-
-      emergency_contact_2_name:
-        data.emergency_contact_2_name || "",
-
-      emergency_contact_2_phone:
-        data.emergency_contact_2_phone || "",
-
-      emergency_contact_2_relation:
-        data.emergency_contact_2_relation || "",
-
-      emergency_contact_3_name:
-        data.emergency_contact_3_name || "",
-
-      emergency_contact_3_phone:
-        data.emergency_contact_3_phone || "",
-
-      emergency_contact_3_relation:
-        data.emergency_contact_3_relation || "",
-
-      department_id:
-        data.department_id || "",
-
-      designation:
-        data.designation || "",
-
-      probation_end_date:
-        data.probation_end_date || "",
-
-      confirmation_date:
-        data.confirmation_date || "",
-
-      reporting_manager:
-        data.reporting_manager || "",
-
-      work_location:
-        data.work_location || "",
-
-      bank_name:
-        data.bank_name || "",
-
-      bank_account_number:
-        data.bank_account_number || "",
-
-      ifsc_code:
-        data.ifsc_code || "",
-
-      pan_number:
-        data.pan_number || "",
-
-      aadhar_number:
-        data.aadhar_number || "",
-
-      passport_number:
-        data.passport_number || "",
-
-      pf:
-        data.uan_number || "",
-
-      esi:
-        data.esi_number || "",
-
-      pt:
-        data.pt_number || "",
-
-      tds:
-        data.tds_eligible ? "Yes" : "",
-
-      accessory_type:
-        data.accessory_type || "",
-
-      accessory_serial:
-        data.accessory_serial || "",
-
-      peripherals:
-        Array.isArray(data.peripherals)
-          ? data.peripherals.map((item: any) => ({
-              type: item?.type || "",
-              serial: item?.serial || "",
-            }))
-          : [],
-    });
-
-    setPendingRequest(
-      initialPendingRequest
-    );
-  }, [
-    employee,
-    initialPendingRequest,
-  ]);
 
   /* ============================================================
      PROFILE PHOTO SYNC
@@ -688,11 +654,17 @@ export default function EmployeeProfileView({
           throw new Error(message || "Failed to load documents");
         }
 
-        const data = await response.json();
+        const data = (await response.json()) as
+          | EmployeeDocument[]
+          | { documents?: EmployeeDocument[] };
 
         if (cancelled) return;
 
-        const loadedDocuments: EmployeeDocument[] = Array.isArray(data) ? data : Array.isArray(data?.documents) ? data.documents : [];
+        const loadedDocuments: EmployeeDocument[] = Array.isArray(data)
+          ? data
+          : Array.isArray(data.documents)
+            ? data.documents
+            : [];
 
         
         const latestByType = new Map<string, EmployeeDocument>();
@@ -888,15 +860,14 @@ export default function EmployeeProfileView({
           "content-type"
         ) || "";
 
-      let data: any;
+      let data: UploadApiResponse;
 
       if (
         contentType.includes(
           "application/json"
         )
       ) {
-        data =
-          await response.json();
+        data = (await response.json()) as UploadApiResponse;      
       } else {
         const text =
           await response.text();
@@ -921,7 +892,7 @@ export default function EmployeeProfileView({
       }
       closeEditModal();
 
-      const newDocument = data.document as EmployeeDocument;
+      const newDocument = data.document;
       const extracted = data?.extractedDetails;
 
       const sensitiveTypes = [
@@ -1091,17 +1062,18 @@ export default function EmployeeProfileView({
       setDocumentName("");
       setDocumentError(null);
       // setIsEditModalOpen(false);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(
         "Document upload error:",
         error
       );
 
       setDocumentError(
-        error?.message ||
-          "Failed to upload file"
+        error instanceof Error
+          ? error.message
+          : "Failed to upload file"
       );
-    } finally {
+    }finally {
       setIsUploading(false);
       e.target.value = "";
     }
@@ -1164,10 +1136,10 @@ export default function EmployeeProfileView({
       });
 
       const contentType = response.headers.get("content-type") || "";
-      let data: any = null;
+      let data: UploadApiResponse | null = null;
 
       if (contentType.includes("application/json")) {
-        data = await response.json();
+        data = (await response.json()) as UploadApiResponse;
       } else {
         const responseText = await response.text();
         throw new Error(
@@ -1375,8 +1347,8 @@ if (!profilePhotoUrl?.trim()) {
 
       const fieldMap: Record<
         string,
-        string
-      > = {
+        keyof EmployeeProfileData
+     > = {
         phone: "phone",
         date_of_birth: "date_of_birth",
         gender: "gender",
@@ -1534,7 +1506,7 @@ if (!profilePhotoUrl?.trim()) {
             const oldPeripherals =
               Array.isArray(oldValue)
                 ? oldValue.map(
-                    (item: any) => ({
+                    (item: PeripheralItem) => ({
                       type:
                         item?.type ||
                         "",
@@ -1548,7 +1520,7 @@ if (!profilePhotoUrl?.trim()) {
             const newPeripherals =
               Array.isArray(newValue)
                 ? newValue.map(
-                    (item: any) => ({
+                    (item: PeripheralItem) => ({
                       type:
                         item?.type ||
                         "",
@@ -1637,15 +1609,14 @@ if (!profilePhotoUrl?.trim()) {
           "content-type"
         ) || "";
 
-      let data: any = null;
+      let data: ProfileChangeApiResponse | null = null;
 
       if (
         contentType.includes(
           "application/json"
         )
       ) {
-        data =
-          await response.json();
+        data = (await response.json()) as ProfileChangeApiResponse;
       } else {
         const text =
           await response.text();
@@ -1668,7 +1639,13 @@ if (!profilePhotoUrl?.trim()) {
         );
       }
 
-      setPendingRequest(data?.request || data);
+      if (!data) {
+        throw new Error("Invalid profile change response.");
+      }
+
+      setPendingRequest(
+        data.request ?? (data as ProfileChangeRequest)
+      );
 
       sensitiveDocumentIdsRef.current = {};
       setSensitiveDocumentIds({});
@@ -1907,9 +1884,12 @@ if (!profilePhotoUrl?.trim()) {
             <div className="relative h-28 w-28">
               <div className="h-full w-full overflow-hidden rounded-full border-4 border-slate-100 bg-slate-100">
                 {profilePhotoUrl ? (
-                  <img
+                  <Image
                     src={profilePhotoUrl}
                     alt={employeeFullName}
+                    width={112}
+                    height={112}
+                    unoptimized
                     className="h-full w-full object-cover"
                   />
                 ) : (
@@ -3222,7 +3202,7 @@ if (!profilePhotoUrl?.trim()) {
 
                     {employeeData.peripherals.map(
                       (
-                        item: any,
+                        item,
                         index: number
                       ) => (
 

@@ -31,5 +31,5 @@ export default async function MasterDataPage() {
     redirect("/dashboard");
   }
 
-  return <PayrollMasterData role={profile.role} />;
+  return <PayrollMasterData />;
 }

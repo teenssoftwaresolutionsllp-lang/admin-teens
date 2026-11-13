@@ -158,7 +158,7 @@ export async function POST(request: Request) {
     const dataURI = `data:${isPdf ? "application/pdf" : file.type || (isJpeg ? "image/jpeg" : "image/png")};base64,${base64Data}`;
 
     // 6. Upload to Cloudinary
-    const uploadResult = await new Promise<any>(
+    const uploadResult = await new Promise<{ public_id: string }>(
       (resolve, reject) => {
         cloudinary.uploader.upload(
           dataURI,

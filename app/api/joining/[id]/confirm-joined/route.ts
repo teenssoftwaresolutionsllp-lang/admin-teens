@@ -25,7 +25,7 @@ type StatutoryDetails = {
   tds_eligible: boolean;
 };
 
-function validateStatutoryDetails(body: any): StatutoryDetails {
+function validateStatutoryDetails(body: Record<string, unknown>): StatutoryDetails {
   const booleanFields = [
     "pf_eligible",
     "esi_healthcare_eligible",
@@ -52,18 +52,18 @@ function validateStatutoryDetails(body: any): StatutoryDetails {
   };
 
   return {
-    pf_eligible: body.pf_eligible,
+    pf_eligible: Boolean(body.pf_eligible),
     uan_number: body.pf_eligible ? optionalNumber("uan_number") : null,
 
-    esi_healthcare_eligible: body.esi_healthcare_eligible,
+    esi_healthcare_eligible: Boolean(body.esi_healthcare_eligible),
     esi_number: body.esi_healthcare_eligible
       ? optionalNumber("esi_number")
       : null,
 
-    pt_eligible: body.pt_eligible,
+    pt_eligible: Boolean(body.pt_eligible),
     pt_number: body.pt_eligible ? optionalNumber("pt_number") : null,
 
-    tds_eligible: body.tds_eligible,
+    tds_eligible: Boolean(body.tds_eligible),
   };
 }
 
@@ -544,7 +544,7 @@ export async function POST(
         ),
 
         status: "active",
-      } as any);
+      } as Parameters<typeof DataStore.createEmployee>[0]);
 
       if (!employee?.id || !employee?.employee_id) {
         throw new Error("Employee creation did not return a valid employee record and ID.");

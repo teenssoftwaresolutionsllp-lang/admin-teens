@@ -402,7 +402,7 @@ export default function DashboardKpiCards({
 
         <div className="relative mt-4">
           <p className="text-xs font-semibold text-slate-600">
-            Leave Requests
+            Pending Leave Requests
           </p>
 
           <h2 className="mt-1 text-[32px] font-extrabold leading-none tracking-tight text-slate-900">
@@ -493,7 +493,7 @@ export default function DashboardKpiCards({
         <div className="relative mt-3">
           <div className="flex items-center justify-between gap-2">
             <p className="text-xs font-semibold text-slate-600">
-              Today Present
+              Attendance
             </p>
 
             <Building2 className="h-3.5 w-3.5 shrink-0 text-violet-500" />

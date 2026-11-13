@@ -1,17 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import {
   Banknote, Settings, Play, CheckCircle2, Loader2, FileText, Eye,Building2,
-  Sliders, XCircle, Printer, Users, CalendarDays, IndianRupee,BriefcaseBusiness,CircleCheck,
-  TrendingDown, ShieldCheck, ChevronRight, Briefcase, CircleDollarSign,X,
-  UserRound, User, Clock3, Info, Search, CreditCard, Pencil, Save
+  Sliders, XCircle, Printer, Users, CalendarDays, IndianRupee,BriefcaseBusiness,
+  TrendingDown, ShieldCheck, ChevronRight, CircleDollarSign,X,
+  UserRound, Clock3, Info, Search, Pencil, Save,
+  type LucideIcon
 } from "lucide-react";
 import { numberToWordsIndian } from "@/lib/calculations";
 import Image from "next/image";
-
-import { SalaryComponent, Payslip, Employee } from "@/lib/types";
+import { SalaryComponent, Payslip, Employee,PayslipBreakupItem } from "@/lib/types";
 import StandardPayslip, {
   type PayslipItem,
 } from "@/components/payroll/StandardPayslip";
@@ -32,38 +32,91 @@ const monthNames = [
 ];
 
 
-const normalizePayslipBreakup = (breakup: any): any[] => {
+type PayslipBreakupRow = Omit<Partial<PayslipBreakupItem>,"amount"> & {
+  amount?: number | string;
+  value?: number | string;
+  component_code?: string;
+  component_name?: string;
+  component?: string;
+};
+
+type LegacyPayslipDeductionFields = Partial<
+  Record<
+    | "pt"
+    | "epf"
+    | "esic_emp"
+    | "tds"
+    | "advance"
+    | "other_deduction",
+    number
+  >
+>;
+
+type PayslipEmployeeDetails = Employee & {
+  middle_name?: string | null;
+  name?: string | null;
+  code?: string | null;
+  bank_name?: string | null;
+  bank?: string | null;
+  bank_account_number?: string | null;
+  account_number?: string | null;
+  bank_account_no?: string | null;
+  account_no?: string | null;
+  ifsc_code?: string | null;
+  ifsc?: string | null;
+  bank_ifsc?: string | null;
+  bank_details?: {
+    bank_name?: string | null;
+    account_number?: string | null;
+    ifsc_code?: string | null;
+  } | null;
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const normalizePayslipBreakup = (
+  breakup: unknown
+): PayslipBreakupRow[] => {
   if (!breakup) return [];
 
   if (Array.isArray(breakup)) {
-    return breakup;
+    return breakup.filter(isRecord).map((item) => ({
+      ...item,
+    })) as PayslipBreakupRow[];
   }
 
-  if (typeof breakup === "object") {
-    return Object.entries(breakup).map(([key, value]: [string, any]) => {
-      if (value && typeof value === "object") {
+  if (isRecord(breakup)) {
+    return Object.entries(breakup).map(([key, value]) => {
+      if (isRecord(value)) {
         return {
           ...value,
-          code: value.code || key,
+          code:
+            typeof value.code === "string" ? value.code : key,
           name:
-            value.name ||
-            value.component_name ||
-            value.component ||
-            key,
+            typeof value.name === "string"
+              ? value.name
+              : typeof value.component_name === "string"
+                ? value.component_name
+                : typeof value.component === "string"
+                  ? value.component
+                  : key,
         };
       }
 
       return {
         code: key,
         name: key,
-        amount: value,
+        amount:
+          typeof value === "number" || typeof value === "string"
+            ? value
+            : 0,
       };
     });
   }
 
   return [];
 };
-
 const STANDARD_SALARY_HEADS = [
   { key: "basic", label: "Basic Salary", aliases: ["basic", "basic salary"] },
   { key: "hra", label: "House Rent Allowance", aliases: ["hra", "house rent allowance"] },
@@ -77,7 +130,7 @@ const getPayslipStandardSalary = (slip: Payslip): PayslipItem[] => {
   const items = normalizePayslipBreakup(slip.earnings_breakup);
 
   return STANDARD_SALARY_HEADS.map((head) => {
-    const item = items.find((entry: any) => {
+    const item = items.find((entry) => {
       const identifiers = [
         entry?.code,
         entry?.component_code,
@@ -101,89 +154,14 @@ const getPayslipStandardSalary = (slip: Payslip): PayslipItem[] => {
   });
 };
 
-const getPayslipOtherEarnings = (slip: Payslip) => {
-  const items = normalizePayslipBreakup(slip.earnings_breakup);
-
-  return items.filter((item: any) => {
-    const identifiers = [
-      item?.code,
-      item?.component_code,
-      item?.name,
-      item?.component_name,
-      item?.component,
-      item?.type,
-    ]
-      .filter(Boolean)
-      .join(" ")
-      .toLowerCase()
-      .replace(/[_-]+/g, " ");
-
-    const isStandardSalaryHead = STANDARD_SALARY_HEADS.some((head) =>
-      head.aliases.some((alias) => identifiers.includes(alias))
-    );
-    const isEmployerContribution =
-      /employer.?contribution|employer.?pf|employer.?esi|pf.?admin|gratuity.?provision|employer.?gratuity/.test(identifiers);
-
-    return !isStandardSalaryHead && !isEmployerContribution;
-  });
-};
-
-const getPayslipDeductions = (slip: Payslip) => {
-  const items = normalizePayslipBreakup(slip.deductions_breakup);
-
-  const isLopItem = (item: any) => {
-    const text = [
-      item?.code,
-      item?.component_code,
-      item?.name,
-      item?.component_name,
-    ]
-      .filter(Boolean)
-      .join(" ")
-      .toLowerCase();
-
-    return /\blop\b|loss.?of.?pay/.test(text);
-  };
-
-  const hasLop = items.some(isLopItem);
-  const lopAmount = Number(slip.lop_deduction || 0);
-
-  if (!hasLop && lopAmount > 0) {
-    items.push({
-      component_id: "lop-deduction",
-      name: "Loss of Pay",
-      code: "LOP",
-      type: "deduction" as any,
-      amount: lopAmount,
-    });
-  }
-
-  return items.filter((item: any) => {
-    const text = [
-      item?.code,
-      item?.component_code,
-      item?.name,
-      item?.component_name,
-      item?.type,
-    ]
-      .filter(Boolean)
-      .join(" ")
-      .toLowerCase();
-
-    return (
-      !/employer.?contribution|employer.?pf|employer.?esi|pf.?admin|gratuity.?provision|employer.?gratuity/.test(text) &&
-      !/\bremarks?\b/.test(text)
-    );
-  });
-};
 
 const getPayslipDeductionAmount = (
   slip: Payslip,
   aliases: string[],
-  fallbackKey: string
+  fallbackKey: keyof LegacyPayslipDeductionFields | "lop_deduction"
 ): number => {
   const items = normalizePayslipBreakup(slip.deductions_breakup);
-  const match = items.find((item: any) => {
+  const match = items.find((item) => {
     const identifiers = [item?.code, item?.component_code, item?.name, item?.component_name, item?.component]
       .filter(Boolean)
       .join(" ")
@@ -193,7 +171,8 @@ const getPayslipDeductionAmount = (
   });
 
   if (match) return Number(match.amount ?? match.value ?? 0);
-  return Number((slip as any)[fallbackKey] ?? 0);
+  const legacySlip = slip as Payslip & LegacyPayslipDeductionFields;
+  return Number(legacySlip[fallbackKey] ?? 0);
 };
 
 // Currency formatters
@@ -216,9 +195,9 @@ export default function PayrollManager({
   const currentYear = now.getFullYear();
 
   const [employees] = useState<Employee[]>(initialEmployees);
-  const [components, setComponents] = useState<SalaryComponent[]>(initialComponents);
+  const components = initialComponents;
   const [employeeComponents, setEmployeeComponents] = useState<SalaryComponent[]>([]);
-  const [employeeComponentsLoading, setEmployeeComponentsLoading] = useState(false);
+  const [employeeComponentsLoadedFor, setEmployeeComponentsLoadedFor] = useState<string | null>(null);
   const [payslips, setPayslips] = useState<Payslip[]>(initialPayslips);
   const [activeTab, setActiveTab] = useState<ActiveTab>("runner");
   const [selectedMonth, setSelectedMonth] = useState(currentMonth === 1 ? 12 : currentMonth - 1);
@@ -234,7 +213,11 @@ export default function PayrollManager({
   const [message, setMessage] = useState<MessageState>(null);
   const [previewSlip, setPreviewSlip] = useState<Payslip | null>(null);
   const [showFilters, setShowFilters] = useState(false);
-  const [isMounted, setIsMounted] = useState(false);
+  const isMounted = useSyncExternalStore(
+  () => () => {},
+  () => true,
+  () => false
+);
   const [calendarLoading, setCalendarLoading] = useState(false);
   const [workingSaturdays, setWorkingSaturdays] = useState<number[]>([]);
   const [holidayDates, setHolidayDates] = useState<string[]>([]);
@@ -272,8 +255,6 @@ export default function PayrollManager({
   const [showPendingContributionModal, setShowPendingContributionModal] = useState(false);
 
   const [checkingPendingContribution, setCheckingPendingContribution] = useState(false);
-
-  const [pendingContributionReviewed, setPendingContributionReviewed] = useState(false);
   type AdditionalEarningType = "" | "Incentive" | "Bonus" | "Compensation";
   const [additionalEarningType, setAdditionalEarningType] =  useState<AdditionalEarningType>("");
   const [additionalEarningAmount, setAdditionalEarningAmount] = useState("");
@@ -283,100 +264,168 @@ export default function PayrollManager({
     [currentYear]
   );
 
-  const activeEmployees = useMemo(() => employees.filter(employee => employee.status === "active"),[employees]);
-    const getEmployeeDepartment = (employee: Employee) => {
-    const department = (employee as any).department;
-    if (typeof department === "object" && department !== null) {
-      return department.name || (employee as any).department_name || "Unassigned";
-    }
-    return (
-      (employee as any).department_name ||
-      department ||
-      "Unassigned"
-    );
-  };
+  const activeEmployees = useMemo(
+    () => employees.filter((employee) => employee.status === "active"),
+    [employees]
+  );
+
+  const getEmployeeDepartment = useCallback((employee: Employee): string => {
+    return employee.department?.name || "Unassigned";
+  }, []);
+
+  const matchesPayrollEmployeeFilters = useCallback((
+    employee: Employee,
+    searchValue: string,
+    departmentValue: string
+  ): boolean => {
+    const search = searchValue.trim().toLowerCase();
+    const department = getEmployeeDepartment(employee);
+
+    const matchesDepartment =
+      departmentValue === "all" || department === departmentValue;
+
+    const fullName =
+      `${employee.first_name || ""} ${employee.last_name || ""}`.toLowerCase();
+
+    const employeeCode = String(employee.employee_id || "").toLowerCase();
+    const email = String(employee.email || "").toLowerCase();
+
+    const matchesSearch =
+      !search ||
+      fullName.includes(search) ||
+      employeeCode.includes(search) ||
+      email.includes(search);
+
+    return matchesDepartment && matchesSearch;
+  }, [getEmployeeDepartment]);
 
   const payrollDepartments = useMemo(() => {
     return Array.from(
       new Set(activeEmployees.map(getEmployeeDepartment))
     ).sort((a, b) => a.localeCompare(b));
-  }, [activeEmployees]);
+  }, [activeEmployees,getEmployeeDepartment]);
 
   const filteredPayrollEmployees = useMemo(() => {
-    const search = payrollEmployeeSearch.trim().toLowerCase();
-
-    return activeEmployees.filter((employee) => {
-      const department = getEmployeeDepartment(employee);
-
-      const matchesDepartment =
-        payrollDepartmentFilter === "all" ||
-        department === payrollDepartmentFilter;
-
-      const fullName =
-        `${employee.first_name || ""} ${employee.last_name || ""}`.toLowerCase();
-
-      const employeeCode = String(employee.employee_id || "").toLowerCase();
-      const email = String(employee.email || "").toLowerCase();
-
-      const matchesSearch =
-        !search ||
-        fullName.includes(search) ||
-        employeeCode.includes(search) ||
-        email.includes(search);
-
-      return matchesDepartment && matchesSearch;
-    });
+    return activeEmployees.filter((employee) =>
+      matchesPayrollEmployeeFilters(
+        employee,
+        payrollEmployeeSearch,
+        payrollDepartmentFilter
+      )
+    );
   }, [
     activeEmployees,
     payrollEmployeeSearch,
     payrollDepartmentFilter,
+    matchesPayrollEmployeeFilters,
   ]);
 
-  useEffect(() => {
-    if (
-      selectedEmployee &&
-      !filteredPayrollEmployees.some(
-        (employee) => employee.id === selectedEmployee
-      )
-    ) {
-      setSelectedEmployee("");
-    }
-  }, [filteredPayrollEmployees, selectedEmployee]);
 
   const selectedEmployeeData = useMemo(
     () => employees.find(employee => employee.id === selectedEmployee),
     [employees, selectedEmployee]
   );
 
-  const loadEmployeeComponents = useCallback(async () => 
-  {
-    if (!selectedEmployee) {
-      setEmployeeComponents([]);
-      return;
-    }
 
-    setEmployeeComponentsLoading(true);
-    setMessage(null);
+  const employeeComponentsLoading = Boolean(
+    selectedEmployee && employeeComponentsLoadedFor !== selectedEmployee
+  );
 
-    try {
-      const response = await fetch(`/api/payroll/employee-components?employeeId=${selectedEmployee}`);
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to load employee salary components");
+  useEffect(() => {
+    let cancelled = false;
+
+    const load = async () => {
+      if (!selectedEmployee) return;
+
+      try {
+        const response = await fetch(
+          `/api/payroll/employee-components?employeeId=${encodeURIComponent(selectedEmployee)}`
+        );
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(
+            data.error || "Failed to load employee salary components"
+          );
+        }
+
+        if (!cancelled) {
+          setEmployeeComponents(data.components || []);
+          setEmployeeComponentsLoadedFor(selectedEmployee);
+          setMessage(null);
+        }
+      } catch (error: unknown) {
+        console.error("Failed to load employee salary components:", error);
+
+        if (!cancelled) {
+          setEmployeeComponents([]);
+          setEmployeeComponentsLoadedFor(selectedEmployee);
+          setMessage({
+            type: "error",
+            text: error instanceof Error ? error.message : "Failed to load salary components",
+          });
+        }
       }
-      setEmployeeComponents(data.components || []);
-    } catch (error: any) {
-      console.error("Failed to load employee salary components:", error);
-      setEmployeeComponents([]);
-      setMessage(error.message || "Failed to load salary components");
-    } finally {
-      setEmployeeComponentsLoading(false);
-    }
+    };
+
+    void load();
+
+    return () => {
+      cancelled = true;
+    };
   }, [selectedEmployee]);
 
   useEffect(() => {
-    loadEmployeeComponents();
-  }, [loadEmployeeComponents]);
+    let cancelled = false;
+
+    const load = async () => {
+      if (!selectedEmployee) return;
+
+      try {
+        const response = await fetch(
+          `/api/payroll/calendar?employeeId=${encodeURIComponent(selectedEmployee)}&year=${selectedYear}&month=${selectedMonth}`
+        );
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data?.error || "Failed to load payroll calendar.");
+        }
+
+        if (!cancelled) {
+          setWorkingSaturdays(
+            Array.isArray(data.workingSaturdays) ? data.workingSaturdays : []
+          );
+          setHolidayDates(
+            Array.isArray(data.holidayDates) ? data.holidayDates : []
+          );
+          setWorkingDays(Number(data.workingDays || 0));
+          setCalendarName(data.calendarName || "Company Calendar");
+          setMessage(null);
+        }
+      } catch (error: unknown) {
+        console.error("Payroll calendar error:", error);
+
+        if (!cancelled) {
+          setWorkingSaturdays([]);
+          setHolidayDates([]);
+          setWorkingDays(0);
+          setMessage({
+            type: "error",
+            text:
+              error instanceof Error
+                ? error.message
+                : "Failed to load payroll calendar.",
+          });
+        }
+      }
+    };
+
+    void load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedEmployee, selectedMonth, selectedYear]);
 
   const selectedPeriod = selectedYear * 12 + selectedMonth;
   const currentPeriod = currentYear * 12 + currentMonth;
@@ -412,30 +461,32 @@ export default function PayrollManager({
 /* PAYSLIP HELPERS */
 /* ========================================================= */
 
-const formatPayslipCurrency = (value: number | string | null | undefined) => {
-  const amount = Number(value || 0);
 
-  return `₹${amount.toLocaleString("en-IN", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-};
-
-const getPayslipEmployeeName = (employee: any) => {
+const getPayslipEmployeeName = (
+  employee: PayslipEmployeeDetails | null | undefined
+): string => {
   if (!employee) return "-";
 
   if (employee.name) return employee.name;
 
-  return [employee.first_name, employee.middle_name, employee.last_name]
+  return [
+    employee.first_name,
+    employee.middle_name,
+    employee.last_name,
+  ]
     .filter(Boolean)
     .join(" ") || "-";
 };
 
-const getPayslipEmployeeCode = (employee: any) => {
+const getPayslipEmployeeCode = (
+  employee: PayslipEmployeeDetails | null | undefined
+): string => {
   return employee?.employee_id || employee?.code || "-";
 };
 
-const getPayslipBankName = (employee: any) => {
+const getPayslipBankName = (
+  employee: PayslipEmployeeDetails | null | undefined
+): string => {
   return (
     employee?.bank_name ||
     employee?.bank ||
@@ -444,7 +495,9 @@ const getPayslipBankName = (employee: any) => {
   );
 };
 
-const getPayslipAccountNumber = (employee: any) => {
+const getPayslipAccountNumber = (
+  employee: PayslipEmployeeDetails | null | undefined
+): string => {
   return (
     employee?.bank_account_number ||
     employee?.account_number ||
@@ -455,7 +508,9 @@ const getPayslipAccountNumber = (employee: any) => {
   );
 };
 
-const getPayslipIFSC = (employee: any) => {
+const getPayslipIFSC = (
+  employee: PayslipEmployeeDetails | null | undefined
+): string => {
   return (
     employee?.ifsc_code ||
     employee?.ifsc ||
@@ -465,7 +520,7 @@ const getPayslipIFSC = (employee: any) => {
   );
 };
 
-const getPayslipDate = (value: any) => {
+const getPayslipDate = (value: string | Date | null | undefined) => {
   if (!value) return "-";
 
   const date = new Date(value);
@@ -496,129 +551,10 @@ const getAmountInWords = (amount: number) => {
   return `${numberToWordsIndian(roundedAmount)} Rupees Only`;
 };
 
-
-/* ========================================================= */
-/* PAYSLIP INFO ROW */
-/* ========================================================= */
-
-function PayslipInfoRow({
-  label,
-  value,
-}: {
-  label: string;
-  value: string | number | null | undefined;
-}) {
-  return (
-    <div className="min-w-0">
-      <label className="mb-1.5 block text-[11px] font-medium text-slate-500">
-        {label}
-      </label>
-
-      <div className="flex min-h-[42px] w-full items-center rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-800">
-        <span className="truncate">
-          {value === null || value === undefined || value === ""
-            ? "-"
-            : String(value)}
-        </span>
-      </div>
-    </div>
-  );
-}
-
-/* ========================================================= */
-/* PAYSLIP SUMMARY ITEM */
-/* ========================================================= */
-
-function PayslipSummaryItem({
-  label,
-  value,
-}: {
-  label: string;
-  value: string | number | null | undefined;
-}) {
-  return (
-    <div className="min-w-0">
-      <label className="mb-1.5 block text-[11px] font-medium text-slate-500">
-        {label}
-      </label>
-
-      <div className="flex min-h-[42px] w-full items-center rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800">
-        {value === null || value === undefined || value === ""
-          ? "-"
-          : String(value)}
-      </div>
-    </div>
-  );
-}
-
-/* ========================================================= */
-/* NORMALIZE SALARY BREAKUP */
-/* ========================================================= */
-
-
-
-
 /* ========================================================= */
 /* BREAKUP ROW */
 /* ========================================================= */
 
-function PayslipBreakupRow({
-  item,
-}: {
-  item: any;
-}) {
-  const name =
-    item?.name ||
-    item?.component_name ||
-    item?.component ||
-    item?.label ||
-    item?.code ||
-    "Salary Component";
-
-  const code =
-    item?.code ||
-    "";
-
-  const amount = Number(
-    item?.amount ??
-    item?.value ??
-    0
-  );
-
-
-  return (
-    <div className="flex min-h-[58px] items-center justify-between gap-5 border-b border-slate-100 py-3">
-
-      {/* COMPONENT NAME */}
-
-      <div className="min-w-0">
-
-        <p className="text-xs font-medium text-slate-700">
-          {name}
-        </p>
-
-        {code && (
-          <p className="mt-1 text-[9px] font-medium uppercase tracking-wide text-slate-400">
-            {code}
-          </p>
-        )}
-
-      </div>
-
-
-      {/* AMOUNT */}
-
-      <div className="shrink-0">
-
-        <span className="whitespace-nowrap text-sm font-semibold text-slate-800">
-          {formatPayslipCurrency(amount)}
-        </span>
-
-      </div>
-
-    </div>
-  );
-}
   const isBeforeJoiningPeriod = employeeJoiningPeriod !== null && selectedPeriod < employeeJoiningPeriod;
 
   const payrollPeriodValid = !isFuturePeriod && !isBeforeJoiningPeriod;
@@ -647,18 +583,16 @@ function PayslipBreakupRow({
       setHolidayDates(Array.isArray(data.holidayDates) ? data.holidayDates : []);
       setWorkingDays(Number(data.workingDays || 0));
       setCalendarName(data.calendarName || "Company Calendar");
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Payroll calendar error:", error);
       setWorkingSaturdays([]);
       setHolidayDates([]);
       setWorkingDays(0);
-      setMessage({ type: "error", text: error?.message || "Failed to load payroll calendar." });
+      setMessage({ type: "error", text: error instanceof Error ? error.message : "Failed to load payroll calendar." });
     } finally {
       setCalendarLoading(false);
     }
   }, [selectedEmployee, selectedMonth, selectedYear]);
-
-  useEffect(() => setIsMounted(true), []);
 
   useEffect(() => {
     if (!previewSlip) return;
@@ -668,8 +602,56 @@ function PayslipBreakupRow({
   }, [previewSlip]);
 
   useEffect(() => {
-    loadPayrollCalendar();
-  }, [loadPayrollCalendar]);
+    let cancelled = false;
+
+    const load = async () => {
+      if (!selectedEmployee) return;
+
+      try {
+        const response = await fetch(
+          `/api/payroll/calendar?employeeId=${encodeURIComponent(selectedEmployee)}&year=${selectedYear}&month=${selectedMonth}`
+        );
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data?.error || "Failed to load payroll calendar.");
+        }
+
+        if (!cancelled) {
+          setWorkingSaturdays(
+            Array.isArray(data.workingSaturdays) ? data.workingSaturdays : []
+          );
+          setHolidayDates(
+            Array.isArray(data.holidayDates) ? data.holidayDates : []
+          );
+          setWorkingDays(Number(data.workingDays || 0));
+          setCalendarName(data.calendarName || "Company Calendar");
+          setMessage(null);
+        }
+      } catch (error: unknown) {
+        console.error("Payroll calendar error:", error);
+
+        if (!cancelled) {
+          setWorkingSaturdays([]);
+          setHolidayDates([]);
+          setWorkingDays(0);
+          setMessage({
+            type: "error",
+            text:
+              error instanceof Error
+                ? error.message
+                : "Failed to load payroll calendar.",
+          });
+        }
+      }
+    };
+
+    void load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedEmployee, selectedMonth, selectedYear]);
 
   const filteredPayslips = useMemo(() => {
     return payslips.filter(slip => {
@@ -716,8 +698,8 @@ function PayslipBreakupRow({
         type: "success",
         text: enabled ? `${date} marked as a working Saturday.` : `${date} changed back to a holiday.`
       });
-    } catch (error: any) {
-      setMessage({ type: "error", text: error?.message || "Failed to update working Saturday." });
+    } catch (error: unknown) {
+      setMessage({ type: "error", text: error instanceof Error ? error.message : "Failed to update working Saturday." });
     } finally {
       setSavingSaturday(null);
     }
@@ -826,10 +808,10 @@ function PayslipBreakupRow({
       });
 
       setActiveTab("slips");
-    } catch (error: any) {
+    } catch (error: unknown) {
       setMessage({
         type: "error",
-        text: error?.message || "Something went wrong while generating payroll.",
+        text: error instanceof Error ? error.message : "Something went wrong while generating payroll.",
       });
     } finally {
       setRunning(false);
@@ -892,10 +874,10 @@ function PayslipBreakupRow({
       }
 
       await generatePayroll();
-    } catch (error: any) {
+    } catch (error: unknown) {
       setMessage({
         type: "error",
-        text: error?.message || "Unable to check pending contributions.",
+        text: error instanceof Error ? error.message : "Unable to check pending contributions.",
       });
     } finally {
       setCheckingPendingContribution(false);
@@ -947,11 +929,11 @@ function PayslipBreakupRow({
           component.is_active ? "disabled" : "enabled"
         }.`,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       setMessage({
         type: "error",
         text:
-          error?.message ||
+          error instanceof Error ? error.message :
           "Failed to update employee salary component.",
       });
     } finally {
@@ -1008,11 +990,11 @@ function PayslipBreakupRow({
         type: "success",
         text: `${editingComponent.name} updated successfully.`,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       setMessage({
         type: "error",
         text:
-          error?.message ||
+          error instanceof Error ? error.message :
           "Failed to update employee salary component.",
       });
     } finally {
@@ -1042,7 +1024,6 @@ function PayslipBreakupRow({
   };
 
 
-  const handlePrintPayslip = () => window.print();
 
   const tabs = [
     { id: "runner" as ActiveTab, label: "Payroll Runner", description: "Generate monthly payroll", icon: Play },
@@ -1337,9 +1318,11 @@ function PayslipBreakupRow({
                         {/* Employee Profile Photo */}
                         <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full bg-indigo-100">
                           {selectedEmployeeData.profile_photo_url ? (
-                            <img
+                            <Image
                               src={selectedEmployeeData.profile_photo_url}
                               alt={`${selectedEmployeeData.first_name ?? ""} ${selectedEmployeeData.last_name ?? ""}`}
+                              width={40}
+                              height={40}
                               className="h-full w-full object-cover"
                             />
                           ) : (
@@ -1449,7 +1432,7 @@ function PayslipBreakupRow({
                         </p>
 
                         <p className="text-[10px] text-slate-500">
-                          Add incentive, bonus or compensation to this month's payslip.
+                          Add incentive, bonus or compensation to this month&apos;s payslip.
                         </p>
                       </div>
 
@@ -1681,16 +1664,9 @@ function PayslipBreakupRow({
                     employee.last_name?.charAt(0) || ""
                   }`.toUpperCase();
 
-                const department =
-                  (employee as any).department?.name ||
-                  (employee as any).department_name ||
-                  (employee as any).department ||
-                  "—";
+                const department = employee.department?.name || "—";
 
-                const employmentType =
-                  (employee as any).employment_type ||
-                  (employee as any).employmentType ||
-                  "—";
+                const employmentType = employee.employment_type || "—";
 
                 return (
                   <div className="border-b border-slate-100 bg-white px-5 py-4">
@@ -1703,9 +1679,11 @@ function PayslipBreakupRow({
                           {/* Profile */}
                           <div className="flex h-12 w-12 shrink-0 overflow-hidden rounded-full bg-indigo-100">
                             {employee.profile_photo_url ? (
-                              <img
+                              <Image
                                 src={employee.profile_photo_url}
                                 alt={`${employee.first_name} ${employee.last_name}`}
+                                width={48}
+                                height={48}
                                 className="h-full w-full object-cover"
                               />
                             ) : (
@@ -2045,8 +2023,7 @@ function PayslipBreakupRow({
                     placeholder="Search employee..."
                     value={searchTerm}
                     onChange={(event) => {
-                      setSelectedEmployee("");
-                      setPayrollEmployeeSearch(event.target.value);
+                      setSearchTerm(event.target.value);
                     }}
                     className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-8 pr-3 text-xs outline-none focus:border-indigo-500 sm:w-56"
                   />
@@ -2124,9 +2101,11 @@ function PayslipBreakupRow({
                             <div className="flex items-center gap-2">
                               <div className="h-8 w-8 overflow-hidden rounded-full bg-indigo-100">
                                 {employee?.profile_photo_url ? (
-                                  <img
+                                  <Image
                                     src={employee.profile_photo_url}
                                     alt={`${employee?.first_name ?? ""} ${employee?.last_name ?? ""}`}
+                                    width={32}
+                                    height={32}
                                     className="h-full w-full object-cover"
                                   />
                                 ) : (
@@ -2201,8 +2180,8 @@ function PayslipBreakupRow({
 
               <div className="space-y-4 p-5">
                 <p className="text-xs leading-5 text-slate-600">
-                  The previous month's payslip has pending statutory contributions.
-                  Review these amounts before generating the current month's payroll.
+                  The previous month&apos;s payslip has pending statutory contributions.
+                  Review these amounts before generating the current month&apos;s payroll.
                   No pending amount will be automatically recovered.
                 </p>
 
@@ -2377,7 +2356,7 @@ function PayslipBreakupRow({
                         // The payslip row must show the amount remaining after LOP.
                         amount: Math.max(
                           0,
-                          Number((previewSlip as any).gross_salary ?? 0) -
+                          Number(previewSlip.gross_salary ?? 0) -
                             getPayslipDeductionAmount(
                               previewSlip,
                               ["lop", "loss of pay"],
@@ -2388,12 +2367,12 @@ function PayslipBreakupRow({
                       {
                         key: "arrears",
                         label: "Arrears",
-                        amount: Number((previewSlip as any).arrears ?? 0),
+                        amount: Number((previewSlip as Payslip & { arrears?: number | string | null }).arrears ?? 0),
                       },
                       {
                         key: "incentive-bonus",
                         label: "Incentive / Bonus",
-                        amount: Number((previewSlip as any).incentive ?? 0),
+                        amount: Number(previewSlip.incentive ?? 0),
                       },
                     ]}
                     deductions={[
@@ -2440,7 +2419,7 @@ function PayslipBreakupRow({
                     paidLeaves={Number(previewSlip.paid_leaves || 0)}
                     lopDays={Number(previewSlip.lop_days || 0)}
                     grossSalaryBeforeLOP={
-                      Number((previewSlip as any).gross_salary ?? 0)
+                      Number(previewSlip.gross_salary ?? 0)
                     }
                     grossDeductions={
                       getPayslipDeductionAmount(previewSlip, ["pt", "professional tax"], "pt") +
@@ -2677,7 +2656,7 @@ function FieldSelect({
   children
 }: {
   label: string;
-  icon?: any;
+  icon?: LucideIcon;
   value: string | number;
   onChange: (value: string) => void;
   children: React.ReactNode;
@@ -2729,7 +2708,7 @@ function MetricCard({
   value,
   helper
 }: {
-  icon: any;
+  icon: LucideIcon;
   label: string;
   value: string;
   helper: string;
@@ -2765,7 +2744,7 @@ function EmptyState({
   title,
   description
 }: {
-  icon: any;
+  icon :LucideIcon;
   title: string;
   description: string;
 }) {
@@ -2776,100 +2755,6 @@ function EmptyState({
       </div>
       <h3 className="mt-3 text-xs font-bold text-slate-800">{title}</h3>
       <p className="mt-1 max-w-sm text-xs text-slate-500">{description}</p>
-    </div>
-  );
-}
-
-function InfoGrid({
-  items,
-  border = false
-}: {
-  items: [string, string][];
-  border?: boolean;
-}) {
-  return (
-    <div className={border ? "border-b lg:border-b-0 lg:border-r border-slate-200" : ""}>
-      {items.map(([label, value], index) => (
-        <div key={label} className={`${index < items.length - 1 ? "border-b border-slate-200" : ""} p-3`}>
-          <p className="text-[8px] font-semibold uppercase tracking-wide text-slate-400">{label}</p>
-          <p className="mt-0.5 text-xs font-semibold text-slate-900 break-words">{value}</p>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function SummaryCell({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="border-r border-slate-200 px-3 py-3 last:border-r-0">
-      <p className="text-[8px] font-semibold uppercase text-slate-400">{label}</p>
-      <p className="mt-0.5 text-sm font-bold text-slate-900">{value}</p>
-    </div>
-  );
-}
-
-function BreakupCard({
-  title,
-  totalLabel,
-  total,
-  data,
-  tone
-}: {
-  title: string;
-  totalLabel: string;
-  total: number | null | undefined;
-  data: any;
-  tone: "indigo" | "rose";
-}) {
-  const entries: [string, number][] = Array.isArray(data)
-    ? data.map((item: any) => [item.name || "-", Number(item.amount || 0)])
-    : data && typeof data === "object"
-      ? Object.entries(data).map(([key, value]: [string, any]) => [
-          key.replace(/_/g, " ").replace(/\b\w/g, char => char.toUpperCase()),
-          typeof value === "object" && value !== null ? Number(value.amount || 0) : Number(value || 0)
-        ])
-      : [];
-
-  const header = tone === "indigo"
-    ? "bg-indigo-600 text-white"
-    : "bg-rose-500 text-white";
-
-  const totalBg = tone === "indigo"
-    ? "bg-indigo-50 text-indigo-700"
-    : "bg-rose-50 text-rose-600";
-
-  return (
-    <div className={`overflow-hidden rounded-lg border ${tone === "indigo" ? "border-indigo-100" : "border-rose-100"}`}>
-      <div className={`flex items-center justify-between px-3 py-2.5 ${header}`}>
-        <div className="flex items-center gap-2">
-          {tone === "indigo"
-            ? <Briefcase className="h-4 w-4" />
-            : <CreditCard className="h-4 w-4" />}
-          <h3 className="text-xs font-bold">{title}</h3>
-        </div>
-        <span className="text-[8px] font-semibold uppercase">Amount</span>
-      </div>
-
-      <div className="grid grid-cols-[1fr_100px] border-b border-slate-200 bg-slate-50 px-3 py-1.5 text-[8px] font-semibold uppercase text-slate-400">
-        <span>Component</span>
-        <span className="text-right">Current Month</span>
-      </div>
-
-      {entries.length > 0 ? entries.map(([name, amount], index) => (
-        <div key={`${name}-${index}`} className="grid grid-cols-[1fr_100px] border-b border-slate-100 px-3 py-2">
-          <span className="text-[10px] text-slate-700">{name}</span>
-          <span className={`text-right text-[10px] font-semibold ${tone === "rose" ? "text-rose-600" : "text-slate-900"}`}>
-            {formatCurrency(amount)}
-          </span>
-        </div>
-      )) : (
-        <div className="px-3 py-6 text-center text-[10px] text-slate-400">No {title.toLowerCase()} available</div>
-      )}
-
-      <div className={`flex items-center justify-between px-3 py-3 ${totalBg}`}>
-        <span className="text-[10px] font-bold">{totalLabel}</span>
-        <span className="text-xs font-bold">{formatCurrency(total)}</span>
-      </div>
     </div>
   );
 }

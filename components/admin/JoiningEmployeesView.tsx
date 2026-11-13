@@ -42,14 +42,17 @@ export default function JoiningEmployeesView() {
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
 
-  const loadCandidates = useCallback(async () => {
-    setLoading(true);
-    setError("");
+  const loadCandidates = useCallback(async (showLoading = false) => {
+    if (showLoading) {
+      setLoading(true);
+      setError("");
+    }
 
     try {
       const response = await fetch("/api/joining", {
         cache: "no-store",
       });
+
       const result = await response.json();
 
       if (!response.ok) {
@@ -57,6 +60,7 @@ export default function JoiningEmployeesView() {
       }
 
       setCandidates(result.candidates ?? []);
+      setError("");
     } catch (err) {
       setError(
         err instanceof Error
@@ -69,8 +73,45 @@ export default function JoiningEmployeesView() {
   }, []);
 
   useEffect(() => {
-    void loadCandidates();
-  }, [loadCandidates]);
+    let cancelled = false;
+
+    const fetchCandidates = async () => {
+      try {
+        const response = await fetch("/api/joining", {
+          cache: "no-store",
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error(result.error || "Failed to load joining records.");
+        }
+
+        if (!cancelled) {
+          setCandidates(result.candidates ?? []);
+          setError("");
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(
+            err instanceof Error
+              ? err.message
+              : "Failed to load joining records."
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    };
+
+    void fetchCandidates();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const filteredCandidates = candidates.filter((candidate) => {
     const query = search.trim().toLowerCase();
@@ -113,7 +154,7 @@ export default function JoiningEmployeesView() {
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            onClick={() => void loadCandidates()}
+            onClick={() =>void loadCandidates()}
             disabled={loading}
             className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium hover:bg-slate-50 disabled:opacity-50"
           >

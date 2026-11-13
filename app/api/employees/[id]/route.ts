@@ -121,7 +121,7 @@ export async function PUT(
     const { id } = await props.params;
     const rawBody = await request.json();
 
-    const updateData: Record<string, any> = Object.fromEntries(
+    const updateData: Record<string, unknown> = Object.fromEntries(
       Object.entries(rawBody).map(([field, value]) => [
         field,
         typeof value === 'string' && value.trim() === '' ? null : value,
@@ -716,11 +716,13 @@ export async function PUT(
     }
 
     return NextResponse.json(updated);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('API Error in PUT /api/employees/[id]:', error);
 
+    const message = error instanceof Error ? error.message : 'Internal server error';
+
     return NextResponse.json(
-      { error: error?.message || 'Internal server error' },
+      { error: message },
       { status: 500 }
     );
   }

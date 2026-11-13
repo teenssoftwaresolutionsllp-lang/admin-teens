@@ -32,12 +32,14 @@ export async function GET() {
     return NextResponse.json({
       employee_id: `TN${nextNumber}`,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error generating employee ID:", error);
+
+    const message = error instanceof Error ? error.message : "Failed to generate employee ID";
 
     return NextResponse.json(
       {
-        error: error.message || "Failed to generate employee ID",
+        error: message,
       },
       { status: 500 }
     );

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import Image from "next/image";
 import {
   Bell,
   LogOut,
@@ -284,6 +285,7 @@ export default function Header({ profile }: HeaderProps) {
 
   // Refresh periodically and whenever the user returns to this tab.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void fetchNotifications();
 
     const refreshWhenVisible = () => {
@@ -657,7 +659,7 @@ export default function Header({ profile }: HeaderProps) {
             className="flex-shrink-0 rounded-full outline-none ring-indigo-500 focus-visible:ring-2"
           >
             {avatarUrl ? (
-              <img
+              <Image
                 src={avatarUrl}
                 alt={profile.full_name || "Profile photo"}
                 onError={() => setAvatarUrl("")}
@@ -689,7 +691,7 @@ export default function Header({ profile }: HeaderProps) {
           <div className="absolute left-3 top-full z-20 mt-2 w-64 space-y-2 rounded-xl border border-slate-700 bg-slate-900 p-3 text-white shadow-2xl md:hidden">
             <div className="mb-2 flex items-center gap-3 border-b border-slate-800 px-3 py-3">
               {avatarUrl ? (
-                <img
+                <Image
                   src={avatarUrl}
                   alt="Profile photo"
                   className="h-10 w-10 rounded-full border border-slate-600 object-cover"

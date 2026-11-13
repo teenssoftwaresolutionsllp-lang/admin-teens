@@ -636,7 +636,7 @@ export default async function DashboardPage({
                 </h1>
 
                 <p className="mt-2 text-sm font-medium text-[#172554] sm:text-[17px]">
-                  Here's what's happening in your organization today.
+                  Here&apos;s what&apos;s happening in your organization today.
                 </p>
 
                 <div className="mt-3 flex items-center gap-3 text-[#111b4b]">

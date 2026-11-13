@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect,useRef, useState } from "react";
 import type { FormEvent } from "react";
 import type { EmergencyHoliday } from "@/lib/types";
 import { useRouter } from "next/navigation";
@@ -53,8 +53,14 @@ export default function ProjectsManager({
   const router = useRouter();
 
   const [projects, setProjects] = useState<Project[]>(initialProjects);
-  const [calendarList, setCalendarList] =
-    useState<HolidayCalendar[]>(calendars);
+  const [calendarUpdates, setCalendarUpdates] = useState<
+      Record<string, Partial<HolidayCalendar>>
+    >({});
+
+    const calendarList = calendars.map((calendar) => ({
+      ...calendar,
+      ...calendarUpdates[calendar.id],
+    }));
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -104,9 +110,6 @@ export default function ProjectsManager({
       selectedYear
   );
 
-  useEffect(() => {
-    setCalendarList(calendars);
-  }, [calendars]);
 
   const activeCalendar = calendarList.find(
     (calendar) =>
@@ -115,39 +118,59 @@ export default function ProjectsManager({
       (calendar.shift_type || "general") === selectedShift
   );
 
-  useEffect(() => {
-    const extracted = activeCalendar?.extracted_holidays;
-
-    if (Array.isArray(extracted)) {
-      setDraftHolidays(
-        extracted.map((item) => {
-          const holiday = item as Record<string, unknown>;
-
-          return {
-            holiday_date:
-              typeof holiday.holiday_date === "string"
-                ? holiday.holiday_date
-                : "",
-            title:
-              typeof holiday.title === "string"
-                ? holiday.title
-                : "",
-            is_optional: holiday.is_optional === true,
-            is_working_day: holiday.is_working_day === true,
-          };
-        })
-      );
-    } else {
-      setDraftHolidays([]);
-    }
-
-    setSelectedFile(null);
-    setMessage(null);
-    setCalendarError(null);
-  }, [
+  const calendarSelectionKey = [
     selectedCountry,
     selectedYear,
     selectedShift,
+    activeCalendar?.id ?? "none",
+  ].join(":");
+
+  const previousCalendarSelectionKey = useRef<string | null>(null);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      if (
+        previousCalendarSelectionKey.current === calendarSelectionKey
+      ) {
+        return;
+      }
+
+      previousCalendarSelectionKey.current = calendarSelectionKey;
+
+      const extracted = activeCalendar?.extracted_holidays;
+
+      if (Array.isArray(extracted)) {
+        setDraftHolidays(
+          extracted.map((item) => {
+            const holiday = item as Record<string, unknown>;
+
+            return {
+              holiday_date:
+                typeof holiday.holiday_date === "string"
+                  ? holiday.holiday_date
+                  : "",
+              title:
+                typeof holiday.title === "string"
+                  ? holiday.title
+                  : "",
+              is_optional: holiday.is_optional === true,
+              is_working_day: holiday.is_working_day === true,
+            };
+          })
+        );
+      } else {
+        setDraftHolidays([]);
+      }
+
+      setSelectedFile(null);
+      setMessage(null);
+      setCalendarError(null);
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [
+    calendarSelectionKey,
+    activeCalendar?.extracted_holidays,
     activeCalendar?.id,
   ]);
 
@@ -194,13 +217,13 @@ export default function ProjectsManager({
     calendarId: string,
     updates: Partial<HolidayCalendar>
   ) => {
-    setCalendarList((current) =>
-      current.map((calendar) =>
-        calendar.id === calendarId
-          ? { ...calendar, ...updates }
-          : calendar
-      )
-    );
+    setCalendarUpdates((current) => ({
+      ...current,
+      [calendarId]: {
+        ...current[calendarId],
+        ...updates,
+      },
+    }));
   };
 
   const handleCalendarUpload = async () => {

@@ -67,6 +67,7 @@ export default function Sidebar({ role, designation }: SidebarProps) {
 
   useEffect(() => {
     try {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsCollapsed(
         window.localStorage.getItem("sidebar-collapsed") === "true"
       );

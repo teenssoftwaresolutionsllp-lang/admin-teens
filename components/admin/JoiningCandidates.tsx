@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore, type FormEvent, } from "react";
 import { createPortal } from "react-dom";
 import {
   RefreshCw,
@@ -194,11 +194,11 @@ export default function JoiningCandidates() {
     message: string;
   } | null>(null);
 
-  const [isMounted, setIsMounted] = useState(false);
-
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
+  const isMounted = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false
+  );
 
   const [dialogError, setDialogError] = useState("");
   const [confirmJoinedError, setConfirmJoinedError] = useState("");
@@ -221,7 +221,6 @@ export default function JoiningCandidates() {
   }, [toast]);
 
   const loadDepartments = useCallback(async () => {
-    setDepartmentsLoading(true);
 
     try {
       const response = await fetch("/api/departments", {
@@ -248,11 +247,17 @@ export default function JoiningCandidates() {
   }, [showToast]);
 
   useEffect(() => {
-    void loadDepartments();
+    const timer = window.setTimeout(() => {
+      void loadDepartments();
+    }, 0);
+
+    return () => window.clearTimeout(timer);
   }, [loadDepartments]);
 
-  const loadCandidates = useCallback(async () => {
-    setLoading(true);
+  const loadCandidates = useCallback(async (showLoading = true) => {
+    if (showLoading) {
+      setLoading(true);
+    }
 
     try {
       const response = await fetch("/api/joining", {
@@ -304,7 +309,11 @@ export default function JoiningCandidates() {
   }, [showToast]);
 
   useEffect(() => {
-    void loadCandidates();
+    const timer = window.setTimeout(() => {
+      void loadCandidates(false);
+    }, 0);
+
+    return () => window.clearTimeout(timer);
   }, [loadCandidates]);
 
   function updateField(field: keyof typeof initialForm, value: string) {

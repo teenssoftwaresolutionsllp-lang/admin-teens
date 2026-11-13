@@ -1,4 +1,5 @@
 import { createClient, createAdminClient } from "@/lib/supabase-server";
+import { Employee } from "@/lib/types";
 import { DataStore } from "@/lib/data-store";
 import EmployeePayslipsView from "@/components/portal/EmployeePayslipsView";
 import { redirect } from "next/navigation";
@@ -51,40 +52,32 @@ export default async function EmployeePayslipsPage() {
 
   // Never send employer-paid contributions or full employee records
   // to the employee's browser.
-  const payslips = rawPayslips.map((slip) => {
-    const {
-      employer_pf,
-      employer_esi,
-      pf_admin,
-      gratuity_provision,
-      employee: _fullEmployee,
-      ...safeSlip
-    } = slip;
+  const excludedPayslipFields = new Set([
+    "employer_pf",
+    "employer_esi",
+    "pf_admin",
+    "gratuity_provision",
+    "employee",
+  ]);
 
-    return {
-      ...safeSlip,
-      employee: undefined,
-    };
-  });
-
-  // Pass only the fields required by the employee payslip view.
-  const safeEmployee = {
-    id: employee.id,
-    employee_id: employee.employee_id,
-    first_name: employee.first_name,
-    last_name: employee.last_name,
-    designation: employee.designation,
-    bank_name: employee.bank_name,
-    bank_account_number: employee.bank_account_number,
-    ifsc_code: employee.ifsc_code,
-    uan_number: employee.uan_number,
-    esi_number: employee.esi_number,
-    pan_number: employee.pan_number,
-  };
+  const payslips = rawPayslips.map((slip) =>
+    Object.fromEntries(
+      Object.entries(slip).filter(
+        ([key]) => !excludedPayslipFields.has(key)
+      )
+    ) as Omit<
+      typeof slip,
+      | "employer_pf"
+      | "employer_esi"
+      | "pf_admin"
+      | "gratuity_provision"
+      | "employee"
+    >
+  );
 
   return (
     <EmployeePayslipsView
-      employee={safeEmployee as any}
+      employee={employee as unknown as Employee}
       payslips={payslips}
     />
   );
