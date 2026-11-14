@@ -39,3 +39,40 @@ export async function deleteFromCloudinary(publicId: string) {
     });
   });
 }
+
+export async function uploadImageToCloudinary(
+  file: File,
+  folder: string
+) {
+  const arrayBuffer = await file.arrayBuffer();
+  const buffer = Buffer.from(arrayBuffer);
+
+  return new Promise<{ url: string; public_id: string }>(
+    (resolve, reject) => {
+      cloudinary.uploader
+        .upload_stream(
+          {
+            folder,
+            resource_type: "image",
+          },
+          (error, result) => {
+            if (error) {
+              reject(error);
+              return;
+            }
+
+            if (!result) {
+              reject(new Error("Cloudinary image upload returned no result."));
+              return;
+            }
+
+            resolve({
+              url: result.secure_url,
+              public_id: result.public_id,
+            });
+          }
+        )
+        .end(buffer);
+    }
+  );
+}

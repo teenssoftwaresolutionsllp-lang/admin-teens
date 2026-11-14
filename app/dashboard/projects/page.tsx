@@ -24,6 +24,7 @@ export default async function AdminProjectsPage() {
     employees,
     profileResult,
     holidaysResult,
+    departmentsResult,
   ] = await Promise.all([
     DataStore.getProjects(),
     DataStore.getHolidayCalendars(),
@@ -40,6 +41,10 @@ export default async function AdminProjectsPage() {
       )
       .eq("holiday_type", "emergency")
       .order("holiday_date", { ascending: false }),
+      admin
+        .from("departments")
+        .select("id, name")
+        .order("name"),
   ]);
 
   if (holidaysResult.error) {
@@ -49,12 +54,15 @@ export default async function AdminProjectsPage() {
     );
   }
 
-  const role = String(profileResult.data?.role || "").toLowerCase();
+  const role = String(
+    profileResult.data?.role || user.user_metadata?.role || "hr"
+  ).toLowerCase();
 
   return (
     <ProjectsManager
       initialProjects={projects}
       calendars={calendars}
+      departments={departmentsResult.data ?? []}
       employees={employees}
       emergencyHolidays={
         (holidaysResult.data || []) as unknown as EmergencyHoliday[]
@@ -62,6 +70,7 @@ export default async function AdminProjectsPage() {
       canManageEmergencyHolidays={
         !profileResult.error && ["hr", "ceo"].includes(role)
       }
+      role={role}
     />
   );
 }

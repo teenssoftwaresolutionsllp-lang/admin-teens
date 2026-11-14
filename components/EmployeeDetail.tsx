@@ -605,6 +605,8 @@ const getEmployeeStatusLabel = () => {
             {employee.profile_photo_url ? (
               <Image
                 src={employee.profile_photo_url}
+                width={40}
+                height={40}
                 alt={`${employee.first_name} ${employee.last_name}`}
                 className="h-full w-full object-cover"
               />

@@ -1,7 +1,8 @@
-import { createClient } from "@/lib/supabase-server";
+import { createClient,createAdminClient } from "@/lib/supabase-server";
 import { DataStore } from "@/lib/data-store";
 import ClockInWidget from "@/components/portal/ClockInWidget";
 import Link from "next/link";
+import Image from "next/image";
 import {
   CalendarDays,
   CalendarCheck,
@@ -47,6 +48,81 @@ export default async function EmployeePortalPage() {
   }
 
   const employeeId = employee.id;
+
+  // --------------------------------------------------
+// UPCOMING COMPANY EVENTS
+// --------------------------------------------------
+
+const admin = await createAdminClient();
+const eventsNow = new Date().toISOString();
+
+type CompanyEventMedia = {
+  id: string;
+  image_url: string;
+  alt_text?: string | null;
+  sort_order?: number;
+};
+
+type CompanyEvent = {
+  id: string;
+  title: string;
+  description?: string | null;
+  event_date: string;
+  end_date?: string | null;
+  location?: string | null;
+  media: CompanyEventMedia[];
+};
+
+const { data: eventRows, error: eventsError } = await admin
+  .from("company_events")
+  .select(`
+    id,
+    title,
+    description,
+    event_date,
+    end_date,
+    location
+  `)
+  .eq("event_type", "event")
+  .eq("status", "published")
+  .not("event_date", "is", null)
+  .gte("event_date", eventsNow)
+  .or(`expires_at.is.null,expires_at.gt.${eventsNow}`)
+  .order("event_date", { ascending: true });
+
+if (eventsError) {
+  console.error("Unable to load upcoming company events:", eventsError.message);
+}
+
+const upcomingEventIds = (eventRows ?? []).map((event) => event.id);
+
+let eventMedia: CompanyEventMedia[] = [];
+
+if (upcomingEventIds.length > 0) {
+  const { data: mediaRows, error: mediaError } = await admin
+    .from("company_event_media")
+    .select("id, event_id, image_url, alt_text, sort_order")
+    .in("event_id", upcomingEventIds)
+    .order("sort_order", { ascending: true });
+
+  if (mediaError) {
+    console.error("Unable to load event photos:", mediaError.message);
+  } else {
+    eventMedia = (mediaRows ?? []) as (CompanyEventMedia & {
+      event_id: string;
+    })[];
+  }
+}
+
+const upcomingEvents: CompanyEvent[] = (eventRows ?? []).map((event) => ({
+  ...event,
+  media: eventMedia.filter((photo) => {
+    return (
+      (photo as CompanyEventMedia & { event_id: string }).event_id ===
+      event.id
+    );
+  }),
+}));
 
   const todayAttendance = employeeId
     ? await DataStore.getTodayAttendance(employeeId)
@@ -177,6 +253,18 @@ export default async function EmployeePortalPage() {
       month: "long",
       year: "numeric",
       timeZone: "UTC",
+    });
+  };
+
+  const formatEventDate = (dateStr: string) => {
+    return new Date(dateStr).toLocaleString("en-IN", {
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+      timeZone: "Asia/Kolkata",
     });
   };
 
@@ -534,6 +622,95 @@ export default async function EmployeePortalPage() {
           </div>
         </section>
       </div>
+
+      {/* Upcoming Company Events */}
+      <section className={cardClass}>
+        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+          <div>
+            <h2 className="text-sm font-bold text-slate-800">
+              Upcoming Company Events
+            </h2>
+            <p className="mt-1 text-[11px] text-slate-400">
+              Company events and event photos
+            </p>
+          </div>
+
+          <div className="rounded-xl bg-indigo-50 p-2.5 text-indigo-600">
+            <PartyPopper className="h-5 w-5" />
+          </div>
+        </div>
+
+        {upcomingEvents.length > 0 ? (
+          <div className="grid grid-cols-1 gap-4 p-5 md:grid-cols-2">
+            {upcomingEvents.map((event) => (
+              <article
+                key={event.id}
+                className="overflow-hidden rounded-xl border border-slate-100 bg-white"
+              >
+                {event.media.length > 0 && (
+                  <div className="grid grid-cols-2 gap-1 bg-slate-100">
+                    {event.media.slice(0, 4).map((photo) => (
+                      <div
+                        key={photo.id}
+                        className="relative h-36 overflow-hidden"
+                      >
+                        <Image
+                          src={photo.image_url}
+                          alt={photo.alt_text || event.title}
+                          fill
+                          unoptimized
+                          sizes="(max-width: 768px) 100vw, 50vw"
+                          className="object-cover transition-transform duration-300 hover:scale-105"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="space-y-2 p-4">
+                  <h3 className="text-sm font-bold text-slate-800">
+                    {event.title}
+                  </h3>
+
+                  <p className="text-xs font-medium text-indigo-600">
+                    <Clock className="mr-1 inline h-3.5 w-3.5" />
+                    {formatEventDate(event.event_date)}
+                  </p>
+
+                  {event.location && (
+                    <p className="text-xs text-slate-500">
+                      <CalendarDays className="mr-1 inline h-3.5 w-3.5" />
+                      {event.location}
+                    </p>
+                  )}
+
+                  {event.description && (
+                    <p className="whitespace-pre-wrap text-xs leading-5 text-slate-600">
+                      {event.description}
+                    </p>
+                  )}
+
+                  {event.media.length > 4 && (
+                    <p className="text-[11px] font-medium text-indigo-600">
+                      +{event.media.length - 4} more photos
+                    </p>
+                  )}
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div className="px-5 py-10 text-center">
+            <PartyPopper className="mx-auto h-8 w-8 text-slate-300" />
+            <p className="mt-3 text-sm font-semibold text-slate-600">
+              No Upcoming Company Events
+            </p>
+            <p className="mt-1 text-xs text-slate-400">
+              New company events will appear here when published.
+            </p>
+          </div>
+        )}
+      </section>
 
       {/* Upcoming Holiday */}
       <section className="rounded-2xl border border-[#eee8ff] bg-[#faf8ff] px-5 py-4">

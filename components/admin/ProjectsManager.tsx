@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect,useRef, useState } from "react";
+import CompanyEventsManager from "@/components/admin/CompanyEventsManager";
 import type { FormEvent } from "react";
 import type { EmergencyHoliday } from "@/lib/types";
 import { useRouter } from "next/navigation";
@@ -31,11 +32,17 @@ import {
 interface ProjectsManagerProps {
   initialProjects: Project[];
   calendars: HolidayCalendar[];
+  departments: Department[];
   employees: Employee[];
   emergencyHolidays: EmergencyHoliday[];
   canManageEmergencyHolidays: boolean;
+  role?: string;
 }
 
+interface Department {
+  id: string;
+  name: string;
+}
 interface DraftHoliday {
   holiday_date: string;
   title: string;
@@ -47,8 +54,10 @@ export default function ProjectsManager({
   initialProjects,
   calendars,
   employees,
+  departments,
   emergencyHolidays,
   canManageEmergencyHolidays,
+  role = "hr",
 }: ProjectsManagerProps) {
   const router = useRouter();
 
@@ -61,9 +70,6 @@ export default function ProjectsManager({
       ...calendar,
       ...calendarUpdates[calendar.id],
     }));
-
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const [selectedCountry, setSelectedCountry] = useState("IN");
   const [selectedYear, setSelectedYear] = useState(
@@ -81,17 +87,6 @@ export default function ProjectsManager({
   const [message, setMessage] = useState<string | null>(null);
   const [calendarError, setCalendarError] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
-
-  const [formData, setFormData] = useState({
-    name: "",
-    client_country: "India",
-    timezone: "Asia/Kolkata",
-    calendar_id: calendars[0]?.id || "",
-    shift_start_time: "09:00",
-    shift_end_time: "18:00",
-    grace_period_minutes: 30,
-    half_day_cutoff_minutes: 150,
-  });
 
   const [emergencyForm, setEmergencyForm] = useState({
     title: "",
@@ -173,45 +168,6 @@ export default function ProjectsManager({
     activeCalendar?.extracted_holidays,
     activeCalendar?.id,
   ]);
-
-  const handleCreateProject = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-
-    try {
-      const response = await fetch("/api/projects", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || "Failed to create project");
-      }
-
-      setProjects((current) => [...current, result.project]);
-      setIsModalOpen(false);
-
-      setFormData({
-        name: "",
-        client_country: "India",
-        timezone: "Asia/Kolkata",
-        calendar_id: calendarList[0]?.id || "",
-        shift_start_time: "09:00",
-        shift_end_time: "18:00",
-        grace_period_minutes: 30,
-        half_day_cutoff_minutes: 150,
-      });
-    } catch (caught) {
-      setError(
-        caught instanceof Error
-          ? caught.message
-          : "Failed to create project"
-      );
-    }
-  };
 
   const updateCalendar = (
     calendarId: string,
@@ -624,109 +580,115 @@ export default function ProjectsManager({
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
-      {/* Top Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 sm:p-7 rounded-2xl border border-slate-200/90 shadow-sm">
+
+      {/* Company Events and Emergency Announcements */}
+      <CompanyEventsManager
+        employees={employees}
+        departments={departments}
+      />
+
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 sm:p-7 rounded-2xl border border-slate-200/90 shadow-sm">
         <div>
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shrink-0">
-              <Globe className="w-5 h-5" />
+              {role === "hr" ? (
+                <Calendar className="w-5 h-5" />
+              ) : (
+                <Globe className="w-5 h-5" />
+              )}
             </div>
 
             <h2 className="text-xl font-bold text-slate-900 tracking-tight">
-              Projects, Shifts & Country Calendars
+              {role === "hr"
+                ? "Holiday Calendars"
+                : "Company Projects & Holiday Calendars"}
             </h2>
           </div>
 
           <p className="text-xs text-slate-500 mt-1.5 leading-relaxed pl-11">
-            Manage multi-country timelines, client shifts, and country
-            holiday calendars. Employees inherit holidays and shift
-            rules from their assigned project.
+            {role === "hr"
+              ? "View and configure multi-country holiday schedules, shifts, and emergency holidays."
+              : "Overview of all company projects, client shifts, and country holiday calendars."}
           </p>
         </div>
-
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="inline-flex items-center gap-2 px-4 py-2.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-sm transition-all shrink-0 hover:shadow"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Create Project</span>
-        </button>
       </div>
 
-      {/* Projects Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-        {projects.map((proj) => {
-          const assignedCount = employees.filter(
-            (employee) => employee.project_id === proj.id
-          ).length;
+      {/* Projects Grid - Visible to CEO, hidden for HR */}
+      {role !== "hr" && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+          {projects.map((proj) => {
+            const assignedCount = employees.filter(
+              (employee) => employee.project_id === proj.id
+            ).length;
 
-          return (
-            <div
-              key={proj.id}
-              className="bg-white rounded-2xl border border-slate-200/90 p-5 sm:p-6 shadow-sm hover:shadow-md transition-all flex flex-col justify-between"
-            >
-              <div>
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-purple-50 text-purple-700 border border-purple-200 uppercase tracking-wider">
-                    {proj.client_country}
-                  </span>
+            return (
+              <div
+                key={proj.id}
+                className="bg-white rounded-2xl border border-slate-200/90 p-5 sm:p-6 shadow-sm hover:shadow-md transition-all flex flex-col justify-between"
+              >
+                <div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-purple-50 text-purple-700 border border-purple-200 uppercase tracking-wider">
+                      {proj.client_country}
+                    </span>
 
-                  <span className="text-xs font-medium text-slate-400 font-mono">
-                    {proj.timezone}
-                  </span>
+                    <span className="text-xs font-medium text-slate-400 font-mono">
+                      {proj.timezone}
+                    </span>
+                  </div>
+
+                  <h3 className="text-base font-bold text-slate-900 mt-3 tracking-tight">
+                    {proj.name}
+                  </h3>
+
+                  <div className="mt-4 space-y-2 text-xs text-slate-600 bg-slate-50/70 p-3.5 rounded-xl border border-slate-100">
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400 font-medium">
+                        Shift Hours:
+                      </span>
+                      <span className="font-semibold text-slate-800 font-mono">
+                        {proj.shift_start_time} - {proj.shift_end_time}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400 font-medium">
+                        Grace Period:
+                      </span>
+                      <span className="font-semibold text-slate-800">
+                        {proj.grace_period_minutes} mins
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400 font-medium">
+                        Holiday Schedule:
+                      </span>
+                      <span className="font-semibold text-indigo-700">
+                        {proj.calendar?.name || "India Standard"}
+                      </span>
+                    </div>
+                  </div>
                 </div>
 
-                <h3 className="text-base font-bold text-slate-900 mt-3 tracking-tight">
-                  {proj.name}
-                </h3>
+                <div className="mt-5 pt-3.5 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                  <span className="flex items-center gap-1.5 font-medium">
+                    <Users className="w-4 h-4 text-slate-400" />
+                    <span>
+                      {assignedCount}{" "}
+                      {assignedCount === 1 ? "Employee" : "Employees"} Assigned
+                    </span>
+                  </span>
 
-                <div className="mt-4 space-y-2 text-xs text-slate-600 bg-slate-50/70 p-3.5 rounded-xl border border-slate-100">
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-400 font-medium">
-                      Shift Hours:
-                    </span>
-                    <span className="font-semibold text-slate-800 font-mono">
-                      {proj.shift_start_time} - {proj.shift_end_time}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-400 font-medium">
-                      Grace Period:
-                    </span>
-                    <span className="font-semibold text-slate-800">
-                      {proj.grace_period_minutes} mins
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-400 font-medium">
-                      Holiday Schedule:
-                    </span>
-                    <span className="font-semibold text-indigo-700">
-                      {proj.calendar?.name || "India Standard"}
-                    </span>
-                  </div>
+                  <span className="text-[11px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                    Active
+                  </span>
                 </div>
               </div>
-
-              <div className="mt-5 pt-3.5 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-                <span className="flex items-center gap-1.5 font-medium">
-                  <Users className="w-4 h-4 text-slate-400" />
-                  <span>
-                    {assignedCount}{" "}
-                    {assignedCount === 1 ? "Employee" : "Employees"} Assigned
-                  </span>
-                </span>
-
-                <span className="text-[11px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                  Active
-                </span>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Multi-Country Holiday Calendars */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
@@ -1399,7 +1361,7 @@ export default function ProjectsManager({
                     Holiday Scope *
                   </label>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div className={`grid grid-cols-1 ${role === "hr" ? "sm:grid-cols-1" : "sm:grid-cols-2"} gap-2`}>
                     <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white p-3 cursor-pointer">
                       <input
                         type="radio"
@@ -1425,33 +1387,35 @@ export default function ProjectsManager({
                       </span>
                     </label>
 
-                    <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white p-3 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="emergency-scope"
-                        value="project"
-                        checked={emergencyForm.scope === "project"}
-                        onChange={() =>
-                          setEmergencyForm((previous) => ({
-                            ...previous,
-                            scope: "project",
-                          }))
-                        }
-                        className="accent-amber-600"
-                      />
-                      <span>
-                        <span className="block text-xs font-bold text-slate-800">
-                          Selected Projects
+                    {role !== "hr" && (
+                      <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white p-3 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="emergency-scope"
+                          value="project"
+                          checked={emergencyForm.scope === "project"}
+                          onChange={() =>
+                            setEmergencyForm((previous) => ({
+                              ...previous,
+                              scope: "project",
+                            }))
+                          }
+                          className="accent-amber-600"
+                        />
+                        <span>
+                          <span className="block text-xs font-bold text-slate-800">
+                            Selected Projects
+                          </span>
+                          <span className="block text-[10px] text-slate-500 mt-0.5">
+                            Only employees assigned to selected projects
+                          </span>
                         </span>
-                        <span className="block text-[10px] text-slate-500 mt-0.5">
-                          Only employees assigned to selected projects
-                        </span>
-                      </span>
-                    </label>
+                      </label>
+                    )}
                   </div>
                 </div>
 
-                {emergencyForm.scope === "project" && (
+                {role !== "hr" && emergencyForm.scope === "project" && (
                   <div className="rounded-xl border border-slate-200 bg-white p-3">
                     <div className="flex items-center justify-between mb-2">
                       <label className="text-xs font-semibold text-slate-700">
@@ -1750,179 +1714,6 @@ export default function ProjectsManager({
           )}
         </div>
       </div>
-
-
-      {/* Create Project Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-7 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95">
-            <div className="flex items-center justify-between pb-3.5 border-b border-slate-200">
-              <h3 className="text-base font-bold text-slate-900 tracking-tight">
-                Create New Client Project
-              </h3>
-
-              <button
-                onClick={() => setIsModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 p-1 hover:bg-slate-100 rounded-lg transition-colors"
-              >
-                <XCircle className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form
-              onSubmit={handleCreateProject}
-              className="mt-4 space-y-3.5 text-xs"
-            >
-              {error && (
-                <p className="rounded-xl border border-rose-200 bg-rose-50 p-3 font-semibold text-rose-700">
-                  {error}
-                </p>
-              )}
-
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">
-                  Project Name
-                </label>
-
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. US Telecom Billing Suite"
-                  value={formData.name}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      name: e.target.value,
-                    })
-                  }
-                  className="w-full px-3.5 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">
-                    Client Country
-                  </label>
-
-                  <select
-                    value={formData.client_country}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        client_country: e.target.value,
-                      })
-                    }
-                    className="w-full px-3.5 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
-                  >
-                    <option value="India">India</option>
-                    <option value="United States">United States</option>
-                    <option value="United Kingdom">United Kingdom</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">
-                    Holiday Calendar
-                  </label>
-
-                  <select
-                    value={formData.calendar_id}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        calendar_id: e.target.value,
-                      })
-                    }
-                    className="w-full px-3.5 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
-                  >
-                    {calendarList.map((calendar) => (
-                      <option key={calendar.id} value={calendar.id}>
-                        {calendar.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">
-                    Shift Start Time
-                  </label>
-
-                  <input
-                    type="time"
-                    required
-                    value={formData.shift_start_time}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        shift_start_time: e.target.value,
-                      })
-                    }
-                    className="w-full px-3.5 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
-                  />
-                </div>
-
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">
-                    Shift End Time
-                  </label>
-
-                  <input
-                    type="time"
-                    required
-                    value={formData.shift_end_time}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        shift_end_time: e.target.value,
-                      })
-                    }
-                    className="w-full px-3.5 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">
-                  Grace Period (Minutes)
-                </label>
-
-                <input
-                  type="number"
-                  value={formData.grace_period_minutes}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      grace_period_minutes: Number(e.target.value),
-                    })
-                  }
-                  className="w-full px-3.5 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-2.5 pt-3.5 border-t border-slate-200">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
-                >
-                  Cancel
-                </button>
-
-                <button
-                  type="submit"
-                  className="px-4 py-2 font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-sm transition-all hover:shadow"
-                >
-                  Create Project
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

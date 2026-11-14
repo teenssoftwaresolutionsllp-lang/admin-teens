@@ -82,9 +82,10 @@ const statusLabels: Record<string, string> = {
   expired: "Expired",
 };
 
-const inputClass ="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100";
+const inputClass =
+  "mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs sm:text-sm font-medium text-slate-800 placeholder-slate-400 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 disabled:bg-slate-50 disabled:text-slate-400";
 
-const labelClass = "block text-sm font-medium text-slate-700";
+const labelClass = "block text-xs sm:text-sm font-semibold text-slate-700";
 
 function getIndiaToday(): string {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -846,20 +847,22 @@ export default function JoiningCandidates() {
       )}
 
       {/* Page heading */}
-      <div className="flex flex-wrap items-start justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">
             Add Joining
           </h1>
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="mt-1 text-xs sm:text-sm text-slate-500">
             Manage selected candidates and prepare for their joining.
           </p>
         </div>
 
-        <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3">
-          <Users className="h-5 w-5 text-indigo-600" />
+        <div className="flex items-center gap-3 rounded-2xl border border-slate-200/90 bg-white px-4 py-3 shadow-xs">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-100">
+            <Users className="h-5 w-5" />
+          </div>
           <div>
-            <p className="text-xs text-slate-500">Total candidates</p>
+            <p className="text-xs font-medium text-slate-500">Total candidates</p>
             <p className="text-lg font-bold text-slate-900">
               {candidates.length}
             </p>
@@ -868,9 +871,9 @@ export default function JoiningCandidates() {
       </div>
 
       {/* New candidate form */}
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
+      <section className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-sm sm:p-7">
         <div className="mb-6 flex items-center gap-3">
-          <div className="rounded-xl bg-indigo-50 p-2.5">
+          <div className="rounded-xl bg-indigo-50 p-2.5 border border-indigo-100">
             <UserPlus className="h-5 w-5 text-indigo-600" />
           </div>
 
@@ -878,7 +881,7 @@ export default function JoiningCandidates() {
             <h2 className="font-semibold text-slate-900">
               New Joining Candidate
             </h2>
-            <p className="text-sm text-slate-500">
+            <p className="text-xs sm:text-sm text-slate-500">
               Saving a candidate does not create an employee record. The
               joining date is selected when generating the joining letter.
             </p>
@@ -1063,58 +1066,170 @@ export default function JoiningCandidates() {
           </div>
 
           <div className="border-t border-slate-100 pt-5">
-            <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-500">Experience details</h3>
+            <h3 className="mb-4 text-xs font-bold uppercase tracking-wider text-slate-500">
+              Experience details
+            </h3>
             <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-              <label className={labelClass}>Experience level *
-                <select required value={form.experience_level} onChange={(event) => {
-                  const level = event.target.value as "fresher" | "experienced";
-                  setForm((current) => ({ ...current, experience_level: level,
-                    total_experience_years: level === "fresher" ? "0" : current.total_experience_years,
-                    total_experience_months: level === "fresher" ? "0" : current.total_experience_months }));
-                }} className={inputClass}>
-                  <option value="fresher">Fresher</option><option value="experienced">Experienced</option>
+              <label className={labelClass}>
+                Experience level *
+                <select
+                  required
+                  value={form.experience_level}
+                  onChange={(event) => {
+                    const level = event.target.value as "fresher" | "experienced";
+                    setForm((current) => ({
+                      ...current,
+                      experience_level: level,
+                      total_experience_years:
+                        level === "fresher" ? "0" : current.total_experience_years,
+                      total_experience_months:
+                        level === "fresher" ? "0" : current.total_experience_months,
+                    }));
+                  }}
+                  className={inputClass}
+                >
+                  <option value="fresher">Fresher</option>
+                  <option value="experienced">Experienced</option>
                 </select>
               </label>
-              <div className={labelClass}>Total experience *
+
+              <div className={labelClass}>
+                <span>Total experience *</span>
                 <div className="mt-1.5 grid grid-cols-2 gap-3">
-                  <label><input type="number" min="0" max="50" step="1" required disabled={form.experience_level === "fresher"} value={form.total_experience_years} onChange={(e) => updateField("total_experience_years", e.target.value)} className={inputClass} /><span className="mt-1 block text-xs font-normal text-slate-500">Years</span></label>
-                  <label><input type="number" min="0" max="11" step="1" required disabled={form.experience_level === "fresher"} value={form.total_experience_months} onChange={(e) => updateField("total_experience_months", e.target.value)} className={inputClass} /><span className="mt-1 block text-xs font-normal text-slate-500">Months</span></label>
+                  <div>
+                    <input
+                      type="number"
+                      min="0"
+                      max="50"
+                      step="1"
+                      required
+                      disabled={form.experience_level === "fresher"}
+                      value={form.total_experience_years}
+                      onChange={(e) => updateField("total_experience_years", e.target.value)}
+                      className={inputClass}
+                      placeholder="Years"
+                    />
+                    <span className="mt-1 block text-xs font-normal text-slate-400">Years</span>
+                  </div>
+                  <div>
+                    <input
+                      type="number"
+                      min="0"
+                      max="11"
+                      step="1"
+                      required
+                      disabled={form.experience_level === "fresher"}
+                      value={form.total_experience_months}
+                      onChange={(e) => updateField("total_experience_months", e.target.value)}
+                      className={inputClass}
+                      placeholder="Months"
+                    />
+                    <span className="mt-1 block text-xs font-normal text-slate-400">Months</span>
+                  </div>
                 </div>
               </div>
             </div>
-            <p className="mt-3 text-xs text-slate-500">Fresher candidates are automatically saved with 0 years and 0 months.</p>
+            <p className="mt-2 text-xs text-slate-400">
+              Fresher candidates are automatically saved with 0 years and 0 months.
+            </p>
           </div>
 
           <div className="border-t border-slate-100 pt-5">
             <div className="mb-4 flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600"><FileText className="h-5 w-5" /></div>
-              <div><h3 className="text-sm font-semibold text-slate-800">Candidate documents</h3><p className="text-xs text-slate-500">Add resume and experience letters</p></div>
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-100">
+                <FileText className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-slate-900">Candidate documents</h3>
+                <p className="text-xs text-slate-500">Add resume and experience letters</p>
+              </div>
             </div>
-            <div className="rounded-2xl border border-dashed border-indigo-200 bg-gradient-to-br from-indigo-50/70 to-slate-50 p-4 sm:p-5">
-              <div className="mx-auto grid max-w-xl gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
-                <label className="text-sm font-semibold text-slate-700">Document type
-                  <select value={uploadDocumentType} onChange={(event) => setUploadDocumentType(event.target.value as "resume" | "experience_document")} className={`${inputClass} mt-1.5 bg-white`}>
-                    <option value="resume">Resume</option><option value="experience_document">Experience Letter</option>
-                  </select>
-                </label>
-                <label className="inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700">
-                  <FileText className="h-4 w-4" />{uploadDocumentType === "resume" ? "Select Resume" : "Select Experience Letter"}
-                  <input type="file" multiple={uploadDocumentType === "experience_document"} accept=".pdf,.doc,.docx" className="sr-only" onChange={(event) => {
-                    const files = Array.from(event.target.files ?? []);
-                    const additions = files.map((file) => ({ file, documentType: uploadDocumentType }));
-                    setCandidateDocuments((current) => uploadDocumentType === "resume" ? [...current.filter((item) => item.documentType !== "resume"), ...additions.slice(0, 1)] : [...current, ...additions]);
-                    event.target.value = "";
-                  }} />
+
+            <div className="rounded-2xl border border-dashed border-indigo-200 bg-gradient-to-br from-indigo-50/50 via-white to-slate-50/70 p-4 sm:p-5">
+              <div className="mx-auto flex flex-col sm:flex-row sm:items-end gap-3 max-w-xl">
+                <div className="flex-1 min-w-0">
+                  <label className="text-xs font-semibold text-slate-700">
+                    Document type
+                    <select
+                      value={uploadDocumentType}
+                      onChange={(event) =>
+                        setUploadDocumentType(
+                          event.target.value as "resume" | "experience_document"
+                        )
+                      }
+                      className={inputClass}
+                    >
+                      <option value="resume">Resume</option>
+                      <option value="experience_document">Experience Letter</option>
+                    </select>
+                  </label>
+                </div>
+
+                <label className="relative inline-flex min-h-[42px] cursor-pointer items-center justify-center gap-2 overflow-hidden rounded-xl bg-indigo-600 px-5 py-2.5 text-xs sm:text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 shrink-0 whitespace-nowrap self-stretch sm:self-auto">
+                  <FileText className="h-4 w-4 pointer-events-none" />
+                  <span className="pointer-events-none">
+                    {uploadDocumentType === "resume" ? "Select Resume" : "Select Experience Letter"}
+                  </span>
+                  <input
+                    type="file"
+                    multiple={uploadDocumentType === "experience_document"}
+                    accept=".pdf,.doc,.docx"
+                    className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
+                    onChange={(event) => {
+                      const files = Array.from(event.target.files ?? []);
+                      const additions = files.map((file) => ({
+                        file,
+                        documentType: uploadDocumentType,
+                      }));
+                      setCandidateDocuments((current) =>
+                        uploadDocumentType === "resume"
+                          ? [
+                              ...current.filter((item) => item.documentType !== "resume"),
+                              ...additions.slice(0, 1),
+                            ]
+                          : [...current, ...additions]
+                      );
+                      event.target.value = "";
+                    }}
+                  />
                 </label>
               </div>
-              <p className="mt-3 text-center text-xs text-slate-500">PDF, DOC or DOCX · Maximum 10 MB per file</p>
+
+              <p className="mt-3 text-center text-xs text-slate-400">
+                PDF, DOC or DOCX · Maximum 10 MB per file
+              </p>
+
               {candidateDocuments.length > 0 && (
-                <div className="mx-auto mt-5 max-w-2xl space-y-3">
+                <div className="mx-auto mt-4 max-w-2xl space-y-2.5">
                   {candidateDocuments.map((document, index) => (
-                    <div key={`${document.file.name}-${index}`} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600"><FileText className="h-4 w-4" /></div>
-                      <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-slate-700">{document.file.name}</p><p className="text-xs text-slate-500">{document.documentType === "resume" ? "Resume" : "Experience Letter"} · {(document.file.size / (1024 * 1024)).toFixed(2)} MB</p></div>
-                      <button type="button" onClick={() => setCandidateDocuments((current) => current.filter((_, itemIndex) => itemIndex !== index))} className="rounded-lg p-2 text-slate-400 transition hover:bg-red-50 hover:text-red-600" aria-label={`Remove ${document.file.name}`}><X className="h-4 w-4" /></button>
+                    <div
+                      key={`${document.file.name}-${index}`}
+                      className="flex items-center gap-3 rounded-xl border border-slate-200/90 bg-white p-3 shadow-xs"
+                    >
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
+                        <FileText className="h-4 w-4" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-xs sm:text-sm font-semibold text-slate-800">
+                          {document.file.name}
+                        </p>
+                        <p className="text-xs text-slate-400">
+                          {document.documentType === "resume" ? "Resume" : "Experience Letter"} ·{" "}
+                          {(document.file.size / (1024 * 1024)).toFixed(2)} MB
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setCandidateDocuments((current) =>
+                            current.filter((_, itemIndex) => itemIndex !== index)
+                          )
+                        }
+                        className="rounded-lg p-2 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 shrink-0"
+                        aria-label={`Remove ${document.file.name}`}
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -1169,37 +1284,28 @@ export default function JoiningCandidates() {
             No joining candidates yet. Add your first candidate above.
           </p>
         ) : (
-          <div className="w-full min-w-0 overflow-x-hidden">
-            <table className="w-full table-fixed text-left text-sm">
-                  <colgroup>
-                    <col className="w-[16%]" />
-                    <col className="w-[19%]" />
-                    <col className="w-[11%]" />
-                    <col className="w-[11%]" />
-                    <col className="w-[10%]" />
-                    <col className="w-[12%]" />
-                    <col className="w-[21%]" />
-                  </colgroup>
-              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+          <div className="w-full overflow-x-auto">
+            <table className="w-full min-w-[1020px] text-left text-xs sm:text-sm">
+              <thead className="border-b border-slate-200 bg-slate-50/80 text-[11px] font-bold uppercase tracking-wider text-slate-500">
                 <tr>
-                  <th className="px-3 py-3 font-semibold">Candidate</th>
-                  <th className="px-3 py-3 font-semibold">Contact</th>
-                  <th className="px-3 py-3 font-semibold">Designation</th>
-                  <th className="px-3 py-3 font-semibold">Joining date</th>
-                  <th className="px-3 py-3 font-semibold">Annual CTC</th>
-                  <th className="px-3 py-3 font-semibold">Status</th>
-                  <th className="px-3 py-3 font-semibold">Actions</th>
+                  <th className="px-4 py-3.5 whitespace-nowrap min-w-[180px]">Candidate</th>
+                  <th className="px-4 py-3.5 whitespace-nowrap min-w-[200px]">Contact</th>
+                  <th className="px-4 py-3.5 whitespace-nowrap min-w-[150px]">Designation</th>
+                  <th className="px-4 py-3.5 whitespace-nowrap min-w-[120px]">Joining date</th>
+                  <th className="px-4 py-3.5 whitespace-nowrap min-w-[120px]">Annual CTC</th>
+                  <th className="px-4 py-3.5 whitespace-nowrap min-w-[140px]">Status</th>
+                  <th className="px-4 py-3.5 whitespace-nowrap min-w-[260px] text-right">Actions</th>
                 </tr>
               </thead>
 
               <tbody className="divide-y divide-slate-100">
                 {candidates.map((candidate) => (
-                  <tr key={candidate.id} className="hover:bg-slate-50">
-                    <td className="min-w-0 px-3 py-4">
-                      <p className="font-semibold text-slate-900">
+                  <tr key={candidate.id} className="transition-colors hover:bg-slate-50/70">
+                    <td className="px-4 py-3.5 align-top">
+                      <p className="font-bold text-slate-900">
                         {candidate.first_name} {candidate.last_name}
                       </p>
-                      <p className="mt-1 text-xs text-slate-500">
+                      <p className="mt-0.5 text-xs text-slate-400">
                         Added{" "}
                         {new Date(candidate.created_at).toLocaleDateString(
                           "en-IN"
@@ -1207,70 +1313,75 @@ export default function JoiningCandidates() {
                       </p>
 
                       {candidate.employee_id && (
-                        <p className="mt-1 text-xs font-semibold text-emerald-700">
+                        <p className="mt-1 inline-flex items-center rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-200">
                           Employee ID: {candidate.employee_id}
                         </p>
                       )}
                     </td>
 
-                    <td className="min-w-0 px-3 py-4">
-                      <p className="break-all text-sm text-slate-700">
+                    <td className="px-4 py-3.5 align-top">
+                      <p className="break-all text-xs sm:text-sm font-medium text-slate-700">
                         {candidate.personal_email}
                       </p>
-                      <p className="mt-1 text-xs text-slate-500">
+                      <p className="mt-0.5 text-xs text-slate-400 font-mono">
                         {candidate.mobile_number}
                       </p>
                     </td>
 
-                    <td className="px-5 py-4 text-slate-700">
+                    <td className="px-4 py-3.5 align-top text-xs sm:text-sm text-slate-700">
                       {candidate.designation}
                     </td>
 
-                    <td className="px-5 py-4 text-slate-700">
+                    <td className="px-4 py-3.5 align-top text-xs sm:text-sm text-slate-600">
                       {candidate.joining_date
                         ? new Date(
                             `${candidate.joining_date}T00:00:00`
                           ).toLocaleDateString("en-IN")
-                        : "Not set"}
+                        : <span className="text-slate-400 italic">Not set</span>}
                     </td>
 
-                    <td className="px-5 py-4 text-slate-700">
-                      ₹
-                      {Number(candidate.annual_ctc).toLocaleString("en-IN")}
+                    <td className="px-4 py-3.5 align-top text-xs sm:text-sm font-semibold text-slate-800">
+                      ₹{Number(candidate.annual_ctc).toLocaleString("en-IN")}
                     </td>
 
-                    <td className="min-w-0 px-3 py-4">
+                    <td className="px-4 py-3.5 align-top">
                       <span
-                        className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
+                        className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${
                           candidate.status === "joined"
-                            ? "bg-emerald-100 text-emerald-800"
+                            ? "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200"
                             : candidate.status === "joining_letter_sent"
-                              ? "bg-indigo-100 text-indigo-800"
-                              : candidate.status === "offer_declined" ||
-                                  candidate.status === "cancelled" ||
-                                  candidate.status === "expired"
-                                ? "bg-red-100 text-red-700"
-                                : "bg-slate-100 text-slate-700"
+                              ? "bg-indigo-50 text-indigo-700 ring-1 ring-inset ring-indigo-200"
+                              : candidate.status === "offer_accepted"
+                                ? "bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-200"
+                                : candidate.status === "offer_sent"
+                                  ? "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200"
+                                  : candidate.status === "offer_declined" ||
+                                      candidate.status === "cancelled" ||
+                                      candidate.status === "expired"
+                                    ? "bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-200"
+                                    : "bg-slate-100 text-slate-700"
                         }`}
                       >
+                        <span className="h-1.5 w-1.5 rounded-full bg-current" />
                         {statusLabels[candidate.status] ?? candidate.status}
                       </span>
 
                       {candidate.conversion_status === "failed" &&
                         candidate.status !== "joined" && (
-                          <p className="mt-1 text-xs text-red-600">
+                          <p className="mt-1 text-xs font-medium text-rose-600">
                             Employee conversion failed
                           </p>
                         )}
 
                       {candidate.conversion_status === "processing" && (
-                        <p className="mt-1 text-xs text-amber-600">
-                          Conversion in progress
+                        <p className="mt-1 text-xs font-medium text-amber-600">
+                          Conversion in progress...
                         </p>
                       )}
                     </td>
-                    <td className="min-w-0 px-3 py-4">
-                      <div className="flex flex-wrap items-center gap-2">
+
+                    <td className="px-4 py-3.5 align-top">
+                      <div className="flex flex-wrap items-center justify-end gap-1.5">
                         {/* Offer actions are available only before acceptance. */}
                         {offerDocuments[candidate.id] ? (
                           <button
@@ -1278,7 +1389,7 @@ export default function JoiningCandidates() {
                             onClick={() =>
                               handlePreviewOffer(offerDocuments[candidate.id])
                             }
-                            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100"
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 whitespace-nowrap shrink-0 transition"
                           >
                             <Eye className="h-3.5 w-3.5" />
                             View Offer
@@ -1288,7 +1399,7 @@ export default function JoiningCandidates() {
                             type="button"
                             onClick={() => void handleGenerateOffer(candidate)}
                             disabled={offerLoadingId === candidate.id}
-                            className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 disabled:opacity-50"
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 disabled:opacity-50 whitespace-nowrap shrink-0 transition"
                           >
                             <FileText className="h-3.5 w-3.5" />
                             {offerLoadingId === candidate.id
@@ -1303,7 +1414,7 @@ export default function JoiningCandidates() {
                             type="button"
                             onClick={() => handleEditOffer(candidate)}
                             disabled={offerLoadingId === candidate.id || offerEditSaving}
-                            className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-white px-3 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-50 disabled:opacity-50"
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-white px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-50 disabled:opacity-50 whitespace-nowrap shrink-0 transition"
                           >
                             {candidate.status === "offer_sent"
                               ? "Edit & Resend Offer"
@@ -1318,10 +1429,10 @@ export default function JoiningCandidates() {
                               type="button"
                               onClick={() =>
                                 handlePreviewJoiningLetter(
-                                  joiningLetterDocuments[candidate.id]
+                                   joiningLetterDocuments[candidate.id]
                                 )
                               }
-                              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100"
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 whitespace-nowrap shrink-0 transition"
                             >
                               <Eye className="h-3.5 w-3.5" />
                               View Joining Letter
@@ -1331,7 +1442,7 @@ export default function JoiningCandidates() {
                               type="button"
                               onClick={() => handleGenerateJoiningLetter(candidate)}
                               disabled={joiningLetterLoadingId === candidate.id}
-                              className="inline-flex items-center gap-1.5 rounded-lg bg-violet-50 px-3 py-2 text-xs font-semibold text-violet-700 hover:bg-violet-100 disabled:opacity-50"
+                              className="inline-flex items-center gap-1.5 rounded-lg bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-700 hover:bg-violet-100 disabled:opacity-50 whitespace-nowrap shrink-0 transition"
                             >
                               <CalendarDays className="h-3.5 w-3.5" />
                               {joiningLetterLoadingId === candidate.id
@@ -1351,7 +1462,7 @@ export default function JoiningCandidates() {
                                   joiningLetterDocuments[candidate.id]
                                 )
                               }
-                              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100"
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 whitespace-nowrap shrink-0 transition"
                             >
                               <Eye className="h-3.5 w-3.5" />
                               View Joining Letter
@@ -1367,7 +1478,7 @@ export default function JoiningCandidates() {
                                 confirmJoinedLoadingId === candidate.id ||
                                 candidate.conversion_status === "processing"
                               }
-                              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50 whitespace-nowrap shrink-0 transition"
                             >
                               {confirmJoinedLoadingId === candidate.id
                                 ? "Confirming..."
@@ -1504,17 +1615,19 @@ export default function JoiningCandidates() {
                       </select>
                     </label>
 
-                    <label className="inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700">
-                      <FileText className="h-4 w-4" />
-                      {offerEditUploadType === "resume"
-                        ? "Select Resume"
-                        : "Select Experience Letter"}
+                    <label className="relative inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 overflow-hidden rounded-xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700">
+                      <FileText className="h-4 w-4 pointer-events-none" />
+                      <span className="pointer-events-none">
+                        {offerEditUploadType === "resume"
+                          ? "Select Resume"
+                          : "Select Experience Letter"}
+                      </span>
 
                       <input
                         type="file"
                         multiple={offerEditUploadType === "experience_document"}
                         accept=".pdf,.doc,.docx"
-                        className="sr-only"
+                        className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
                         onChange={(event) => {
                           const files = Array.from(event.target.files ?? []);
                           const additions = files.map((file) => ({

@@ -12,6 +12,15 @@ import {
   Eye,
   UserCircle,
   Download,
+  Search,
+  X,
+  SlidersHorizontal,
+  ChevronDown,
+  ChevronUp,
+  Briefcase,
+  User,
+  ShieldCheck,
+  LogOut,
 } from "lucide-react"
 
 const companies = companiesData.companies
@@ -150,6 +159,7 @@ const formatOptionLabel = (value: string) =>
 export default function EmployeeTable({
   employees,
   departments,
+  role = "hr",
 }: EmployeeTableProps) {
   const searchParams = useSearchParams()
   const { dashboardFilter,clearDashboardFilter } = useEmployeeDashboardFilter();
@@ -169,6 +179,7 @@ export default function EmployeeTable({
   const [fromDate, setFromDate] = useState("")
   const [toDate, setToDate] = useState("")
   const [activeFilterTab, setActiveFilterTab] = useState("employee")
+  const [isFiltersCollapsed, setIsFiltersCollapsed] = useState(false)
 
 
   // Additional filters - All view only
@@ -376,7 +387,7 @@ export default function EmployeeTable({
     esiFilter !== "all" ||
     ptFilter !== "all" ||
     tdsFilter !== "all" ||
-    projectFilter !== "all" ||
+    (role !== "hr" && projectFilter !== "all") ||
     appointmentDateFrom !== "" || appointmentDateTo !== "" ||
     experienceLevelFilter !== "all" ||
     experienceYearsMin !== "" ||
@@ -705,6 +716,7 @@ export default function EmployeeTable({
         { header: "Blood Group", key: "blood_group", width: 14 },
         { header: "Marital Status", key: "marital_status", width: 18 },
         { header: "Department", key: "department", width: 22 },
+        ...(role !== "hr" ? [{ header: "Project", key: "project", width: 22 }] : []),
         { header: "Designation", key: "designation", width: 22 },
         { header: "Employment Type", key: "employment_type", width: 18 },
         { header: "Experience Level", key: "experience_level", width: 18 },
@@ -925,7 +937,7 @@ export default function EmployeeTable({
       normalize(emp.notice_status) === normalize(noticeFilter)
 
     const matchesProject =
-      projectFilter === "all" || emp.project_id === projectFilter
+      role === "hr" || projectFilter === "all" || emp.project_id === projectFilter
 
     const matchesDateRange = (
       value: string | null | undefined,
@@ -1135,6 +1147,7 @@ export default function EmployeeTable({
           marital_status: details.marital_status || "N/A",
 
           department: getDepartmentName(emp),
+          ...(role !== "hr" ? { project: details.project?.name || details.project_id || "N/A" } : {}),
           designation: emp.designation || "N/A",
           employment_type: emp.employment_type || "N/A",
           experience_level:
@@ -1187,6 +1200,7 @@ export default function EmployeeTable({
         { header: "Blood Group", key: "blood_group", width: 14 },
         { header: "Marital Status", key: "marital_status", width: 18 },
         { header: "Department", key: "department", width: 22 },
+        ...(role !== "hr" ? [{ header: "Project", key: "project", width: 22 }] : []),
         { header: "Designation", key: "designation", width: 22 },
         { header: "Employment Type", key: "employment_type", width: 18 },
         { header: "Experience Level", key: "experience_level", width: 18 },
@@ -1240,172 +1254,435 @@ export default function EmployeeTable({
     }
   };
 
+  const employeeEmploymentFiltersCount = [
+    compFilter !== "all",
+    deptFilter !== "all",
+    role !== "hr" && projectFilter !== "all",
+    designationFilter !== "all",
+    statusFilter !== (isAllSubmenu ? "all" : sidebarStatus),
+    typeFilter !== "all",
+    clientTypeFilter !== "all",
+    noticeFilter !== "all",
+    fromDate !== "" || toDate !== "",
+    appointmentDateFrom !== "" || appointmentDateTo !== "",
+    confirmationDateFrom !== "" || confirmationDateTo !== "",
+    probationEndFrom !== "" || probationEndTo !== "",
+    probationDurationMin !== "" || probationDurationMax !== "",
+    experienceLevelFilter !== "all",
+    experienceYearsMin !== "" || experienceYearsMax !== "",
+    experienceMonthsMin !== "" || experienceMonthsMax !== "",
+    noticeDaysMin !== "" || noticeDaysMax !== "",
+    salaryMin !== "" || salaryMax !== "",
+  ].filter(Boolean).length;
+
+  const personalFiltersCount = [
+    genderFilter !== "all",
+    maritalFilter !== "all",
+    bloodGroupFilter !== "all",
+    locationFilter !== "all",
+    dobFrom !== "" || dobTo !== "",
+  ].filter(Boolean).length;
+
+  const exitFiltersCount = [
+    resignationDateFrom !== "" || resignationDateTo !== "",
+    exitDateFrom !== "" || exitDateTo !== "",
+  ].filter(Boolean).length;
+
+  const statutoryFiltersCount = [
+    pfFilter !== "all",
+    esiFilter !== "all",
+    ptFilter !== "all",
+    tdsFilter !== "all",
+  ].filter(Boolean).length;
+
+  const filterTabs = [
+    {
+      id: "employee",
+      label: "Employment Details",
+      icon: Briefcase,
+      count: employeeEmploymentFiltersCount,
+    },
+    {
+      id: "personal",
+      label: "Personal Details",
+      icon: User,
+      count: personalFiltersCount,
+    },
+    {
+      id: "exit",
+      label: "Exit Details",
+      icon: LogOut,
+      count: exitFiltersCount,
+    },
+    {
+      id: "statutory",
+      label: "Statutory Eligibility",
+      icon: ShieldCheck,
+      count: statutoryFiltersCount,
+    },
+  ];
+
   return (
     <div className="flex flex-col gap-5">
       {/* Filters */}
       {isAllSubmenu ? (
-        <div className="sticky top-0 z-[100] w-full shrink-0 bg-white shadow-md">
-          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-            {/* Header */}
-            <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <h3 className="text-sm font-bold text-slate-900">
-                    Employee Directory Filters
-                  </h3>
-                  <p className="mt-0.5 text-xs text-slate-500">
-                    Select a category to view its filters.
-                  </p>
+        <div className="w-full shrink-0">
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all">
+            {/* Header / Search bar */}
+            <div className="border-b border-slate-200 bg-slate-50/70 p-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="relative flex-1">
+                  <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(event) => setSearchTerm(event.target.value)}
+                    placeholder="Search by employee name, ID, email, or phone number..."
+                    className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-9 text-xs font-medium text-slate-800 placeholder-slate-400 transition focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                  />
+                  {searchTerm && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchTerm("")}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                      aria-label="Clear search"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                 </div>
 
-                <div className="flex items-center gap-3">
-                  <span className="text-xs font-semibold text-slate-500">
-                    {filteredEmployees.length} matching employees
+                <div className="flex items-center gap-2.5 self-end sm:self-auto shrink-0">
+                  <span className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-50 px-2.5 py-1.5 text-xs font-semibold text-indigo-700 ring-1 ring-inset ring-indigo-200">
+                    <span className="h-1.5 w-1.5 rounded-full bg-indigo-600" />
+                    {filteredEmployees.length} matching
                   </span>
 
+                  {isFilterActive && (
+                    <button
+                      type="button"
+                      onClick={handleClearFilters}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 hover:text-slate-900"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                      <span>Clear filters</span>
+                    </button>
+                  )}
+
                   <button
                     type="button"
-                    onClick={handleClearFilters}
-                    className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+                    onClick={() => setIsFiltersCollapsed((prev) => !prev)}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-900"
+                    title={isFiltersCollapsed ? "Expand filters" : "Collapse filters"}
                   >
-                    Clear filters
+                    <SlidersHorizontal className="h-3.5 w-3.5 text-slate-500" />
+                    <span>{isFiltersCollapsed ? "Show Filters" : "Hide Filters"}</span>
+                    {isFiltersCollapsed ? (
+                      <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+                    ) : (
+                      <ChevronUp className="h-3.5 w-3.5 text-slate-400" />
+                    )}
                   </button>
                 </div>
               </div>
             </div>
 
-            {/* Search - Always visible */}
-            <div className="border-b border-slate-200 p-4">
-              <label className="mb-1.5 block text-xs font-semibold text-slate-600">
-                Search Employees
-              </label>
-
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(event) => setSearchTerm(event.target.value)}
-                placeholder="Search by name, employee ID, email or phone..."
-                className={filterInputClass}
-              />
-            </div>
-
-            {/* Filter Category Tabs */}
-            <div className="overflow-x-auto border-b border-slate-200">
-              <div className="flex min-w-max gap-1 px-3 pt-3">
-                {[
-                  { id: "employee", label: "Employee Details" },
-                  { id: "personal", label: "Personal Details" },
-                  { id: "employment", label: "Employment Details" },
-                  { id: "exit", label: "Exit Details" },
-                  { id: "statutory", label: "Statutory Eligibility" },
-                ].map((tab) => (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    onClick={() => setActiveFilterTab(tab.id)}
-                    className={`rounded-t-lg border-b-2 px-4 py-3 text-xs font-semibold transition ${
-                      activeFilterTab === tab.id
-                        ? "border-indigo-600 bg-indigo-50 text-indigo-700"
-                        : "border-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-800"
-                    }`}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
+            {/* Active Filter Chips */}
+            {isFilterActive && (
+              <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-200/70 bg-indigo-50/30 px-4 py-2.5">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mr-1">
+                  Active Filters:
+                </span>
+                {searchTerm && (
+                  <span className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-xs font-medium text-slate-700 shadow-xs ring-1 ring-inset ring-slate-200">
+                    Search: &ldquo;{searchTerm}&rdquo;
+                    <button type="button" onClick={() => setSearchTerm("")} className="text-slate-400 hover:text-rose-600">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                )}
+                {compFilter !== "all" && (
+                  <span className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-xs font-medium text-slate-700 shadow-xs ring-1 ring-inset ring-slate-200">
+                    Company: {compFilter}
+                    <button type="button" onClick={() => setCompFilter("all")} className="text-slate-400 hover:text-rose-600">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                )}
+                {deptFilter !== "all" && (
+                  <span className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-xs font-medium text-slate-700 shadow-xs ring-1 ring-inset ring-slate-200">
+                    Dept: {availableDepartments.find((d) => d.id === deptFilter)?.name || deptFilter}
+                    <button type="button" onClick={() => setDeptFilter("all")} className="text-slate-400 hover:text-rose-600">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                )}
+                {role !== "hr" && projectFilter !== "all" && (
+                  <span className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-xs font-medium text-slate-700 shadow-xs ring-1 ring-inset ring-slate-200">
+                    Project: {availableProjects.find((p) => p.id === projectFilter)?.name || projectFilter}
+                    <button type="button" onClick={() => setProjectFilter("all")} className="text-slate-400 hover:text-rose-600">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                )}
+                {designationFilter !== "all" && (
+                  <span className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-xs font-medium text-slate-700 shadow-xs ring-1 ring-inset ring-slate-200">
+                    Designation: {designationFilter}
+                    <button type="button" onClick={() => setDesignationFilter("all")} className="text-slate-400 hover:text-rose-600">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                )}
+                {statusFilter !== "all" && (
+                  <span className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-xs font-medium text-slate-700 shadow-xs ring-1 ring-inset ring-slate-200">
+                    Status: {formatOptionLabel(statusFilter)}
+                    <button type="button" onClick={() => setStatusFilter("all")} className="text-slate-400 hover:text-rose-600">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                )}
+                {typeFilter !== "all" && (
+                  <span className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-xs font-medium text-slate-700 shadow-xs ring-1 ring-inset ring-slate-200">
+                    Type: {formatOptionLabel(typeFilter)}
+                    <button type="button" onClick={() => setTypeFilter("all")} className="text-slate-400 hover:text-rose-600">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                )}
+                {clientTypeFilter !== "all" && (
+                  <span className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-xs font-medium text-slate-700 shadow-xs ring-1 ring-inset ring-slate-200">
+                    Client: {formatOptionLabel(clientTypeFilter)}
+                    <button type="button" onClick={() => setClientTypeFilter("all")} className="text-slate-400 hover:text-rose-600">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                )}
+                {noticeFilter !== "all" && (
+                  <span className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-xs font-medium text-slate-700 shadow-xs ring-1 ring-inset ring-slate-200">
+                    Notice: {formatOptionLabel(noticeFilter)}
+                    <button type="button" onClick={() => setNoticeFilter("all")} className="text-slate-400 hover:text-rose-600">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                )}
+                {(fromDate || toDate) && (
+                  <span className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-xs font-medium text-slate-700 shadow-xs ring-1 ring-inset ring-slate-200">
+                    Joining: {fromDate || "Any"} to {toDate || "Any"}
+                    <button type="button" onClick={() => { setFromDate(""); setToDate(""); }} className="text-slate-400 hover:text-rose-600">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                )}
+                {(salaryMin || salaryMax) && (
+                  <span className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-xs font-medium text-slate-700 shadow-xs ring-1 ring-inset ring-slate-200">
+                    Salary: ₹{salaryMin || 0} - ₹{salaryMax || "Any"}
+                    <button type="button" onClick={() => { setSalaryMin(""); setSalaryMax(""); }} className="text-slate-400 hover:text-rose-600">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                )}
+                {experienceLevelFilter !== "all" && (
+                  <span className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-xs font-medium text-slate-700 shadow-xs ring-1 ring-inset ring-slate-200">
+                    Exp Level: {formatOptionLabel(experienceLevelFilter)}
+                    <button type="button" onClick={() => setExperienceLevelFilter("all")} className="text-slate-400 hover:text-rose-600">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                )}
+                {genderFilter !== "all" && (
+                  <span className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-xs font-medium text-slate-700 shadow-xs ring-1 ring-inset ring-slate-200">
+                    Gender: {formatOptionLabel(genderFilter)}
+                    <button type="button" onClick={() => setGenderFilter("all")} className="text-slate-400 hover:text-rose-600">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                )}
+                {locationFilter !== "all" && (
+                  <span className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-xs font-medium text-slate-700 shadow-xs ring-1 ring-inset ring-slate-200">
+                    Location: {locationFilter}
+                    <button type="button" onClick={() => setLocationFilter("all")} className="text-slate-400 hover:text-rose-600">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                )}
+                {maritalFilter !== "all" && (
+                  <span className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-xs font-medium text-slate-700 shadow-xs ring-1 ring-inset ring-slate-200">
+                    Marital: {formatOptionLabel(maritalFilter)}
+                    <button type="button" onClick={() => setMaritalFilter("all")} className="text-slate-400 hover:text-rose-600">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                )}
+                {bloodGroupFilter !== "all" && (
+                  <span className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-xs font-medium text-slate-700 shadow-xs ring-1 ring-inset ring-slate-200">
+                    Blood: {bloodGroupFilter}
+                    <button type="button" onClick={() => setBloodGroupFilter("all")} className="text-slate-400 hover:text-rose-600">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                )}
               </div>
-            </div>
+            )}
 
-            {/* Selected Tab Filters */}
-            <div className="min-h-[150px] p-4">
-              {activeFilterTab === "employee" && (
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                  {renderSelect("Company", compFilter, setCompFilter, availableCompanies, "All Companies")}
-
-                  <div className="min-w-0">
-                    <label className="mb-1.5 block text-xs font-semibold text-slate-600">
-                      Department
-                    </label>
-                    <select
-                      value={deptFilter}
-                      onChange={(event) => setDeptFilter(event.target.value)}
-                      className={filterInputClass}
-                    >
-                      <option value="all">All Departments</option>
-                      {availableDepartments.map((department) => (
-                        <option key={department.id} value={department.id}>
-                          {department.name}
-                        </option>
-                      ))}
-                    </select>
+            {/* Filter Tabs and Body (Collapsible) */}
+            {!isFiltersCollapsed && (
+              <>
+                <div className="overflow-x-auto border-b border-slate-200 bg-white">
+                  <div className="flex min-w-max gap-1 px-4 pt-2">
+                    {filterTabs.map((tab) => {
+                      const IconComponent = tab.icon;
+                      return (
+                        <button
+                          key={tab.id}
+                          type="button"
+                          onClick={() => setActiveFilterTab(tab.id)}
+                          className={`inline-flex items-center gap-2 rounded-t-xl border-b-2 px-4 py-3 text-xs font-semibold transition ${
+                            activeFilterTab === tab.id
+                              ? "border-indigo-600 bg-indigo-50/70 text-indigo-700"
+                              : "border-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-800"
+                          }`}
+                        >
+                          <IconComponent className="h-3.5 w-3.5" />
+                          <span>{tab.label}</span>
+                          {tab.count > 0 && (
+                            <span className="inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-indigo-600 px-1 text-[10px] font-bold text-white">
+                              {tab.count}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
                   </div>
-
-                  <div className="min-w-0">
-                    <label className="mb-1.5 block text-xs font-semibold text-slate-600">
-                      Project
-                    </label>
-                    <select
-                      value={projectFilter}
-                      onChange={(event) => setProjectFilter(event.target.value)}
-                      className={filterInputClass}
-                    >
-                      <option value="all">All Projects</option>
-                      {availableProjects.map((project) => (
-                        <option key={project.id} value={project.id}>
-                          {project.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {renderSelect("Designation", designationFilter, setDesignationFilter, availableDesignations, "All Designations")}
-                  {renderSelect("Status", statusFilter, setStatusFilter, statusOptions, "All Statuses")}
-                  {renderSelect("Employment Type", typeFilter, setTypeFilter, availableEmploymentTypes, "All Types")}
-                  {renderSelect("Client Type", clientTypeFilter, setClientTypeFilter, clientTypeOptions, "All Client Types")}
-                  {renderSelect("Notice Status", noticeFilter, setNoticeFilter, noticeStatusOptions, "All Notice Statuses")}
                 </div>
-              )}
 
-              {activeFilterTab === "personal" && (
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                  {renderSelect("Gender", genderFilter, setGenderFilter, genderOptions)}
-                  {renderSelect("Marital Status", maritalFilter, setMaritalFilter, maritalStatusOptions)}
-                  {renderSelect("Blood Group", bloodGroupFilter, setBloodGroupFilter, bloodGroupOptions)}
-                  {renderSelect("Work Location", locationFilter, setLocationFilter, locationOptions)}
-                  {renderDateRange("Date of Birth", dobFrom, setDobFrom, dobTo, setDobTo)}
-                </div>
-              )}
+                <div className="p-4 sm:p-5">
+                  {/* COMBINED: Employee & Employment Details */}
+                  {activeFilterTab === "employee" && (
+                    <div className="space-y-5">
+                      {/* Sub-section 1: Role & Organization */}
+                      <div>
+                        <div className="mb-2.5 flex items-center gap-2">
+                          <span className="h-1.5 w-1.5 rounded-full bg-indigo-600" />
+                          <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                            Role & Organization
+                          </h4>
+                        </div>
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                          {renderSelect("Company", compFilter, setCompFilter, availableCompanies, "All Companies")}
 
-              {activeFilterTab === "employment" && (
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                  {renderDateRange("Joining Date", fromDate, setFromDate, toDate, setToDate)}
-                  {renderDateRange("Appointment Date", appointmentDateFrom, setAppointmentDateFrom, appointmentDateTo, setAppointmentDateTo)}
-                  {renderDateRange("Confirmation Date", confirmationDateFrom, setConfirmationDateFrom, confirmationDateTo, setConfirmationDateTo)}
-                  {renderDateRange("Probation End Date", probationEndFrom, setProbationEndFrom, probationEndTo, setProbationEndTo)}
-                  {renderNumberRange("Probation Duration", probationDurationMin, setProbationDurationMin, probationDurationMax, setProbationDurationMax, "months")}
-                  {renderSelect("Experience Level", experienceLevelFilter, setExperienceLevelFilter, ["fresher", "experienced"], "All Experience Levels")}
-                  {renderNumberRange("Experience Years", experienceYearsMin, setExperienceYearsMin, experienceYearsMax, setExperienceYearsMax,"years")}
-                  {renderNumberRange("Experience Months",experienceMonthsMin,setExperienceMonthsMin,experienceMonthsMax,setExperienceMonthsMax,"months")}
-                  {renderNumberRange("Notice Period Days", noticeDaysMin, setNoticeDaysMin, noticeDaysMax, setNoticeDaysMax, "days")}
-                  {renderNumberRange("Salary", salaryMin, setSalaryMin, salaryMax, setSalaryMax, "₹")}
-                </div>
-              )}
+                          <div className="min-w-0">
+                            <label className="mb-1.5 block text-xs font-semibold text-slate-600">
+                              Department
+                            </label>
+                            <select
+                              value={deptFilter}
+                              onChange={(event) => setDeptFilter(event.target.value)}
+                              className={filterInputClass}
+                            >
+                              <option value="all">All Departments</option>
+                              {availableDepartments.map((department) => (
+                                <option key={department.id} value={department.id}>
+                                  {department.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
 
-              {activeFilterTab === "exit" && (
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                  {renderDateRange("Resignation Date", resignationDateFrom, setResignationDateFrom, resignationDateTo, setResignationDateTo)}
-                  {renderDateRange("Exit Date", exitDateFrom, setExitDateFrom, exitDateTo, setExitDateTo)}
-                </div>
-              )}
+                          {role !== "hr" && (
+                            <div className="min-w-0">
+                              <label className="mb-1.5 block text-xs font-semibold text-slate-600">
+                                Project
+                              </label>
+                              <select
+                                value={projectFilter}
+                                onChange={(event) => setProjectFilter(event.target.value)}
+                                className={filterInputClass}
+                              >
+                                <option value="all">All Projects</option>
+                                {availableProjects.map((project) => (
+                                  <option key={project.id} value={project.id}>
+                                    {project.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          )}
 
-              {activeFilterTab === "statutory" && (
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                  {renderEligibilitySelect("PF Eligibility", pfFilter, setPfFilter)}
-                  {renderEligibilitySelect("ESI Healthcare Eligibility", esiFilter, setEsiFilter)}
-                  {renderEligibilitySelect("PT Eligibility", ptFilter, setPtFilter)}
-                  {renderEligibilitySelect("TDS Eligibility", tdsFilter, setTdsFilter)}
+                          {renderSelect("Designation", designationFilter, setDesignationFilter, availableDesignations, "All Designations")}
+                          {renderSelect("Status", statusFilter, setStatusFilter, statusOptions, "All Statuses")}
+                          {renderSelect("Employment Type", typeFilter, setTypeFilter, availableEmploymentTypes, "All Types")}
+                          {renderSelect("Client Type", clientTypeFilter, setClientTypeFilter, clientTypeOptions, "All Client Types")}
+                          {renderSelect("Notice Status", noticeFilter, setNoticeFilter, noticeStatusOptions, "All Notice Statuses")}
+                        </div>
+                      </div>
+
+                      {/* Sub-section 2: Key Timeline Dates */}
+                      <div className="border-t border-slate-100 pt-4">
+                        <div className="mb-2.5 flex items-center gap-2">
+                          <span className="h-1.5 w-1.5 rounded-full bg-indigo-600" />
+                          <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                            Key Timeline Dates
+                          </h4>
+                        </div>
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                          {renderDateRange("Joining Date", fromDate, setFromDate, toDate, setToDate)}
+                          {renderDateRange("Appointment Date", appointmentDateFrom, setAppointmentDateFrom, appointmentDateTo, setAppointmentDateTo)}
+                          {renderDateRange("Confirmation Date", confirmationDateFrom, setConfirmationDateFrom, confirmationDateTo, setConfirmationDateTo)}
+                          {renderDateRange("Probation End Date", probationEndFrom, setProbationEndFrom, probationEndTo, setProbationEndTo)}
+                        </div>
+                      </div>
+
+                      {/* Sub-section 3: Experience & Compensation */}
+                      <div className="border-t border-slate-100 pt-4">
+                        <div className="mb-2.5 flex items-center gap-2">
+                          <span className="h-1.5 w-1.5 rounded-full bg-indigo-600" />
+                          <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                            Experience & Compensation
+                          </h4>
+                        </div>
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                          {renderSelect("Experience Level", experienceLevelFilter, setExperienceLevelFilter, ["fresher", "experienced"], "All Experience Levels")}
+                          {renderNumberRange("Experience Years", experienceYearsMin, setExperienceYearsMin, experienceYearsMax, setExperienceYearsMax, "years")}
+                          {renderNumberRange("Experience Months", experienceMonthsMin, setExperienceMonthsMin, experienceMonthsMax, setExperienceMonthsMax, "months")}
+                          {renderNumberRange("Probation Duration", probationDurationMin, setProbationDurationMin, probationDurationMax, setProbationDurationMax, "months")}
+                          {renderNumberRange("Notice Period Days", noticeDaysMin, setNoticeDaysMin, noticeDaysMax, setNoticeDaysMax, "days")}
+                          {renderNumberRange("Salary / CTC", salaryMin, setSalaryMin, salaryMax, setSalaryMax, "₹")}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Personal Details */}
+                  {activeFilterTab === "personal" && (
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                      {renderSelect("Gender", genderFilter, setGenderFilter, genderOptions)}
+                      {renderSelect("Marital Status", maritalFilter, setMaritalFilter, maritalStatusOptions)}
+                      {renderSelect("Blood Group", bloodGroupFilter, setBloodGroupFilter, bloodGroupOptions)}
+                      {renderSelect("Work Location", locationFilter, setLocationFilter, locationOptions)}
+                      {renderDateRange("Date of Birth", dobFrom, setDobFrom, dobTo, setDobTo)}
+                    </div>
+                  )}
+
+                  {/* Exit Details */}
+                  {activeFilterTab === "exit" && (
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                      {renderDateRange("Resignation Date", resignationDateFrom, setResignationDateFrom, resignationDateTo, setResignationDateTo)}
+                      {renderDateRange("Exit Date", exitDateFrom, setExitDateFrom, exitDateTo, setExitDateTo)}
+                    </div>
+                  )}
+
+                  {/* Statutory Eligibility */}
+                  {activeFilterTab === "statutory" && (
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                      {renderEligibilitySelect("PF Eligibility", pfFilter, setPfFilter)}
+                      {renderEligibilitySelect("ESI Healthcare Eligibility", esiFilter, setEsiFilter)}
+                      {renderEligibilitySelect("PT Eligibility", ptFilter, setPtFilter)}
+                      {renderEligibilitySelect("TDS Eligibility", tdsFilter, setTdsFilter)}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
+              </>
+            )}
           </div>
         </div>
       ) : (
@@ -1479,7 +1756,9 @@ export default function EmployeeTable({
                 <th className="sticky top-0 z-30 whitespace-nowrap border-r border-slate-300 border-b border-slate-200 bg-slate-100 px-4 py-3 font-bold text-slate-900">Joining Date</th>
                 {isAllSubmenu && (
                   <>
-                    <th className="sticky top-0 z-30 whitespace-nowrap border-r border-slate-300 border-b border-slate-200 bg-slate-100 px-4 py-3 font-bold text-slate-900">Project</th>
+                    {role !== "hr" && (
+                      <th className="sticky top-0 z-30 whitespace-nowrap border-r border-slate-300 border-b border-slate-200 bg-slate-100 px-4 py-3 font-bold text-slate-900">Project</th>
+                    )}
                     <th className="sticky top-0 z-30 whitespace-nowrap border-r border-slate-300 border-b border-slate-200 bg-slate-100 px-4 py-3 font-bold text-slate-900">Shift</th>
                     <th className="sticky top-0 z-30 whitespace-nowrap border-r border-slate-300 border-b border-slate-200 bg-slate-100 px-4 py-3 font-bold text-slate-900">Gender</th>
                     <th className="sticky top-0 z-30 whitespace-nowrap border-r border-slate-300 border-b border-slate-200 bg-slate-100 px-4 py-3 font-bold text-slate-900">Date of Birth</th>
@@ -1583,7 +1862,9 @@ export default function EmployeeTable({
                       )
                       return (
                         <>
-                          <td className="whitespace-nowrap border-r border-slate-200 border-b border-slate-100 px-4 py-3 text-xs text-slate-600">{details.project?.name || details.project_id || "—"}</td>
+                          {role !== "hr" && (
+                            <td className="whitespace-nowrap border-r border-slate-200 border-b border-slate-100 px-4 py-3 text-xs text-slate-600">{details.project?.name || details.project_id || "—"}</td>
+                          )}
                           <td className="whitespace-nowrap border-r border-slate-200 border-b border-slate-100 px-4 py-3 text-xs font-medium text-slate-600"> {details.shift_type === "night"? "Night (18:30–03:30)" : "General (09:00–18:00)"}</td>
                           <td className="whitespace-nowrap border-r border-slate-200 border-b border-slate-100 px-4 py-3 text-xs capitalize text-slate-600">{details.gender || "—"}</td>
                           <td className="whitespace-nowrap border-r border-slate-200 border-b border-slate-100 px-4 py-3 text-xs text-slate-500">{formatDate(details.date_of_birth)}</td>
@@ -1638,7 +1919,7 @@ export default function EmployeeTable({
                 ))
               ) : (
                 <tr>
-                  <td colSpan={(isFilterActive ? 1 : 0) + 7 + (isAllSubmenu ? 23 : 0) + (showExitDetails ? 2 : 0)} className="px-6 py-16 text-center">
+                  <td colSpan={(isFilterActive ? 1 : 0) + 7 + (isAllSubmenu ? (role === "hr" ? 22 : 23) : 0) + (showExitDetails ? 2 : 0)} className="px-6 py-16 text-center">
                     <div className="mx-auto flex max-w-sm flex-col items-center">
                       <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-400"><UserCircle className="h-6 w-6" /></div>
                       <p className="text-sm font-bold text-slate-800">No employees found</p>
