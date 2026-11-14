@@ -104,6 +104,7 @@ export interface MasterPayrollRow {
   bank_name: string;
   pf_account_number: string;
   uan_number: string;
+  pf_eligible: boolean;
   pan_number: string;
 
   basic: number;
@@ -256,6 +257,7 @@ export function calculateMasterPayrollRow(
   calculatedLopDays: number = 0,
   adjustments?: MasterPayrollAdjustments,
   existingPayslip?: Record<string, unknown> | null,
+  
   pendingStatutory?: { pf: number; esi: number },
   employeeDaysInPeriod?: number
 ): MasterPayrollRow {
@@ -446,6 +448,7 @@ export function calculateMasterPayrollRow(
     ctc,
     designation: emp.designation || "—",
     department: emp.department || emp.department_name || "General",
+    pf_eligible: emp.pf_eligible !== false,
 
     bank_account_number: emp.bank_account_number || "—",
     ifsc_code: emp.ifsc_code || "—",

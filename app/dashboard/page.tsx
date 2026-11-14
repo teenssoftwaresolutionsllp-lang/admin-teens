@@ -3,18 +3,12 @@ import { redirect } from 'next/navigation';
 import DashboardStats from '@/components/DashboardStats';
 import Link from 'next/link';
 import DashboardKpiCards from '@/components/dashboard/DashboardKpiCards';
+import ProbationCompletionTracker from "@/components/dashboard/ProbationCompletionTracker";
 import {
   TrendingUp,
-  CheckSquare,
-  Clock,
   Banknote,
   Globe,
-  ArrowRight,
-  ShieldAlert,
-  Users,
-  UserPlus,
   CalendarDays,
-  UserCheck,
 } from 'lucide-react';
 
 import { DataStore } from '@/lib/data-store';
@@ -23,7 +17,6 @@ import { Employee } from '@/lib/types';
 import DashboardCharts from '@/components/dashboard/DashboardCharts';
 import LeaveRequestsWidget from '@/components/dashboard/LeaveRequestsWidget';
 import RecentJoiningsWidget from '@/components/dashboard/RecentJoiningsWidget';
-import QuickActions from '@/components/dashboard/QuickActions';
 import UpcomingHolidaysWidget from '@/components/dashboard/UpcomingHolidaysWidget';
 
 function getIndiaDate(date = new Date()) {
@@ -685,7 +678,7 @@ export default async function DashboardPage({
             </div>
 
             <div className="min-w-0 xl:col-span-4">
-              <QuickActions />
+              <ProbationCompletionTracker employees={allEmployees} />
             </div>
           </div>
         </>

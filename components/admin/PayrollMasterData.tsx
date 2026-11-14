@@ -365,7 +365,10 @@ export default function PayrollMasterData() {
     }
   };
 
-  // Export to Excel (CSV) matching exact format
+
+  // ==========================================
+  // EXPORT MASTER REGISTER
+  // ==========================================
   const handleExportCsv = async () => {
     if (!rows.length) return;
 
@@ -377,6 +380,11 @@ export default function PayrollMasterData() {
         ...(column.currency ? { numFmt: '"₹"#,##0.00' } : {}),
       }));
 
+      const totalNetPayout = rows.reduce(
+        (sum, row) => sum + Number(row.net_payout || 0),
+        0
+      );
+
       await exportToExcel({
         fileName: `Payroll_Master_Register_${MONTHS[selectedMonth - 1]}_${selectedYear}.xlsx`,
         sheetName: "Payroll Register",
@@ -384,13 +392,22 @@ export default function PayrollMasterData() {
         subtitle: `Payroll Master Register - ${MONTHS[selectedMonth - 1]} ${selectedYear} | Hyderabad | info@teenss.com | www.teenss.com`,
         columns,
         rows: rows.map((row) => ({ ...row })),
+        totalRow: {
+          label: "TOTAL AMOUNT TO BE PAID",
+          sums: {
+            net_payout: totalNetPayout,
+          },
+        },
       });
     } catch (error) {
       console.error("Failed to export payroll Excel:", error);
+      setError("Failed to export payroll Excel.");
     }
   };
 
-  // Export Bank Import Excel
+  // ==========================================
+  // EXPORT BANK IMPORT
+  // ==========================================
   const handleImportBank = async () => {
     if (!rows.length) return;
 
@@ -403,7 +420,7 @@ export default function PayrollMasterData() {
         {
           header: "Amount to Pay",
           key: "net_payout",
-          width: 18,
+          width: 22,
           numFmt: '"₹"#,##0.00',
         },
       ];
@@ -416,6 +433,11 @@ export default function PayrollMasterData() {
         net_payout: Number(row.net_payout || 0),
       }));
 
+      const totalNetPayout = exportRows.reduce(
+        (sum, row) => sum + row.net_payout,
+        0
+      );
+
       await exportToExcel({
         fileName: `Bank_Import_${MONTHS[selectedMonth - 1]}_${selectedYear}.xlsx`,
         sheetName: "Bank Import",
@@ -423,6 +445,12 @@ export default function PayrollMasterData() {
         subtitle: `Bank Payment Import - ${MONTHS[selectedMonth - 1]} ${selectedYear}`,
         columns,
         rows: exportRows,
+        totalRow: {
+          label: "TOTAL AMOUNT TO BE PAID",
+          sums: {
+            net_payout: totalNetPayout,
+          },
+        },
       });
     } catch (error) {
       console.error("Bank import Excel export failed:", error);
@@ -430,27 +458,43 @@ export default function PayrollMasterData() {
     }
   };
 
-  // Export PF Import Excel
+  // ==========================================
+  // EXPORT PF IMPORT - PF ELIGIBLE EMPLOYEES ONLY
+  // ==========================================
   const handleImportPF = async () => {
     if (!rows.length) return;
 
     try {
+      const eligibleRows = rows.filter(
+        (row) => row.pf_eligible === true
+      );
+
+      if (!eligibleRows.length) {
+        setError("No PF-eligible employees found for this payroll period.");
+        return;
+      }
+
       const columns = [
         { header: "Employee Name", key: "employee_name", width: 25 },
         { header: "UAN Number", key: "uan_number", width: 22 },
         {
           header: "PF Amount",
           key: "epf",
-          width: 18,
+          width: 22,
           numFmt: '"₹"#,##0.00',
         },
       ];
 
-      const exportRows = rows.map((row) => ({
+      const exportRows = eligibleRows.map((row) => ({
         employee_name: row.employee_name,
         uan_number: row.uan_number,
         epf: Number(row.epf || 0),
       }));
+
+      const totalPF = exportRows.reduce(
+        (sum, row) => sum + row.epf,
+        0
+      );
 
       await exportToExcel({
         fileName: `PF_Import_${MONTHS[selectedMonth - 1]}_${selectedYear}.xlsx`,
@@ -459,12 +503,129 @@ export default function PayrollMasterData() {
         subtitle: `Employee PF Import - ${MONTHS[selectedMonth - 1]} ${selectedYear}`,
         columns,
         rows: exportRows,
+        totalRow: {
+          label: "TOTAL PF AMOUNT TO BE PAID",
+          sums: {
+            epf: totalPF,
+          },
+        },
       });
     } catch (error) {
       console.error("PF import Excel export failed:", error);
       setError("Failed to export PF import Excel.");
     }
   };
+
+  // ==========================================
+  // EXPORT TDS
+  // ==========================================
+  const handleExportTDS = async () => {
+    const exportRows = rows
+      .filter((row) => Number(row.tds || 0) > 0)
+      .map((row) => ({
+        employee_code: row.employee_code,
+        employee_name: row.employee_name,
+        pan_number: row.pan_number,
+        tds: Number(row.tds || 0),
+      }));
+
+    if (!exportRows.length) {
+      setError("No TDS amounts found for this payroll period.");
+      return;
+    }
+
+    try {
+      const columns = [
+        { header: "Employee Code", key: "employee_code", width: 18 },
+        { header: "Employee Name", key: "employee_name", width: 25 },
+        { header: "PAN Number", key: "pan_number", width: 20 },
+        {
+          header: "TDS Amount",
+          key: "tds",
+          width: 22,
+          numFmt: '"₹"#,##0.00',
+        },
+      ];
+
+      const totalTDS = exportRows.reduce(
+        (sum, row) => sum + row.tds,
+        0
+      );
+
+      await exportToExcel({
+        fileName: `TDS_Import_${MONTHS[selectedMonth - 1]}_${selectedYear}.xlsx`,
+        sheetName: "TDS",
+        title: "TEENS SOFTWARE SOLUTIONS LLP",
+        subtitle: `Employee TDS - ${MONTHS[selectedMonth - 1]} ${selectedYear}`,
+        columns,
+        rows: exportRows,
+        totalRow: {
+          label: "TOTAL TDS AMOUNT",
+          sums: {
+            tds: totalTDS,
+          },
+        },
+      });
+    } catch (error) {
+      console.error("TDS Excel export failed:", error);
+      setError("Failed to export TDS Excel.");
+    }
+  };
+
+  // ==========================================
+  // EXPORT PROFESSIONAL TAX
+  // ==========================================
+  const handleExportPT = async () => {
+    const exportRows = rows
+      .filter((row) => Number(row.pt || 0) > 0)
+      .map((row) => ({
+        employee_code: row.employee_code,
+        employee_name: row.employee_name,
+        pt: Number(row.pt || 0),
+      }));
+
+    if (!exportRows.length) {
+      setError("No Professional Tax amounts found for this payroll period.");
+      return;
+    }
+
+    try {
+      const columns = [
+        { header: "Employee Code", key: "employee_code", width: 18 },
+        { header: "Employee Name", key: "employee_name", width: 25 },
+        {
+          header: "Professional Tax",
+          key: "pt",
+          width: 22,
+          numFmt: '"₹"#,##0.00',
+        },
+      ];
+
+      const totalPT = exportRows.reduce(
+        (sum, row) => sum + row.pt,
+        0
+      );
+
+      await exportToExcel({
+        fileName: `PT_Import_${MONTHS[selectedMonth - 1]}_${selectedYear}.xlsx`,
+        sheetName: "Professional Tax",
+        title: "TEENS SOFTWARE SOLUTIONS LLP",
+        subtitle: `Employee Professional Tax - ${MONTHS[selectedMonth - 1]} ${selectedYear}`,
+        columns,
+        rows: exportRows,
+        totalRow: {
+          label: "TOTAL PROFESSIONAL TAX",
+          sums: {
+            pt: totalPT,
+          },
+        },
+      });
+    } catch (error) {
+      console.error("PT Excel export failed:", error);
+      setError("Failed to export PT Excel.");
+    }
+  };
+
 
   // Open adjustment modal
   const openEditAdjustments = (row: MasterPayrollRow) => {
@@ -764,6 +925,30 @@ export default function PayrollMasterData() {
                 <Download className="h-4 w-4" />
                 Import PF
               </button>
+
+
+              {/* TDS Download Button */}
+              <button
+                type="button"
+                onClick={handleExportTDS}
+                disabled={loading || rows.length === 0}
+                className="inline-flex items-center gap-2 rounded bg-blue-700 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Download className="h-4 w-4" />
+                Download TDS
+              </button>
+
+              {/* Professional Tax Download Button */}
+              <button
+                type="button"
+                onClick={handleExportPT}
+                disabled={loading || rows.length === 0}
+                className="inline-flex items-center gap-2 rounded bg-purple-700 px-3 py-2 text-xs font-semibold text-white hover:bg-purple-800 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Download className="h-4 w-4" />
+                Download PT
+              </button>
+
 
               <button
                 type="button"

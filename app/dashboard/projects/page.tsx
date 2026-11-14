@@ -5,7 +5,7 @@ import {
   createAdminClient,
 } from "@/lib/supabase-server";
 import { DataStore } from "@/lib/data-store";
-import ProjectsManager from "@/components/admin/ProjectsManager";
+import ProjectsManager from "@/components/admin/HolidayCalendars";
 import type { EmergencyHoliday } from "@/lib/types";
 
 export default async function AdminProjectsPage() {
