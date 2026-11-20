@@ -18,8 +18,9 @@ export async function GET() {
 
     const components = await DataStore.getSalaryComponents();
     return NextResponse.json(components);
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to load components";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -69,7 +70,7 @@ export async function PATCH(request: Request) {
       );
     }
 
-    const updates: Record<string, any> = {};
+    const updates: Record<string, unknown> = {};
 
     if (name !== undefined) {
       updates.name = String(name).trim();
@@ -168,14 +169,17 @@ export async function PATCH(request: Request) {
       success: true,
       component: data
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Salary component PATCH error:", error);
+
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Failed to update salary component";
 
     return NextResponse.json(
       {
-        error:
-          error?.message ||
-          "Failed to update salary component"
+        error: message,
       },
       { status: 500 }
     );

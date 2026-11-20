@@ -313,7 +313,7 @@ export async function GET(
 
       const holidaysForDate =
         (holidays || []).filter(
-          (holiday: any) =>
+          (holiday: { holiday_date?: string | null }) =>
             String(
               holiday.holiday_date
             ).slice(0, 10) === date
@@ -333,7 +333,7 @@ export async function GET(
 
       const isNormalHoliday =
         holidaysForDate.some(
-          (holiday: any) =>
+          (holiday: { is_working_day?: boolean | null; is_optional?: boolean | null }) =>
             holiday.is_working_day !==
               true &&
             holiday.is_optional !==
@@ -431,17 +431,20 @@ export async function GET(
 
       days,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error(
       "Payroll calendar GET error:",
       error
     );
 
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Failed to load payroll calendar";
+
     return NextResponse.json(
       {
-        error:
-          error?.message ||
-          "Failed to load payroll calendar",
+        error: message,
       },
       {
         status: 500,
@@ -632,17 +635,20 @@ export async function POST(
 
       workingSaturdays,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error(
       "Payroll calendar POST error:",
       error
     );
 
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Failed to update payroll calendar";
+
     return NextResponse.json(
       {
-        error:
-          error?.message ||
-          "Failed to update payroll calendar",
+        error: message,
       },
       {
         status: 500,

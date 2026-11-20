@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import Image from "next/image";
 import {
   Bell,
   LogOut,
@@ -11,6 +12,7 @@ import {
   BellRing,
   RefreshCw,
   AlertCircle,
+  Megaphone,
   UserRound,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -86,7 +88,7 @@ export default function Header({ profile }: HeaderProps) {
       return "Payroll & Salary Processing";
     }
 
-    if (pathname === "/dashboard/projects") return "Client & Vendors";
+    if (pathname === "/dashboard/projects") return "Company Events & Announcements - Holiday Calendars";
 
     if (pathname === "/portal/profile") return "My Employee Profile";
 
@@ -141,7 +143,14 @@ export default function Header({ profile }: HeaderProps) {
       : "U";
 
   // Set notification title color based on its status.
-  const getNotificationTitleColor = (title: string) => {
+  const getNotificationTitleColor = (
+    title: string,
+    type?: string
+  ) => {
+    if (type?.toLowerCase() === "announcement") {
+      return "text-red-700";
+    }
+
     if (/reject/i.test(title)) {
       return "text-red-600";
     }
@@ -284,6 +293,7 @@ export default function Header({ profile }: HeaderProps) {
 
   // Refresh periodically and whenever the user returns to this tab.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void fetchNotifications();
 
     const refreshWhenVisible = () => {
@@ -369,6 +379,10 @@ export default function Header({ profile }: HeaderProps) {
 
   const getNotificationCategoryStyle = (type?: string) => {
     const category = (type || "").toLowerCase();
+
+    if (category === "announcement") {
+      return "bg-red-100 text-red-700";
+    }
 
     if (category.includes("leave")) return "bg-emerald-100 text-emerald-700";
     if (category.includes("attendance")) return "bg-sky-100 text-sky-700";
@@ -578,18 +592,36 @@ export default function Header({ profile }: HeaderProps) {
                             notification.type
                           )}`}
                         >
-                          <BellRing className="h-4 w-4" />
+                          {notification.type?.toLowerCase() === "announcement" ? (
+                            <Megaphone className="h-4 w-4" />
+                          ) : (
+                            <BellRing className="h-4 w-4" />
+                          )}
                         </div>
 
                         <div className="min-w-0 flex-1">
-                          <p
-                            className={`text-sm font-semibold ${getNotificationTitleColor(
-                              notification.title
-                            )}`}
-                          >
-                            {notification.title}
-                          </p>
-
+                          {notification.type?.toLowerCase() === "announcement" &&
+                          profile.role === "employee" ? (
+                            <Link
+                              href="/portal#company-events"
+                              onClick={() => setNotificationsOpen(false)}
+                              className={`text-sm font-semibold hover:underline ${getNotificationTitleColor(
+                                notification.title,
+                                notification.type
+                              )}`}
+                            >
+                              {notification.title}
+                            </Link>
+                          ) : (
+                            <p
+                              className={`text-sm font-semibold ${getNotificationTitleColor(
+                                notification.title,
+                                notification.type
+                              )}`}
+                            >
+                              {notification.title}
+                            </p>
+                          )}
                           <p className="mt-1 whitespace-pre-wrap break-words text-xs leading-5 text-slate-600">
                             {notification.message}
                           </p>
@@ -657,9 +689,11 @@ export default function Header({ profile }: HeaderProps) {
             className="flex-shrink-0 rounded-full outline-none ring-indigo-500 focus-visible:ring-2"
           >
             {avatarUrl ? (
-              <img
+              <Image
                 src={avatarUrl}
                 alt={profile.full_name || "Profile photo"}
+                width={40}
+                height={40}
                 onError={() => setAvatarUrl("")}
                 className="h-9 w-9 rounded-full border border-slate-200 object-cover shadow-sm"
               />
@@ -689,9 +723,11 @@ export default function Header({ profile }: HeaderProps) {
           <div className="absolute left-3 top-full z-20 mt-2 w-64 space-y-2 rounded-xl border border-slate-700 bg-slate-900 p-3 text-white shadow-2xl md:hidden">
             <div className="mb-2 flex items-center gap-3 border-b border-slate-800 px-3 py-3">
               {avatarUrl ? (
-                <img
+                <Image
                   src={avatarUrl}
                   alt="Profile photo"
+                  width={90}
+                  height={40}
                   className="h-10 w-10 rounded-full border border-slate-600 object-cover"
                 />
               ) : (

@@ -1,7 +1,15 @@
 "use client";
-
+import technicalSkillsData from "@/data/skills.json";
+import {
+  Search,
+  Plus,
+  X,
+} from "lucide-react";
 import Link from "next/link";
 import { toast } from "react-hot-toast";
+import { Award } from "lucide-react";
+import Image from "next/image";
+
 import {
   useEffect,
   useRef,
@@ -26,6 +34,7 @@ import {
   EyeOff,
   Copy,
   CreditCard,
+  GraduationCap,
   Briefcase,
   FileText,
   Edit3,
@@ -34,7 +43,6 @@ import {
   XCircle,
   Loader2,
   Phone,
-  Building,
   UserRound,
   MapPinned,
   Upload,
@@ -52,6 +60,63 @@ interface EmployeeProfileViewProps {
   pendingRequest: ProfileChangeRequest | null;
   departments: Department[];
 }
+const skillCategories = technicalSkillsData.categories;
+type EmployeeProfileData = Employee & {
+  full_name?: string | null;
+  name?: string | null;
+  role?: string | null;
+  department_name?: string | null;
+  communication_address?: string | null;
+  communication_city?: string | null;
+  communication_state?: string | null;
+  communication_pincode?: string | null;
+  annual_ctc?: number | string | null;
+  total_experience?: string | null;
+  emergency_contact_2_name?: string | null;
+  emergency_contact_2_phone?: string | null;
+  emergency_contact_2_relation?: string | null;
+
+  emergency_contact_3_name?: string | null;
+  emergency_contact_3_phone?: string | null;
+  emergency_contact_3_relation?: string | null;
+  pf?: string | null;
+  esi?: string | null;
+  pt?: string | null;
+  tds?: string | null;
+professional_certification_name?: string | null;
+professional_certification_organization?: string | null;
+professional_certification_credential_id?: string | null;
+professional_certification_issue_date?: string | null;
+professional_certification_expiry_date?: string | null;
+technical_skills?: string[] | null;
+};
+
+type PeripheralItem = {
+  type?: string | null;
+  serial?: string | null;
+};
+
+type ExtractedDocumentDetails = {
+  aadhar_number?: string;
+  pan_number?: string;
+  passport_number?: string;
+  bank_name?: string;
+  bank_account_number?: string;
+  ifsc_code?: string;
+};
+
+type UploadApiResponse = {
+  error?: string;
+  message?: string;
+  document?: EmployeeDocument;
+  extractedDetails?: ExtractedDocumentDetails;
+};
+
+type ProfileChangeApiResponse = {
+  error?: string;
+  request?: ProfileChangeRequest;
+} & Partial<ProfileChangeRequest>;
+
 
 type EditFormData = {
   phone: string;
@@ -81,6 +146,45 @@ type EditFormData = {
   emergency_contact_3_name: string;
   emergency_contact_3_phone: string;
   emergency_contact_3_relation: string;
+
+  // EDUCATION DETAILS
+education_10th_institution: string;
+education_10th_board: string;
+education_10th_year: string;
+education_10th_result_type: string;
+education_10th_result: string;
+
+education_12th_institution: string;
+education_12th_board: string;
+education_12th_year: string;
+education_12th_result_type: string;
+education_12th_result: string;
+
+education_graduation_institution: string;
+education_graduation_board: string;
+education_graduation_year: string;
+education_graduation_result_type: string;
+education_graduation_result: string;
+
+education_post_graduation_institution: string;
+education_post_graduation_board: string;
+education_post_graduation_year: string;
+education_post_graduation_result_type: string;
+education_post_graduation_result: string;
+
+education_diploma_institution: string;
+education_diploma_board: string;
+education_diploma_year: string;
+education_diploma_result_type: string;
+education_diploma_result: string;
+
+professional_certification_name: string;
+professional_certification_organization: string;
+professional_certification_credential_id: string;
+professional_certification_issue_date: string;
+professional_certification_expiry_date: string;
+
+technical_skills: string[];
 
   department_id: string;
   designation: string;
@@ -127,7 +231,6 @@ const documentTypes = [
 ];
 
 const MAX_DOCUMENT_SIZE = 5 * 1024 * 1024;
-
 
 
 const emptyEditForm: EditFormData = {
@@ -181,21 +284,66 @@ const emptyEditForm: EditFormData = {
   accessory_type: "",
   accessory_serial: "",
 
+  // 10th STANDARD
+  education_10th_institution: "",
+  education_10th_board: "",
+  education_10th_year: "",
+  education_10th_result_type: "",
+  education_10th_result: "",
+
+  // 12th / INTERMEDIATE
+  education_12th_institution: "",
+  education_12th_board: "",
+  education_12th_year: "",
+  education_12th_result_type: "",
+  education_12th_result: "",
+
+  // GRADUATION
+  education_graduation_institution: "",
+  education_graduation_board: "",
+  education_graduation_year: "",
+  education_graduation_result_type: "",
+  education_graduation_result: "",
+
+  // POST-GRADUATION
+  education_post_graduation_institution: "",
+  education_post_graduation_board: "",
+  education_post_graduation_year: "",
+  education_post_graduation_result_type: "",
+  education_post_graduation_result: "",
+
+  // DIPLOMA
+  education_diploma_institution: "",
+  education_diploma_board: "",
+  education_diploma_year: "",
+  education_diploma_result_type: "",
+  education_diploma_result: "",
+
+  // PROFESSIONAL CERTIFICATION
+// PROFESSIONAL CERTIFICATION
+professional_certification_name: "",
+professional_certification_organization: "",
+professional_certification_credential_id: "",
+professional_certification_issue_date: "",
+professional_certification_expiry_date: "",
+
+technical_skills: [],
+
   peripherals: [],
 };
-
-
-
-
 
 type EditSection =
   | "all"
   | "personal"
   | "address"
+  | "education"
   | "bank"
   | "employment"
   | "document"
   | "statutory"
+   | "certification"
+   |"photo"
+
   | "accessory"
   | null;
 
@@ -203,13 +351,29 @@ const inputClass = "w-full rounded-xl border border-slate-200 bg-white px-4 py-3
 
 const labelClass = "block mb-2 text-xs font-bold text-slate-700 uppercase tracking-wider";
 
+type ProfileTabId =
+  | "personal"
+  | "address"
+  | "education"
+  | "certifications"
+  | "bank"
+  | "employment"
+  | "document"
+  | "statutory"
+  | "accessory";
+
+type ProfileTab = {
+  id: ProfileTabId;
+  label: string;
+  icon: typeof User;
+};
+
 export default function EmployeeProfileView({
   employee,
   pendingRequest: initialPendingRequest,
   departments,
 }: EmployeeProfileViewProps) {
-  const employeeData =
-    employee as Employee & Record<string, any>;
+  const employeeData = employee as EmployeeProfileData;
 
   const employeeFullName =
     employeeData.full_name ||
@@ -233,17 +397,18 @@ export default function EmployeeProfileView({
       "Not specified"
     );
   };
-
-  const [activeTab, setActiveTab] = useState<
-    | "personal"
-    | "address"
-    | "bank"
-    | "employment"
-    | "document"
-    | "statutory"
-    | "accessory"
-  >("personal");
-
+  
+const [activeTab, setActiveTab] = useState<
+  | "personal"
+  | "address"
+  | "education"
+  | "certifications"
+  | "bank"
+  | "employment"
+  | "document"
+  | "statutory"
+  | "accessory"
+>("personal");
   
 
   const [isEditModalOpen, setIsEditModalOpen] =
@@ -287,6 +452,9 @@ export default function EmployeeProfileView({
     useState<EditFormData>({
       ...emptyEditForm,
     });
+const [skillSearch, setSkillSearch] = useState("");
+const [selectedSkillCategory, setSelectedSkillCategory] =
+  useState("All");
 
   const [profilePhotoUrl, setProfilePhotoUrl] =
     useState<string | null>(
@@ -338,22 +506,262 @@ export default function EmployeeProfileView({
   const documentFileInputRef =
     useRef<HTMLInputElement | null>(null);
 
+    const [certificationDocumentId, setCertificationDocumentId] =
+  useState<string | null>(null);
+
+const [isCertificationUploading, setIsCertificationUploading] =
+  useState(false);
+  
+    const skillCategories = technicalSkillsData.categories;
+
+const filteredSkills = [
+  ...new Set(
+    skillCategories
+      .filter(
+        (category) =>
+          selectedSkillCategory === "All" ||
+          category.name === selectedSkillCategory
+      )
+      .flatMap((category) => category.skills)
+      .filter(
+        (skill) =>
+          skill.toLowerCase().includes(skillSearch.trim().toLowerCase()) &&
+          !(editFormData.technical_skills ?? []).includes(skill)
+      )
+  ),
+].slice(0, 10);
+
+const addTechnicalSkill = (skill: string) => {
+  const newSkill = skill.trim();
+
+  if (!newSkill) return;
+
+  setEditFormData((prev) => {
+    const existingSkills = prev.technical_skills ?? [];
+
+    const alreadyExists = existingSkills.some(
+      (item) => item.toLowerCase() === newSkill.toLowerCase()
+    );
+
+    if (alreadyExists) return prev;
+
+    return {
+      ...prev,
+      technical_skills: [...existingSkills, newSkill],
+    };
+  });
+
+  setSkillSearch("");
+};
+
+const removeTechnicalSkill = (skill: string) => {
+  setEditFormData((prev) => ({
+    ...prev,
+    technical_skills: prev.technical_skills.filter(
+      (item) => item !== skill
+    ),
+  }));
+};
+
   /* ============================================================
      OPEN PROFILE EDIT
   ============================================================ */
 
-  const openEditSection = (
-    section: EditSection
-  ) => {
+  const openEditSection = (section: EditSection) => {
+    const data = employeeData;
+
+    setEditFormData({
+      phone: data.phone || "",
+      date_of_birth: data.date_of_birth || "",
+      gender: data.gender || "",
+      blood_group: data.blood_group || "",
+      marital_status: data.marital_status || "single",
+
+      address: data.permanent_address || "",
+      city: data.permanent_city || "",
+      state: data.permanent_state || "",
+      pincode: data.permanent_pincode || "",
+
+      communication_address: data.communication_address || "",
+      communication_city: data.communication_city || "",
+      communication_state: data.communication_state || "",
+      communication_pincode: data.communication_pincode || "",
+
+      emergency_contact_name: data.emergency_contact_name || "",
+      emergency_contact_phone: data.emergency_contact_phone || "",
+      emergency_contact_relation: data.emergency_contact_relation || "",
+
+      emergency_contact_2_name: data.emergency_contact_2_name || "",
+      emergency_contact_2_phone: data.emergency_contact_2_phone || "",
+      emergency_contact_2_relation: data.emergency_contact_2_relation || "",
+
+      emergency_contact_3_name: data.emergency_contact_3_name || "",
+      emergency_contact_3_phone: data.emergency_contact_3_phone || "",
+      emergency_contact_3_relation: data.emergency_contact_3_relation || "",
+
+      department_id: data.department_id || "",
+      designation: data.designation || "",
+      probation_end_date: data.probation_end_date || "",
+      confirmation_date: data.confirmation_date || "",
+      reporting_manager: data.reporting_manager || "",
+      work_location: data.work_location || "",
+
+      bank_name: data.bank_name || "",
+      bank_account_number: data.bank_account_number || "",
+      ifsc_code: data.ifsc_code || "",
+      pan_number: data.pan_number || "",
+      aadhar_number: data.aadhar_number || "",
+      passport_number: data.passport_number || "",
+
+      pf: data.uan_number || "",
+      esi: data.esi_number || "",
+      pt: data.pt_number || "",
+      tds: data.tds_eligible ? "Yes" : "",
+
+      // EDUCATION DETAILS
+
+// EDUCATION DETAILS
+
+// 10th Standard
+education_10th_institution: "",
+education_10th_board: "",
+education_10th_year: "",
+education_10th_result_type: "",
+education_10th_result: "",
+
+// 12th / Intermediate
+education_12th_institution: "",
+education_12th_board: "",
+education_12th_year: "",
+education_12th_result_type: "",
+education_12th_result: "",
+
+// Graduation
+education_graduation_institution: "",
+education_graduation_board: "",
+education_graduation_year: "",
+education_graduation_result_type: "",
+education_graduation_result: "",
+
+// Post-Graduation
+education_post_graduation_institution: "",
+education_post_graduation_board: "",
+education_post_graduation_year: "",
+education_post_graduation_result_type: "",
+education_post_graduation_result: "",
+
+// Diploma
+education_diploma_institution: "",
+education_diploma_board: "",
+education_diploma_year: "",
+education_diploma_result_type: "",
+education_diploma_result: "",
+
+// PROFESSIONAL CERTIFICATION
+// PROFESSIONAL CERTIFICATION
+professional_certification_name:
+  data.professional_certification_name || "",
+
+professional_certification_organization:
+  data.professional_certification_organization || "",
+
+professional_certification_credential_id:
+  data.professional_certification_credential_id || "",
+
+professional_certification_issue_date:
+  data.professional_certification_issue_date || "",
+
+professional_certification_expiry_date:
+  data.professional_certification_expiry_date || "",
+
+// TECHNICAL SKILLS
+technical_skills: Array.isArray(data.technical_skills)
+  ? data.technical_skills
+  : [],
+
+      accessory_type: data.accessory_type || "",
+      accessory_serial: data.accessory_serial || "",
+
+      peripherals: Array.isArray(data.peripherals)
+        ? data.peripherals.map((item) => ({
+            type: item.type || "",
+            serial: item.serial || "",
+          }))
+        : [],
+    });
+
     setSuccessMessage(null);
     setErrorMessage(null);
     setDocumentError(null);
     setEditSection(section);
+
     sensitiveDocumentIdsRef.current = {};
     setSensitiveDocumentIds({});
     setIsEditModalOpen(true);
   };
 
+// certification file upload handler
+const handleCertificationFileChange = async (
+  e: React.ChangeEvent<HTMLInputElement>
+) => {
+  const file = e.target.files?.[0];
+
+  if (!file) return;
+
+  // File size validation (5 MB)
+  if (file.size > 5 * 1024 * 1024) {
+    toast.error("Certificate file must be smaller than 5 MB.");
+    e.target.value = "";
+    return;
+  }
+
+  try {
+    setIsCertificationUploading(true);
+
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("employee_id", employeeData.id);
+    formData.append("document_type", "Professional Certification");
+    formData.append("document_name", file.name);
+
+    const response = await fetch("/api/upload", {
+      method: "POST",
+      body: formData,
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        data?.error ||
+          data?.message ||
+          "Certificate upload failed."
+      );
+    }
+
+    const documentId = data?.document?.id;
+
+    if (!documentId) {
+      throw new Error(
+        "Certificate uploaded, but document ID was not returned."
+      );
+    }
+
+    setCertificationDocumentId(documentId);
+
+    toast.success("Certificate uploaded successfully.");
+  } catch (error) {
+    console.error("Certificate upload error:", error);
+
+    toast.error(
+      error instanceof Error
+        ? error.message
+        : "Certificate upload failed."
+    );
+  } finally {
+    setIsCertificationUploading(false);
+  }
+};
   /* ============================================================
      CLOSE PROFILE EDIT
   ============================================================ */
@@ -365,150 +773,6 @@ export default function EmployeeProfileView({
     setErrorMessage(null);
   };
 
-  /* ============================================================
-     RESET EDIT FORM
-  ============================================================ */
-
-  useEffect(() => {
-    const data =
-      employee as Employee & Record<string, any>;
-
-    setEditFormData({
-      phone: data.phone || "",
-
-      date_of_birth:
-        data.date_of_birth || "",
-
-      gender:
-        data.gender || "",
-
-      blood_group:
-        data.blood_group || "",
-
-      marital_status:
-        data.marital_status || "single",
-
-      address:
-        data.permanent_address || "",
-
-      city:
-        data.permanent_city || "",
-
-      state:
-        data.permanent_state || "",
-
-      pincode:
-        data.permanent_pincode || "",
-
-      communication_address:
-        data.communication_address || "",
-
-      communication_city:
-        data.communication_city || "",
-
-      communication_state:
-        data.communication_state || "",
-
-      communication_pincode:
-        data.communication_pincode || "",
-
-      emergency_contact_name:
-        data.emergency_contact_name || "",
-
-      emergency_contact_phone:
-        data.emergency_contact_phone || "",
-
-      emergency_contact_relation:
-        data.emergency_contact_relation || "",
-
-      emergency_contact_2_name:
-        data.emergency_contact_2_name || "",
-
-      emergency_contact_2_phone:
-        data.emergency_contact_2_phone || "",
-
-      emergency_contact_2_relation:
-        data.emergency_contact_2_relation || "",
-
-      emergency_contact_3_name:
-        data.emergency_contact_3_name || "",
-
-      emergency_contact_3_phone:
-        data.emergency_contact_3_phone || "",
-
-      emergency_contact_3_relation:
-        data.emergency_contact_3_relation || "",
-
-      department_id:
-        data.department_id || "",
-
-      designation:
-        data.designation || "",
-
-      probation_end_date:
-        data.probation_end_date || "",
-
-      confirmation_date:
-        data.confirmation_date || "",
-
-      reporting_manager:
-        data.reporting_manager || "",
-
-      work_location:
-        data.work_location || "",
-
-      bank_name:
-        data.bank_name || "",
-
-      bank_account_number:
-        data.bank_account_number || "",
-
-      ifsc_code:
-        data.ifsc_code || "",
-
-      pan_number:
-        data.pan_number || "",
-
-      aadhar_number:
-        data.aadhar_number || "",
-
-      passport_number:
-        data.passport_number || "",
-
-      pf:
-        data.uan_number || "",
-
-      esi:
-        data.esi_number || "",
-
-      pt:
-        data.pt_number || "",
-
-      tds:
-        data.tds_eligible ? "Yes" : "",
-
-      accessory_type:
-        data.accessory_type || "",
-
-      accessory_serial:
-        data.accessory_serial || "",
-
-      peripherals:
-        Array.isArray(data.peripherals)
-          ? data.peripherals.map((item: any) => ({
-              type: item?.type || "",
-              serial: item?.serial || "",
-            }))
-          : [],
-    });
-
-    setPendingRequest(
-      initialPendingRequest
-    );
-  }, [
-    employee,
-    initialPendingRequest,
-  ]);
 
   /* ============================================================
      PROFILE PHOTO SYNC
@@ -688,11 +952,17 @@ export default function EmployeeProfileView({
           throw new Error(message || "Failed to load documents");
         }
 
-        const data = await response.json();
+        const data = (await response.json()) as
+          | EmployeeDocument[]
+          | { documents?: EmployeeDocument[] };
 
         if (cancelled) return;
 
-        const loadedDocuments: EmployeeDocument[] = Array.isArray(data) ? data : Array.isArray(data?.documents) ? data.documents : [];
+        const loadedDocuments: EmployeeDocument[] = Array.isArray(data)
+          ? data
+          : Array.isArray(data.documents)
+            ? data.documents
+            : [];
 
         
         const latestByType = new Map<string, EmployeeDocument>();
@@ -888,15 +1158,14 @@ export default function EmployeeProfileView({
           "content-type"
         ) || "";
 
-      let data: any;
+      let data: UploadApiResponse;
 
       if (
         contentType.includes(
           "application/json"
         )
       ) {
-        data =
-          await response.json();
+        data = (await response.json()) as UploadApiResponse;      
       } else {
         const text =
           await response.text();
@@ -921,7 +1190,7 @@ export default function EmployeeProfileView({
       }
       closeEditModal();
 
-      const newDocument = data.document as EmployeeDocument;
+      const newDocument = data.document;
       const extracted = data?.extractedDetails;
 
       const sensitiveTypes = [
@@ -1091,17 +1360,18 @@ export default function EmployeeProfileView({
       setDocumentName("");
       setDocumentError(null);
       // setIsEditModalOpen(false);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(
         "Document upload error:",
         error
       );
 
       setDocumentError(
-        error?.message ||
-          "Failed to upload file"
+        error instanceof Error
+          ? error.message
+          : "Failed to upload file"
       );
-    } finally {
+    }finally {
       setIsUploading(false);
       e.target.value = "";
     }
@@ -1164,10 +1434,10 @@ export default function EmployeeProfileView({
       });
 
       const contentType = response.headers.get("content-type") || "";
-      let data: any = null;
+      let data: UploadApiResponse | null = null;
 
       if (contentType.includes("application/json")) {
-        data = await response.json();
+        data = (await response.json()) as UploadApiResponse;
       } else {
         const responseText = await response.text();
         throw new Error(
@@ -1293,10 +1563,11 @@ export default function EmployeeProfileView({
   ) => {
     e.preventDefault();
 
-    if (
+if (
   loading ||
   requestDocumentUploading ||
-  isProfilePhotoUploading
+  isProfilePhotoUploading ||
+  isCertificationUploading
 ) {
   return;
 }
@@ -1368,15 +1639,68 @@ if (!profilePhotoUrl?.trim()) {
         esi: editFormData.esi,
         pt: editFormData.pt,
         tds: editFormData.tds,
-        accessory_type: editFormData.accessory_type,
-        accessory_serial: editFormData.accessory_serial,
-        peripherals: editFormData.peripherals,
+accessory_type: editFormData.accessory_type,
+accessory_serial: editFormData.accessory_serial,
+peripherals: editFormData.peripherals,
+
+// EDUCATION DETAILS
+education_10th_institution: editFormData.education_10th_institution,
+education_10th_board: editFormData.education_10th_board,
+education_10th_year: editFormData.education_10th_year,
+education_10th_result_type: editFormData.education_10th_result_type,
+education_10th_result: editFormData.education_10th_result,
+
+education_12th_institution: editFormData.education_12th_institution,
+education_12th_board: editFormData.education_12th_board,
+education_12th_year: editFormData.education_12th_year,
+education_12th_result_type: editFormData.education_12th_result_type,
+education_12th_result: editFormData.education_12th_result,
+
+education_graduation_institution: editFormData.education_graduation_institution,
+education_graduation_board: editFormData.education_graduation_board,
+education_graduation_year: editFormData.education_graduation_year,
+education_graduation_result_type: editFormData.education_graduation_result_type,
+education_graduation_result: editFormData.education_graduation_result,
+
+education_post_graduation_institution: editFormData.education_post_graduation_institution,
+education_post_graduation_board: editFormData.education_post_graduation_board,
+education_post_graduation_year: editFormData.education_post_graduation_year,
+education_post_graduation_result_type: editFormData.education_post_graduation_result_type,
+education_post_graduation_result: editFormData.education_post_graduation_result,
+
+education_diploma_institution: editFormData.education_diploma_institution,
+education_diploma_board: editFormData.education_diploma_board,
+education_diploma_year: editFormData.education_diploma_year,
+education_diploma_result_type: editFormData.education_diploma_result_type,
+education_diploma_result: editFormData.education_diploma_result,
+
+// PROFESSIONAL CERTIFICATION
+// PROFESSIONAL CERTIFICATION
+professional_certification_name:
+  editFormData.professional_certification_name,
+
+professional_certification_organization:
+  editFormData.professional_certification_organization,
+
+professional_certification_credential_id:
+  editFormData.professional_certification_credential_id,
+
+professional_certification_issue_date:
+  editFormData.professional_certification_issue_date,
+
+professional_certification_expiry_date:
+  editFormData.professional_certification_expiry_date,
+
+// TECHNICAL SKILLS
+technical_skills:
+  editFormData.technical_skills,
+
       };
 
       const fieldMap: Record<
         string,
-        string
-      > = {
+        keyof EmployeeProfileData
+     > = {
         phone: "phone",
         date_of_birth: "date_of_birth",
         gender: "gender",
@@ -1415,17 +1739,36 @@ if (!profilePhotoUrl?.trim()) {
         esi: "esi_number",
         pt: "pt_number",
         tds: "tds",
+       // PROFESSIONAL CERTIFICATION
+professional_certification_name:
+  "professional_certification_name",
+
+professional_certification_organization:
+  "professional_certification_organization",
+
+professional_certification_credential_id:
+  "professional_certification_credential_id",
+
+professional_certification_issue_date:
+  "professional_certification_issue_date",
+
+professional_certification_expiry_date:
+  "professional_certification_expiry_date",
+
+// TECHNICAL SKILLS
+technical_skills:
+  "technical_skills",
         accessory_type: "accessory_type",
         accessory_serial: "accessory_serial",
         peripherals: "peripherals",
       };
 
-      const sectionFields: Record<
-        Exclude<
-          EditSection,
-          null | "all" | "document"
-        >,
-        string[]
+     const sectionFields: Record<
+      Exclude<
+        EditSection,
+        null | "all" | "document" | "education"|"photo"
+      >,
+      string[]
       > = {
         personal: [
           "phone",
@@ -1489,31 +1832,39 @@ if (!profilePhotoUrl?.trim()) {
           "accessory_serial",
           "peripherals",
         ],
+        certification: [
+  "professional_certification_name",
+  "professional_certification_organization",
+  "professional_certification_credential_id",
+  "professional_certification_issue_date",
+  "professional_certification_expiry_date",
+  "technical_skills",
+],
+
+
       };
 
       Object.entries(
         comparisons
       ).forEach(
         ([field, newValue]) => {
-          if (
-            editSection &&
-            editSection !== "all" &&
-            editSection !== "document"
-          ) {
-            const allowedFields =
-              sectionFields[
-                editSection
-              ];
+if (
+  editSection === null ||
+  editSection === "document" ||
+  editSection === "education" ||
+  editSection === "photo"
+) {
+  return;
+}
 
-            if (
-              !allowedFields.includes(
-                field
-              )
-            ) {
-              return;
-            }
-          }
+const allowedFields =
+  editSection === "all"
+    ? Object.values(sectionFields).flat()
+    : sectionFields[editSection];
 
+if (!allowedFields.includes(field)) {
+  return;
+}
           const employeeField =
             fieldMap[field];
 
@@ -1530,11 +1881,12 @@ if (!profilePhotoUrl?.trim()) {
 
           if (
             field === "peripherals"
+            
           ) {
             const oldPeripherals =
               Array.isArray(oldValue)
                 ? oldValue.map(
-                    (item: any) => ({
+                    (item: PeripheralItem) => ({
                       type:
                         item?.type ||
                         "",
@@ -1548,7 +1900,7 @@ if (!profilePhotoUrl?.trim()) {
             const newPeripherals =
               Array.isArray(newValue)
                 ? newValue.map(
-                    (item: any) => ({
+                    (item: PeripheralItem) => ({
                       type:
                         item?.type ||
                         "",
@@ -1566,22 +1918,23 @@ if (!profilePhotoUrl?.trim()) {
               JSON.stringify(
                 newPeripherals
               );
-          } else {
-            const oldNormalized =
-              String(
-                oldValue ?? ""
-              ).trim();
+          } else if (field === "technical_skills") {
+  const oldSkills = Array.isArray(oldValue)
+    ? oldValue
+    : [];
 
-            const newNormalized =
-              String(
-                newValue ?? ""
-              ).trim();
+  const newSkills = Array.isArray(newValue)
+    ? newValue
+    : [];
 
-            isChanged =
-              oldNormalized !==
-              newNormalized;
-          }
+  isChanged =
+    JSON.stringify(oldSkills) !== JSON.stringify(newSkills);
+} else {
+  const oldNormalized = String(oldValue ?? "").trim();
+  const newNormalized = String(newValue ?? "").trim();
 
+  isChanged = oldNormalized !== newNormalized;
+}
           if (isChanged) {
             changedFields[field] =
               newValue;
@@ -1594,58 +1947,64 @@ if (!profilePhotoUrl?.trim()) {
 
       console.log("[PROFILE CHANGE] Submit handler started");
 
-      if (
-        Object.keys(
-          changedFields
-        ).length === 0
-      ) {
-        setErrorMessage(
-          "No changes found."
-        );
+// DEBUG: Check certification and technical skills
+console.log("========== CERTIFICATION DEBUG ==========");
 
-        return;
-      }
+console.log("EDIT FORM DATA:", {
+  certificationName: editFormData.professional_certification_name,
+  organization: editFormData.professional_certification_organization,
+  credentialId: editFormData.professional_certification_credential_id,
+  issueDate: editFormData.professional_certification_issue_date,
+  expiryDate: editFormData.professional_certification_expiry_date,
+  technicalSkills: editFormData.technical_skills,
+});
 
-      console.log("Submitting profile change:", {
-        employeeId: employeeData.id,
-        requestedChanges: changedFields,
-        sensitiveDocumentIds: sensitiveDocumentIdsRef.current,
-      });
+console.log("CHANGED FIELDS:", changedFields);
+console.log("EMPLOYEE UUID:", employeeData.id);
 
-      const response =
-        await fetch(
-          "/api/profile-change-requests",
-          {
-            method: "POST",
+console.log("=========================================");
 
-            headers: {
-              "Content-Type":
-                "application/json",
-            },
+if (Object.keys(changedFields).length === 0) {
+  setErrorMessage("No changes found.");
+  return;
+}
 
-            body: JSON.stringify({
-              employeeId: employeeData.id,
-              requestedChanges: changedFields,
-              previousValues: previousValues,
-              sensitiveDocumentIds: sensitiveDocumentIdsRef.current,
-            }),
-          }
-        );
+console.log("Submitting profile change:", {
+  employeeId: employeeData.id,
+  requestedChanges: changedFields,
+  sensitiveDocumentIds: sensitiveDocumentIdsRef.current,
+});
+
+const response = await fetch(
+  "/api/profile-change-requests",
+  {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      employeeId: employeeData.id,
+      requestedChanges: changedFields,
+      previousValues,
+      sensitiveDocumentIds: sensitiveDocumentIdsRef.current,
+      certificationDocumentId,
+    }),
+  }
+);
 
       const contentType =
         response.headers.get(
           "content-type"
         ) || "";
 
-      let data: any = null;
+      let data: ProfileChangeApiResponse | null = null;
 
       if (
         contentType.includes(
           "application/json"
         )
       ) {
-        data =
-          await response.json();
+        data = (await response.json()) as ProfileChangeApiResponse;
       } else {
         const text =
           await response.text();
@@ -1668,16 +2027,34 @@ if (!profilePhotoUrl?.trim()) {
         );
       }
 
-      setPendingRequest(data?.request || data);
+      if (!data) {
+        throw new Error("Invalid profile change response.");
+      }
+// Set pending request only if an HR approval request exists
+if (data.request) {
+  setPendingRequest(data.request);
+}
 
-      sensitiveDocumentIdsRef.current = {};
-      setSensitiveDocumentIds({});
+// Clear sensitive document selections
+sensitiveDocumentIdsRef.current = {};
+setSensitiveDocumentIds({});
 
-      setSuccessMessage(
-        "Profile change request submitted successfully. HR can now review your changes."
-      );
+// Check direct updates
+const directUpdate = (data as any).directUpdate || {};
 
-      closeEditModal();
+const hasDirectUpdate =
+  Object.keys(directUpdate).length > 0;
+
+// Show success message
+setSuccessMessage(
+  hasDirectUpdate && !data.request
+    ? "Professional Certification and Technical Skills updated successfully."
+    : hasDirectUpdate
+      ? "Certification and Technical Skills updated. Other profile changes were sent to HR for approval."
+      : "Profile change request submitted successfully. HR can now review your changes."
+);
+
+closeEditModal();
     } catch (error: unknown) {
       console.error(
         "Profile change request error:",
@@ -1751,7 +2128,7 @@ if (!profilePhotoUrl?.trim()) {
         return "Request Accessory Management Edit";
 
       case "document":
-        return "Documents";
+        return "Documentation";
 
       default:
         return "Request Profile Edit";
@@ -1762,49 +2139,53 @@ if (!profilePhotoUrl?.trim()) {
      TABS
   ============================================================ */
 
-  const tabs = [
-    {
-      id: "personal" as const,
-      label: "Personal Information",
-      icon: User,
-    },
-
-    {
-      id: "address" as const,
-      label: "Contact Information",
-      icon: MapPin,
-    },
-
-    {
-      id: "bank" as const,
-      label: "Bank Details",
-      icon: CreditCard,
-    },
-
-    {
-      id: "employment" as const,
-      label: "Employment Details",
-      icon: Briefcase,
-    },
-
-    {
-      id: "document" as const,
-      label: "Documents",
-      icon: FileText,
-    },
-
-    {
-      id: "statutory" as const,
-      label: "Statutory Details",
-      icon: CreditCard,
-    },
-
-    {
-      id: "accessory" as const,
-      label: "Accessory Management",
-      icon: LaptopMinimal,
-    },
-  ];
+const tabs: ProfileTab[] = [
+  {
+    id: "personal",
+    label: "Personal Information",
+    icon: User,
+  },
+  {
+    id: "address",
+    label: "Address & Emergency",
+    icon: MapPin,
+  },
+  {
+    id: "education",
+    label: "Qualification Details",
+    icon: GraduationCap,
+  },
+  {
+    id: "certifications",
+    label: "Certifications & Skills",
+    icon: Award,
+  },
+  {
+    id: "bank",
+    label: "Bank & Identity",
+    icon: CreditCard,
+  },
+  {
+    id: "statutory",
+    label: "Statutory",
+    icon: CreditCard,
+  },
+  {
+    id: "employment",
+    label: "Current Employment Details",
+    icon: Briefcase,
+  },
+  {
+    id: "document",
+    label: "Documentation",
+    icon: FileText,
+  },
+  {
+    id: "accessory",
+    label: "Accessory Management",
+    icon: LaptopMinimal,
+  },
+];;
 
   return (
     <div className="w-full space-y-5">
@@ -1907,9 +2288,12 @@ if (!profilePhotoUrl?.trim()) {
             <div className="relative h-28 w-28">
               <div className="h-full w-full overflow-hidden rounded-full border-4 border-slate-100 bg-slate-100">
                 {profilePhotoUrl ? (
-                  <img
+                  <Image
                     src={profilePhotoUrl}
                     alt={employeeFullName}
+                    width={112}
+                    height={112}
+                    unoptimized
                     className="h-full w-full object-cover"
                   />
                 ) : (
@@ -1977,29 +2361,29 @@ if (!profilePhotoUrl?.trim()) {
             </span>
           </div>
 
-          <nav aria-label="Profile sections" className="space-y-1 p-3">
-            {tabs.map((tab) => {
-              const Icon = tab.icon;
-              const active = activeTab === tab.id;
+         <nav aria-label="Profile sections" className="space-y-1 p-3">
+  {tabs.map((tab) => {
+    const Icon = tab.icon;
+    const active = activeTab === tab.id;
 
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setActiveTab(tab.id)}
-                  aria-current={active ? "page" : undefined}
-                  className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-xs font-semibold transition ${
-                    active
-                      ? "bg-blue-50 text-blue-700"
-                      : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                  }`}
-                >
-                  <Icon className="h-4 w-4 shrink-0" />
-                  <span>{tab.label}</span>
-                </button>
-              );
-            })}
-          </nav>
+    return (
+      <button
+        key={tab.id}
+        type="button"
+        onClick={() => setActiveTab(tab.id)}
+        aria-current={active ? "page" : undefined}
+        className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors ${
+          active
+            ? "bg-indigo-50 text-indigo-700"
+            : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+        }`}
+      >
+        <Icon className="h-4 w-4 shrink-0" />
+        <span>{tab.label}</span>
+      </button>
+    );
+  })}
+</nav>
         </aside>
 
         <section className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -2128,6 +2512,371 @@ if (!profilePhotoUrl?.trim()) {
             </div>
           )}
 
+{/* EDUCATION & CERTIFICATIONS */}
+{activeTab === "education" && (
+  <div className="space-y-6">
+
+    {/* EDUCATION DETAILS */}
+    <div className="rounded-xl border border-gray-200 bg-white p-6">
+
+      <h2 className="text-lg font-bold text-gray-900">
+        Education Details
+      </h2>
+
+      <p className="mt-1 text-sm text-gray-500">
+        Enter details separately for each completed qualification.
+        Upload the corresponding certificate for every qualification.
+      </p>
+
+      <div className="mt-6 space-y-5">
+
+        {/* 10TH STANDARD */}
+        <div className="rounded-xl border border-gray-200 p-4">
+
+          <h3 className="mb-5 text-sm font-bold text-gray-900">
+            1. 10th Standard
+          </h3>
+
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-700">
+                School Name
+              </label>
+              <input type="text" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-700">
+                Board
+              </label>
+              <input type="text" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-700">
+                Year of Passing
+              </label>
+              <input type="number" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
+            </div>
+
+            {/* <div>
+              <label className="mb-2 block text-sm font-medium text-gray-700">
+                Result Type (Percentage / CGPA / Grade)
+              </label>
+              <input type="text" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
+            </div> */}
+
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-700">
+                Percentage / CGPA / Grade
+              </label>
+              <input type="text" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
+            </div>
+
+          </div>
+
+          <div className="mt-4 rounded-lg border border-dashed border-gray-300 bg-gray-50 p-3">
+            <label className="mb-2 block text-sm font-semibold text-gray-700">
+              10th Certificate
+            </label>
+            <input type="file" accept=".pdf,.jpg,.jpeg,.png" className="w-full text-sm" />
+          </div>
+
+        </div>
+
+        {/* 12TH STANDARD */}
+        <div className="rounded-xl border border-gray-200 p-4">
+
+          <h3 className="mb-5 text-sm font-bold text-gray-900">
+            2. 12th / Intermediate
+          </h3>
+
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-700">
+                School / College Name
+              </label>
+              <input type="text" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-700">
+                Board
+              </label>
+              <input type="text" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-700">
+                Stream (Science / Commerce / Arts / Other)
+              </label>
+              <input type="text" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-700">
+                Year of Passing
+              </label>
+              <input type="number" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
+            </div>
+
+            {/* <div>
+              <label className="mb-2 block text-sm font-medium text-gray-700">
+                Result Type (Percentage / CGPA / Grade)
+              </label>
+              <input type="text" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
+            </div> */}
+
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-700">
+                Percentage / CGPA / Grade
+              </label>
+              <input type="text" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
+            </div>
+
+          </div>
+
+          <div className="mt-4 rounded-lg border border-dashed border-gray-300 bg-gray-50 p-3">
+            <label className="mb-2 block text-sm font-semibold text-gray-700">
+              12th Certificate
+            </label>
+            <input type="file" accept=".pdf,.jpg,.jpeg,.png" className="w-full text-sm" />
+          </div>
+
+        </div>
+
+        {/* GRADUATION */}
+        <div className="rounded-xl border border-gray-200 p-4">
+
+          <h3 className="mb-5 text-sm font-bold text-gray-900">
+            3. Graduation
+          </h3>
+
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-700">
+                College Name
+              </label>
+              <input type="text" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-700">
+                University
+              </label>
+              <input type="text" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-700">
+                Degree (B.Tech / B.Sc / B.Com / Other)
+              </label>
+              <input type="text" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-700">
+                Specialization
+              </label>
+              <input type="text" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-700">
+                Year of Passing
+              </label>
+              <input type="number" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
+            </div>
+
+            {/* <div>
+              <label className="mb-2 block text-sm font-medium text-gray-700">
+                Result Type (Percentage / CGPA / Grade)
+              </label>
+              <input type="text" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
+            </div> */}
+
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-700">
+                Percentage / CGPA / Grade
+              </label>
+              <input type="text" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
+            </div>
+
+          </div>
+
+          <div className="mt-4 rounded-lg border border-dashed border-gray-300 bg-gray-50 p-3">
+            <label className="mb-2 block text-sm font-semibold text-gray-700">
+              Graduation Certificate
+            </label>
+            <input type="file" accept=".pdf,.jpg,.jpeg,.png" className="w-full text-sm" />
+          </div>
+
+        </div>
+
+        {/* POST GRADUATION */}
+        <div className="rounded-xl border border-gray-200 p-4">
+
+          <h3 className="mb-5 text-sm font-bold text-gray-900">
+            4. Post-Graduation
+          </h3>
+
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-700">
+                College Name
+              </label>
+              <input type="text" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-700">
+                University
+              </label>
+              <input type="text" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-700">
+                Degree (MCA / MBA / M.Tech / Other)
+              </label>
+              <input type="text" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-700">
+                Specialization
+              </label>
+              <input type="text" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-700">
+                Year of Passing
+              </label>
+              <input type="number" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
+            </div>
+
+            {/* <div>
+              <label className="mb-2 block text-sm font-medium text-gray-700">
+                Result Type (Percentage / CGPA / Grade)
+              </label>
+              <input type="text" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
+            </div> */}
+
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-700">
+                Percentage / CGPA / Grade
+              </label>
+              <input type="text" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
+            </div>
+
+          </div>
+
+          <div className="mt-4 rounded-lg border border-dashed border-gray-300 bg-gray-50 p-3">
+            <label className="mb-2 block text-sm font-semibold text-gray-700">
+              Post-Graduation Certificate
+            </label>
+            <input type="file" accept=".pdf,.jpg,.jpeg,.png" className="w-full text-sm" />
+          </div>
+
+        </div>
+
+        {/* DIPLOMA */}
+        <div className="rounded-xl border border-gray-200 p-4">
+
+          <h3 className="mb-5 text-sm font-bold text-gray-900">
+            5. Diploma
+          </h3>
+
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-700">
+                Institute Name
+              </label>
+              <input type="text" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-700">
+                Board / University
+              </label>
+              <input type="text" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-700">
+                Diploma / Branch
+              </label>
+              <input type="text" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-700">
+                Year of Passing
+              </label>
+              <input type="number" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
+            </div>
+{/* 
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-700">
+                Result Type (Percentage / CGPA / Grade)
+              </label>
+              <input type="text" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
+            </div> */}
+
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-700">
+                Percentage / CGPA / Grade
+              </label>
+              <input type="text" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
+            </div>
+
+          </div>
+
+          <div className="mt-4 rounded-lg border border-dashed border-gray-300 bg-gray-50 p-3">
+            <label className="mb-2 block text-sm font-semibold text-gray-700">
+              Diploma Certificate
+            </label>
+            <input type="file" accept=".pdf,.jpg,.jpeg,.png" className="w-full text-sm" />
+          </div>
+
+        </div>
+
+      </div>
+    </div>
+
+    {/* PASSPORT SIZE PHOTO */}
+    <div className="rounded-xl border border-gray-200 bg-white p-6">
+
+      <h2 className="text-lg font-bold text-gray-900">
+        Passport Size Photo
+      </h2>
+
+      <p className="mt-1 text-sm text-gray-500">
+        Upload your passport-size photograph.
+      </p>
+
+      <div className="mt-5">
+        <input
+          type="file"
+          accept="image/jpeg,image/png"
+          className="w-full rounded-lg border border-gray-300 p-3 text-sm"
+        />
+      </div>
+
+    </div>
+
+  </div>
+)}
+
+{/*certifications and skills*/}
+{/* PROFESSIONAL CERTIFICATIONS */}
+
           {/* ========================================================
               ADDRESS
           ======================================================== */}
@@ -2164,70 +2913,6 @@ if (!profilePhotoUrl?.trim()) {
                   Edit
 
                 </button>
-
-              </div>
-
-              <div>
-
-                <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-4 flex items-center gap-2">
-
-                  <MapPin className="w-4 h-4 text-indigo-600" />
-
-                  Permanent Address
-
-                </h4>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5 text-sm">
-
-                  <div className="sm:col-span-2 md:col-span-3 p-4 bg-slate-50/70 rounded-xl border border-slate-100">
-
-                    <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
-                      Street Address
-                    </span>
-
-                    <span className="font-semibold text-slate-800">
-                      {employeeData.permanent_address ||
-                        "Not specified"}
-                    </span>
-
-                  </div>
-
-                  {[
-                    [
-                      "City",
-                      employeeData.permanent_city,
-                    ],
-
-                    [
-                      "State",
-                      employeeData.permanent_state,
-                    ],
-
-                    [
-                      "Pincode",
-                      employeeData.permanent_pincode,
-                    ],
-                  ].map(
-                    ([label, value]) => (
-                      <div
-                        key={label}
-                        className="p-4 bg-slate-50/70 rounded-xl border border-slate-100"
-                      >
-
-                        <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
-                          {label}
-                        </span>
-
-                        <span className="font-semibold text-slate-800">
-                          {value ||
-                            "Not specified"}
-                        </span>
-
-                      </div>
-                    )
-                  )}
-
-                </div>
 
               </div>
 
@@ -2301,6 +2986,72 @@ if (!profilePhotoUrl?.trim()) {
                 </div>
 
               </div>
+
+              <div>
+
+                <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-4 flex items-center gap-2">
+
+                  <MapPin className="w-4 h-4 text-indigo-600" />
+
+                  Permanent Address
+
+                </h4>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5 text-sm">
+
+                  <div className="sm:col-span-2 md:col-span-3 p-4 bg-slate-50/70 rounded-xl border border-slate-100">
+
+                    <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
+                      Street Address
+                    </span>
+
+                    <span className="font-semibold text-slate-800">
+                      {employeeData.permanent_address ||
+                        "Not specified"}
+                    </span>
+
+                  </div>
+
+                  {[
+                    [
+                      "City",
+                      employeeData.permanent_city,
+                    ],
+
+                    [
+                      "State",
+                      employeeData.permanent_state,
+                    ],
+
+                    [
+                      "Pincode",
+                      employeeData.permanent_pincode,
+                    ],
+                  ].map(
+                    ([label, value]) => (
+                      <div
+                        key={label}
+                        className="p-4 bg-slate-50/70 rounded-xl border border-slate-100"
+                      >
+
+                        <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
+                          {label}
+                        </span>
+
+                        <span className="font-semibold text-slate-800">
+                          {value ||
+                            "Not specified"}
+                        </span>
+
+                      </div>
+                    )
+                  )}
+
+                </div>
+
+              </div>
+
+              
 
               <div>
 
@@ -2577,6 +3328,277 @@ if (!profilePhotoUrl?.trim()) {
               </div>
             </div>
           )}
+          
+{/*Certifications and Skills*/}
+         {activeTab === "certifications" && (
+  <div className="space-y-6">
+
+    
+    {/* TECHNICAL SKILLS */}
+    <div className="rounded-xl border border-gray-200 bg-white p-6">
+
+      <div className="mb-6">
+        <h2 className="text-lg font-bold text-gray-900">
+          Technical Skills
+        </h2>
+
+        <p className="mt-1 text-sm text-gray-500">
+          Search and select your technical skills.
+        </p>
+      </div>
+
+      {/* CATEGORY FILTER */}
+      <div className="mb-5">
+
+        <label className="mb-2 block text-sm font-medium text-gray-700">
+          Skill Category
+        </label>
+
+        <select
+          value={selectedSkillCategory}
+          onChange={(e) =>
+            setSelectedSkillCategory(e.target.value)
+          }
+          className="w-full rounded-lg border border-gray-300 bg-white p-3 text-sm outline-none focus:border-indigo-500"
+        >
+          <option value="All">All Categories</option>
+
+          {skillCategories.map((category) => (
+            <option key={category.name} value={category.name}>
+              {category.name}
+            </option>
+          ))}
+
+        </select>
+
+      </div>
+
+      {/* SEARCH */}
+      <div className="relative">
+
+        <label className="mb-2 block text-sm font-medium text-gray-700">
+          Search Skills
+        </label>
+
+        <div className="flex items-center gap-3 rounded-lg border border-gray-300 px-3 focus-within:border-indigo-500">
+
+          <Search className="h-5 w-5 text-gray-400" />
+
+          <input
+            type="text"
+            value={skillSearch}
+            onChange={(e) => setSkillSearch(e.target.value)}
+            placeholder="Search React, JavaScript, HTML..."
+            className="w-full border-0 bg-transparent p-3 text-sm outline-none focus:ring-0"
+          />
+
+        </div>
+
+        {/* SEARCH RESULTS */}
+        {skillSearch.trim() !== "" && (
+          <div className="mt-2 max-h-60 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-sm">
+
+            {filteredSkills.length > 0 ? (
+
+              filteredSkills.map((skill) => (
+
+                <button
+                  key={skill}
+                  type="button"
+                  onClick={() => addTechnicalSkill(skill)}
+                  className="flex w-full items-center justify-between border-b border-gray-100 px-4 py-3 text-left text-sm text-gray-700 hover:bg-indigo-50"
+                >
+                  <span>{skill}</span>
+
+                  <Plus className="h-4 w-4 text-indigo-600" />
+
+                </button>
+
+              ))
+
+            ) : (
+
+              <p className="p-4 text-sm text-gray-500">
+                No matching skills found.
+              </p>
+
+            )}
+
+          </div>
+        )}
+
+      </div>
+
+      {/* SELECTED SKILLS */}
+      <div className="mt-7">
+
+        <div className="mb-3 flex items-center justify-between">
+
+          <h3 className="text-sm font-semibold text-gray-800">
+            Selected Skills
+          </h3>
+
+          <span className="text-xs text-gray-500">
+            {(editFormData.technical_skills ?? []).length} skills added
+          </span>
+
+        </div>
+
+        {(editFormData.technical_skills ?? []).length > 0 ? (
+
+          <div className="flex flex-wrap gap-2">
+
+            {editFormData.technical_skills.map((skill) => (
+
+              <span
+                key={skill}
+                className="inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-700"
+              >
+                {skill}
+
+                <button
+                  type="button"
+                  onClick={() => removeTechnicalSkill(skill)}
+                  className="text-indigo-500 hover:text-red-600"
+                  aria-label={`Remove ${skill}`}
+                >
+                  <X className="h-4 w-4" />
+                </button>
+
+              </span>
+
+            ))}
+
+          </div>
+
+        ) : (
+
+          <div className="rounded-lg border border-dashed border-gray-300 p-6 text-center">
+
+            <p className="text-sm text-gray-500">
+              No skills added yet.
+            </p>
+
+            <p className="mt-1 text-xs text-gray-400">
+              Search and select your technical skills above.
+            </p>
+
+          </div>
+
+        )}
+
+      </div>
+
+    </div>
+
+    {/* PROFESSIONAL CERTIFICATIONS */}
+    <div className="rounded-xl border border-gray-200 bg-white p-6">
+
+      <div className="mb-6">
+        <h2 className="text-lg font-bold text-gray-900">
+          Professional Certifications
+        </h2>
+
+        <p className="mt-1 text-sm text-gray-500">
+          Add your professional certifications and certificate details.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+
+        {/* CERTIFICATION NAME */}
+        <div className="md:col-span-2">
+          <label className="mb-2 block text-sm font-medium text-gray-700">
+            Certification Name
+          </label>
+
+          <input
+            type="text"
+            name="professional_certification_name"
+            value={editFormData.professional_certification_name ?? ""}
+            onChange={handleInputChange}
+            placeholder="Enter certification name"
+            className="w-full rounded-lg border border-gray-300 p-3 text-sm outline-none focus:border-indigo-500"
+          />
+        </div>
+
+        {/* ISSUING ORGANIZATION */}
+        <div>
+          <label className="mb-2 block text-sm font-medium text-gray-700">
+            Issuing Organization
+          </label>
+
+          <input
+            type="text"
+            placeholder="Enter organization name"
+            className="w-full rounded-lg border border-gray-300 p-3 text-sm outline-none focus:border-indigo-500"
+          />
+        </div>
+
+        {/* CREDENTIAL ID */}
+        <div>
+          <label className="mb-2 block text-sm font-medium text-gray-700">
+            Credential ID
+          </label>
+
+          <input
+            type="text"
+            placeholder="Enter credential ID"
+            className="w-full rounded-lg border border-gray-300 p-3 text-sm outline-none focus:border-indigo-500"
+          />
+        </div>
+
+        {/* ISSUE DATE */}
+        <div>
+          <label className="mb-2 block text-sm font-medium text-gray-700">
+            Issue Date
+          </label>
+
+          <input
+            type="date"
+            className="w-full rounded-lg border border-gray-300 p-3 text-sm outline-none focus:border-indigo-500"
+          />
+        </div>
+
+        {/* EXPIRY DATE */}
+        <div>
+          <label className="mb-2 block text-sm font-medium text-gray-700">
+            Expiry Date
+          </label>
+
+          <input
+            type="date"
+            className="w-full rounded-lg border border-gray-300 p-3 text-sm outline-none focus:border-indigo-500"
+          />
+        </div>
+
+      </div>
+
+      {/* CERTIFICATE UPLOAD */}
+      <div className="mt-6 border-t border-gray-100 pt-6">
+
+        <label className="mb-2 block text-sm font-medium text-gray-700">
+          Upload Certificate
+        </label>
+
+        <input
+          type="file"
+          accept=".pdf,.jpg,.jpeg,.png"
+          className="w-full rounded-lg border border-gray-300 p-3 text-sm"
+        />
+
+        <p className="mt-1 text-xs text-gray-500">
+          Accepted formats: PDF, JPG, JPEG and PNG.
+        </p>
+
+      </div>
+
+    </div>
+
+
+
+  </div>
+)}
           {/* ========================================================
               EMPLOYMENT
           ======================================================== */}
@@ -2589,7 +3611,7 @@ if (!profilePhotoUrl?.trim()) {
                 <div>
 
                   <h3 className="text-lg font-bold text-slate-900">
-                    Employment Information
+                      Current Employment Information
                   </h3>
 
                   <p className="text-sm text-slate-500 mt-1">
@@ -2619,89 +3641,92 @@ if (!profilePhotoUrl?.trim()) {
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5 text-sm">
 
                 {[
-                  [
-                    "Department",
-                    departmentName(),
-                  ],
+  [
+    "Employee ID",
+    employeeData.employee_id,
+  ],
+  [
+    "Department",
+    departmentName(),
+  ],
+  [
+    "Designation",
+    employeeData.designation,
+  ],
+  [
+    "Annual CTC",
+    employeeData.annual_ctc
+      ? `₹${Number(employeeData.annual_ctc).toLocaleString("en-IN")} per annum`
+      : "Not specified",
+  ],
+  [
+    "Work Location",
+    employeeData.work_location,
+  ],
 
-                  [
-                    "Designation",
-                    employeeData.designation,
-                  ],
+  [
+    "Reporting Manager",
+    employeeData.reporting_manager,
+  ],
+  [
+    "Probation End Date",
+    formatDate(employeeData.probation_end_date),
+  ],
+  // [
+  //   "Confirmation Date",
+  //   formatDate(employeeData.confirmation_date),
+  // ],
+  [
+    "Joining Date",
+    formatDate(employeeData.joining_date),
+  ],
+  [
+    "Employment Type",
+    employeeData.employment_type,
+  ],
+  [
+    "Experience Level",
+    employeeData.experience_level,
+  ],
+  [
+    "Total Experience",
+    employeeData.total_experience,
+  ],
+  [
+    "Employment Status",
+    employeeData.status,
+  ],
+[
+  "Shift Type",
+  employeeData.shift_type,
+],
+[
+  "Shift Start Time",
+  employeeData.project?.shift_start_time,
+],
+[
+  "Shift End Time",
+  employeeData.project?.shift_end_time,
+],
+[
+  "Project",
+  employeeData.project?.name,
+],
 
-                  [
-                    "Work Location",
-                    employeeData.work_location,
-                  ],
+].map(([label, value]) => (
+  <div
+    key={label}
+    className="p-4 bg-slate-50/70 rounded-xl border border-slate-100"
+  >
+    <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
+      {label}
+    </span>
 
-                  [
-                    "Reporting Manager",
-                    employeeData.reporting_manager,
-                  ],
-
-                  [
-                    "Probation End Date",
-                    formatDate(
-                      employeeData.probation_end_date
-                    ),
-                  ],
-
-                  [
-                    "Confirmation Date",
-                    formatDate(
-                      employeeData.confirmation_date
-                    ),
-                  ],
-
-                  [
-                    "Joining Date",
-                    formatDate(
-                      employeeData.joining_date
-                    ),
-                  ],
-
-                  [
-                    "Employment Type",
-                    employeeData.employment_type,
-                  ],
-                  [
-                  "Experience Level",
-                  employeeData.experience_level,
-                ],
-                [
-                  "Total Experience",
-                  employeeData.total_experience,
-                ],
-
-                  [
-                    "Employment Status",
-                    employeeData.status,
-                  ],
-                  [
-                  "Annual CTC",
-                  employeeData.annual_ctc
-                    ? `₹${Number(employeeData.annual_ctc).toLocaleString("en-IN")} per annum`
-                    : "Not specified",
-                ],
-                ].map(
-                  ([label, value]) => (
-                    <div
-                      key={label}
-                      className="p-4 bg-slate-50/70 rounded-xl border border-slate-100"
-                    >
-
-                      <span className="text-[11px] text-slate-400 font-bold block uppercase tracking-wider mb-1">
-                        {label}
-                      </span>
-
-                      <span className="font-semibold text-slate-800 capitalize">
-                        {value ||
-                          "Not specified"}
-                      </span>
-
-                    </div>
-                  )
-                )}
+    <span className="font-semibold text-slate-800 capitalize">
+      {value || "Not specified"}
+    </span>
+  </div>
+))}
 
               </div>
 
@@ -3222,7 +4247,7 @@ if (!profilePhotoUrl?.trim()) {
 
                     {employeeData.peripherals.map(
                       (
-                        item: any,
+                        item,
                         index: number
                       ) => (
 
@@ -3760,6 +4785,426 @@ if (!profilePhotoUrl?.trim()) {
                   </section>
                 )}
 
+                
+{/* ==================================================
+    EDUCATION & CERTIFICATIONS
+================================================== */}
+
+{/* ===================================================== */}
+{/* 1. QUALIFICATION DETAILS */}
+{/* ===================================================== */}
+
+{(editSection === "all" || editSection === "education") && (
+  <section className="space-y-6">
+
+    <div className="rounded-xl border border-slate-200 bg-white p-5">
+
+      <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-2">
+        Qualification Details
+      </h3>
+
+      <p className="text-xs text-slate-500 mb-5">
+        Enter your education details and upload the corresponding certificates.
+      </p>
+
+      {[
+        {
+          title: "10th Standard",
+          prefix: "education_10th",
+          nameLabel: "School Name",
+        },
+        {
+          title: "12th / Intermediate",
+          prefix: "education_12th",
+          nameLabel: "School / College Name",
+        },
+        {
+          title: "Graduation",
+          prefix: "education_graduation",
+          nameLabel: "College Name",
+        },
+        {
+          title: "Post-Graduation",
+          prefix: "education_post_graduation",
+          nameLabel: "College Name",
+        },
+        {
+          title: "Diploma",
+          prefix: "education_diploma",
+          nameLabel: "College / Institute Name",
+        },
+      ].map((item, index) => (
+        <div
+          key={item.prefix}
+          className="rounded-xl border border-slate-200 p-4 mb-5 last:mb-0"
+        >
+
+          <h4 className="text-sm font-semibold text-slate-800 mb-4">
+            {index + 1}. {item.title}
+          </h4>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+            <div>
+              <label className={labelClass}>
+                {item.nameLabel}
+              </label>
+
+              <input
+                type="text"
+                name={`${item.prefix}_institution`}
+                value={
+                  (editFormData as any)[`${item.prefix}_institution`] ?? ""
+                }
+                onChange={handleInputChange}
+                placeholder={`Enter ${item.nameLabel.toLowerCase()}`}
+                className={inputClass}
+              />
+            </div>
+
+            <div>
+              <label className={labelClass}>
+                Board / University
+              </label>
+
+              <input
+                type="text"
+                name={`${item.prefix}_board`}
+                value={
+                  (editFormData as any)[`${item.prefix}_board`] ?? ""
+                }
+                onChange={handleInputChange}
+                placeholder="Enter board or university"
+                className={inputClass}
+              />
+            </div>
+
+            <div>
+              <label className={labelClass}>
+                Year of Passing
+              </label>
+
+              <input
+                type="number"
+                name={`${item.prefix}_year`}
+                value={
+                  (editFormData as any)[`${item.prefix}_year`] ?? ""
+                }
+                onChange={handleInputChange}
+                placeholder="Enter passing year"
+                className={inputClass}
+              />
+            </div>
+
+            <div>
+              <label className={labelClass}>
+                Percentage / CGPA / Grade
+              </label>
+
+              <input
+                type="text"
+                name={`${item.prefix}_result`}
+                value={
+                  (editFormData as any)[`${item.prefix}_result`] ?? ""
+                }
+                onChange={handleInputChange}
+                placeholder="Enter result"
+                className={inputClass}
+              />
+            </div>
+
+            <div className="md:col-span-2 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-3">
+
+              <label className={labelClass}>
+                {item.title} Certificate
+              </label>
+
+              <input
+                type="file"
+                name={`${item.prefix}_certificate`}
+                accept=".pdf,.jpg,.jpeg,.png"
+                className="mt-2 block w-full text-sm"
+              />
+
+              <p className="mt-1 text-xs text-slate-500">
+                Upload PDF, JPG or PNG certificate.
+              </p>
+
+            </div>
+
+          </div>
+        </div>
+      ))}
+
+    </div>
+
+  </section>
+)}
+
+
+{/* ===================================================== */}
+{/* 2. PROFESSIONAL CERTIFICATION */}
+{/* ===================================================== */}
+
+{(editSection === "all" || editSection === "certification") && (
+  <section className="rounded-xl border border-slate-200 bg-white p-5">
+
+    <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-2">
+      Professional Certification
+    </h3>
+
+    <p className="text-xs text-slate-500 mb-5">
+      Enter your professional certification details and upload your certificate.
+    </p>
+
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+      <div>
+        <label className={labelClass}>
+          Certification Name
+        </label>
+
+        <input
+          type="text"
+          name="professional_certification_name"
+          value={editFormData.professional_certification_name ?? ""}
+          onChange={handleInputChange}
+          placeholder="Example: AWS Certified Developer"
+          className={inputClass}
+        />
+      </div>
+
+      <div>
+        <label className={labelClass}>
+          Issuing Organization
+        </label>
+
+        <input
+          type="text"
+          name="professional_certification_organization"
+          value={editFormData.professional_certification_organization ?? ""}
+          onChange={handleInputChange}
+          placeholder="Example: Amazon Web Services"
+          className={inputClass}
+        />
+      </div>
+
+      <div>
+        <label className={labelClass}>
+          Credential ID
+        </label>
+
+        <input
+          type="text"
+          name="professional_certification_credential_id"
+          value={editFormData.professional_certification_credential_id ?? ""}
+          onChange={handleInputChange}
+          placeholder="Enter credential ID"
+          className={inputClass}
+        />
+      </div>
+
+      <div>
+        <label className={labelClass}>
+          Issue Date
+        </label>
+
+        <input
+          type="date"
+          name="professional_certification_issue_date"
+          value={editFormData.professional_certification_issue_date ?? ""}
+          onChange={handleInputChange}
+          className={inputClass}
+        />
+      </div>
+
+      <div>
+        <label className={labelClass}>
+          Expiry Date
+        </label>
+
+        <input
+          type="date"
+          name="professional_certification_expiry_date"
+          value={editFormData.professional_certification_expiry_date ?? ""}
+          onChange={handleInputChange}
+          className={inputClass}
+        />
+      </div>
+
+      <div className="md:col-span-2 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-3">
+
+        <label className={labelClass}>
+          Upload Professional Certification
+        </label>
+<input
+  type="file"
+  name="professional_certification_file"
+  accept=".pdf,.jpg,.jpeg,.png"
+  onChange={handleCertificationFileChange}
+  disabled={isCertificationUploading}
+  className="mt-2 block w-full text-sm"
+/>
+
+        <p className="mt-1 text-xs text-slate-500">
+          Upload PDF, JPG or PNG certificate.
+        </p>
+
+      </div>
+
+    </div>
+
+  </section>
+)}
+
+
+{/* ===================================================== */}
+{/* 3. TECHNICAL SKILLS */}
+{/* ===================================================== */}
+
+{(editSection === "all" || editSection === "certification") && (
+  <section className="rounded-xl border border-slate-200 bg-white p-5">
+
+    <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-2">
+      Technical Skills
+    </h3>
+
+    <p className="text-xs text-slate-500 mb-5">
+      Search and add your technical skills. Press Enter to add a skill.
+    </p>
+
+    {/* CATEGORY */}
+
+    <div className="mb-4">
+      <label className={labelClass}>
+        Skill Category
+      </label>
+
+      <select
+        value={selectedSkillCategory}
+        onChange={(e) => setSelectedSkillCategory(e.target.value)}
+        className={inputClass}
+      >
+        <option value="All">All Categories</option>
+
+        {skillCategories.map((category) => (
+          <option key={category.name} value={category.name}>
+            {category.name}
+          </option>
+        ))}
+      </select>
+    </div>
+
+    {/* SEARCH */}
+
+    <div>
+      <label className={labelClass}>
+        Search Skills
+      </label>
+
+      <input
+        type="text"
+        value={skillSearch}
+        onChange={(e) => setSkillSearch(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+
+            const skill = skillSearch.trim();
+
+            if (skill) {
+              addTechnicalSkill(skill);
+            }
+          }
+        }}
+        placeholder="Search Java, React, Python..."
+        className={inputClass}
+      />
+
+      {skillSearch.trim() !== "" && (
+        <div className="mt-2 max-h-48 overflow-y-auto rounded-lg border border-slate-200">
+
+          {filteredSkills.length > 0 ? (
+            filteredSkills.map((skill) => (
+              <button
+                key={skill}
+                type="button"
+                onClick={() => addTechnicalSkill(skill)}
+                className="flex w-full justify-between border-b border-slate-100 px-4 py-3 text-left text-sm hover:bg-indigo-50"
+              >
+                {skill}
+
+                <Plus className="h-4 w-4 text-indigo-600" />
+              </button>
+            ))
+          ) : (
+            <p className="p-3 text-sm text-slate-500">
+              Press Enter to add this skill.
+            </p>
+          )}
+
+        </div>
+      )}
+    </div>
+
+    {/* SELECTED SKILLS */}
+
+    <div className="mt-6">
+
+      <div className="mb-3 flex items-center justify-between">
+
+        <h4 className="text-sm font-semibold text-slate-800">
+          Selected Skills
+        </h4>
+
+        <span className="text-xs text-slate-500">
+          {(editFormData.technical_skills ?? []).length} skills added
+        </span>
+
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+
+        {(editFormData.technical_skills ?? []).map((skill) => (
+          <span
+            key={skill}
+            className="inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm text-indigo-700"
+          >
+            {skill}
+
+            <button
+              type="button"
+              onClick={() => removeTechnicalSkill(skill)}
+              className="text-indigo-500 hover:text-red-600"
+              aria-label={`Remove ${skill}`}
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </span>
+        ))}
+
+      </div>
+
+      {(editFormData.technical_skills ?? []).length === 0 && (
+        <p className="rounded-lg border border-dashed border-slate-300 p-4 text-center text-sm text-slate-500">
+          No technical skills added yet.
+        </p>
+      )}
+
+    </div>
+
+  </section>
+)}
+
+
+{/* ===================================================== */}
+{/* 4. PASSPORT SIZE PHOTO */}
+{/* ===================================================== */}
+
+
+
+
+
                 {/* ==================================================
                     ADDRESS
                 ================================================== */}
@@ -3769,122 +5214,7 @@ if (!profilePhotoUrl?.trim()) {
                   editSection ===
                     "address") && (
                   <>
-                    {/* PERMANENT ADDRESS */}
-
-                    <section>
-
-                      <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-5 flex items-center gap-2">
-
-                        <MapPin className="w-4 h-4 text-indigo-600" />
-
-                        Permanent Address
-
-                      </h3>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-
-                        <div className="md:col-span-2">
-
-                          <label
-                            htmlFor="address"
-                            className={labelClass}
-                          >
-                            Permanent Address
-                          </label>
-
-                          <textarea
-                            id="address"
-                            name="address"
-                            value={
-                              editFormData.address
-                            }
-                            onChange={
-                              handleInputChange
-                            }
-                            placeholder="Enter permanent address"
-                            rows={3}
-                            className={`${inputClass} resize-none`}
-                          />
-
-                        </div>
-
-                        <div>
-
-                          <label
-                            htmlFor="city"
-                            className={labelClass}
-                          >
-                            City
-                          </label>
-
-                          <input
-                            id="city"
-                            name="city"
-                            value={
-                              editFormData.city
-                            }
-                            onChange={
-                              handleInputChange
-                            }
-                            placeholder="Enter city"
-                            className={inputClass}
-                          />
-
-                        </div>
-
-                        <div>
-
-                          <label
-                            htmlFor="state"
-                            className={labelClass}
-                          >
-                            State
-                          </label>
-
-                          <input
-                            id="state"
-                            name="state"
-                            value={
-                              editFormData.state
-                            }
-                            onChange={
-                              handleInputChange
-                            }
-                            placeholder="Enter state"
-                            className={inputClass}
-                          />
-
-                        </div>
-
-                        <div>
-
-                          <label
-                            htmlFor="pincode"
-                            className={labelClass}
-                          >
-                            Pincode
-                          </label>
-
-                          <input
-                            id="pincode"
-                            name="pincode"
-                            type="text"
-                            value={
-                              editFormData.pincode
-                            }
-                            onChange={
-                              handleInputChange
-                            }
-                            placeholder="Enter pincode"
-                            className={inputClass}
-                          />
-
-                        </div>
-
-                      </div>
-
-                    </section>
-
+                   
                     {/* COMMUNICATION ADDRESS */}
 
                     <section>
@@ -3986,6 +5316,119 @@ if (!profilePhotoUrl?.trim()) {
                             name="communication_pincode"
                             value={
                               editFormData.communication_pincode
+                            }
+                            onChange={
+                              handleInputChange
+                            }
+                            placeholder="Enter pincode"
+                            className={inputClass}
+                          />
+
+                        </div>
+
+                      </div>
+
+                    </section>
+                     <section>
+
+                      <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-5 flex items-center gap-2">
+
+                        <MapPin className="w-4 h-4 text-indigo-600" />
+
+                        Permanent Address
+
+                      </h3>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+
+                        <div className="md:col-span-2">
+
+                          <label
+                            htmlFor="address"
+                            className={labelClass}
+                          >
+                            Permanent Address
+                          </label>
+
+                          <textarea
+                            id="address"
+                            name="address"
+                            value={
+                              editFormData.address
+                            }
+                            onChange={
+                              handleInputChange
+                            }
+                            placeholder="Enter permanent address"
+                            rows={3}
+                            className={`${inputClass} resize-none`}
+                          />
+
+                        </div>
+
+                        <div>
+
+                          <label
+                            htmlFor="city"
+                            className={labelClass}
+                          >
+                            City
+                          </label>
+
+                          <input
+                            id="city"
+                            name="city"
+                            value={
+                              editFormData.city
+                            }
+                            onChange={
+                              handleInputChange
+                            }
+                            placeholder="Enter city"
+                            className={inputClass}
+                          />
+
+                        </div>
+
+                        <div>
+
+                          <label
+                            htmlFor="state"
+                            className={labelClass}
+                          >
+                            State
+                          </label>
+
+                          <input
+                            id="state"
+                            name="state"
+                            value={
+                              editFormData.state
+                            }
+                            onChange={
+                              handleInputChange
+                            }
+                            placeholder="Enter state"
+                            className={inputClass}
+                          />
+
+                        </div>
+
+                        <div>
+
+                          <label
+                            htmlFor="pincode"
+                            className={labelClass}
+                          >
+                            Pincode
+                          </label>
+
+                          <input
+                            id="pincode"
+                            name="pincode"
+                            type="text"
+                            value={
+                              editFormData.pincode
                             }
                             onChange={
                               handleInputChange

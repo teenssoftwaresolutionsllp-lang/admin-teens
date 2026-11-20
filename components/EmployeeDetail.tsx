@@ -3,6 +3,7 @@
 import { Employee, EmployeeDocument, UserRole } from "@/lib/types";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase-browser";
+import Image from "next/image";
 import { toast } from "react-hot-toast";
 import { User, MapPin, Briefcase, CreditCard, FileText, Gift, Edit, DeleteIcon, LaptopMinimal, Phone, Eye, EyeOff, Copy, File } from "lucide-react";
 import Link from "next/link";
@@ -15,12 +16,34 @@ interface EmployeeDetailProps {
   role: UserRole;
 }
 
+interface GratuityInfo {
+  serviceYearsText?: string;
+  gratuityServiceYears?: number;
+  monthlyBasic?: number;
+  gratuity5YearTaken?: boolean;
+  gratuity5YearTakenDate?: string | null;
+  gratuity5YearTakenAmount?: number | null;
+  gratuityAmount?: number;
+  isEligible?: boolean;
+  gratuityAmountFormatted?: string;
+  [key: string]: unknown;
+}
+
+function DetailTile({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="bg-slate-50/70 p-4 rounded-xl border border-slate-100/90">
+      <dt className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">{label}</dt>
+      <dd className="text-sm font-semibold text-slate-900 break-words">{value || "N/A"}</dd>
+    </div>
+  );
+}
+
 export default function EmployeeDetail({ employee, documents, role }: EmployeeDetailProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
   const [revealedFields, setRevealedFields] = useState<Record<string, boolean>>({});
-  const [gratuity, setGratuity] = useState<any>(null);
+  const [gratuity, setGratuity] = useState<GratuityInfo | null>(null);
   const [gratuityLoading, setGratuityLoading] = useState(false);
   const [gratuityProcessing, setGratuityProcessing] = useState(false);
   const [gratuityConfirm, setGratuityConfirm] = useState(false);
@@ -44,6 +67,13 @@ export default function EmployeeDetail({ employee, documents, role }: EmployeeDe
   const [exitDate, setExitDate] = useState("");
   const [exitLoginDays, setExitLoginDays] = useState("45");
   const [exitDocument, setExitDocument] = useState<File | null>(null);
+
+  const certificationDocuments = (documents || []).filter((doc) => {
+  return (
+    String(doc.document_type || "").toLowerCase() ===
+    "professional certification"
+  );
+});
 
   const maskString = (str?: string | null, visibleCount = 4) => {
     if (!str) return "N/A";
@@ -162,10 +192,11 @@ export default function EmployeeDetail({ employee, documents, role }: EmployeeDe
       if (!response.ok) {
         throw new Error(result.error || "Failed to load gratuity");
       }
-      setGratuity(result);
-    } catch (error: any) {
+      setGratuity(result as GratuityInfo);
+    } catch (error: unknown) {
       console.error("Gratuity load error:", error);
-      toast.error(error.message || "Failed to load gratuity");
+      const msg = error instanceof Error ? error.message : "Failed to load gratuity";
+      toast.error(msg);
     } finally {
       setGratuityLoading(false);
     }
@@ -173,9 +204,95 @@ export default function EmployeeDetail({ employee, documents, role }: EmployeeDe
 
   useEffect(() => {
     if (activeTab === 7) {
-      loadGratuity();
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      void loadGratuity();
     }
   }, [activeTab]);
+
+  {/* Tab : Skills & Certification */}
+<div className={activeTab === 3 ? "block" : "hidden"}>
+  <div className="space-y-6">
+
+    {/* Professional Certification */}
+    <section className="rounded-xl border border-slate-200 p-5">
+      <h3 className="mb-4 text-sm font-bold uppercase tracking-wider text-slate-900">
+        Professional Certification
+      </h3>
+
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+
+        <div>
+          <label className="mb-1.5 block text-xs font-bold text-slate-700">
+            Certification Name
+          </label>
+        <div>
+  <label className="mb-1.5 block text-xs font-bold text-slate-700">
+    Certification Name
+  </label>
+  <p className="text-sm text-slate-900">
+    {employee.professional_certification_name || "Not provided"}
+  </p>
+</div>
+        </div>
+
+        <div>
+  <label className="mb-1.5 block text-xs font-bold text-slate-700">
+    Organization
+  </label>
+  <p className="text-sm text-slate-900">
+    {employee.professional_certification_organization || "Not provided"}
+  </p>
+</div>
+
+     <div>
+  <label className="mb-1.5 block text-xs font-bold text-slate-700">
+    Credential ID
+  </label>
+  <p className="text-sm text-slate-900">
+    {employee.professional_certification_credential_id || "Not provided"}
+  </p>
+</div>
+
+        <div>
+  <label className="mb-1.5 block text-xs font-bold text-slate-700">
+    Issue Date
+  </label>
+  <p className="text-sm text-slate-900">
+    {employee.professional_certification_issue_date || "Not provided"}
+  </p>
+</div>
+
+<div>
+  <label className="mb-1.5 block text-xs font-bold text-slate-700">
+    Expiry Date
+  </label>
+  <p className="text-sm text-slate-900">
+    {employee.professional_certification_expiry_date || "Not provided"}
+  </p>
+</div>
+      </div>
+    </section>
+
+    {/* Technical Skills */}
+    <section className="rounded-xl border border-slate-200 p-5">
+      <h3 className="mb-4 text-sm font-bold uppercase tracking-wider text-slate-900">
+        Technical Skills
+      </h3>
+
+      <div className="flex flex-wrap gap-2">
+  {(employee.technical_skills ?? []).map((skill, index) => (
+    <span
+      key={`${skill}-${index}`}
+      className="rounded-full bg-indigo-50 px-3 py-2 text-sm text-indigo-700"
+    >
+      {skill}
+    </span>
+  ))}
+</div>
+    </section>
+
+  </div>
+</div>
 
 const getEmployeeStatusLabel = () => {
   const status = String(employee.status || "").toLowerCase();
@@ -380,9 +497,10 @@ const getEmployeeStatusLabel = () => {
       setExitDocument(null);
 
       router.refresh();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Exit employee error:", error);
-      toast.error(error.message || "Failed to process employee exit");
+      const msg = error instanceof Error ? error.message : "Failed to process employee exit";
+      toast.error(msg);
     } finally {
       setIsLoading(false);
     }
@@ -439,8 +557,9 @@ const getEmployeeStatusLabel = () => {
       setEarlyReleaseDate("");
       setEarlyReleaseReason("");
       router.refresh();
-    } catch (error: any) {
-      toast.error(error.message || "Failed to record early release");
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : "Failed to record early release";
+      toast.error(msg);
     } finally {
       setIsLoading(false);
     }
@@ -483,8 +602,9 @@ const getEmployeeStatusLabel = () => {
       toast.success("Notice period completed successfully");
       setShowCompleteNoticeConfirm(false);
       router.refresh();
-    } catch (error: any) {
-      toast.error(error.message || "Failed to complete notice period");
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : "Failed to complete notice period";
+      toast.error(msg);
     } finally {
       setIsLoading(false);
     }
@@ -499,23 +619,19 @@ const getEmployeeStatusLabel = () => {
 
   const tabs = [
     { name: "Personal", icon: User },
-    { name: "Employment", icon: Briefcase },
+    { name: "CurrentEmployment", icon: Briefcase },
+    // {name : "PreviousEmployment", icon: Briefcase},
+    { name: "Statutory", icon: File},
+    { name: "Skills & Certification", icon: FileText },
     { name: "Bank & Identity", icon: CreditCard },
     { name: "Address & Emergency", icon: MapPin },
     { name: "Documentation", icon: FileText },
     { name:"Accessory Management", icon: LaptopMinimal},
-    { name: "Statutory", icon: File},
+    
     { name: "Gratuity", icon: Gift },
 
     ...(!isExitStatus ? [{ name: "Terminated", icon: DeleteIcon }] : []),
   ];
-
-  const DetailTile = ({ label, value }: { label: string; value: React.ReactNode }) => (
-    <div className="bg-slate-50/70 p-4 rounded-xl border border-slate-100/90">
-      <dt className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">{label}</dt>
-      <dd className="text-sm font-semibold text-slate-900 break-words">{value || "N/A"}</dd>
-    </div>
-  );
 
   const handleTakeGratuity = () => {
     setGratuityConfirm(true);
@@ -558,17 +674,16 @@ const getEmployeeStatusLabel = () => {
           minimumFractionDigits: 2,
         })} processed successfully.`,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(
         "Gratuity processing error:",
         error
       );
 
+      const msg = error instanceof Error ? error.message : "Failed to process gratuity";
       setGratuityMessage({
         type: "error",
-        message:
-          error.message ||
-          "Failed to process gratuity",
+        message: msg,
       });
     } finally {
       setGratuityProcessing(false);
@@ -583,8 +698,10 @@ const getEmployeeStatusLabel = () => {
           {/* Employee Profile Photo */}
           <div className="w-18 h-18 sm:w-20 sm:h-20 overflow-hidden rounded-2xl bg-indigo-100 shadow-md shadow-indigo-100">
             {employee.profile_photo_url ? (
-              <img
+              <Image
                 src={employee.profile_photo_url}
+                width={40}
+                height={40}
                 alt={`${employee.first_name} ${employee.last_name}`}
                 className="h-full w-full object-cover"
               />
@@ -691,8 +808,124 @@ const getEmployeeStatusLabel = () => {
             </div>
           )}
 
+{/* Skills & Certification */}
+{activeTab === 3 && (
+  <div className="space-y-6">
+
+    {/* Professional Certification */}
+    <section className="rounded-xl border border-slate-200 bg-white p-5">
+      <h3 className="mb-4 text-sm font-bold uppercase tracking-wider text-slate-900">
+        Professional Certification
+      </h3>
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <DetailTile
+          label="Certification Name"
+          value={employee.professional_certification_name}
+        />
+
+        <DetailTile
+          label="Organization"
+          value={employee.professional_certification_organization}
+        />
+
+        <DetailTile
+          label="Credential ID"
+          value={employee.professional_certification_credential_id}
+        />
+
+        <DetailTile
+          label="Issue Date"
+          value={formatDate(employee.professional_certification_issue_date)}
+        />
+
+        <DetailTile
+          label="Expiry Date"
+          value={formatDate(employee.professional_certification_expiry_date)}
+        />
+      </div>
+    </section>
+
+    {/* Technical Skills */}
+    <section className="rounded-xl border border-slate-200 bg-white p-5">
+      <h3 className="mb-4 text-sm font-bold uppercase tracking-wider text-slate-900">
+        Technical Skills
+      </h3>
+
+      <div className="flex flex-wrap gap-2">
+        {Array.isArray(employee.technical_skills) &&
+        employee.technical_skills.length > 0 ? (
+          employee.technical_skills.map((skill, index) => (
+            <span
+              key={`${skill}-${index}`}
+              className="rounded-full bg-blue-50 px-3 py-1.5 text-sm font-medium text-blue-700"
+            >
+              {skill}
+            </span>
+          ))
+        ) : (
+          <p className="text-sm text-slate-500">
+            No technical skills added.
+          </p>
+        )}
+      </div>
+    </section>
+
+    {/* Uploaded Certification Documents */}
+    <section className="rounded-xl border border-slate-200 bg-white p-5">
+      <h3 className="mb-4 text-sm font-bold uppercase tracking-wider text-slate-900">
+        Uploaded Certification
+      </h3>
+
+      {certificationDocuments.length > 0 ? (
+        <div className="space-y-3">
+          {certificationDocuments.map((doc) => (
+            <div
+              key={doc.id}
+              className="flex flex-col justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center"
+            >
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="rounded-lg bg-indigo-100 p-3">
+                  <FileText className="h-5 w-5 text-indigo-600" />
+                </div>
+
+                <div className="min-w-0">
+                  <p className="break-words text-sm font-semibold text-slate-900">
+                    {doc.document_name || "Professional Certification"}
+                  </p>
+
+                  <p className="text-xs text-slate-500">
+                    Professional Certification
+                  </p>
+                </div>
+              </div>
+
+              {doc.document_url && (
+                <a
+                  href={doc.document_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-700"
+                >
+                  <Eye className="h-4 w-4" />
+                  View Certificate
+                </a>
+              )}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-sm text-slate-500">
+          No certification document uploaded.
+        </p>
+      )}
+    </section>
+
+  </div>
+)}
+
           {/* Bank & Identity */}
-          {activeTab === 2 && (
+          {activeTab === 4 && (
             <div className="space-y-6">
               <div>
                 <h3 className="text-sm font-bold text-slate-900 mb-3 uppercase tracking-wider text-slate-400">Financial Details</h3>
@@ -716,9 +949,50 @@ const getEmployeeStatusLabel = () => {
           )}
 
           {/* Address & Emergency */}
-          {activeTab === 3 && (
+          {activeTab === 5 && (
             <div className="space-y-8">
 
+              {/* ================= COMMUNICATION ADDRESS ================= */}
+              <div className="pt-6 border-t border-slate-100">
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
+                    <MapPin className="w-4 h-4 text-blue-600" />
+                  </div>
+
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900">
+                      Communication Address
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                      Employee&apos;s current or temporary residential address
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div className="md:col-span-2 lg:col-span-3">
+                    <DetailTile
+                      label="Address"
+                      value={employee.temporary_address}
+                    />
+                  </div>
+
+                  <DetailTile
+                    label="City"
+                    value={employee.temporary_city}
+                  />
+
+                  <DetailTile
+                    label="State"
+                    value={employee.temporary_state}
+                  />
+
+                  <DetailTile
+                    label="Pincode"
+                    value={employee.temporary_pincode}
+                  />
+                </div>
+              </div>
               {/* ================= PERMANENT ADDRESS ================= */}
               <div>
                 <div className="flex items-center gap-2 mb-4">
@@ -762,47 +1036,7 @@ const getEmployeeStatusLabel = () => {
               </div>
 
 
-              {/* ================= COMMUNICATION ADDRESS ================= */}
-              <div className="pt-6 border-t border-slate-100">
-                <div className="flex items-center gap-2 mb-4">
-                  <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
-                    <MapPin className="w-4 h-4 text-blue-600" />
-                  </div>
-
-                  <div>
-                    <h3 className="text-sm font-bold text-slate-900">
-                      Communication Address
-                    </h3>
-                    <p className="text-xs text-slate-500">
-                      Employee&apos;s current or temporary residential address
-                    </p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <div className="md:col-span-2 lg:col-span-3">
-                    <DetailTile
-                      label="Address"
-                      value={employee.temporary_address}
-                    />
-                  </div>
-
-                  <DetailTile
-                    label="City"
-                    value={employee.temporary_city}
-                  />
-
-                  <DetailTile
-                    label="State"
-                    value={employee.temporary_state}
-                  />
-
-                  <DetailTile
-                    label="Pincode"
-                    value={employee.temporary_pincode}
-                  />
-                </div>
-              </div>
+              
 
 
               {/* ================= EMERGENCY CONTACTS ================= */}
@@ -905,7 +1139,7 @@ const getEmployeeStatusLabel = () => {
           )}
 
           {/* Documents */}
-          {activeTab === 4 && (
+          {activeTab === 6 && (
             <div>
               <DocumentUpload
                 employeeId={employee.id}
@@ -917,7 +1151,7 @@ const getEmployeeStatusLabel = () => {
 
 
           {/* Tab 5: Accessory Management*/}
-          {activeTab === 5 && (
+          {activeTab === 7 && (
             <div className="space-y-6">
 
               {/* Main Accessory */}
@@ -984,8 +1218,8 @@ const getEmployeeStatusLabel = () => {
             </div>
           )}
 
-          {/* {tab 6: options to selct eligabilty of pt ,tds} */}
-          {activeTab === 6 && (
+          {/* {tab 2: options to selct eligabilty of pt ,tds} */}
+          {activeTab === 2 && (
             <div className="space-y-6">
 
               <div>
@@ -1063,7 +1297,7 @@ const getEmployeeStatusLabel = () => {
           )}
 
           {/* ================= GRATUITY ================= */}
-          {activeTab === 7 && (
+          {activeTab === 8 && (
             <div className="space-y-6">
 
               {/* HEADER */}
@@ -1140,14 +1374,14 @@ const getEmployeeStatusLabel = () => {
                         className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase border ${
                           gratuity.gratuity5YearTaken
                             ? "bg-blue-50 text-blue-700 border-blue-200"
-                            : gratuity.gratuityServiceYears >= 5
+                            : (gratuity.gratuityServiceYears ?? 0) >= 5
                             ? "bg-emerald-50 text-emerald-700 border-emerald-200"
                             : "bg-slate-50 text-slate-500 border-slate-200"
                         }`}
                       >
                         {gratuity.gratuity5YearTaken
                           ? "Taken"
-                          : gratuity.gratuityServiceYears >= 5
+                          : (gratuity.gratuityServiceYears ?? 0) >= 5
                           ? "Available"
                           : "Not Eligible"}
                       </span>
@@ -1160,7 +1394,7 @@ const getEmployeeStatusLabel = () => {
                       <DetailTile
                         label="Current Gratuity Amount"
                         value={
-                          gratuity.gratuityServiceYears >= 5
+                          (gratuity.gratuityServiceYears ?? 0) >= 5
                             ? `₹${Number(
                                 gratuity.gratuityAmount
                               ).toLocaleString("en-IN", {
@@ -1174,7 +1408,7 @@ const getEmployeeStatusLabel = () => {
                       <DetailTile
                         label="Calculation Service"
                         value={
-                          gratuity.gratuityServiceYears >= 5
+                          (gratuity.gratuityServiceYears ?? 0) >= 5
                             ? `${gratuity.gratuityServiceYears} ${
                                 gratuity.gratuityServiceYears === 1
                                   ? "Year"
@@ -1190,7 +1424,7 @@ const getEmployeeStatusLabel = () => {
                         value={
                           gratuity.gratuity5YearTaken
                             ? "Taken"
-                            : gratuity.gratuityServiceYears >= 5
+                            : (gratuity.gratuityServiceYears ?? 0) >= 5
                             ? "Available"
                             : "Not Eligible"
                         }
@@ -1224,7 +1458,7 @@ const getEmployeeStatusLabel = () => {
                         TAKE GRATUITY
                     =================================================== */}
                     {!gratuity.gratuity5YearTaken &&
-                      gratuity.gratuityServiceYears >= 5 &&
+                      (gratuity.gratuityServiceYears ?? 0) >= 5 &&
                       (role === "hr" || role === "ceo") && (
                         <button
                           type="button"
@@ -1271,7 +1505,7 @@ const getEmployeeStatusLabel = () => {
           )}
 
           {/* Delete */}
-          {!isExitStatus && activeTab === 8 && (
+          {!isExitStatus && activeTab === 9 && (
             <div className="space-y-6">
               {isOnNotice && (
                 <div className="rounded-xl border border-amber-200 bg-amber-50 p-5 space-y-4">
@@ -1401,7 +1635,7 @@ const getEmployeeStatusLabel = () => {
                       </h4>
 
                       <p className="text-sm text-slate-600">
-                        The employee's final exit date will be{" "}
+                        The employee&apos;s final exit date will be{" "}
                         <strong>{formatDate(plannedLastWorkingDate)}</strong>.
                       </p>
 

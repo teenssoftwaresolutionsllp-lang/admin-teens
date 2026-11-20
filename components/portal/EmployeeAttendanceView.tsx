@@ -15,6 +15,7 @@ import {
   LeaveRequest,
   LeaveType,
   Project,
+  WfhRequest,
 } from "@/lib/types";
 
 import {
@@ -22,7 +23,6 @@ import {
   CheckCircle2,
   XCircle,
   Home,
-  FileCheck,
   Loader2,
   Calendar,
   CalendarOff,
@@ -46,8 +46,65 @@ interface EmployeeAttendanceViewProps {
   regularizations: AttendanceRegularization[];
   leaveRequests?: LeaveRequest[];
   leaveTypes?: LeaveType[];
-  
 }
+
+type AttendanceLogCompat = AttendanceLog & {
+  clock_in?: string | null;
+  clockIn?: string | null;
+  clock_out?: string | null;
+  clockOut?: string | null;
+  check_in?: string | null;
+  checkIn?: string | null;
+  check_out?: string | null;
+  checkOut?: string | null;
+  attendanceDate?: string;
+  date?: string;
+  totalHours?: number | string | null;
+  shift_name?: string | null;
+  shift?: string | null;
+  shiftName?: string | null;
+};
+
+type LeaveTypeCompat = LeaveType & {
+  leave_code?: string | null;
+  leaveType?: LeaveType | null;
+  leave_type?: LeaveType | null;
+  leaveTypeCode?: string | null;
+  leave_type_code?: string | null;
+};
+
+type LeaveRequestCompat = LeaveRequest & {
+  startDate?: string;
+  endDate?: string;
+  leaveTypeId?: string;
+  leaveType?: LeaveTypeCompat | null;
+  leave_type?: LeaveTypeCompat | null;
+  isHalfDay?: boolean;
+  totalDays?: number;
+};
+
+type RegularizationCompat = AttendanceRegularization & {
+  attendanceDate?: string;
+  date?: string;
+  proposedCheckIn?: string | null;
+  proposedCheckOut?: string | null;
+  punch_in?: string | null;
+  punchIn?: string | null;
+  punchInTime?: string | null;
+  check_in?: string | null;
+  checkIn?: string | null;
+  punch_out?: string | null;
+  punchOut?: string | null;
+  punchOutTime?: string | null;
+  check_out?: string | null;
+  checkOut?: string | null;
+};
+
+type HolidayCompat = {
+  holiday_date: string;
+  is_working_day?: boolean;
+  is_optional?: boolean;
+};
 
 /* ============================================================
    HELPERS
@@ -88,54 +145,48 @@ function calculateDaysBetween(
   );
 }
 
-function getClockIn(
-  log: AttendanceLog | null | undefined
-) {
+function getClockIn(log: AttendanceLog | null | undefined) {
   if (!log) return null;
 
+  const value = log as AttendanceLogCompat;
+
   return (
-    (log as any).clock_in ??
-    (log as any).clockIn ??
-    (log as any).check_in_time ??
-    (log as any).check_in ??
-    (log as any).checkIn ??
+    value.clock_in ??
+    value.clockIn ??
+    value.check_in_time ??
+    value.check_in ??
+    value.checkIn ??
     null
   );
 }
 
-
-function getClockOut(
-  log: AttendanceLog | null | undefined
-) {
+function getClockOut(log: AttendanceLog | null | undefined) {
   if (!log) return null;
 
+  const value = log as AttendanceLogCompat;
+
   return (
-    (log as any).clock_out ??
-    (log as any).clockOut ??
-    (log as any).check_out_time ??
-    (log as any).check_out ??
-    (log as any).checkOut ??
+    value.clock_out ??
+    value.clockOut ??
+    value.check_out_time ??
+    value.check_out ??
+    value.checkOut ??
     null
   );
 }
 
-function getLogDate(
-  log: AttendanceLog | null | undefined
-) {
+function getLogDate(log: AttendanceLog | null | undefined) {
   if (!log) return "";
 
   const value =
-    (log as any).attendance_date ??
-    (log as any).attendanceDate ??
-    (log as any).date ??
+    (log as AttendanceLogCompat).attendance_date ??
+    (log as AttendanceLogCompat).attendanceDate ??
+    (log as AttendanceLogCompat).date ??
     "";
 
   if (!value) return "";
 
-  if (
-    typeof value === "string" &&
-    /^\d{4}-\d{2}-\d{2}$/.test(value)
-  ) {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     return value;
   }
 
@@ -146,12 +197,8 @@ function getLogDate(
   }
 
   const year = parsed.getFullYear();
-  const month = String(
-    parsed.getMonth() + 1
-  ).padStart(2, "0");
-  const day = String(
-    parsed.getDate()
-  ).padStart(2, "0");
+  const month = String(parsed.getMonth() + 1).padStart(2, "0");
+  const day = String(parsed.getDate()).padStart(2, "0");
 
   return `${year}-${month}-${day}`;
 }
@@ -183,7 +230,7 @@ function formatAttendanceTime(
     );
 
   if (shortTimeMatch) {
-    let hours = Number(
+    const hours = Number(
       shortTimeMatch[1]
     );
 
@@ -218,7 +265,7 @@ function formatAttendanceTime(
     );
 
   if (longTimeMatch) {
-    let hours = Number(
+    const hours = Number(
       longTimeMatch[1]
     );
 
@@ -516,24 +563,54 @@ function isWorkFromHome(log: AttendanceLog): boolean {
    LEAVE TYPE HELPERS
 ============================================================ */
 
-function getLeaveTypeCode(
-  value: any
-) {
+function getLeaveTypeCode(value: LeaveType | LeaveRequest): string {
+  const item = value as LeaveTypeCompat & LeaveRequestCompat;
+
   return String(
-    value?.leaveType?.code ??
-      value?.leave_type?.code ??
-      value?.leaveTypeCode ??
-      value?.leave_type_code ??
-      value?.code ??
-      value?.leaveType?.leave_code ??
-      value?.leave_type?.leave_code ??
-      value?.leaveType?.name ??
-      value?.leave_type?.name ??
-      value?.name ??
+    item.leaveType?.code ??
+      item.leave_type?.code ??
+      item.leaveTypeCode ??
+      item.leave_type_code ??
+      item.code ??
+      item.leaveType?.leave_code ??
+      item.leave_type?.leave_code ??
+      item.leaveType?.name ??
+      item.leave_type?.name ??
+      item.name ??
       ""
   )
     .trim()
     .toUpperCase();
+}
+
+function getLeaveRequestStatus(request: { status?: string | null }): string {
+  return String(request?.status ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+}
+
+function getLeaveTypeId(request: LeaveRequest): string {
+  const item = request as LeaveRequestCompat;
+
+  return String(
+    item.leave_type_id ??
+      item.leaveTypeId ??
+      item.leave_type?.id ??
+      item.leaveType?.id ??
+      ""
+  ).trim();
+}
+
+function getLeaveTypeName(value: LeaveType | LeaveRequest): string {
+  const item = value as LeaveTypeCompat & LeaveRequestCompat;
+
+  return String(
+    item.leaveType?.name ??
+      item.leave_type?.name ??
+      item.name ??
+      ""
+  ).trim();
 }
 
 /* ============================================================
@@ -549,47 +626,10 @@ function normalizeAttendanceStatus(
     .replace(/[\s-]+/g, "_");
 }
 
-/* ============================================================
-   LEAVE REQUEST HELPERS
-============================================================ */
-
-function getLeaveRequestStatus(
-  request: any
-) {
-  return String(
-    request?.status ?? ""
-  )
-    .trim()
-    .toLowerCase()
-    .replace(/[\s-]+/g, "_");
-}
 
 /* ============================================================
-   LEAVE TYPE HELPERS
+   ATTENDANCE STATUS
 ============================================================ */
-
-function getLeaveTypeId(
-  request: any
-) {
-  return String(
-    request?.leave_type_id ??
-      request?.leaveTypeId ??
-      request?.leave_type?.id ??
-      request?.leaveType?.id ??
-      ""
-  ).trim();
-}
-
-function getLeaveTypeName(
-  value: any
-) {
-  return String(
-    value?.leaveType?.name ??
-      value?.leave_type?.name ??
-      value?.name ??
-      ""
-  ).trim();
-}
 
 /* ============================================================
    COMPONENT
@@ -691,7 +731,7 @@ export default function EmployeeAttendanceView({
     WFH REQUEST STATE
   ============================================================ */
 
-  const [wfhRequests, setWfhRequests] = useState<any[]>([]);
+  const [wfhRequests, setWfhRequests] = useState<WfhRequest[]>([]);
   const [loadingWfh, setLoadingWfh] = useState(false);
   const [showWfhModal, setShowWfhModal] = useState(false);
   const [submittingWfh, setSubmittingWfh] = useState(false);
@@ -810,7 +850,10 @@ export default function EmployeeAttendanceView({
       }
     }, [employee.id]);
 
-  useEffect(() => {refreshLeaveData();
+  useEffect(() => {
+      const initialRefresh = setTimeout(() => {
+        void refreshLeaveData();
+      }, 0);
 
     const interval =
       setInterval(() => {
@@ -818,6 +861,7 @@ export default function EmployeeAttendanceView({
       }, 30000);
 
     return () => {
+      clearTimeout(initialRefresh);
       clearInterval(interval);
     };
   }, [refreshLeaveData]);
@@ -859,11 +903,18 @@ export default function EmployeeAttendanceView({
   }, []);
 
   useEffect(() => {
-    refreshWfhRequests();
+    const initialRefresh = setTimeout(() => {
+      void refreshWfhRequests();
+    }, 0);
 
-    const interval = setInterval(refreshWfhRequests, 30000);
+    const interval = setInterval(() => {
+      void refreshWfhRequests();
+    }, 30000);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearTimeout(initialRefresh);
+      clearInterval(interval);
+    };
   }, [refreshWfhRequests]);
 
   /* ============================================================
@@ -910,18 +961,13 @@ export default function EmployeeAttendanceView({
  const presentCount = useMemo(() => {
   const approvedLeaveDates = new Set<string>();
 
-  for (const request of leaveRequests as any[]) {
+  for (const request of leaveRequests) {
     if (getLeaveRequestStatus(request) !== "approved") {
       continue;
     }
 
-    const start = String(
-      request.start_date ?? request.startDate ?? ""
-    ).slice(0, 10);
-
-    const end = String(
-      request.end_date ?? request.endDate ?? start
-    ).slice(0, 10);
+    const start = String(request.start_date ?? "").slice(0, 10);
+    const end = String(request.end_date ?? start).slice(0, 10);
 
     if (!start || !end || start > end) continue;
 
@@ -935,7 +981,7 @@ export default function EmployeeAttendanceView({
   }
 
   return logs.reduce((total, log) => {
-    const rawLog = log as any;
+    const rawLog = log as AttendanceLogCompat;
 
     const attendanceDate = String(
       rawLog.attendance_date ??
@@ -1049,17 +1095,18 @@ export default function EmployeeAttendanceView({
 
     const approvedLeaveDates = new Set<string>();
 
-    for (const request of leaveRequests as any[]) {
+    for (const request of leaveRequests) {
       if (getLeaveRequestStatus(request) !== "approved") {
         continue;
       }
 
+      const reqCompat = request as LeaveRequestCompat;
       const start = String(
-        request.start_date ?? request.startDate ?? ""
+        reqCompat.start_date ?? reqCompat.startDate ?? ""
       ).slice(0, 10);
 
       const end = String(
-        request.end_date ?? request.endDate ?? start
+        reqCompat.end_date ?? reqCompat.endDate ?? start
       ).slice(0, 10);
 
       if (!start || !end || start > end) continue;
@@ -1123,7 +1170,7 @@ export default function EmployeeAttendanceView({
       if (dateLogs.length > 0) {
         const hasExplicitAbsence = dateLogs.some((log) => {
           const status = normalizeAttendanceStatus(
-            (log as any).status
+            log.status
           );
 
           return (
@@ -1224,7 +1271,7 @@ const selectedMonthLogs = useMemo(() => {
   (project.calendar?.holidays || [])
     .filter(
       (holiday) =>
-        (holiday as any).is_working_day !== true
+        (holiday as HolidayCompat).is_working_day !== true
     )
     .map((holiday) => holiday.holiday_date.slice(0, 10))
 );
@@ -1365,7 +1412,7 @@ const totalWorkingDays = useMemo(() => {
       ];
 
       return leaveTypes.filter(
-        (type: any) =>
+        (type: LeaveType) =>
           allowed.includes(
             getLeaveTypeCode(type)
           )
@@ -1374,13 +1421,13 @@ const totalWorkingDays = useMemo(() => {
 
   const getRequestLeaveType =
     useCallback(
-      (request: any) => {
+      (request: LeaveRequest) => {
         const requestTypeId =
           getLeaveTypeId(request);
 
         const matchedType =
           leaveTypes.find(
-            (type: any) =>
+            (type: LeaveType) =>
               String(
                 type?.id ?? ""
               ).trim() ===
@@ -1419,6 +1466,7 @@ const totalWorkingDays = useMemo(() => {
      LEAVE MODAL
   ============================================================ */
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const openLeaveModal = () => {
     setLeaveError(null);
     setLeaveSuccess(null);
@@ -1426,11 +1474,7 @@ const totalWorkingDays = useMemo(() => {
     setLeaveForm({
       leaveTypeId:
         visibleLeaveTypes[0]
-          ? String(
-              (visibleLeaveTypes[0] as any)
-                .id
-            )
-          : "",
+          ? String(visibleLeaveTypes[0].id): "",
       startDate: "",
       endDate: "",
       totalDays: 1,
@@ -1449,29 +1493,29 @@ const totalWorkingDays = useMemo(() => {
     setLeaveError(null);
   };
 
-  useEffect(() => {
-    if (
-      leaveForm.startDate &&
-      leaveForm.endDate
-    ) {
-      const days =
-        calculateDaysBetween(
-          leaveForm.startDate,
-          leaveForm.endDate
-        );
+  // useEffect(() => {
+  //   if (
+  //     leaveForm.startDate &&
+  //     leaveForm.endDate
+  //   ) {
+  //     const days =
+  //       calculateDaysBetween(
+  //         leaveForm.startDate,
+  //         leaveForm.endDate
+  //       );
 
-      setLeaveForm((prev) => ({
-        ...prev,
-        totalDays: prev.isHalfDay
-          ? 0.5
-          : Math.max(days, 1),
-      }));
-    }
-  }, [
-    leaveForm.startDate,
-    leaveForm.endDate,
-    leaveForm.isHalfDay,
-  ]);
+  //     setLeaveForm((prev) => ({
+  //       ...prev,
+  //       totalDays: prev.isHalfDay
+  //         ? 0.5
+  //         : Math.max(days, 1),
+  //     }));
+  //   }
+  // }, [
+  //   leaveForm.startDate,
+  //   leaveForm.endDate,
+  //   leaveForm.isHalfDay,
+  // ]);
 
   /* ============================================================
      SUBMIT LEAVE
@@ -2016,45 +2060,36 @@ const totalWorkingDays = useMemo(() => {
      REGULARIZATION STATUS
   ============================================================ */
 
-  const getRegularizationStatus =
-    (request: any) => {
-      return String(
-        request?.status ??
-          "pending"
-      ).toLowerCase();
-    };
+  const getRegularizationStatus = (
+    request: RegularizationCompat
+  ): string => {
+    return String(
+      request?.status ?? "pending"
+    )
+      .trim()
+      .toLowerCase()
+      .replace(/[\s-]+/g, "_");
+  };
 
-  const getStatusLabel =
-    (request: any) => {
-      const status =
-        getRegularizationStatus(
-          request
-        );
+  const getStatusLabel = (
+    request: RegularizationCompat
+  ): string => {
+    const status = getRegularizationStatus(request);
 
-      switch (status) {
-        case "approved":
-          return "Approved";
+    switch (status) {
+      case "approved":
+        return "Approved";
 
-        case "rejected":
-          return "Rejected";
+      case "rejected":
+        return "Rejected";
 
-        case "pending":
-          return "Pending";
+      case "pending":
+        return "Pending";
 
-        default:
-          return status
-            .replaceAll(
-              "_",
-              " "
-            )
-            .replace(
-              /\b\w/g,
-              (char) =>
-                char.toUpperCase()
-            );
-      }
-    };
-
+      default:
+        return status.replaceAll("_", " ");
+    }
+  };
   /* ============================================================
     WFH REQUEST HANDLERS
   ============================================================ */
@@ -2487,15 +2522,16 @@ const totalWorkingDays = useMemo(() => {
                 return false;
               }
 
+              const req = request as LeaveRequestCompat;
               const start = String(
-                (request as any).start_date ??
-                (request as any).startDate ??
+                req.start_date ??
+                req.startDate ??
                 ""
               ).slice(0, 10);
 
               const end = String(
-                (request as any).end_date ??
-                (request as any).endDate ??
+                req.end_date ??
+                req.endDate ??
                 start
               ).slice(0, 10);
 
@@ -2559,9 +2595,7 @@ const totalWorkingDays = useMemo(() => {
 
               const status =
                 String(
-                  (updatedLog as any)
-                    .status ??
-                    "present"
+                  updatedLog .status ?? "present"
                 ).toLowerCase();
 
               let selectedStatus:
@@ -2602,11 +2636,7 @@ const totalWorkingDays = useMemo(() => {
                   updatedLog
                 );
 
-              const totalHours =
-                (updatedLog as any)
-                  .total_hours ??
-                (updatedLog as any)
-                  .totalHours;
+              const totalHours = (updatedLog as AttendanceLogCompat).total_hours ?? (updatedLog as AttendanceLogCompat).totalHours;
 
               let worked = "--";
 
@@ -2826,7 +2856,7 @@ const totalWorkingDays = useMemo(() => {
                           )
                         : selectedLog
                         ? String(
-                            (selectedLog as any)
+                            (selectedLog as AttendanceLogCompat)
                               .status ??
                               "Not Available"
                           ).replaceAll(
@@ -2838,12 +2868,12 @@ const totalWorkingDays = useMemo(() => {
                   </td>
 
                   <td className="px-5 py-4 text-sm text-slate-600">
-                    {(selectedLog as any)
-                      ?.shift_name ??
-                      (selectedLog as any)
-                        ?.shift ??
-                      (selectedLog as any)
-                        ?.shiftName ??
+                    {((selectedLog as AttendanceLogCompat)
+                      ?.shift_name as string | undefined) ??
+                      ((selectedLog as AttendanceLogCompat)
+                        ?.shift as string | undefined) ??
+                      ((selectedLog as AttendanceLogCompat)
+                        ?.shiftName as string | undefined) ??
                       project?.name ??
                       "--"}
                   </td>
@@ -2929,7 +2959,7 @@ const totalWorkingDays = useMemo(() => {
 
                   {regs.map(
                     (
-                      request: any,
+                      request: RegularizationCompat,
                       index
                     ) => {
 
@@ -3089,7 +3119,7 @@ const totalWorkingDays = useMemo(() => {
                 </thead>
 
                 <tbody>
-                  {wfhRequests.map((request: any) => {
+                  {wfhRequests.map((request: WfhRequest) => {
                     const status = String(
                       request.status || "pending"
                     ).toLowerCase();
@@ -3213,7 +3243,7 @@ const totalWorkingDays = useMemo(() => {
 
                   {leaveRequests.map(
                     (
-                      request: any,
+                      request: LeaveRequestCompat,
                       index
                     ) => {
 
@@ -3663,7 +3693,7 @@ const totalWorkingDays = useMemo(() => {
                     </option>
 
                     {visibleLeaveTypes.map(
-                      (type: any) => (
+                      (type: LeaveType) => (
                         <option
                           key={type.id}
                           value={type.id}
@@ -3692,16 +3722,22 @@ const totalWorkingDays = useMemo(() => {
                       value={
                         leaveForm.startDate
                       }
-                      onChange={(e) =>
-                        setLeaveForm(
-                          (prev) => ({
-                            ...prev,
-                            startDate:
-                              e.target
-                                .value,
-                          })
-                        )
-                      }
+                      onChange={(e) => {
+                        const startDate = e.target.value;
+
+                        setLeaveForm((prev) => ({
+                          ...prev,
+                          startDate,
+                          totalDays: prev.isHalfDay
+                            ? 0.5
+                            : startDate && prev.endDate
+                              ? Math.max(
+                                  calculateDaysBetween(startDate, prev.endDate),
+                                  1
+                                )
+                              : 1,
+                        }));
+                      }}
                       required
                       className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-500 focus:ring-2 focus:ring-slate-100"
                     />
@@ -3719,16 +3755,22 @@ const totalWorkingDays = useMemo(() => {
                       value={
                         leaveForm.endDate
                       }
-                      onChange={(e) =>
-                        setLeaveForm(
-                          (prev) => ({
-                            ...prev,
-                            endDate:
-                              e.target
-                                .value,
-                          })
-                        )
-                      }
+                      onChange={(e) => {
+                        const endDate = e.target.value;
+
+                        setLeaveForm((prev) => ({
+                          ...prev,
+                          endDate,
+                          totalDays: prev.isHalfDay
+                            ? 0.5
+                            : prev.startDate && endDate
+                              ? Math.max(
+                                  calculateDaysBetween(prev.startDate, endDate),
+                                  1
+                                )
+                              : 1,
+                        }));
+                      }}
                       required
                       className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-500 focus:ring-2 focus:ring-slate-100"
                     />

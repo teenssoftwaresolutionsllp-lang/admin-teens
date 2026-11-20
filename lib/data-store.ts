@@ -424,119 +424,98 @@ export class DataStore {
     }
   }
 
-  static async getEmployeeByEmail(email: string): Promise<Employee | null> {
-    const cache = getCache();
 
-    // Check in-memory cache first
-    const cached = cache.employees.find(
-      (e) => e.email?.toLowerCase() === email?.toLowerCase()
-    );
+static async getEmployeeByEmail(email: string): Promise<Employee | null> {
+  try {
+    const supabase = await createAdminClient();
 
-    if (cached) {
+    // Always fetch the latest employee record from database.
+    const { data, error } = await supabase
+      .from("employees")
+      .select(`*, department:departments(id, name)`)
+      .ilike("email", email)
+      .maybeSingle();
+
+    if (error) {
+      console.error("getEmployeeByEmail error:", error);
+      return null;
+    }
+
+    if (!data) {
+      return null;
+    }
+
+    const projects = await this.getProjects();
+
+    const result: Employee = {
+      ...data,
+      project: data.project_id
+        ? projects.find((project) => project.id === data.project_id)
+        : undefined,
+    };
+
+    // Update cache with latest database values.
+    this.seedEmployeeToCache(result);
+
+    return result;
+  } catch (error) {
+    console.error("getEmployeeByEmail failed:", error);
+    return null;
+  }
+}
+
+
+
+static async getEmployeeByUserId(userId: string): Promise<Employee | null> {
+  try {
+    const supabase = await createAdminClient();
+
+    // Get employee directly from database (latest values).
+    const { data, error } = await supabase
+      .from("employees")
+      .select(`*, department:departments(id, name)`)
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (error) {
+      console.error("getEmployeeByUserId error:", error);
+      return null;
+    }
+
+    if (data) {
       const projects = await this.getProjects();
 
-      return {
-        ...cached,
-        project: cached.project ||
-          projects.find((project) => project.id === cached.project_id) ||
-          undefined,
+      const result: Employee = {
+        ...data,
+        project: data.project_id
+          ? projects.find((project) => project.id === data.project_id)
+          : undefined,
       };
+
+      // Update cache with latest database values.
+      this.seedEmployeeToCache(result);
+
+      return result;
     }
 
-    // Try DB
-    try {
-      const supabase = await createAdminClient();
-      const { data, error } = await supabase
-        .from("employees")
-        .select(`*, department:departments(id, name)`)
-        .eq("email", email)
-        .single();
+    // Fallback: find employee using profile email.
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("email")
+      .eq("id", userId)
+      .maybeSingle();
 
-      if (!error && data) {
-        const projects = await this.getProjects();
-        const result: Employee = {
-          ...data,
-          project: data.project_id
-            ? projects.find((project) => project.id === data.project_id)
-            : undefined,
-        };
-        this.seedEmployeeToCache(result);
-        return result;
-      }
-    } catch (err) {
-      // silent
+    if (profile?.email) {
+      return await this.getEmployeeByEmail(profile.email);
     }
 
     return null;
-  }
-
-  static async getEmployeeByUserId(userId: string): Promise<Employee | null> {
-    const cache = getCache();
-
-    // 1. Check in-memory cache first (match by user_id)
-    if (userId) {
-      const cachedByUserId = cache.employees.find((e) => e.user_id === userId);
-      if (cachedByUserId) {
-        return {
-          ...cachedByUserId,
-          project: cachedByUserId.project_id
-            ? cachedByUserId.project ||
-              cache.projects.find(
-                (project) => project.id === cachedByUserId.project_id
-              )
-            : undefined,
-        };
-      }
-    }
-
-    // 2. Try DB to get profile email
-    try {
-      const supabase = await createAdminClient();
-      const { data: profile } = await supabase.from("profiles").select("email").eq("id", userId).single();
-      const email = profile?.email;
-
-      if (email) {
-        const cachedByEmail = cache.employees.find((e) => e.email?.toLowerCase() === email.toLowerCase());
-        if (cachedByEmail) {
-          cachedByEmail.user_id = userId;
-          return {
-            ...cachedByEmail,
-            project: cachedByEmail.project_id
-              ? cachedByEmail.project ||
-                cache.projects.find(
-                  (project) => project.id === cachedByEmail.project_id
-                )
-              : undefined,
-          };
-        }
-      }
-
-      let query = supabase.from("employees").select(`*, department:departments(id, name)`);
-      if (email) {
-        query = query.or(`user_id.eq.${userId},email.eq.${email}`);
-      } else {
-        query = query.eq("user_id", userId);
-      }
-
-      const { data, error } = await query.limit(1).single();
-      if (!error && data) {
-        const projects = await this.getProjects();
-
-        const result: Employee = {
-          ...data,
-          project: data.project_id
-            ? projects.find((project) => project.id === data.project_id)
-            : undefined,
-        };
-        this.seedEmployeeToCache(result);
-        return result;
-      }
-    } catch (err) {
-      console.warn("getEmployeeByUserId DB fallback:", err);
-    }
-
+  } catch (error) {
+    console.error("getEmployeeByUserId failed:", error);
     return null;
   }
+}
+
 
   static async createEmployee(empData: Partial<Employee>): Promise<Employee> {
     const cache = getCache();
@@ -782,12 +761,13 @@ export class DataStore {
       this.seedEmployeeToCache(data as Employee);
 
       return data as Employee;
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errObj = error as { message?: string; details?: string; hint?: string; code?: string } | null;
       console.error("updateEmployee failed:", error);
-      console.error("Message:", error?.message);
-      console.error("Details:", error?.details);
-      console.error("Hint:", error?.hint);
-      console.error("Code:", error?.code);
+      console.error("Message:", errObj?.message);
+      console.error("Details:", errObj?.details);
+      console.error("Hint:", errObj?.hint);
+      console.error("Code:", errObj?.code);
 
       throw error;
     }
@@ -906,7 +886,7 @@ export class DataStore {
       if (requests.length === 0) return [];
 
       const requestIds = requests
-        .map((request: any) => request.id)
+        .map((request: { id?: string }) => request.id)
         .filter(Boolean);
 
       const { data: documents, error: documentsError } = await supabase
@@ -918,7 +898,7 @@ export class DataStore {
 
       if (documentsError) throw documentsError;
 
-      const documentsByRequest = new Map<string, any[]>();
+      const documentsByRequest = new Map<string, unknown[]>();
 
       for (const document of documents ?? []) {
         const requestId = document.profile_change_request_id;
@@ -930,10 +910,10 @@ export class DataStore {
         documentsByRequest.set(requestId, current);
       }
 
-      return requests.map((request: any) => ({
+      return requests.map((request: { id: string }) => ({
         ...request,
         supporting_documents: documentsByRequest.get(request.id) ?? [],
-      })) as ProfileChangeRequest[];
+      })) as unknown as ProfileChangeRequest[];
     } catch (error) {
       console.error("Failed to load profile change requests:", error);
       throw error;
@@ -941,56 +921,72 @@ export class DataStore {
   }
 
 
-  static async createProfileChangeRequest({
-    employeeId,
-    requestedChanges,
-    previousValues,
-  }: {
-    employeeId: string;
-    requestedChanges: Record<string, any>;
-    previousValues?: Record<string, any>;
-  }): Promise<ProfileChangeRequest> {
-    const cache = getCache();
-    const employee = await this.getEmployeeById(employeeId);
-    if (!employee) {
-      throw new Error("Employee not found");
-    }
 
-    const employeeUuid = employee.id;
+static async createProfileChangeRequest({
+  employeeId,
+  requestedChanges,
+  previousValues,
+}: {
+  employeeId: string;
+  requestedChanges: Record<string, unknown>;
+  previousValues?: Record<string, unknown>;
+}): Promise<ProfileChangeRequest> {
 
-    const newRequest: ProfileChangeRequest = {
-      id: "pcr-" + Date.now(),
-      employee_id: employeeUuid,
-      requested_changes: requestedChanges,
-      previous_values: previousValues,
-      status: "pending",
-      created_at: new Date().toISOString(),
-      employee: employee || undefined,
-    };
-
-    try {
-      const supabase = await createAdminClient();
-      const { data, error } = await supabase
-        .from("profile_change_requests")
-        .insert({
-          employee_id: employeeUuid,
-          requested_changes: requestedChanges,
-          previous_values: previousValues ?? {},
-          status: "pending",
-        })
-        .select()
-        .single();
-
-      if (!error && data) {
-        return { ...data, employee: employee || undefined };
-      }
-    } catch (err) {
-      console.warn("createProfileChangeRequest using cache fallback:", err);
-    }
-
-    cache.changeRequests.unshift(newRequest);
-    return newRequest;
+  if (!employeeId) {
+    throw new Error("Employee ID is required");
   }
+
+  if (
+    !requestedChanges ||
+    typeof requestedChanges !== "object" ||
+    Array.isArray(requestedChanges) ||
+    Object.keys(requestedChanges).length === 0
+  ) {
+    throw new Error("No profile changes were provided");
+  }
+
+  const employee = await this.getEmployeeById(employeeId);
+
+  if (!employee) {
+    throw new Error("Employee not found");
+  }
+
+  const supabase = await createAdminClient();
+
+  const { data, error } = await supabase
+    .from("profile_change_requests")
+    .insert({
+      employee_id: employee.id,
+      requested_changes: requestedChanges,
+      previous_values: previousValues ?? {},
+      status: "pending",
+    })
+    .select("*")
+    .single();
+
+  if (error) {
+    console.error(
+      "PROFILE CHANGE REQUEST DATABASE INSERT ERROR:",
+      error
+    );
+
+    throw new Error(
+      `Failed to save profile change request: ${error.message}`
+    );
+  }
+
+  if (!data) {
+    throw new Error(
+      "Profile change request was not returned by the database"
+    );
+  }
+
+  return {
+    ...data,
+    employee,
+  };
+}
+
 
 
   static readonly SENSITIVE_PROFILE_FIELDS = [
@@ -1258,7 +1254,7 @@ export class DataStore {
     }
 
     return (data || [])
-      .map((row: any) => {
+      .map((row: { holiday_date?: string | null }) => {
         const date =
           String(
             row.holiday_date
@@ -3012,7 +3008,7 @@ static async reviewLeaveRequest({
       const deductions: Array<{
         year: number;
         days: number;
-        balance: Record<string, any>;
+        balance: Record<string, unknown>;
       }> = [];
 
       // 5. Prepare deductions for each calendar year.
@@ -3830,7 +3826,10 @@ static async reviewLeaveRequest({
     // CREATE HOLIDAY MAP
     // =========================================================
 
-    const holidayMap = new Map<string, any[]>();
+    const holidayMap = new Map<
+      string,
+      Array<{ is_working_day?: boolean | null; is_optional?: boolean | null }>
+    >();
 
     for (const holiday of holidayRows || []) {
       const holidayDate = String(
@@ -4082,7 +4081,7 @@ static async reviewLeaveRequest({
 
         const leave =
           (empLeaves || []).find(
-            (request: any) => {
+            (request: { start_date?: string | null; end_date?: string | null }) => {
               const startDate =
                 String(
                   request.start_date
@@ -4372,7 +4371,7 @@ static async reviewLeaveRequest({
         ? existingPayslip.earnings_breakup
         : [];
 
-      const existingAdditionalEarningBreakup = existingEarningsBreakup.filter((earning: any) => earning?.code === "INCENTIVE" || earning?.code === "BONUS" || earning?.code === "COMPENSATION");
+      const existingAdditionalEarningBreakup = existingEarningsBreakup.filter((earning: { code?: string }) => earning?.code === "INCENTIVE" || earning?.code === "BONUS" || earning?.code === "COMPENSATION");
       // -------------------------------------------------------
       // NEW ADDITIONAL EARNING BREAKUP
       // -------------------------------------------------------
@@ -4510,14 +4509,14 @@ static async reviewLeaveRequest({
       // SAVE / UPDATE PAYSLIP
       // =======================================================
 
-      let savedPayslip: any = null;
-      let payslipError: any = null;
+      let savedPayslip: Record<string, unknown> | null = null;
+      let payslipError: { message?: string } | null = null;
 
-      if ((existingPayslip as any)?.id) {
+      if ((existingPayslip as { id?: string })?.id) {
         const res = await supabase
           .from("payslips")
           .update(payslipData)
-          .eq("id", (existingPayslip as any).id)
+          .eq("id", (existingPayslip as { id: string }).id)
           .select()
           .single();
         savedPayslip = res.data;
@@ -4543,7 +4542,7 @@ static async reviewLeaveRequest({
       // =======================================================
 
       const payslip: Payslip = {
-        ...(savedPayslip as Payslip),
+        ...(savedPayslip as unknown as Payslip),
         employee: emp,
       };
 

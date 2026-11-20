@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { Image } from "lucide-react"
 import {
   Users,
   UserCheck,

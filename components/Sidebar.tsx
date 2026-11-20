@@ -76,6 +76,7 @@ export default function Sidebar({
       const savedState =
         window.localStorage.getItem("sidebar-collapsed");
 
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsCollapsed(savedState === "true");
     } catch (error) {
       console.error("Unable to read sidebar state:", error);
@@ -305,9 +306,9 @@ export default function Sidebar({
     },
 
     {
-      name: "Projects & Calendars",
+      name: role === "hr" ? "Events & Holiday Calendar" : "Projects & Calendars",
       href: "/dashboard/projects",
-      icon: Globe,
+      icon: role === "hr" ? CalendarDays : Globe,
       roles: ["ceo", "hr"],
     },
 
@@ -370,12 +371,12 @@ export default function Sidebar({
       roles: ["employee"],
     },
 
-    {
-      name: "Apply Leave",
-      href: "/portal/leaves?view=apply",
-      icon: CalendarDays,
-      roles: ["employee"],
-    },
+    // {
+    //   name: "Apply Leave",
+    //   href: "/portal/leaves?view=apply",
+    //   icon: CalendarDays,
+    //   roles: ["employee"],
+    // },
 
     // Employee Events page
     {

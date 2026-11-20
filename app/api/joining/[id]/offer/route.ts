@@ -621,7 +621,7 @@ export async function POST(
     const declineToken = createActionToken();
 
     const tokenExpiry = new Date(
-      Date.now() + 15 * 24 * 60 * 60 * 1000
+      Date.now() + 7 * 24 * 60 * 60 * 1000
     ).toISOString();
 
     const { error: tokenInsertError } = await auth.admin
@@ -842,7 +842,7 @@ export async function POST(
           "",
           `Reject Offer: ${declineUrl}`,
           "",
-          "These links expire 15 days after they are issued. You will be asked to confirm your decision before it is submitted.",
+          "These links expire  days after they are issued. You will be asked to confirm your decision before it is submitted.",
           "",
           "If you have any questions, please contact our HR team.",
           "",
@@ -910,7 +910,7 @@ export async function POST(
             </div>
 
             <p style="font-size: 14px; color: #555;">
-              These links expire 15 days after they are issued. After selecting
+              These links expire 7 days after they are issued. After selecting
               an option, you will be asked to confirm your decision before it
               is submitted.
             </p>

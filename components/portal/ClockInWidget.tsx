@@ -38,15 +38,6 @@ type AttendanceLogWithMode = AttendanceLog & {
   work_mode?: WorkMode | null;
 };
 
-interface AttendanceRegularizationRequest {
-  id: string;
-  employee_id: string;
-  attendance_date: string;
-  status: "pending" | "approved" | "rejected";
-  created_at: string;
-  reviewed_at?: string | null;
-}
-
 interface ClockInWidgetProps {
   employeeId: string;
   isApprovedLeave?: boolean;
@@ -70,15 +61,8 @@ export default function ClockInWidget({
   onRequestRegularization,
   onAttendanceUpdate,
 }: ClockInWidgetProps) {
-  const [log, setLog] = useState<AttendanceLog | null>(initialLog);
 
-  const [regularizationRequests, setRegularizationRequests] =
-    useState<AttendanceRegularizationRequest[]>([]);
-
-  const [loading, setLoading] = useState(false);
-  const [workedMinutes, setWorkedMinutes] = useState(0);
-
-  const getTodayString = () => {
+    const getTodayString = () => {
     const now = new Date();
 
     const year = now.getFullYear();
@@ -92,71 +76,27 @@ export default function ClockInWidget({
   const activeDate = selectedDate || todayString;
   const isToday = activeDate === todayString;
 
-  // Load regularization requests.
-  useEffect(() => {
-    let active = true;
+  const [log, setLog] = useState<AttendanceLog | null>(
+    isToday ? initialLog : null
+  );
 
-    const loadRegularizations = async () => {
-      try {
-        const response = await fetch(
-          "/api/attendance/regularization",
-          {
-            cache: "no-store",
-            headers: {
-              Accept: "application/json",
-            },
-          }
-        );
+  const [previousAttendance, setPreviousAttendance] = useState({
+    initialLog,
+    activeDate,
+  });
 
-        if (!response.ok) return;
+  if (
+    previousAttendance.initialLog !== initialLog ||
+    previousAttendance.activeDate !== activeDate
+  ) {
+    setPreviousAttendance({ initialLog, activeDate });
+    setLog(isToday ? initialLog : null);
+  }
 
-        const data = await response.json();
+const [loading, setLoading] = useState(false);
+const [workedMinutes, setWorkedMinutes] = useState(0);
 
-        const requests = Array.isArray(data)
-          ? data
-          : Array.isArray(data?.requests)
-            ? data.requests
-            : Array.isArray(data?.regularizations)
-              ? data.regularizations
-              : [];
 
-        if (active) {
-          setRegularizationRequests(requests);
-        }
-      } catch (error) {
-        console.error(
-          "Unable to load attendance regularizations:",
-          error
-        );
-      }
-    };
-
-    void loadRegularizations();
-
-    const interval = window.setInterval(() => {
-      void loadRegularizations();
-    }, 15000);
-
-    window.addEventListener("focus", loadRegularizations);
-
-    return () => {
-      active = false;
-      window.clearInterval(interval);
-      window.removeEventListener(
-        "focus",
-        loadRegularizations
-      );
-    };
-  }, [employeeId, todayString]);
-
-  // Update attendance when the selected date changes.
-  useEffect(() => {
-    if (isToday) {
-      setLog(initialLog);
-    } else {
-      setLog(null);
-    }
-  }, [initialLog, activeDate, isToday]);
 
   // Update worked time every second.
   useEffect(() => {
@@ -258,42 +198,6 @@ export default function ClockInWidget({
 
   const isCheckedOut =
     isToday && !!log?.check_out_time;
-
-  const checkoutTimestamp = log?.check_out_time
-    ? new Date(log.check_out_time).getTime()
-    : 0;
-
-  const latestRegularization = regularizationRequests
-    .filter(
-      (request) =>
-        request.employee_id === employeeId &&
-        request.attendance_date === todayString
-    )
-    .sort(
-      (a, b) =>
-        new Date(b.created_at).getTime() -
-        new Date(a.created_at).getTime()
-    )[0];
-
-  const requestCreatedTimestamp =
-    latestRegularization?.created_at
-      ? new Date(latestRegularization.created_at).getTime()
-      : 0;
-
-  const requestReviewedTimestamp =
-    latestRegularization?.reviewed_at
-      ? new Date(latestRegularization.reviewed_at).getTime()
-      : 0;
-
-  // Allow another login only after a valid HR approval.
-  const regularizationApproved =
-    latestRegularization?.status === "approved" &&
-    requestCreatedTimestamp > checkoutTimestamp &&
-    requestReviewedTimestamp >= requestCreatedTimestamp;
-
-  const regularizationPending =
-    latestRegularization?.status === "pending" &&
-    requestCreatedTimestamp > checkoutTimestamp;
 
 const canLogin =
   isToday &&

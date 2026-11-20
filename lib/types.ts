@@ -231,6 +231,17 @@ export interface Employee {
   passport_number?:string |null;
   payment_mode?:string | null;
 
+
+    // ==============================
+  // Skills & Certification
+  // ==============================
+  professional_certification_name?: string | null;
+  professional_certification_organization?: string | null;
+  professional_certification_credential_id?: string | null;
+  professional_certification_issue_date?: string | null;
+  professional_certification_expiry_date?: string | null;
+  technical_skills?: string[] | null;
+
   // ==============================
   // Accessories Information
   // ==============================
@@ -304,20 +315,23 @@ export interface EmployeeDocument {
   aadhaar_number?: string | null;
   pan_number?: string | null;
   passport_number?: string | null;
+  bank_name?: string | null;
+  bank_account_number?: string | null;
+  ifsc_code?: string | null;
 
 
   created_at?: string;
   updated_at?: string;
   uploaded_at?: string;
   
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export interface ProfileChangeRequest {
   id: string;
   employee_id: string;
-  requested_changes: Record<string, any>;
-  previous_values?: Record<string, any>;
+  requested_changes: Record<string, unknown>;
+  previous_values?: Record<string, unknown>;
   status: 'pending' | 'approved' | 'rejected';
   rejection_reason?: string | null;
   reviewed_by?: string | null;

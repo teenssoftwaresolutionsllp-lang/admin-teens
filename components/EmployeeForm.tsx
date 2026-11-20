@@ -44,7 +44,37 @@ export default function EmployeeForm({ employee, departments, projects, generate
   const [tdsEligible, setTdsEligible] = useState(false);
   const [documents, setDocuments] = useState<EmployeeDocument[]>([]);
   const [error, setError] = useState<string []>([]);
+  const [skillInput, setSkillInput] = useState("");
+  const handleAddSkill = () => {
+  const skill = skillInput.trim();
 
+  if (!skill) return;
+
+  const currentSkills = Array.isArray(formData.technical_skills)
+    ? formData.technical_skills
+    : [];
+
+  const alreadyExists = currentSkills.some(
+    (item: string) => item.toLowerCase() === skill.toLowerCase()
+  );
+
+  if (alreadyExists) {
+    toast.error("Skill already added");
+    return;
+  }
+
+  setFormData((prev) => ({
+    ...prev,
+    technical_skills: [
+      ...(Array.isArray(prev.technical_skills)
+        ? prev.technical_skills
+        : []),
+      skill,
+    ],
+  }));
+
+  setSkillInput("");
+};
   const [companySearch, setCompanySearch] = useState(
     employee?.company_name || ""
   );
@@ -74,7 +104,7 @@ export default function EmployeeForm({ employee, departments, projects, generate
 
 
     // Employment Information
-    employee_id: employee?.employee_id || "",
+    employee_id: employee?.employee_id || generatedEmployeeId || "",
     department_id: employee?.department_id || "",
     project_id: employee?.project_id || "",
     shift_type: employee?.shift_type || "general",
@@ -130,6 +160,20 @@ export default function EmployeeForm({ employee, departments, projects, generate
     emergency_contact_phone_3: employee?.emergency_contact_phone_3 || "",
 
 
+    // Skills & Certification
+professional_certification_name:
+  employee?.professional_certification_name || "",
+professional_certification_organization:
+  employee?.professional_certification_organization || "",
+professional_certification_credential_id:
+  employee?.professional_certification_credential_id || "",
+professional_certification_issue_date:
+  employee?.professional_certification_issue_date?.split("T")[0] || "",
+professional_certification_expiry_date:
+  employee?.professional_certification_expiry_date?.split("T")[0] || "",
+technical_skills: employee?.technical_skills || [],
+
+
     // Accessories 
     accessory_type: employee?.accessory_type || "",
     accessory_serial: employee?.accessory_serial || "",
@@ -145,7 +189,7 @@ export default function EmployeeForm({ employee, departments, projects, generate
     // Initial Login
     initial_password: "Employee@123",
 
-  } as any);
+  } as Partial<Employee> & { initial_password?: string });
 
   useEffect(() => {
   if (mode === "add") {
@@ -171,6 +215,7 @@ export default function EmployeeForm({ employee, departments, projects, generate
     // =========================
     // STATUTORY
     // =========================
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setEsiEligible(employee.esi_healthcare_eligible ?? false);
     setEsiNumber(employee.esi_number ?? "");
 
@@ -290,6 +335,23 @@ export default function EmployeeForm({ employee, departments, projects, generate
       emergency_contact_phone_3:
         employee.emergency_contact_phone_3 ?? "",
 
+        // Skills & Certification
+professional_certification_name:
+  employee.professional_certification_name ?? "",
+professional_certification_organization:
+  employee.professional_certification_organization ?? "",
+professional_certification_credential_id:
+  employee.professional_certification_credential_id ?? "",
+professional_certification_issue_date:
+  employee.professional_certification_issue_date
+    ? employee.professional_certification_issue_date.split("T")[0]
+    : "",
+professional_certification_expiry_date:
+  employee.professional_certification_expiry_date
+    ? employee.professional_certification_expiry_date.split("T")[0]
+    : "",
+technical_skills: employee.technical_skills ?? [],
+
       // Accessories
       accessory_type: employee.accessory_type ?? "",
       accessory_serial: employee.accessory_serial ?? "",
@@ -303,7 +365,7 @@ export default function EmployeeForm({ employee, departments, projects, generate
 
       // Don't change this in edit
       initial_password: "Employee@123",
-    } as any);
+    } as Partial<Employee> & { initial_password?: string });
   }, [employee]);
 
 
@@ -406,8 +468,9 @@ const handleManagerPermission = async () => {
     setIsReportingManager(nextValue);
     toast.success(data.message || "Manager permission updated successfully");
     router.refresh();
-  } catch (err: any) {
-    toast.error(err?.message || "Failed to update manager permission");
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Failed to update manager permission";
+    toast.error(message);
   } finally {
     setIsManagerPermissionLoading(false);
   }
@@ -540,12 +603,12 @@ const handleSubmit = async (e: React.FormEvent) => {
     const method = mode === "add" ? "POST" : "PUT";
 
       const {
-        initial_password,
+        initial_password: _initial_password,
         ...employeeData
       } = formData;
+      void _initial_password;
 
-
-    let payload: any = {
+    const payload: Record<string, unknown> = {
       ...employeeData,
 
       // Client
@@ -618,11 +681,11 @@ const handleSubmit = async (e: React.FormEvent) => {
     );
 
     router.refresh();
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Employee save error:", err);
 
     const message =
-      err?.message || "Failed to save employee";
+      err instanceof Error ? err.message : "Failed to save employee";
 
     setError([message]);
     toast.error(message);
@@ -632,13 +695,15 @@ const handleSubmit = async (e: React.FormEvent) => {
 };
 
   const tabs = [
-    { name: "Personal Info", icon: User },
-    { name: "Employment", icon: Briefcase },
+    { name: "personal", icon: User},
+    { name: "CurrentEmployment", icon: Briefcase },
+    { name: "Statutory", icon: File},
+    { name: "Skills & Certifications", icon: KeyRound },
     { name: "Bank & Identity", icon: CreditCard },
     { name: "Address & Emergency", icon: MapPin },
     { name: "Documentation", icon: FileText },
     { name:"Accessory Management", icon: LaptopMinimal},
-    { name: "Statutory", icon: File},
+   
   ]
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-200/90 overflow-hidden">
@@ -836,7 +901,7 @@ const handleSubmit = async (e: React.FormEvent) => {
                   <input
                     type="text"
                     name="initial_password"
-                    value={(formData as any).initial_password || "Employee@123"}
+                    value={formData.initial_password || "Employee@123"}
                     onChange={handleChange}
                     className="w-full max-w-xs rounded-xl border border-indigo-300 bg-white px-3.5 py-2 text-sm font-mono text-indigo-950 font-bold shadow-sm"
                   />
@@ -936,6 +1001,33 @@ const handleSubmit = async (e: React.FormEvent) => {
                 required
                 className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
               />
+            </div>
+            {/* CTC */}
+             <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                CTC (Lakhs / Year)
+              </label>
+              <input
+                type="number"
+                name="salary"
+                step="0.01"
+                min="0"
+                value={formData.salary ?? ""}
+                onChange={(e) => {
+                  const value = e.target.value;
+
+                  setFormData((prev) => ({
+                    ...prev,
+                    salary: value === "" ? undefined : Number(value),
+                  }));
+                }}
+                required
+                placeholder="e.g. 5.5"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
+              />
+              <p className="text-[11px] text-slate-500 mt-1.5">
+                Enter annual CTC in lakhs. Example: 5.5 = ₹5.5 Lakhs per year.
+              </p>
             </div>
 
             {/* Employment Type */}
@@ -1141,7 +1233,7 @@ const handleSubmit = async (e: React.FormEvent) => {
             </div>
 
             {/* Appointment Date */}
-            <div>
+            {/* <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                 Appointment Date
               </label>
@@ -1157,7 +1249,7 @@ const handleSubmit = async (e: React.FormEvent) => {
                 }
                 className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
               />
-            </div>
+            </div> */}
 
             {/* Reporting Manager */}
             <div>
@@ -1193,32 +1285,7 @@ const handleSubmit = async (e: React.FormEvent) => {
             </div>
 
             {/* CTC */}
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                CTC (Lakhs / Year)
-              </label>
-              <input
-                type="number"
-                name="salary"
-                step="0.01"
-                min="0"
-                value={formData.salary ?? ""}
-                onChange={(e) => {
-                  const value = e.target.value;
-
-                  setFormData((prev) => ({
-                    ...prev,
-                    salary: value === "" ? undefined : Number(value),
-                  }));
-                }}
-                required
-                placeholder="e.g. 5.5"
-                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
-              />
-              <p className="text-[11px] text-slate-500 mt-1.5">
-                Enter annual CTC in lakhs. Example: 5.5 = ₹5.5 Lakhs per year.
-              </p>
-            </div>
+           
 
             {/* Client Type */}
             <div>
@@ -1325,7 +1392,7 @@ const handleSubmit = async (e: React.FormEvent) => {
               </select>
 
               <p className="text-[11px] text-slate-500 mt-1.5">
-                Applies when no project is assigned. An assigned project's shift settings always take priority.
+                Applies when no project is assigned. An assigned project&apos;s shift settings always take priority.
               </p>
             </div>
 
@@ -1353,7 +1420,7 @@ const handleSubmit = async (e: React.FormEvent) => {
                 </select>
 
                 <p className="text-[11px] text-slate-500 mt-1.5">
-                  Project assignment is optional. When assigned, the project's timezone,
+                  Project assignment is optional. When assigned, the project&apos;s timezone,
                   shift rules, and linked holiday calendar take priority over the employee shift.
                 </p>
               </div>
@@ -1400,8 +1467,8 @@ const handleSubmit = async (e: React.FormEvent) => {
           </div>
         </div>
 
-        {/* Tab 2:  Bank & Identity*/}
-        <div className={activeTab === 2 ? "block" : "hidden"}>
+        {/* Tab 4:  Bank & Identity*/}
+        <div className={activeTab === 4? "block" : "hidden"}>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
 
             {/* Bank Name */}
@@ -1503,12 +1570,117 @@ const handleSubmit = async (e: React.FormEvent) => {
 
           </div>
         </div>
-        {/* Tab 3 : ADDRESS & EMERGENCY */}
-        <div className={activeTab === 3 ? "block" : "hidden"}>
+        {/* Tab 5 : ADDRESS & EMERGENCY */}
+        <div className={activeTab === 5 ? "block" : "hidden"}>
 
           {/* Main Address Container */}
           <div className="space-y-8">
 
+            
+            {/* ================= TEMPORARY ADDRESS ================= */}
+            <section>
+              <div className="flex items-center gap-2 mb-4">
+                <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
+                  <MapPin className="w-4 h-4 text-blue-600" />
+                </div>
+
+                <div>
+                  <h3 className="text-sm font-bold text-gray-900">
+                    Communication Address
+                  </h3>
+                  <p className="text-xs text-gray-500">
+                    Employee&apos;s current or temporary residential address
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+
+                {/* Temporary Address */}
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-bold text-gray-700 mb-2">
+                    Address
+                  </label>
+
+                  <textarea
+                    name="temporary_address"
+                    value={formData.temporary_address || ""}
+                    onChange={handleChange}
+                    rows={3}
+                    placeholder="Enter temporary address"
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
+                  />
+                </div>
+
+                {/* Temporary City */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-2">
+                    City
+                  </label>
+
+                  <input
+                    type="text"
+                    name="temporary_city"
+                    value={formData.temporary_city || ""}
+                    onChange={handleChange}
+                    placeholder="Enter city"
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  />
+                </div>
+
+                {/* Temporary State */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-2">
+                    State
+                  </label>
+
+                  <input
+                    type="text"
+                    name="temporary_state"
+                    value={formData.temporary_state || ""}
+                    onChange={handleChange}
+                    placeholder="Enter state"
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  />
+                </div>
+
+                {/* Temporary Pincode */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-2">
+                    Pincode
+                  </label>
+
+                  <input
+                    type="text"
+                    name="temporary_pincode"
+                    value={formData.temporary_pincode || ""}
+                    onChange={handleChange}
+                    placeholder="Enter pincode"
+                    maxLength={6}
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  />
+                </div>
+                </div>
+                </section>
+                      {/* ================= SAME AS PERMANENT ================= */}
+            <div className="flex justify-center">
+              <button
+                type="button"
+                onClick={() => {
+                  setFormData((prev) => ({
+                    ...prev,
+                    temporary_address: prev.permanent_address || "",
+                    temporary_city: prev.permanent_city || "",
+                    temporary_state: prev.permanent_state || "",
+                    temporary_pincode: prev.permanent_pincode || "",
+                  }));
+                }}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-600 text-xs font-bold hover:bg-indigo-100 hover:border-indigo-300 transition-all"
+              >
+                <Copy className="w-4 h-4" />
+                Same as Permanent Address
+              </button>
+            </div>
             {/* ================= PERMANENT ADDRESS ================= */}
             <section>
               <div className="flex items-center gap-2 mb-4">
@@ -1597,113 +1769,12 @@ const handleSubmit = async (e: React.FormEvent) => {
             </section>
 
 
-            {/* ================= SAME AS PERMANENT ================= */}
-            <div className="flex justify-center">
-              <button
-                type="button"
-                onClick={() => {
-                  setFormData((prev) => ({
-                    ...prev,
-                    temporary_address: prev.permanent_address || "",
-                    temporary_city: prev.permanent_city || "",
-                    temporary_state: prev.permanent_state || "",
-                    temporary_pincode: prev.permanent_pincode || "",
-                  }));
-                }}
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-600 text-xs font-bold hover:bg-indigo-100 hover:border-indigo-300 transition-all"
-              >
-                <Copy className="w-4 h-4" />
-                Same as Permanent Address
-              </button>
-            </div>
+    
 
 
-            {/* ================= TEMPORARY ADDRESS ================= */}
-            <section>
-              <div className="flex items-center gap-2 mb-4">
-                <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
-                  <MapPin className="w-4 h-4 text-blue-600" />
-                </div>
-
-                <div>
-                  <h3 className="text-sm font-bold text-gray-900">
-                    Communication Address
-                  </h3>
-                  <p className="text-xs text-gray-500">
-                    Employee&apos;s current or temporary residential address
-                  </p>
-                </div>
+{/* 
               </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-
-                {/* Temporary Address */}
-                <div className="md:col-span-2">
-                  <label className="block text-xs font-bold text-gray-700 mb-2">
-                    Address
-                  </label>
-
-                  <textarea
-                    name="temporary_address"
-                    value={formData.temporary_address || ""}
-                    onChange={handleChange}
-                    rows={3}
-                    placeholder="Enter temporary address"
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
-                  />
-                </div>
-
-                {/* Temporary City */}
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-2">
-                    City
-                  </label>
-
-                  <input
-                    type="text"
-                    name="temporary_city"
-                    value={formData.temporary_city || ""}
-                    onChange={handleChange}
-                    placeholder="Enter city"
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  />
-                </div>
-
-                {/* Temporary State */}
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-2">
-                    State
-                  </label>
-
-                  <input
-                    type="text"
-                    name="temporary_state"
-                    value={formData.temporary_state || ""}
-                    onChange={handleChange}
-                    placeholder="Enter state"
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  />
-                </div>
-
-                {/* Temporary Pincode */}
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-2">
-                    Pincode
-                  </label>
-
-                  <input
-                    type="text"
-                    name="temporary_pincode"
-                    value={formData.temporary_pincode || ""}
-                    onChange={handleChange}
-                    placeholder="Enter pincode"
-                    maxLength={6}
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  />
-                </div>
-
-              </div>
-            </section>
+            </section> */}
 
 
             {/* ================= EMERGENCY CONTACT ================= */}
@@ -1938,8 +2009,8 @@ const handleSubmit = async (e: React.FormEvent) => {
             </section>
           </div>
         </div>
-        {/* Tab 4: Documents */}
-        {activeTab === 4 && (
+        {/* Tab 6: Documents */}
+        {activeTab === 6 && (
           <div>
             <DocumentUpload
             documents={documents || []}
@@ -1948,8 +2019,205 @@ const handleSubmit = async (e: React.FormEvent) => {
           </div>
         )}
 
-        {/* Tab 5: Accessory management*/}
-        {activeTab === 5 && (
+        {/* Tab 3: Skills & Certification */}
+<div className={activeTab === 3 ? "block" : "hidden"}>
+  <div className="space-y-6">
+
+    {/* Professional Certification */}
+    <section className="rounded-xl border border-slate-200 p-5">
+      <h3 className="mb-4 text-sm font-bold uppercase tracking-wider text-slate-900">
+        Professional Certification
+      </h3>
+
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+
+        <div>
+          <label className="mb-1.5 block text-xs font-bold text-slate-700">
+            Certification Name
+          </label>
+          <input
+            type="text"
+            name="professional_certification_name"
+            value={formData.professional_certification_name || ""}
+            onChange={handleChange}
+            placeholder="Enter certification name"
+            className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+          />
+        </div>
+
+        <div>
+          <label className="mb-1.5 block text-xs font-bold text-slate-700">
+            Organization
+          </label>
+          <input
+            type="text"
+            name="professional_certification_organization"
+            value={formData.professional_certification_organization || ""}
+            onChange={handleChange}
+            placeholder="Enter organization"
+            className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+          />
+        </div>
+
+        <div>
+          <label className="mb-1.5 block text-xs font-bold text-slate-700">
+            Credential ID
+          </label>
+          <input
+            type="text"
+            name="professional_certification_credential_id"
+            value={formData.professional_certification_credential_id || ""}
+            onChange={handleChange}
+            placeholder="Enter credential ID"
+            className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+          />
+        </div>
+
+        <div>
+          <label className="mb-1.5 block text-xs font-bold text-slate-700">
+            Issue Date
+          </label>
+          <input
+            type="date"
+            name="professional_certification_issue_date"
+            value={formData.professional_certification_issue_date || ""}
+            onChange={handleChange}
+            className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+          />
+        </div>
+
+        <div>
+          <label className="mb-1.5 block text-xs font-bold text-slate-700">
+            Expiry Date
+          </label>
+          <input
+            type="date"
+            name="professional_certification_expiry_date"
+            value={formData.professional_certification_expiry_date || ""}
+            onChange={handleChange}
+            className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+          />
+        </div>
+
+      </div>
+    </section>
+
+    {/* Technical Skills */}
+    <section className="rounded-xl border border-slate-200 p-5">
+      <h3 className="mb-4 text-sm font-bold uppercase tracking-wider text-slate-900">
+        Technical Skills
+      </h3>
+
+      <div className="flex gap-3">
+        <input
+          type="text"
+          value={skillInput}
+          onChange={(e) => setSkillInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+
+              const skill = skillInput.trim();
+              const currentSkills = Array.isArray(formData.technical_skills)
+                ? formData.technical_skills
+                : [];
+
+              if (
+                skill &&
+                !currentSkills.some(
+                  (item) => item.toLowerCase() === skill.toLowerCase()
+                )
+              ) {
+                setFormData((prev) => ({
+                  ...prev,
+                  technical_skills: [
+                    ...(Array.isArray(prev.technical_skills)
+                      ? prev.technical_skills
+                      : []),
+                    skill,
+                  ],
+                }));
+              }
+
+              setSkillInput("");
+            }
+          }}
+          placeholder="Enter a skill, e.g. React"
+          className="min-w-0 flex-1 rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+        />
+
+        <button
+          type="button"
+          onClick={() => {
+            const skill = skillInput.trim();
+            const currentSkills = Array.isArray(formData.technical_skills)
+              ? formData.technical_skills
+              : [];
+
+            if (!skill) return;
+
+            if (
+              currentSkills.some(
+                (item) => item.toLowerCase() === skill.toLowerCase()
+              )
+            ) {
+              toast.error("Skill already added");
+              return;
+            }
+
+            setFormData((prev) => ({
+              ...prev,
+              technical_skills: [
+                ...(Array.isArray(prev.technical_skills)
+                  ? prev.technical_skills
+                  : []),
+                skill,
+              ],
+            }));
+
+            setSkillInput("");
+          }}
+          className="rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-indigo-700"
+        >
+          + Add
+        </button>
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        {Array.isArray(formData.technical_skills) &&
+          formData.technical_skills.map((skill, index) => (
+            <span
+              key={`${skill}-${index}`}
+              className="inline-flex items-center gap-2 rounded-full bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-700"
+            >
+              {skill}
+
+              <button
+                type="button"
+                onClick={() =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    technical_skills: (
+                      Array.isArray(prev.technical_skills)
+                        ? prev.technical_skills
+                        : []
+                    ).filter((_, i) => i !== index),
+                  }))
+                }
+                className="font-bold text-red-500"
+              >
+                ×
+              </button>
+            </span>
+          ))}
+      </div>
+    </section>
+
+  </div>
+</div>
+
+        {/* Tab 7: Accessory management*/}
+        {activeTab === 7 && (
           <div className="space-y-6">
 
             {/* ================= ASSIGNED EQUIPMENT ================= */}
@@ -2109,8 +2377,8 @@ const handleSubmit = async (e: React.FormEvent) => {
           </div>
         )}
 
-        {/* {tab 6: options to selct eligabilty of pt ,tds} */}
-        <div className={activeTab === 6 ? "block" : "hidden"}>
+        {/* {tab 2: options to selct eligabilty of pt ,tds} */}
+        <div className={activeTab === 2 ? "block" : "hidden"}>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
 
             {/* ESI */}

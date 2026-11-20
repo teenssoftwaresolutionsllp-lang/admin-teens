@@ -142,8 +142,9 @@ export default function DocumentUpload({ employeeId, documents: initialDocs, onU
       if (onUpload) onUpload(newDoc);
       setDocumentName("");
       router.refresh();
-    } catch (err: any) {
-      setError(err.message || "Failed to upload file");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to upload file";
+      setError(message);
     } finally {
       setIsUploading(false);
       e.target.value = ""; // reset file input
@@ -155,8 +156,9 @@ export default function DocumentUpload({ employeeId, documents: initialDocs, onU
       const res = await fetch(`/api/documents/${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Delete failed");
       setDocuments(prev => prev.filter(d => d.id !== id));
-    } catch (err: any) {
-      setError(err.message || "Failed to delete file");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to delete file";
+      setError(message);
     }
   };
 

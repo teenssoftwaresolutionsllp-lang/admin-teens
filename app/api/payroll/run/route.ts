@@ -6,6 +6,8 @@ import {
   calculateEmployeeLopDays,
   MasterPayrollEmployee,
   MasterPayrollAdjustments,
+  RawAttendanceLog,
+  RawLeaveRequest,
 } from '@/lib/payroll/master-payroll-engine';
 
 const monthNames = [
@@ -241,8 +243,8 @@ export async function POST(request: Request) {
     // 4. Full month absence: 0 present days & 0 paid leaves -> all calendar days count as LOP (0 pay days).
     const calculatedLopDays = calculateEmployeeLopDays(
       employeeId,
-      (attendanceLogs ?? []) as any[],
-      (leaveRequests ?? []) as any[],
+      (attendanceLogs ?? []) as RawAttendanceLog[],
+      (leaveRequests ?? []) as RawLeaveRequest[],
       monthStart,
       monthEnd,
       {
@@ -285,7 +287,7 @@ export async function POST(request: Request) {
 
     // Clean up any older duplicate payslips if they exist
     if (existingPayslips && existingPayslips.length > 1) {
-      const duplicateIds = existingPayslips.slice(1).map((p: any) => p.id);
+      const duplicateIds = existingPayslips.slice(1).map((p) => p.id);
       await admin.from("payslips").delete().in("id", duplicateIds);
     }
 
@@ -444,11 +446,12 @@ export async function POST(request: Request) {
       generatedCount: 1,
       payslips: [clientPayslip],
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Payroll generation error:", error);
+    const message = error instanceof Error ? error.message : "Failed to generate payroll";
     return NextResponse.json(
       {
-        error: error?.message || "Failed to generate payroll",
+        error: message,
       },
       { status: 500 }
     );

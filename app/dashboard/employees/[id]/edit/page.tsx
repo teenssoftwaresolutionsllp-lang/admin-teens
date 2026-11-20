@@ -4,9 +4,9 @@ import EmployeeForm from "@/components/EmployeeForm";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { notFound, redirect } from "next/navigation";
-import { Department, Employee, UserRole } from "@/lib/types";
+import { Department, Employee, UserRole, EmployeeDocument } from "@/lib/types";
 
-export default async function EditEmployeePage(props: any) {
+export default async function EditEmployeePage(props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
   const { id } = params;
 
@@ -58,7 +58,7 @@ export default async function EditEmployeePage(props: any) {
   }
 
   // Load employee documents
-  let documents: any[] = [];
+  let documents: EmployeeDocument[] = [];
 
   try {
     const adminClient = await createAdminClient();

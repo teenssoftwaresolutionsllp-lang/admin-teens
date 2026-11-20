@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { exportToExcel } from "@/lib/excel/exportToExcel";
+import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
   Play,
@@ -20,17 +21,12 @@ import {
   Sliders,
   Building2,
   Calendar,
-  Check,
   ChevronDown,
   ChevronUp,
 } from "lucide-react";
 import StandardPayslip from "@/components/payroll/StandardPayslip";
-import { numberToWordsIndian } from "@/lib/calculations";
 import {MasterPayrollRow,MasterRegisterTotals} from "@/lib/payroll/master-payroll-engine";
 
-interface Props {
-  role: "ceo" | "hr" | "admin";
-}
 
 const MONTHS = [
   "January",
@@ -48,11 +44,26 @@ const MONTHS = [
 ];
 
 interface ColumnDef {
-  key: string;
+  key: keyof MasterPayrollRow;
   label: string;
   currency?: boolean;
   sticky?: boolean;
 }
+
+type SalaryComponent = {
+  id: string;
+  name: string;
+  code: string;
+  type: "earning" | "deduction";
+  calculation_type:
+    | "fixed"
+    | "percentage_of_basic"
+    | "percentage_of_gross";
+  value: number;
+  affects_lop: boolean;
+  is_active: boolean;
+  description: string | null;
+};
 
 export const REGISTER_COLUMNS: ColumnDef[] = [
   { key: "employee_code", label: "Emp. Code", sticky: true },
@@ -100,7 +111,7 @@ function formatRupee(val: number | null | undefined): string {
   });
 }
 
-export default function PayrollMasterData({ role }: Props) {
+export default function PayrollMasterData() {
   const today = new Date();
   const currentMonth = today.getMonth() + 1;
   const currentYear = today.getFullYear();
@@ -139,9 +150,9 @@ export default function PayrollMasterData({ role }: Props) {
   const [savingSaturday, setSavingSaturday] = useState<string | null>(null);
 
   // Salary Components state
-  const [salaryComponents, setSalaryComponents] = useState<any[]>([]);
+  const [salaryComponents, setSalaryComponents] = useState<SalaryComponent[]>([]);
   const [loadingComponents, setLoadingComponents] = useState(false);
-  const [editingComponent, setEditingComponent] = useState<any | null>(null);
+  const [editingComponent, setEditingComponent] = useState<SalaryComponent | null>(null);
   const [savingComponent, setSavingComponent] = useState(false);
 
   // Edit adjustments modal state
@@ -178,9 +189,10 @@ export default function PayrollMasterData({ role }: Props) {
       setRows(data.rows || []);
       setTotals(data.totals || null);
       setHasSavedRun(Boolean(data.hasSavedRun));
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "An unexpected error occurred";
       console.error("Master register load error:", err);
-      setError(err?.message || "Failed to load payroll master data.");
+      setError(message || "Failed to load payroll master data.");
       setRows([]);
       setTotals(null);
     } finally {
@@ -246,17 +258,25 @@ export default function PayrollMasterData({ role }: Props) {
   };
 
   useEffect(() => {
-    if (activeTab === "register") {
-      void loadRegister();
-    } else if (activeTab === "components") {
-      void loadSalaryComponents();
-    }
+    const timer = window.setTimeout(() => {
+      if (activeTab === "register") {
+        void loadRegister();
+      } else if (activeTab === "components") {
+        void loadSalaryComponents();
+      }
+    }, 0);
+
+    return () => window.clearTimeout(timer);
   }, [activeTab, loadRegister, loadSalaryComponents]);
 
   useEffect(() => {
-    if (showCalendarWidget) {
+    if (!showCalendarWidget) return;
+
+    const timer = window.setTimeout(() => {
       void loadCalendarSchedule();
-    }
+    }, 0);
+
+    return () => window.clearTimeout(timer);
   }, [showCalendarWidget, loadCalendarSchedule]);
 
   // Compute unique departments for dropdown
@@ -336,15 +356,19 @@ export default function PayrollMasterData({ role }: Props) {
         setTotals(data.totals);
       }
       setHasSavedRun(true);
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "An unexpected error occurred";
       console.error("Run all payroll error:", err);
-      setError(err?.message || "Failed to run payroll for all employees.");
+      setError(message || "Failed to run payroll for all employees.");
     } finally {
       setRunningAll(false);
     }
   };
 
-  // Export to Excel (CSV) matching exact format
+
+  // ==========================================
+  // EXPORT MASTER REGISTER
+  // ==========================================
   const handleExportCsv = async () => {
     if (!rows.length) return;
 
@@ -356,6 +380,11 @@ export default function PayrollMasterData({ role }: Props) {
         ...(column.currency ? { numFmt: '"₹"#,##0.00' } : {}),
       }));
 
+      const totalNetPayout = rows.reduce(
+        (sum, row) => sum + Number(row.net_payout || 0),
+        0
+      );
+
       await exportToExcel({
         fileName: `Payroll_Master_Register_${MONTHS[selectedMonth - 1]}_${selectedYear}.xlsx`,
         sheetName: "Payroll Register",
@@ -363,13 +392,22 @@ export default function PayrollMasterData({ role }: Props) {
         subtitle: `Payroll Master Register - ${MONTHS[selectedMonth - 1]} ${selectedYear} | Hyderabad | info@teenss.com | www.teenss.com`,
         columns,
         rows: rows.map((row) => ({ ...row })),
+        totalRow: {
+          label: "TOTAL AMOUNT TO BE PAID",
+          sums: {
+            net_payout: totalNetPayout,
+          },
+        },
       });
     } catch (error) {
       console.error("Failed to export payroll Excel:", error);
+      setError("Failed to export payroll Excel.");
     }
   };
 
-  // Export Bank Import Excel
+  // ==========================================
+  // EXPORT BANK IMPORT
+  // ==========================================
   const handleImportBank = async () => {
     if (!rows.length) return;
 
@@ -382,7 +420,7 @@ export default function PayrollMasterData({ role }: Props) {
         {
           header: "Amount to Pay",
           key: "net_payout",
-          width: 18,
+          width: 22,
           numFmt: '"₹"#,##0.00',
         },
       ];
@@ -395,6 +433,11 @@ export default function PayrollMasterData({ role }: Props) {
         net_payout: Number(row.net_payout || 0),
       }));
 
+      const totalNetPayout = exportRows.reduce(
+        (sum, row) => sum + row.net_payout,
+        0
+      );
+
       await exportToExcel({
         fileName: `Bank_Import_${MONTHS[selectedMonth - 1]}_${selectedYear}.xlsx`,
         sheetName: "Bank Import",
@@ -402,6 +445,12 @@ export default function PayrollMasterData({ role }: Props) {
         subtitle: `Bank Payment Import - ${MONTHS[selectedMonth - 1]} ${selectedYear}`,
         columns,
         rows: exportRows,
+        totalRow: {
+          label: "TOTAL AMOUNT TO BE PAID",
+          sums: {
+            net_payout: totalNetPayout,
+          },
+        },
       });
     } catch (error) {
       console.error("Bank import Excel export failed:", error);
@@ -409,27 +458,43 @@ export default function PayrollMasterData({ role }: Props) {
     }
   };
 
-  // Export PF Import Excel
+  // ==========================================
+  // EXPORT PF IMPORT - PF ELIGIBLE EMPLOYEES ONLY
+  // ==========================================
   const handleImportPF = async () => {
     if (!rows.length) return;
 
     try {
+      const eligibleRows = rows.filter(
+        (row) => row.pf_eligible === true
+      );
+
+      if (!eligibleRows.length) {
+        setError("No PF-eligible employees found for this payroll period.");
+        return;
+      }
+
       const columns = [
         { header: "Employee Name", key: "employee_name", width: 25 },
         { header: "UAN Number", key: "uan_number", width: 22 },
         {
           header: "PF Amount",
           key: "epf",
-          width: 18,
+          width: 22,
           numFmt: '"₹"#,##0.00',
         },
       ];
 
-      const exportRows = rows.map((row) => ({
+      const exportRows = eligibleRows.map((row) => ({
         employee_name: row.employee_name,
         uan_number: row.uan_number,
         epf: Number(row.epf || 0),
       }));
+
+      const totalPF = exportRows.reduce(
+        (sum, row) => sum + row.epf,
+        0
+      );
 
       await exportToExcel({
         fileName: `PF_Import_${MONTHS[selectedMonth - 1]}_${selectedYear}.xlsx`,
@@ -438,12 +503,129 @@ export default function PayrollMasterData({ role }: Props) {
         subtitle: `Employee PF Import - ${MONTHS[selectedMonth - 1]} ${selectedYear}`,
         columns,
         rows: exportRows,
+        totalRow: {
+          label: "TOTAL PF AMOUNT TO BE PAID",
+          sums: {
+            epf: totalPF,
+          },
+        },
       });
     } catch (error) {
       console.error("PF import Excel export failed:", error);
       setError("Failed to export PF import Excel.");
     }
   };
+
+  // ==========================================
+  // EXPORT TDS
+  // ==========================================
+  const handleExportTDS = async () => {
+    const exportRows = rows
+      .filter((row) => Number(row.tds || 0) > 0)
+      .map((row) => ({
+        employee_code: row.employee_code,
+        employee_name: row.employee_name,
+        pan_number: row.pan_number,
+        tds: Number(row.tds || 0),
+      }));
+
+    if (!exportRows.length) {
+      setError("No TDS amounts found for this payroll period.");
+      return;
+    }
+
+    try {
+      const columns = [
+        { header: "Employee Code", key: "employee_code", width: 18 },
+        { header: "Employee Name", key: "employee_name", width: 25 },
+        { header: "PAN Number", key: "pan_number", width: 20 },
+        {
+          header: "TDS Amount",
+          key: "tds",
+          width: 22,
+          numFmt: '"₹"#,##0.00',
+        },
+      ];
+
+      const totalTDS = exportRows.reduce(
+        (sum, row) => sum + row.tds,
+        0
+      );
+
+      await exportToExcel({
+        fileName: `TDS_Import_${MONTHS[selectedMonth - 1]}_${selectedYear}.xlsx`,
+        sheetName: "TDS",
+        title: "TEENS SOFTWARE SOLUTIONS LLP",
+        subtitle: `Employee TDS - ${MONTHS[selectedMonth - 1]} ${selectedYear}`,
+        columns,
+        rows: exportRows,
+        totalRow: {
+          label: "TOTAL TDS AMOUNT",
+          sums: {
+            tds: totalTDS,
+          },
+        },
+      });
+    } catch (error) {
+      console.error("TDS Excel export failed:", error);
+      setError("Failed to export TDS Excel.");
+    }
+  };
+
+  // ==========================================
+  // EXPORT PROFESSIONAL TAX
+  // ==========================================
+  const handleExportPT = async () => {
+    const exportRows = rows
+      .filter((row) => Number(row.pt || 0) > 0)
+      .map((row) => ({
+        employee_code: row.employee_code,
+        employee_name: row.employee_name,
+        pt: Number(row.pt || 0),
+      }));
+
+    if (!exportRows.length) {
+      setError("No Professional Tax amounts found for this payroll period.");
+      return;
+    }
+
+    try {
+      const columns = [
+        { header: "Employee Code", key: "employee_code", width: 18 },
+        { header: "Employee Name", key: "employee_name", width: 25 },
+        {
+          header: "Professional Tax",
+          key: "pt",
+          width: 22,
+          numFmt: '"₹"#,##0.00',
+        },
+      ];
+
+      const totalPT = exportRows.reduce(
+        (sum, row) => sum + row.pt,
+        0
+      );
+
+      await exportToExcel({
+        fileName: `PT_Import_${MONTHS[selectedMonth - 1]}_${selectedYear}.xlsx`,
+        sheetName: "Professional Tax",
+        title: "TEENS SOFTWARE SOLUTIONS LLP",
+        subtitle: `Employee Professional Tax - ${MONTHS[selectedMonth - 1]} ${selectedYear}`,
+        columns,
+        rows: exportRows,
+        totalRow: {
+          label: "TOTAL PROFESSIONAL TAX",
+          sums: {
+            pt: totalPT,
+          },
+        },
+      });
+    } catch (error) {
+      console.error("PT Excel export failed:", error);
+      setError("Failed to export PT Excel.");
+    }
+  };
+
 
   // Open adjustment modal
   const openEditAdjustments = (row: MasterPayrollRow) => {
@@ -500,9 +682,10 @@ export default function PayrollMasterData({ role }: Props) {
 
       setEditingRow(null);
       setSuccessMessage(`Adjustments saved for ${editingRow.employee_name}.`);
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "An unexpected error occurred";
       console.error("Save adjustments error:", err);
-      setError(err?.message || "Failed to update employee adjustments.");
+      setError(message || "Failed to update employee adjustments.");
     } finally {
       setSavingAdjustments(false);
     }
@@ -532,8 +715,9 @@ export default function PayrollMasterData({ role }: Props) {
       await loadSalaryComponents();
       await loadRegister();
       setSuccessMessage("Salary component updated successfully.");
-    } catch (err: any) {
-      setError(err?.message || "Failed to update salary component.");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "An unexpected error occurred";
+      setError(message || "Failed to update salary component.");
     } finally {
       setSavingComponent(false);
     }
@@ -741,6 +925,30 @@ export default function PayrollMasterData({ role }: Props) {
                 <Download className="h-4 w-4" />
                 Import PF
               </button>
+
+
+              {/* TDS Download Button */}
+              <button
+                type="button"
+                onClick={handleExportTDS}
+                disabled={loading || rows.length === 0}
+                className="inline-flex items-center gap-2 rounded bg-blue-700 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Download className="h-4 w-4" />
+                Download TDS
+              </button>
+
+              {/* Professional Tax Download Button */}
+              <button
+                type="button"
+                onClick={handleExportPT}
+                disabled={loading || rows.length === 0}
+                className="inline-flex items-center gap-2 rounded bg-purple-700 px-3 py-2 text-xs font-semibold text-white hover:bg-purple-800 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Download className="h-4 w-4" />
+                Download PT
+              </button>
+
 
               <button
                 type="button"
@@ -985,9 +1193,9 @@ export default function PayrollMasterData({ role }: Props) {
                         </td>
 
                         {REGISTER_COLUMNS.map((col, colIdx) => {
-                          const rawVal = (row as any)[col.key];
+                          const rawVal = row [col.key];
                           const isCurrency = col.currency;
-                          let cellContent = rawVal ?? "—";
+                          let cellContent: ReactNode = rawVal ?? "—";
 
                           if (col.key === "employee_name") {
                             cellContent = (
@@ -1021,7 +1229,7 @@ export default function PayrollMasterData({ role }: Props) {
                                 "0.00"
                               );
                           } else if (isCurrency) {
-                            cellContent = formatRupee(rawVal);
+                            cellContent = typeof rawVal === "number" ? formatRupee(rawVal) : "—";
                           }
 
                           return (
@@ -1250,9 +1458,8 @@ export default function PayrollMasterData({ role }: Props) {
                       </td>
                       <td className="px-3 py-2.5 text-center font-mono font-bold text-slate-900">
                         {comp.calculation_type === "percentage_of_basic" ||
-                        comp.calculation_type === "percentage_of_gross" ||
-                        comp.calculation_type === "percentage_of_ctc"
-                          ? `${comp.value}%`
+                        comp.calculation_type === "percentage_of_gross" 
+                        ? `${comp.value}%`
                           : `₹${Number(comp.value || 0).toLocaleString("en-IN")}`}
                       </td>
                       <td className="px-3 py-2.5 text-center">
@@ -1322,7 +1529,7 @@ export default function PayrollMasterData({ role }: Props) {
                   step="0.01"
                   value={editingComponent.value}
                   onChange={(e) =>
-                    setEditingComponent({ ...editingComponent, value: e.target.value })
+                    setEditingComponent({ ...editingComponent, value: Number(e.target.value), })
                   }
                   className="h-9 w-full rounded border border-slate-300 px-3 outline-none focus:border-indigo-600"
                 />
@@ -1335,7 +1542,7 @@ export default function PayrollMasterData({ role }: Props) {
                   onChange={(e) =>
                     setEditingComponent({
                       ...editingComponent,
-                      calculation_type: e.target.value,
+                      calculation_type: e.target.value as SalaryComponent["calculation_type"],
                     })
                   }
                   className="h-9 w-full rounded border border-slate-300 px-3 outline-none focus:border-indigo-600"

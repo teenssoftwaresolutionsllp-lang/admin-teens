@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, startTransition } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   ProfileChangeRequest,
@@ -8,6 +8,7 @@ import {
   ResignationRequest,
   WfhRequest,
 } from "@/lib/types";
+import Image from "next/image";
 import {
   CheckSquare,
   UserCheck,
@@ -37,6 +38,14 @@ interface ApprovalsHubProps {
 type Feedback = {
   msg: string;
   type: "success" | "error";
+};
+
+type DepartmentRecord = {
+  employee?: {
+    department?: { name?: string | null } | null;
+    departments?: { name?: string | null } | null;
+    department_name?: string | null;
+  } | null;
 };
 
 export default function ApprovalsHub({
@@ -77,7 +86,7 @@ export default function ApprovalsHub({
   const [resignationRequests, setResignationRequests] = useState<ResignationRequest[]>(initialResignationRequests);
   const [noticePeriodValue, setNoticePeriodValue] = useState("30");
   const [noticePeriodUnit, setNoticePeriodUnit] = useState<"days" | "months">("days");
-  const [temporaryLoginDays, setTemporaryLoginDays] = useState("0");
+  const [temporaryLoginDays] = useState("0");
   const [wfhRequests, setWfhRequests] = useState<WfhRequest[]>(initialWfhRequests);
 
 
@@ -114,20 +123,28 @@ export default function ApprovalsHub({
 
 
   useEffect(() => {
-    setActiveTab(selectedLeaveId || requestedTab === "leaves" || requestedLeaveType !== "ALL" ? "leaves" : "profile");
-    setProfileStatusFilter("all");
-    setLeaveDepartmentFilter("all");
-    setLeaveDurationFilter("all");
-    setLeaveEmployeeSearch("");
-    setLeaveHistoryStatusFilter("all");
-    setLeaveFromDate("");
-    setLeaveToDate("");
-    setLeaveTypeFilter(requestedLeaveType);
-    setResignationDepartmentFilter("all");
-    setResignationHistoryStatusFilter("all");
-    setResignationEmployeeSearch("");
-    setResignationFromDate("");
-    setResignationToDate("");
+    startTransition(() => {
+      setActiveTab(
+        selectedLeaveId ||
+          requestedTab === "leaves" ||
+          requestedLeaveType !== "ALL"
+          ? "leaves"
+          : "profile"
+      );
+      setProfileStatusFilter("all");
+      setLeaveDepartmentFilter("all");
+      setLeaveDurationFilter("all");
+      setLeaveEmployeeSearch("");
+      setLeaveHistoryStatusFilter("all");
+      setLeaveFromDate("");
+      setLeaveToDate("");
+      setLeaveTypeFilter(requestedLeaveType);
+      setResignationDepartmentFilter("all");
+      setResignationHistoryStatusFilter("all");
+      setResignationEmployeeSearch("");
+      setResignationFromDate("");
+      setResignationToDate("");
+    });
   }, [isHistoryView, selectedLeaveId, requestedLeaveType, requestedTab]);
 
 
@@ -813,7 +830,7 @@ export default function ApprovalsHub({
 
   // Always show the department name, never a raw department ID.
   // The data query must include employee.department.name for this to populate.
-  const getDepartmentKey = (record: any): string => {
+  const getDepartmentKey = (record: DepartmentRecord): string => {
     const employee = record?.employee;
     const departmentName =
       employee?.department?.name ??
@@ -1486,6 +1503,13 @@ export default function ApprovalsHub({
                     tds: "Statutory Information",
                     tds_eligible: "Statutory Information",
 
+                    professional_certification_name: "Professional Certification",
+                    professional_certification_organization: "Professional Certification",
+                    professional_certification_credential_id: "Professional Certification",
+                    professional_certification_issue_date: "Professional Certification",
+                    professional_certification_expiry_date: "Professional Certification",
+                    technical_skills: "Professional Certification",
+
                     emergency_contact_name: "Emergency Contact Information",
                     emergency_contact_phone: "Emergency Contact Information",
                     emergency_contact_relation: "Emergency Contact Information",
@@ -1512,10 +1536,11 @@ export default function ApprovalsHub({
                     peripherals: "Accessory Information",
                   };
 
-                  const sectionOrder = [
+                 const sectionOrder = [
                     "Personal Information",
                     "Contact Information",
                     "Employment Information",
+                    "Professional Certification",
                     "Bank & Identity Information",
                     "Statutory Information",
                     "Emergency Contact Information",
@@ -1548,6 +1573,10 @@ export default function ApprovalsHub({
                             if (typeof item === "string" && item.trim() === "") {
                               return "(empty)";
                             }
+                           if (Array.isArray(item)) {
+                              return item.length > 0 ? item.join(", ") : "(empty)";
+                            }
+
                             return typeof item === "object"
                               ? JSON.stringify(item, null, 2)
                               : String(item);
@@ -1817,9 +1846,11 @@ export default function ApprovalsHub({
                             <div className="flex items-center gap-3">
                               <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-indigo-600 text-xs font-bold text-white">
                                 {emp?.profile_photo_url ? (
-                                  <img
+                                  <Image
                                     src={emp.profile_photo_url}
                                     alt={`${emp.first_name ?? ""} ${emp.last_name ?? ""}`}
+                                    width={36}
+                                    height={36}
                                     className="h-full w-full object-cover"
                                   />
                                 ) : (
@@ -1964,11 +1995,13 @@ export default function ApprovalsHub({
                             <div className="flex items-center gap-3">
                               <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-indigo-600 text-xs font-bold text-white">
                                 {emp?.profile_photo_url ? (
-                                  <img
-                                    src={emp.profile_photo_url}
-                                    alt={`${emp.first_name ?? ""} ${emp.last_name ?? ""}`}
-                                    className="h-full w-full object-cover"
-                                  />
+                                  <Image
+                                  src={emp.profile_photo_url}
+                                  alt={`${emp.first_name ?? ""} ${emp.last_name ?? ""}`}
+                                  width={36}
+                                  height={36}
+                                  className="h-full w-full object-cover"
+                                />
                                 ) : (
                                   <>
                                     {emp?.first_name?.charAt(0)?.toUpperCase() ||

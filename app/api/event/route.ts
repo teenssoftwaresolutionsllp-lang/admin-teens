@@ -6,75 +6,24 @@ import {
 } from "@/lib/supabase-server";
 
 export const dynamic = "force-dynamic";
-export const runtime = "nodejs";
 
-// =====================================================
-// ERROR HANDLING
-// =====================================================
-
-function errorResponse(message: string, status = 400) {
-  return NextResponse.json(
-    {
-      success: false,
-      error: message,
-    },
-    { status }
-  );
-}
-
-function databaseErrorResponse(
-  action: string,
-  error: {
-    message?: string;
-    details?: string | null;
-    hint?: string | null;
-    code?: string;
-  }
-) {
-  console.error(`${action} DATABASE ERROR:`, {
-    message: error.message,
-    details: error.details,
-    hint: error.hint,
-    code: error.code,
-  });
-
-  return NextResponse.json(
-    {
-      success: false,
-      error: error.message || "Database operation failed.",
-      details: error.details || null,
-      hint: error.hint || null,
-      code: error.code || null,
-    },
-    { status: 500 }
-  );
-}
-
-function getErrorMessage(error: unknown) {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return "An unexpected error occurred.";
-}
-
-// =====================================================
+// --------------------------------------------------
 // AUTHENTICATION
-// =====================================================
+// --------------------------------------------------
 
-async function getAuthContext() {
+async function getAuthenticatedUser() {
   const supabase = await createClient();
 
   const {
     data: { user },
-    error: authError,
+    error,
   } = await supabase.auth.getUser();
 
-  if (authError || !user) {
+  if (error || !user) {
     return {
       user: null,
-      admin: null,
       role: null,
+      error: "Unauthorized. Please login again.",
     };
   }
 
@@ -87,405 +36,623 @@ async function getAuthContext() {
     .maybeSingle();
 
   if (profileError) {
-    console.error("PROFILE ROLE ERROR:", profileError);
+    console.error("Profile lookup error:", profileError.message);
 
     return {
-      user,
-      admin,
+      user: null,
       role: null,
+      error: "Unable to verify user permissions.",
     };
   }
 
   return {
     user,
-    admin,
-    role: profile?.role || null,
+    role: String(profile?.role || "").toLowerCase(),
+    error: null,
   };
 }
 
-function isHR(role: string | null) {
-  return role === "hr" || role === "ceo";
+// --------------------------------------------------
+// HR PERMISSION
+// --------------------------------------------------
+
+async function checkHRPermission() {
+  const auth = await getAuthenticatedUser();
+
+  if (!auth.user) {
+    return {
+      allowed: false,
+      error: auth.error || "Unauthorized.",
+      admin: null,
+    };
+  }
+
+  if (!["hr", "ceo"].includes(auth.role || "")) {
+    return {
+      allowed: false,
+      error: "You do not have permission to manage company events.",
+      admin: null,
+    };
+  }
+
+  const admin = await createAdminClient();
+
+  return {
+    allowed: true,
+    error: null,
+    admin,
+  };
 }
 
-// =====================================================
+// --------------------------------------------------
 // GET EVENTS
-// =====================================================
+// Employee and HR can view published events.
+// Returns event photos inside event.media.
+// --------------------------------------------------
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
-    const { user, admin, role } = await getAuthContext();
+    const auth = await getAuthenticatedUser();
 
-    if (!user || !admin) {
-      return errorResponse("Please login to continue.", 401);
+    if (!auth.user) {
+      return NextResponse.json(
+        { success: false, error: auth.error },
+        { status: 401 }
+      );
     }
 
-    const { searchParams } = new URL(request.url);
-    const eventId = searchParams.get("id");
+    const admin = await createAdminClient();
+    const now = new Date().toISOString();
 
-    let query = admin
+    const { data: eventRows, error: eventsError } = await admin
       .from("company_events")
       .select(`
         id,
         title,
         description,
-        event_date,
-        start_time,
-        end_time,
-        location,
-        invitation_image_url,
+        event_type,
         status,
+        audience_scope,
+        event_date,
+        end_date,
+        location,
+        expires_at,
         created_by,
+        published_at,
         created_at,
-        updated_at,
-        event_photos (
-          id,
-          photo_url,
-          uploaded_by,
-          created_at
-        )
-      `);
+        updated_at
+      `)
+      .eq("event_type", "event")
+      .eq("status", "published")
+      .or(`expires_at.is.null,expires_at.gt.${now}`)
+      .order("event_date", { ascending: true });
 
-    // Employees can only see published events.
-    if (!isHR(role)) {
-      query = query.eq("status", "published");
+    if (eventsError) {
+      console.error(
+        "GET company_events error:",
+        eventsError.message
+      );
+
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Unable to load company events.",
+        },
+        { status: 500 }
+      );
     }
 
-    if (eventId) {
-      query = query.eq("id", eventId);
+    const eventIds = (eventRows || []).map(
+      (event) => event.id
+    );
+
+    let eventMedia: {
+      id: string;
+      event_id: string;
+      image_url: string;
+      cloudinary_public_id: string | null;
+      alt_text: string | null;
+      sort_order: number | null;
+      created_at: string;
+    }[] = [];
+
+    // Load photos for all returned events.
+
+    if (eventIds.length > 0) {
+      const { data: mediaRows, error: mediaError } =
+        await admin
+          .from("company_event_media")
+          .select(`
+            id,
+            event_id,
+            image_url,
+            cloudinary_public_id,
+            alt_text,
+            sort_order,
+            created_at
+          `)
+          .in("event_id", eventIds)
+          .order("sort_order", { ascending: true });
+
+      if (mediaError) {
+        console.error(
+          "GET company_event_media error:",
+          mediaError.message
+        );
+
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Unable to load event photos.",
+          },
+          { status: 500 }
+        );
+      }
+
+      eventMedia = mediaRows || [];
     }
 
-    query = query.order("event_date", {
-      ascending: true,
-    });
+    // Attach photos to their matching events.
 
-    const { data: events, error } = await query;
+    const events = (eventRows || []).map((event) => ({
+      ...event,
 
-    if (error) {
-      return databaseErrorResponse("GET EVENTS", error);
-    }
+      media: eventMedia.filter(
+        (photo) => photo.event_id === event.id
+      ),
+    }));
 
-    return NextResponse.json({
-      success: true,
-      events: events || [],
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        events,
+      },
+      {
+        status: 200,
+        headers: {
+          "Cache-Control": "no-store, max-age=0",
+        },
+      }
+    );
   } catch (error) {
-    console.error("GET EVENTS ERROR:", error);
+    console.error("GET events unexpected error:", error);
 
     return NextResponse.json(
       {
         success: false,
-        error: getErrorMessage(error),
+        error: "Something went wrong while loading events.",
       },
       { status: 500 }
     );
   }
 }
 
-// =====================================================
-// POST EVENTS
-// CREATE / UPDATE / PUBLISH / CANCEL / ADD PHOTO
-// DELETE PHOTO
-// =====================================================
+// --------------------------------------------------
+// POST
+// Supported actions:
+// create
+// update
+// publish
+// cancel
+// add_photo
+// delete_photo
+// --------------------------------------------------
 
 export async function POST(request: NextRequest) {
   try {
-    const { user, admin, role } = await getAuthContext();
+    const permission = await checkHRPermission();
 
-    if (!user || !admin) {
-      return errorResponse("Please login to continue.", 401);
-    }
-
-    if (!isHR(role)) {
-      return errorResponse(
-        "Only HR or CEO can manage company events.",
-        403
+    if (!permission.allowed || !permission.admin) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: permission.error,
+        },
+        { status: 403 }
       );
     }
 
+    const admin = permission.admin;
     const body = await request.json();
-    const action = body.action;
 
-    // =================================================
+    const action = String(body.action || "").trim().toLowerCase();
+
+    // --------------------------------------------------
     // CREATE EVENT
-    // =================================================
+    // --------------------------------------------------
 
     if (action === "create") {
       const {
         title,
         description,
         event_date,
-        start_time,
-        end_time,
+        end_date,
         location,
-        invitation_image_url,
+        event_type,
+        audience_scope,
+        expires_at,
         status,
       } = body;
 
-      if (
-        typeof title !== "string" ||
-        !title.trim() ||
-        typeof event_date !== "string" ||
-        !event_date.trim()
-      ) {
-        return errorResponse(
-          "Event title and date are required."
+      if (!title || !String(title).trim()) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Event title is required.",
+          },
+          { status: 400 }
         );
       }
 
-      const eventStatus =
-        status === "published" ? "published" : "draft";
-
-      const { data: event, error } = await admin
-        .from("company_events")
-        .insert({
-          title: title.trim(),
-          description: description || null,
-          event_date,
-          start_time: start_time || null,
-          end_time: end_time || null,
-          location: location || null,
-          invitation_image_url: invitation_image_url || null,
-          status: eventStatus,
-          created_by: user.id,
-        })
-        .select()
-        .single();
-
-      if (error) {
-        return databaseErrorResponse("CREATE EVENT", error);
+      if (!event_date) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Event date is required.",
+          },
+          { status: 400 }
+        );
       }
 
-      return NextResponse.json(
-        {
-          success: true,
-          message:
-            eventStatus === "published"
-              ? "Event published successfully."
-              : "Event saved as draft.",
-          event,
-        },
-        { status: 201 }
-      );
-    }
+      const auth = await getAuthenticatedUser();
 
-    // =================================================
-    // UPDATE EVENT
-    // =================================================
+      if (!auth.user) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: auth.error,
+          },
+          { status: 401 }
+        );
+      }
 
-    if (action === "update") {
-      const {
-        event_id,
-        title,
-        description,
+      const insertData = {
+        title: String(title).trim(),
+        description: description || null,
         event_date,
-        start_time,
-        end_time,
-        location,
-        invitation_image_url,
-      } = body;
-
-      if (!event_id) {
-        return errorResponse("Event ID is required.");
-      }
-
-      const updates: Record<string, unknown> = {
-        updated_at: new Date().toISOString(),
+        end_date: end_date || null,
+        location: location || null,
+        event_type: event_type || "event",
+        audience_scope: audience_scope || "all",
+        expires_at: expires_at || null,
+        status: status || "draft",
+        created_by: auth.user.id,
+        published_at:
+          status === "published"
+            ? new Date().toISOString()
+            : null,
       };
 
-      if (title !== undefined) {
-        if (typeof title !== "string" || !title.trim()) {
-          return errorResponse("Event title cannot be empty.");
-        }
-
-        updates.title = title.trim();
-      }
-
-      if (description !== undefined) {
-        updates.description = description || null;
-      }
-
-      if (event_date !== undefined) {
-        updates.event_date = event_date;
-      }
-
-      if (start_time !== undefined) {
-        updates.start_time = start_time || null;
-      }
-
-      if (end_time !== undefined) {
-        updates.end_time = end_time || null;
-      }
-
-      if (location !== undefined) {
-        updates.location = location || null;
-      }
-
-      if (invitation_image_url !== undefined) {
-        updates.invitation_image_url =
-          invitation_image_url || null;
-      }
-
-      const { data: event, error } = await admin
+      const { data, error } = await admin
         .from("company_events")
-        .update(updates)
-        .eq("id", event_id)
+        .insert(insertData)
         .select()
         .single();
 
       if (error) {
-        return databaseErrorResponse("UPDATE EVENT", error);
+        console.error("Create event error:", error.message);
+
+        return NextResponse.json(
+          {
+            success: false,
+            error: error.message,
+          },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: "Event created successfully.",
+        event: {
+          ...data,
+          media: [],
+        },
+      });
+    }
+
+    // --------------------------------------------------
+    // UPDATE EVENT
+    // --------------------------------------------------
+
+    if (action === "update") {
+      const { id, ...fields } = body;
+
+      if (!id) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Event ID is required.",
+          },
+          { status: 400 }
+        );
+      }
+
+      const allowedFields = [
+        "title",
+        "description",
+        "event_date",
+        "end_date",
+        "location",
+        "event_type",
+        "audience_scope",
+        "expires_at",
+      ];
+
+      const updateData: Record<string, unknown> = {};
+
+      for (const field of allowedFields) {
+        if (Object.prototype.hasOwnProperty.call(fields, field)) {
+          updateData[field] = fields[field] || null;
+        }
+      }
+
+      if (Object.keys(updateData).length === 0) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "No valid event fields provided.",
+          },
+          { status: 400 }
+        );
+      }
+
+      updateData.updated_at = new Date().toISOString();
+
+      const { data, error } = await admin
+        .from("company_events")
+        .update(updateData)
+        .eq("id", id)
+        .select()
+        .single();
+
+      if (error) {
+        console.error("Update event error:", error.message);
+
+        return NextResponse.json(
+          {
+            success: false,
+            error: error.message,
+          },
+          { status: 500 }
+        );
       }
 
       return NextResponse.json({
         success: true,
         message: "Event updated successfully.",
-        event,
+        event: data,
       });
     }
 
-    // =================================================
+    // --------------------------------------------------
     // PUBLISH EVENT
-    // =================================================
+    // --------------------------------------------------
 
     if (action === "publish") {
-      const { event_id } = body;
+      const { id } = body;
 
-      if (!event_id) {
-        return errorResponse("Event ID is required.");
+      if (!id) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Event ID is required.",
+          },
+          { status: 400 }
+        );
       }
 
-      const { data: event, error } = await admin
+      const { data, error } = await admin
         .from("company_events")
         .update({
           status: "published",
+          published_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         })
-        .eq("id", event_id)
+        .eq("id", id)
         .select()
         .single();
 
       if (error) {
-        return databaseErrorResponse("PUBLISH EVENT", error);
+        console.error("Publish event error:", error.message);
+
+        return NextResponse.json(
+          {
+            success: false,
+            error: error.message,
+          },
+          { status: 500 }
+        );
       }
 
       return NextResponse.json({
         success: true,
         message: "Event published successfully.",
-        event,
+        event: data,
       });
     }
 
-    // =================================================
+    // --------------------------------------------------
     // CANCEL EVENT
-    // =================================================
+    // --------------------------------------------------
 
     if (action === "cancel") {
-      const { event_id } = body;
+      const { id } = body;
 
-      if (!event_id) {
-        return errorResponse("Event ID is required.");
+      if (!id) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Event ID is required.",
+          },
+          { status: 400 }
+        );
       }
 
-      const { data: event, error } = await admin
+      const { data, error } = await admin
         .from("company_events")
         .update({
           status: "cancelled",
           updated_at: new Date().toISOString(),
         })
-        .eq("id", event_id)
+        .eq("id", id)
         .select()
         .single();
 
       if (error) {
-        return databaseErrorResponse("CANCEL EVENT", error);
+        console.error("Cancel event error:", error.message);
+
+        return NextResponse.json(
+          {
+            success: false,
+            error: error.message,
+          },
+          { status: 500 }
+        );
       }
 
       return NextResponse.json({
         success: true,
         message: "Event cancelled successfully.",
-        event,
+        event: data,
       });
     }
 
-    // =================================================
+    // --------------------------------------------------
     // ADD EVENT PHOTO
-    // =================================================
+    // --------------------------------------------------
 
     if (action === "add_photo") {
-      const { event_id, photo_url } = body;
+      const {
+        event_id,
+        image_url,
+        photo_url,
+        alt_text,
+        cloudinary_public_id,
+        sort_order,
+      } = body;
 
-      if (
-        !event_id ||
-        typeof photo_url !== "string" ||
-        !photo_url.trim()
-      ) {
-        return errorResponse(
-          "Event ID and photo URL are required."
+      const finalImageUrl = image_url || photo_url;
+
+      if (!event_id) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Event ID is required.",
+          },
+          { status: 400 }
         );
       }
 
-      const { data: existingEvent, error: eventError } =
-        await admin
-          .from("company_events")
-          .select("id")
-          .eq("id", event_id)
-          .maybeSingle();
-
-      if (eventError) {
-        return databaseErrorResponse(
-          "CHECK EVENT BEFORE ADDING PHOTO",
-          eventError
+      if (!finalImageUrl) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Image URL is required.",
+          },
+          { status: 400 }
         );
       }
 
-      if (!existingEvent) {
-        return errorResponse("Event not found.", 404);
+      const { data: event, error: eventError } = await admin
+        .from("company_events")
+        .select("id")
+        .eq("id", event_id)
+        .maybeSingle();
+
+      if (eventError || !event) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Event not found.",
+          },
+          { status: 404 }
+        );
       }
 
-      const { data: photo, error } = await admin
-        .from("event_photos")
-        .insert({
-          event_id,
-          photo_url: photo_url.trim(),
-          uploaded_by: user.id,
-        })
+      const insertData = {
+        event_id,
+        image_url: finalImageUrl,
+        cloudinary_public_id:
+          cloudinary_public_id || null,
+        alt_text: alt_text || null,
+        sort_order: Number.isFinite(Number(sort_order))
+          ? Number(sort_order)
+          : 0,
+      };
+
+      const { data, error } = await admin
+        .from("company_event_media")
+        .insert(insertData)
         .select()
         .single();
 
       if (error) {
-        return databaseErrorResponse("ADD EVENT PHOTO", error);
+        console.error("Add event photo error:", error.message);
+
+        return NextResponse.json(
+          {
+            success: false,
+            error: error.message,
+          },
+          { status: 500 }
+        );
       }
 
-      return NextResponse.json(
-        {
-          success: true,
-          message: "Event photo added successfully.",
-          photo,
-        },
-        { status: 201 }
-      );
+      return NextResponse.json({
+        success: true,
+        message: "Event photo uploaded successfully.",
+        photo: data,
+      });
     }
 
-    // =================================================
+    // --------------------------------------------------
     // DELETE EVENT PHOTO
-    // =================================================
+    // --------------------------------------------------
 
     if (action === "delete_photo") {
-      const { photo_id } = body;
+      const { id, photo_id } = body;
+      const photoId = photo_id || id;
 
-      if (!photo_id) {
-        return errorResponse("Photo ID is required.");
+      if (!photoId) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Photo ID is required.",
+          },
+          { status: 400 }
+        );
       }
 
-      const { error } = await admin
-        .from("event_photos")
+      const { data, error } = await admin
+        .from("company_event_media")
         .delete()
-        .eq("id", photo_id);
+        .eq("id", photoId)
+        .select("id")
+        .maybeSingle();
 
       if (error) {
-        return databaseErrorResponse(
-          "DELETE EVENT PHOTO",
-          error
+        console.error(
+          "Delete event photo error:",
+          error.message
+        );
+
+        return NextResponse.json(
+          {
+            success: false,
+            error: error.message,
+          },
+          { status: 500 }
+        );
+      }
+
+      if (!data) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Event photo not found.",
+          },
+          { status: 404 }
         );
       }
 
@@ -495,70 +662,137 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // =================================================
+    // --------------------------------------------------
     // INVALID ACTION
-    // =================================================
-
-    return errorResponse("Invalid event action.");
-  } catch (error) {
-    console.error("POST EVENTS ERROR:", error);
+    // --------------------------------------------------
 
     return NextResponse.json(
       {
         success: false,
-        error: getErrorMessage(error),
+        error: "Invalid action.",
+      },
+      { status: 400 }
+    );
+  } catch (error) {
+    console.error("POST event unexpected error:", error);
+
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Something went wrong while processing the event.",
       },
       { status: 500 }
     );
   }
 }
 
-// =====================================================
+// --------------------------------------------------
 // DELETE EVENT
-// =====================================================
+// Deletes its photos first, then the event.
+// --------------------------------------------------
 
 export async function DELETE(request: NextRequest) {
   try {
-    const { user, admin, role } = await getAuthContext();
+    const permission = await checkHRPermission();
 
-    if (!user || !admin) {
-      return errorResponse("Please login to continue.", 401);
-    }
-
-    if (!isHR(role)) {
-      return errorResponse(
-        "Only HR or CEO can delete events.",
-        403
+    if (!permission.allowed || !permission.admin) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: permission.error,
+        },
+        { status: 403 }
       );
     }
 
-    const { searchParams } = new URL(request.url);
-    const eventId = searchParams.get("id");
+    const admin = permission.admin;
+
+    let eventId =
+      request.nextUrl.searchParams.get("id");
 
     if (!eventId) {
-      return errorResponse("Event ID is required.");
+      try {
+        const body = await request.json();
+        eventId = body.id || body.event_id || null;
+      } catch {
+        // No JSON body; use query parameter.
+      }
     }
 
-    const { error } = await admin
+    if (!eventId) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Event ID is required.",
+        },
+        { status: 400 }
+      );
+    }
+
+    // Delete associated photos first.
+
+    const { error: mediaError } = await admin
+      .from("company_event_media")
+      .delete()
+      .eq("event_id", eventId);
+
+    if (mediaError) {
+      console.error(
+        "Delete event media error:",
+        mediaError.message
+      );
+
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Unable to delete event photos.",
+        },
+        { status: 500 }
+      );
+    }
+
+    // Delete event.
+
+    const { data, error } = await admin
       .from("company_events")
       .delete()
-      .eq("id", eventId);
+      .eq("id", eventId)
+      .select("id")
+      .maybeSingle();
 
     if (error) {
-      return databaseErrorResponse("DELETE EVENT", error);
+      console.error("Delete event error:", error.message);
+
+      return NextResponse.json(
+        {
+          success: false,
+          error: error.message,
+        },
+        { status: 500 }
+      );
+    }
+
+    if (!data) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Event not found.",
+        },
+        { status: 404 }
+      );
     }
 
     return NextResponse.json({
       success: true,
-      message: "Event deleted successfully.",
+      message: "Event and its photos deleted successfully.",
     });
   } catch (error) {
-    console.error("DELETE EVENT ERROR:", error);
+    console.error("DELETE event unexpected error:", error);
 
     return NextResponse.json(
       {
         success: false,
-        error: getErrorMessage(error),
+        error: "Something went wrong while deleting the event.",
       },
       { status: 500 }
     );

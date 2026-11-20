@@ -104,6 +104,7 @@ export interface MasterPayrollRow {
   bank_name: string;
   pf_account_number: string;
   uan_number: string;
+  pf_eligible: boolean;
   pan_number: string;
 
   basic: number;
@@ -255,7 +256,8 @@ export function calculateMasterPayrollRow(
   daysInMonth: number,
   calculatedLopDays: number = 0,
   adjustments?: MasterPayrollAdjustments,
-  existingPayslip?: any,
+  existingPayslip?: Record<string, unknown> | null,
+  
   pendingStatutory?: { pf: number; esi: number },
   employeeDaysInPeriod?: number
 ): MasterPayrollRow {
@@ -378,8 +380,8 @@ export function calculateMasterPayrollRow(
   const shouldRecover =
     adjustments?.recoverPendingStatutory === true ||
     (Array.isArray(existingPayslip?.deductions_breakup) &&
-      existingPayslip.deductions_breakup.some(
-        (b: any) => b.code === "STATUTORY_RECOVERY"
+      (existingPayslip.deductions_breakup as Array<Record<string, unknown>>).some(
+        (b) => b.code === "STATUTORY_RECOVERY"
       ));
 
   const recoveredStatutory = shouldRecover
@@ -410,10 +412,10 @@ export function calculateMasterPayrollRow(
             totalDeductions
         );
 
-  let remarks =
+  let remarks: string =
     adjustments?.remarks !== undefined
-      ? adjustments.remarks
-      : existingPayslip?.remarks || "";
+      ? String(adjustments.remarks)
+      : String(existingPayslip?.remarks || "");
 
   if (payDays === 0 && workingDays > 0) {
     const absenceNote =
@@ -436,7 +438,7 @@ export function calculateMasterPayrollRow(
   }
 
   const status: "draft" | "processed" | "paid" =
-    existingPayslip?.payment_status || "draft";
+    (existingPayslip?.payment_status as "draft" | "processed" | "paid") || "draft";
 
   return {
     employee_id: emp.id,
@@ -446,6 +448,7 @@ export function calculateMasterPayrollRow(
     ctc,
     designation: emp.designation || "—",
     department: emp.department || emp.department_name || "General",
+    pf_eligible: emp.pf_eligible !== false,
 
     bank_account_number: emp.bank_account_number || "—",
     ifsc_code: emp.ifsc_code || "—",
@@ -490,7 +493,7 @@ export function calculateMasterPayrollRow(
     remarks,
 
     status,
-    payslip_id: existingPayslip?.id,
+    payslip_id: existingPayslip?.id ? String(existingPayslip.id) : undefined,
   };
 }
 
