@@ -7,7 +7,9 @@ import {
   calculateEmployeeLopDays,
   MasterPayrollEmployee,
   MasterPayrollAdjustments,
-  calculateEmployeePayrollDays
+  calculateEmployeePayrollDays,
+  RawAttendanceLog,
+  RawLeaveRequest,
 } from "@/lib/payroll/master-payroll-engine";
 
 export const dynamic = "force-dynamic";
@@ -229,8 +231,8 @@ export async function POST(request: NextRequest) {
     // 4. Full month absence: 0 present days & 0 paid leaves -> all calendar days count as LOP (0 pay days).
     const lopDaysByEmployee = new Map<string, number>();
 
-    const safeAttendanceLogs = (attendanceLogs ?? []) as any[];
-    const safeLeaveRequests = (leaveRequests ?? []) as any[];
+    const safeAttendanceLogs = (attendanceLogs ?? []) as RawAttendanceLog[];
+    const safeLeaveRequests = (leaveRequests ?? []) as RawLeaveRequest[];
 
     for (const emp of employees) {
       const empLop = calculateEmployeeLopDays(

@@ -67,6 +67,7 @@ export default function Sidebar({ role, designation }: SidebarProps) {
 
   useEffect(() => {
     try {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsCollapsed(
         window.localStorage.getItem("sidebar-collapsed") === "true"
       );
@@ -270,9 +271,9 @@ export default function Sidebar({ role, designation }: SidebarProps) {
       ],
     },
     {
-      name: "Projects & Calendars",
+      name: role === "hr" ? "Events & Holiday Calendar" : "Projects & Calendars",
       href: "/dashboard/projects",
-      icon: Globe,
+      icon: role === "hr" ? CalendarDays : Globe,
       roles: ["ceo", "hr"],
     },
     {

@@ -815,8 +815,15 @@ async function extractTextFromPDF(buffer: Buffer): Promise<string> {
 // POST
 // ======================================================
 
+type CloudinaryUploadResult = {
+  secure_url: string;
+  public_id: string;
+  resource_type?: string;
+  [key: string]: unknown;
+};
+
 export async function POST(request: Request) {
-  let uploadResult: any = null;
+  let uploadResult: CloudinaryUploadResult | null = null;
 
   try {
     // ==================================================
@@ -1014,7 +1021,12 @@ export async function POST(request: Request) {
 
     let requiresApproval = false;
 
-    let existingDocument: any = null;
+    let existingDocument: {
+      id?: string;
+      cloudinary_public_id?: string | null;
+      cloudinary_resource_type?: string | null;
+      [key: string]: unknown;
+    } | null = null;
 
     if (!allowsMultiple) {
       if (verificationRequired) {
@@ -1230,13 +1242,13 @@ export async function POST(request: Request) {
         }
 
         const matchingRequests = (requests ?? []).filter(
-          (item: any) => {
+          (item: { requested_changes?: Record<string, unknown> | null }) => {
             const changes = item.requested_changes;
 
             return (
               changes &&
               typeof changes === 'object' &&
-              String(changes[identityField] ?? '')
+              String((changes as Record<string, unknown>)[identityField] ?? '')
                 .trim()
                 .toUpperCase() ===
                 identityNumber!.trim().toUpperCase()
@@ -1244,7 +1256,12 @@ export async function POST(request: Request) {
           }
         );
 
-        for (const candidate of matchingRequests as any[]) {
+        for (const candidate of matchingRequests as Array<{
+          id: string;
+          employee_id: string;
+          requested_changes: Record<string, unknown>;
+          status: string;
+        }>) {
           const {
             data: rejectedDocs,
             error: rejectedLookupError,
@@ -1308,7 +1325,7 @@ export async function POST(request: Request) {
     // CLOUDINARY UPLOAD
     // ==================================================
 
-    uploadResult = await new Promise<any>(
+    uploadResult = await new Promise<CloudinaryUploadResult>(
       (resolve, reject) => {
         cloudinary.uploader.upload(
           dataURI,
@@ -1320,7 +1337,7 @@ export async function POST(request: Request) {
             if (error) {
               reject(error);
             } else {
-              resolve(result);
+              resolve(result as CloudinaryUploadResult);
             }
           }
         );
@@ -1350,7 +1367,7 @@ export async function POST(request: Request) {
     // ======================================================
 
     if (requiresApproval) {
-      const pendingDocumentFields: Record<string, any> = {
+      const pendingDocumentFields: Record<string, unknown> = {
         employee_id,
         document_type,
         document_name: document_name.trim(),
@@ -1802,7 +1819,7 @@ export async function POST(request: Request) {
         ...(verificationRequired
           ? {
               verification_status: 'pending',
-              previous_document_id: existingDocument?.id ?? null,
+              previous_document_id: null,
             }
           : {}),
 
@@ -1887,7 +1904,7 @@ export async function POST(request: Request) {
           : {}),
       },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Upload error:', error);
 
     // ==================================================
@@ -1910,11 +1927,14 @@ export async function POST(request: Request) {
       }
     }
 
+    const message =
+      error instanceof Error
+        ? error.message
+        : 'An error occurred during file upload';
+
     return NextResponse.json(
       {
-        error:
-          error?.message ||
-          'An error occurred during file upload',
+        error: message,
       },
       { status: 500 }
     );

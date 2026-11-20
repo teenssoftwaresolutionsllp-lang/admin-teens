@@ -1,0 +1,201 @@
+import {
+  createCipheriv,
+  createDecipheriv,
+  randomBytes,
+} from "crypto";
+
+const ALGORITHM = "aes-256-gcm";
+
+type EncryptedValue = {
+  __encrypted: true;
+  algorithm: "aes-256-gcm";
+  iv: string;
+  authTag: string;
+  ciphertext: string;
+};
+
+const SENSITIVE_FIELDS = [
+  "aadhaarNumber",
+  "panNumber",
+  "bankAccountNumber",
+  "passportNumber",
+  "drivingLicenseNumber",
+  "bankIfsc",
+  "uanNumber",
+] as const;
+
+const SENSITIVE_SECTIONS = [
+  "identityDetails",
+  "bankDetails",
+  "previousEmploymentDetails",
+] as const;
+
+function getEncryptionKey(): Buffer {
+  const rawKey = process.env.ONBOARDING_ENCRYPTION_KEY?.trim();
+
+  if (!rawKey || !/^[0-9a-fA-F]{64}$/.test(rawKey)) {
+    throw new Error(
+      "ONBOARDING_ENCRYPTION_KEY is missing or invalid."
+    );
+  }
+
+  return Buffer.from(rawKey, "hex");
+}
+
+export function isEncryptedValue(
+  value: unknown
+): value is EncryptedValue {
+  if (!value || typeof value !== "object") return false;
+
+  const item = value as Record<string, unknown>;
+
+  return (
+    item.__encrypted === true &&
+    item.algorithm === ALGORITHM &&
+    typeof item.iv === "string" &&
+    typeof item.authTag === "string" &&
+    typeof item.ciphertext === "string"
+  );
+}
+
+export function encryptSensitiveValue(
+  value: string
+): EncryptedValue {
+  if (typeof value !== "string") {
+    throw new Error("Sensitive values must be strings.");
+  }
+
+  const iv = randomBytes(12);
+
+  const cipher = createCipheriv(
+    ALGORITHM,
+    getEncryptionKey(),
+    iv
+  );
+
+  const ciphertext = Buffer.concat([
+    cipher.update(value, "utf8"),
+    cipher.final(),
+  ]);
+
+  return {
+    __encrypted: true,
+    algorithm: ALGORITHM,
+    iv: iv.toString("hex"),
+    authTag: cipher.getAuthTag().toString("hex"),
+    ciphertext: ciphertext.toString("hex"),
+  };
+}
+
+export function decryptSensitiveValue(
+  value: EncryptedValue
+): string {
+  if (!isEncryptedValue(value)) {
+    throw new Error("Invalid encrypted value.");
+  }
+
+  const decipher = createDecipheriv(
+    ALGORITHM,
+    getEncryptionKey(),
+    Buffer.from(value.iv, "hex")
+  );
+
+  decipher.setAuthTag(
+    Buffer.from(value.authTag, "hex")
+  );
+
+  const plaintext = Buffer.concat([
+    decipher.update(
+      Buffer.from(value.ciphertext, "hex")
+    ),
+    decipher.final(),
+  ]);
+
+  return plaintext.toString("utf8");
+}
+
+function transformSensitiveFields(
+  data: Record<string, unknown>,
+  operation: "encrypt" | "decrypt"
+): Record<string, unknown> {
+  const result = { ...data };
+
+  const transform = (
+    target: Record<string, unknown>,
+    field: string,
+    path: string
+  ) => {
+    const value = target[field];
+
+    if (value === undefined || value === null || value === "") {
+      return;
+    }
+
+    if (operation === "encrypt") {
+      if (isEncryptedValue(value)) return;
+
+      if (typeof value !== "string") {
+        throw new Error(`Invalid sensitive field: ${path}`);
+      }
+
+      target[field] = encryptSensitiveValue(value);
+      return;
+    }
+
+    if (!isEncryptedValue(value)) {
+      throw new Error(
+        `Sensitive field ${path} is not encrypted.`
+      );
+    }
+
+    target[field] = decryptSensitiveValue(value);
+  };
+
+  // Preserve support for legacy top-level sensitive fields.
+  for (const field of SENSITIVE_FIELDS) {
+    transform(result, field, field);
+  }
+
+  // Encrypt/decrypt nested identity and bank details.
+  for (const section of SENSITIVE_SECTIONS) {
+    const sectionValue = result[section];
+
+    if (
+      sectionValue === undefined ||
+      sectionValue === null
+    ) {
+      continue;
+    }
+
+    if (
+      typeof sectionValue !== "object" ||
+      Array.isArray(sectionValue)
+    ) {
+      throw new Error(`Invalid onboarding section: ${section}`);
+    }
+
+    const nested = {
+      ...(sectionValue as Record<string, unknown>),
+    };
+
+    for (const field of SENSITIVE_FIELDS) {
+      transform(nested, field, `${section}.${field}`);
+    }
+
+    result[section] = nested;
+  }
+
+  return result;
+}
+
+export function encryptOnboardingSensitiveFields(
+  data: Record<string, unknown>
+): Record<string, unknown> {
+  return transformSensitiveFields(data, "encrypt");
+}
+
+export function decryptOnboardingSensitiveFields(
+  data: Record<string, unknown>
+): Record<string, unknown> {
+  return transformSensitiveFields(data, "decrypt");
+}

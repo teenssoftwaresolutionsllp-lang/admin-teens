@@ -105,6 +105,42 @@ export default async function EmployeeDetailPage(
     assigned_reporting_manager_name: reportingManagerName,
   };
 
+
+  // 5A. Fetch transferred education records.
+  let educationRecords: Record<string, unknown>[] = [];
+
+  const { data: educationData, error: educationError } =
+    await adminClient
+      .from("employee_education")
+      .select("*")
+      .eq("employee_id", employee.id)
+      .order("year_of_passing", { ascending: true });
+
+  if (educationError) {
+    console.error("Failed to load employee education:", educationError);
+  } else {
+    educationRecords = educationData ?? [];
+  }
+
+  // 5B. Fetch transferred previous employment records.
+  let previousEmploymentRecords: Record<string, unknown>[] = [];
+
+  const { data: previousEmploymentData, error: previousEmploymentError } =
+    await adminClient
+      .from("employee_previous_employment")
+      .select("*")
+      .eq("employee_id", employee.id)
+      .order("employment_start_date", { ascending: false });
+
+  if (previousEmploymentError) {
+    console.error(
+      "Failed to load previous employment records:",
+      previousEmploymentError
+    );
+  } else {
+    previousEmploymentRecords = previousEmploymentData ?? [];
+  }
+
   // 5. Fetch documents for the authorized employee.
   let documents: EmployeeDocument[] = [];
 
@@ -195,6 +231,8 @@ export default async function EmployeeDetailPage(
       <EmployeeDetail
         employee={employeeWithManager as Employee}
         documents={documents}
+        educationRecords={educationRecords}
+        previousEmploymentRecords={previousEmploymentRecords}
         role={role}
       />
     </div>

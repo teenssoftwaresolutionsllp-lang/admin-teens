@@ -1,3 +1,4 @@
+
 import { NextResponse } from "next/server";
 import { createHash } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase-server";
@@ -15,6 +16,14 @@ function isValidAction(value: unknown): value is OfferAction {
   return value === "accept_offer" || value === "decline_offer";
 }
 
+function noStoreHeaders() {
+  return {
+    "Cache-Control": "no-store, no-cache, must-revalidate",
+    Pragma: "no-cache",
+    Expires: "0",
+  };
+}
+
 function invalidLink() {
   return NextResponse.json(
     {
@@ -23,7 +32,7 @@ function invalidLink() {
     },
     {
       status: 400,
-      headers: { "Cache-Control": "no-store" },
+      headers: noStoreHeaders(),
     }
   );
 }
@@ -35,37 +44,95 @@ export async function GET(request: Request) {
     const action = url.searchParams.get("action");
 
     if (!isValidAction(action)) return invalidLink();
-    if (!/^[a-f0-9]{64}$/i.test(token)) return invalidLink();
+
+    if (!/^[a-f0-9]{64}$/i.test(token)) {
+      return invalidLink();
+    }
 
     const admin = await createAdminClient();
 
-    const { data: tokenRecord, error } = await admin
+    // 1. Find the exact response token.
+    const { data: tokenRecord, error: tokenError } = await admin
       .from("joining_action_tokens")
-      .select("candidate_id, expires_at, used_at, revoked_at")
+      .select(
+        "candidate_id, document_id, activated_at, expires_at, used_at, revoked_at"
+      )
       .eq("token_hash", hashToken(token))
       .eq("action", action)
       .maybeSingle();
 
-    if (error) throw error;
+    if (tokenError) throw tokenError;
 
+    // Only activated tokens linked to an exact offer document are valid.
     if (
       !tokenRecord ||
+      !tokenRecord.document_id ||
+      !tokenRecord.activated_at ||
       tokenRecord.used_at ||
       tokenRecord.revoked_at ||
+      !tokenRecord.expires_at ||
       new Date(tokenRecord.expires_at).getTime() <= Date.now()
     ) {
       return invalidLink();
     }
 
+    // 2. Candidate must still be awaiting an offer decision.
     const { data: candidate, error: candidateError } = await admin
       .from("joining_candidates")
-      .select("first_name, status")
+      .select("id, first_name, status, accepted_offer_document_id")
       .eq("id", tokenRecord.candidate_id)
       .maybeSingle();
 
     if (candidateError) throw candidateError;
 
-    if (!candidate || candidate.status !== "offer_sent") {
+    if (
+      !candidate ||
+      candidate.status !== "offer_sent" ||
+      candidate.accepted_offer_document_id !== null
+    ) {
+      return invalidLink();
+    }
+
+    // 3. Verify the exact document belongs to this candidate.
+    const { data: offerDocument, error: documentError } = await admin
+      .from("joining_documents")
+      .select("id, version, sent_at, offer_snapshot")
+      .eq("id", tokenRecord.document_id)
+      .eq("candidate_id", tokenRecord.candidate_id)
+      .eq("document_type", "offer_letter")
+      .maybeSingle();
+
+    if (documentError) throw documentError;
+
+    if (
+      !offerDocument ||
+      !offerDocument.sent_at ||
+      !offerDocument.offer_snapshot ||
+      typeof offerDocument.offer_snapshot !== "object" ||
+      Array.isArray(offerDocument.offer_snapshot)
+    ) {
+      return invalidLink();
+    }
+
+    // 4. Only the latest offer revision can be accepted or declined.
+    // Include unsent revisions so an older sent offer cannot remain valid
+    // when a newer revision has already been created.
+    const { data: latestOffer, error: latestOfferError } = await admin
+      .from("joining_documents")
+      .select("id, version")
+      .eq("candidate_id", tokenRecord.candidate_id)
+      .eq("document_type", "offer_letter")
+      .order("version", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (latestOfferError) throw latestOfferError;
+
+    if (
+      !latestOffer ||
+      latestOffer.id !== offerDocument.id ||
+      latestOffer.version !== offerDocument.version
+    ) {
       return invalidLink();
     }
 
@@ -76,7 +143,7 @@ export async function GET(request: Request) {
         action,
       },
       {
-        headers: { "Cache-Control": "no-store" },
+        headers: noStoreHeaders(),
       }
     );
   } catch (error) {
@@ -88,7 +155,7 @@ export async function GET(request: Request) {
       },
       {
         status: 500,
-        headers: { "Cache-Control": "no-store" },
+        headers: noStoreHeaders(),
       }
     );
   }
@@ -110,12 +177,14 @@ export async function POST(request: Request) {
     }
 
     const admin = await createAdminClient();
+    const tokenHash = hashToken(token);
 
     // Find the candidate before the atomic RPC consumes the token.
+    // The RPC remains responsible for all authoritative validation.
     const { data: tokenOwner, error: tokenOwnerError } = await admin
       .from("joining_action_tokens")
       .select("candidate_id")
-      .eq("token_hash", hashToken(token))
+      .eq("token_hash", tokenHash)
       .eq("action", action)
       .maybeSingle();
 
@@ -137,14 +206,16 @@ export async function POST(request: Request) {
           .maybeSingle();
 
       if (candidateLookupError) throw candidateLookupError;
+
       candidateOwner = candidateData;
     }
 
-    // Atomically process the candidate's decision.
+    // The database function atomically validates and consumes the token,
+    // checks the exact offer version, and records the candidate decision.
     const { data, error } = await admin.rpc(
       "respond_to_joining_offer",
       {
-        p_token_hash: hashToken(token),
+        p_token_hash: tokenHash,
         p_action: action,
       }
     );
@@ -158,7 +229,7 @@ export async function POST(request: Request) {
         },
         {
           status: 500,
-          headers: { "Cache-Control": "no-store" },
+          headers: noStoreHeaders(),
         }
       );
     }
@@ -173,7 +244,7 @@ export async function POST(request: Request) {
         },
         {
           status: 409,
-          headers: { "Cache-Control": "no-store" },
+          headers: noStoreHeaders(),
         }
       );
     }
@@ -181,6 +252,7 @@ export async function POST(request: Request) {
     // Notify the HR user who created the candidate.
     if (candidateOwner?.created_by) {
       const accepted = action === "accept_offer";
+
       const candidateName =
         `${candidateOwner.first_name} ${candidateOwner.last_name}`.trim();
 
@@ -214,7 +286,7 @@ export async function POST(request: Request) {
         message: data.message,
       },
       {
-        headers: { "Cache-Control": "no-store" },
+        headers: noStoreHeaders(),
       }
     );
   } catch (error) {
@@ -226,7 +298,7 @@ export async function POST(request: Request) {
       },
       {
         status: 500,
-        headers: { "Cache-Control": "no-store" },
+        headers: noStoreHeaders(),
       }
     );
   }

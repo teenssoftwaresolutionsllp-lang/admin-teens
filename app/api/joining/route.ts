@@ -1,3 +1,4 @@
+
 import { NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase-server";
 
@@ -5,31 +6,53 @@ export const dynamic = "force-dynamic";
 
 type ExperienceLevel = "fresher" | "experienced";
 
+type StatutoryApplicability = {
+  pf_eligible: boolean;
+  esi_eligible: boolean;
+  pt_eligible: boolean;
+  tds_eligible: boolean;
+};
+
 function parseExperience(body: Record<string, unknown>) {
   const level =
     typeof body.experience_level === "string"
       ? body.experience_level.trim().toLowerCase()
       : "";
+
   const years = Number(body.total_experience_years);
   const months = Number(body.total_experience_months);
 
   if (level !== "fresher" && level !== "experienced") {
-    return { error: "Select a valid experience level: Fresher or Experienced." } as const;
+    return {
+      error: "Select a valid experience level: Fresher or Experienced.",
+    } as const;
   }
 
   if (
-    !Number.isInteger(years) || years < 0 || years > 50 ||
-    !Number.isInteger(months) || months < 0 || months > 11
+    !Number.isInteger(years) ||
+    years < 0 ||
+    years > 50 ||
+    !Number.isInteger(months) ||
+    months < 0 ||
+    months > 11
   ) {
-    return { error: "Enter valid experience. Years must be 0–50 and months 0–11." } as const;
+    return {
+      error: "Enter valid experience. Years must be 0–50 and months 0–11.",
+    } as const;
   }
 
   if (level === "fresher" && (years !== 0 || months !== 0)) {
-    return { error: "Fresher candidates must have 0 years and 0 months of experience." } as const;
+    return {
+      error:
+        "Fresher candidates must have 0 years and 0 months of experience.",
+    } as const;
   }
 
   if (level === "experienced" && years === 0 && months === 0) {
-    return { error: "Experienced candidates must have at least 1 month of experience." } as const;
+    return {
+      error:
+        "Experienced candidates must have at least 1 month of experience.",
+    } as const;
   }
 
   return {
@@ -39,8 +62,39 @@ function parseExperience(body: Record<string, unknown>) {
   } as const;
 }
 
+function parseStatutoryApplicability(
+  body: Record<string, unknown>
+):
+  | { data: StatutoryApplicability }
+  | { error: string } {
+  const fields = [
+    ["pf_eligible", "PF"],
+    ["esi_eligible", "ESI"],
+    ["pt_eligible", "Professional Tax"],
+    ["tds_eligible", "TDS"],
+  ] as const;
+
+  for (const [key, label] of fields) {
+    if (typeof body[key] !== "boolean") {
+      return {
+        error: `Please select whether ${label} is applicable or not applicable.`,
+      };
+    }
+  }
+
+  return {
+    data: {
+      pf_eligible: body.pf_eligible as boolean,
+      esi_eligible: body.esi_eligible as boolean,
+      pt_eligible: body.pt_eligible as boolean,
+      tds_eligible: body.tds_eligible as boolean,
+    },
+  };
+}
+
 async function getAuthorizedHr() {
   const supabase = await createClient();
+
   const {
     data: { user },
     error: authError,
@@ -51,6 +105,7 @@ async function getAuthorizedHr() {
   }
 
   const admin = await createAdminClient();
+
   const { data: profile, error: profileError } = await admin
     .from("profiles")
     .select("role")
@@ -59,31 +114,106 @@ async function getAuthorizedHr() {
 
   if (profileError) {
     console.error("Joining role check failed:", profileError.message);
-    return { error: "Unable to verify access", status: 500 as const };
+
+    return {
+      error: "Unable to verify access",
+      status: 500 as const,
+    };
   }
 
   if (profile?.role !== "hr") {
-    return { error: "HR access required", status: 403 as const };
+    return {
+      error: "HR access required",
+      status: 403 as const,
+    };
   }
 
   return { admin, user };
 }
 
-export async function GET() {
+function isObjectBody(value: unknown): value is Record<string, unknown> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value)
+  );
+}
+
+const uuidPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const allowedGenders = [
+  "male",
+  "female",
+  "non_binary",
+  "prefer_not_to_say",
+] as const;
+
+const allowedEmploymentTypes = [
+  "full_time",
+  "contract",
+  "intern",
+] as const;
+
+async function validateDepartment(
+  admin: Awaited<ReturnType<typeof createAdminClient>>,
+  department: string
+) {
+  const { data: availableDepartments, error } = await admin
+    .from("departments")
+    .select("id, name");
+
+  if (error) throw error;
+
+  const normalizedDepartment =
+    department.toLowerCase() === "human resources"
+      ? "hr"
+      : department.toLowerCase();
+
+  const matchingDepartments = (availableDepartments ?? []).filter(
+    (item) => item.name.trim().toLowerCase() === normalizedDepartment
+  );
+
+  if (matchingDepartments.length !== 1) {
+    return {
+      error: `Department "${department}" is not available. Please select a valid department.`,
+    };
+  }
+
+  return { department: matchingDepartments[0].name };
+}
+
+export async function GET(request: Request) {
   try {
     const auth = await getAuthorizedHr();
+
     if ("error" in auth) {
-      return NextResponse.json({ error: auth.error }, { status: auth.status });
+      return NextResponse.json(
+        { error: auth.error },
+        { status: auth.status }
+      );
     }
 
-    const { data: candidates, error } = await auth.admin
+    // Joining Candidates can request only candidates not yet
+    // handed off to the Add Employee queue.
+    const candidatesQuery = auth.admin
       .from("joining_candidates")
-      .select("*")
-      .order("created_at", { ascending: false });
+      .select("*");
+
+    const excludeMoved =
+      new URL(request.url).searchParams.get("excludeMoved") === "1";
+
+    const { data: candidates, error } = await (
+      excludeMoved
+        ? candidatesQuery.is("add_employee_moved_at", null)
+        : candidatesQuery
+    ).order("created_at", { ascending: false });
 
     if (error) throw error;
 
-    const candidateIds = (candidates ?? []).map((candidate) => candidate.id);
+    const candidateIds = (candidates ?? []).map(
+      (candidate) => candidate.id
+    );
 
     type JoiningDocumentRow = {
       id: string;
@@ -99,35 +229,48 @@ export async function GET() {
     let documents: JoiningDocumentRow[] = [];
 
     if (candidateIds.length > 0) {
-      const { data: documentRows, error: documentsError } = await auth.admin
-        .from("joining_documents")
-        .select("id, candidate_id, document_type, version, created_at, sent_at, file_name, mime_type")
-        .in("candidate_id", candidateIds)
-        .in("document_type", [
-          "offer_letter",
-          "joining_letter",
-          "resume",
-          "experience_document",
-        ])
-        .order("version", { ascending: false });
+      const { data: documentRows, error: documentsError } =
+        await auth.admin
+          .from("joining_documents")
+          .select(
+            "id, candidate_id, document_type, version, created_at, sent_at, file_name, mime_type"
+          )
+          .in("candidate_id", candidateIds)
+          .in("document_type", [
+            "offer_letter",
+            "joining_letter",
+            "resume",
+            "experience_document",
+          ])
+          .order("version", { ascending: false });
 
       if (documentsError) throw documentsError;
+
       documents = (documentRows ?? []) as JoiningDocumentRow[];
     }
 
-    const candidatesWithDocuments = (candidates ?? []).map((candidate) => ({
-      ...candidate,
-      joining_documents: documents
-        .filter((document) => document.candidate_id === candidate.id)
-        .sort((a, b) => b.version - a.version),
-    }));
+    const candidatesWithDocuments = (candidates ?? []).map(
+      (candidate) => ({
+        ...candidate,
+        joining_documents: documents
+          .filter(
+            (document) => document.candidate_id === candidate.id
+          )
+          .sort((a, b) => b.version - a.version),
+      })
+    );
 
     return NextResponse.json(
       { candidates: candidatesWithDocuments },
-      { headers: { "Cache-Control": "no-store, max-age=0" } }
+      {
+        headers: {
+          "Cache-Control": "no-store, max-age=0",
+        },
+      }
     );
   } catch (error) {
     console.error("GET /api/joining failed:", error);
+
     return NextResponse.json(
       { error: "Failed to load joining candidates" },
       { status: 500 }
@@ -138,108 +281,194 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const auth = await getAuthorizedHr();
+
     if ("error" in auth) {
-      return NextResponse.json({ error: auth.error }, { status: auth.status });
+      return NextResponse.json(
+        { error: auth.error },
+        { status: auth.status }
+      );
     }
 
     let body: Record<string, unknown>;
+
     try {
       const parsedBody: unknown = await request.json();
-      if (
-        typeof parsedBody !== "object" ||
-        parsedBody === null ||
-        Array.isArray(parsedBody)
-      ) {
-        return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
+
+      if (!isObjectBody(parsedBody)) {
+        return NextResponse.json(
+          { error: "Invalid request body." },
+          { status: 400 }
+        );
       }
-      body = parsedBody as Record<string, unknown>;
+
+      body = parsedBody;
     } catch {
-      return NextResponse.json({ error: "Invalid JSON request body." }, { status: 400 });
+      return NextResponse.json(
+        { error: "Invalid JSON request body." },
+        { status: 400 }
+      );
     }
 
-    const first_name = typeof body.first_name === "string" ? body.first_name.trim() : "";
-    const last_name = typeof body.last_name === "string" ? body.last_name.trim() : "";
+    const first_name =
+      typeof body.first_name === "string"
+        ? body.first_name.trim()
+        : "";
+
+    const last_name =
+      typeof body.last_name === "string"
+        ? body.last_name.trim()
+        : "";
+
     const personal_email =
       typeof body.personal_email === "string"
         ? body.personal_email.trim().toLowerCase()
         : "";
-    const mobile_number = typeof body.mobile_number === "string" ? body.mobile_number.trim() : "";
-    const designation = typeof body.designation === "string" ? body.designation.trim() : "";
+
+    const mobile_number =
+      typeof body.mobile_number === "string"
+        ? body.mobile_number.trim()
+        : "";
+
+    const designation =
+      typeof body.designation === "string"
+        ? body.designation.trim()
+        : "";
+
     const annual_ctc = body.annual_ctc;
-    const gender = typeof body.gender === "string" ? body.gender.trim() : "";
-    const department = typeof body.department === "string" ? body.department.trim() : "";
+
+    const gender =
+      typeof body.gender === "string"
+        ? body.gender.trim()
+        : "";
+
+    const department =
+      typeof body.department === "string"
+        ? body.department.trim()
+        : "";
+
     const employment_type =
-      typeof body.employment_type === "string" ? body.employment_type.trim() : "";
+      typeof body.employment_type === "string"
+        ? body.employment_type.trim()
+        : "";
+
     const work_location =
-      typeof body.work_location === "string" ? body.work_location.trim() : "";
+      typeof body.work_location === "string"
+        ? body.work_location.trim()
+        : "";
 
     const experience = parseExperience(body);
+
     if ("error" in experience) {
-      return NextResponse.json({ error: experience.error }, { status: 400 });
+      return NextResponse.json(
+        { error: experience.error },
+        { status: 400 }
+      );
     }
 
-    // HR selects the joining date and probation duration when generating the Joining Letter.
+    const statutory = parseStatutoryApplicability(body);
+
+    if ("error" in statutory) {
+      return NextResponse.json(
+        { error: statutory.error },
+        { status: 400 }
+      );
+    }
+
     if (
-      !first_name || !last_name || !personal_email || !mobile_number ||
-      !designation || annual_ctc === undefined || annual_ctc === null || annual_ctc === ""
+      !first_name ||
+      !last_name ||
+      !personal_email ||
+      !mobile_number ||
+      !designation ||
+      annual_ctc === undefined ||
+      annual_ctc === null ||
+      annual_ctc === ""
     ) {
-      return NextResponse.json({ error: "Please complete all required fields." }, { status: 400 });
+      return NextResponse.json(
+        { error: "Please complete all required fields." },
+        { status: 400 }
+      );
     }
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(personal_email)) {
-      return NextResponse.json({ error: "Enter a valid personal email address." }, { status: 400 });
+      return NextResponse.json(
+        { error: "Enter a valid personal email address." },
+        { status: 400 }
+      );
     }
 
-    // The form accepts annual CTC in lakhs.
+    if (mobile_number.length < 7 || mobile_number.length > 20) {
+      return NextResponse.json(
+        { error: "Enter a valid mobile number." },
+        { status: 400 }
+      );
+    }
+
+    // The Add Candidate form sends annual CTC in lakhs.
     const ctcInLakhs = Number(annual_ctc);
-    if (!Number.isFinite(ctcInLakhs) || ctcInLakhs < 0 || ctcInLakhs > 9999999) {
+
+    if (
+      !Number.isFinite(ctcInLakhs) ||
+      ctcInLakhs < 0 ||
+      ctcInLakhs > 9999999
+    ) {
       return NextResponse.json(
         { error: "Annual CTC must be a valid non-negative amount." },
         { status: 400 }
       );
     }
 
-    const allowedGenders = ["male", "female", "non_binary", "prefer_not_to_say"] as const;
-    if (!allowedGenders.includes(gender as (typeof allowedGenders)[number])) {
+    if (
+      !allowedGenders.includes(
+        gender as (typeof allowedGenders)[number]
+      )
+    ) {
       return NextResponse.json(
-        { error: "Gender is required. Please select a valid gender." },
+        {
+          error: "Gender is required. Please select a valid gender.",
+        },
         { status: 400 }
       );
     }
 
     if (!department) {
-      return NextResponse.json({ error: "Department is required." }, { status: 400 });
-    }
-
-    const { data: availableDepartments, error: departmentError } = await auth.admin
-      .from("departments")
-      .select("id, name");
-    if (departmentError) throw departmentError;
-
-    const normalizedDepartment =
-      department.toLowerCase() === "human resources" ? "hr" : department.toLowerCase();
-    const matchingDepartments = (availableDepartments ?? []).filter(
-      (item) => item.name.trim().toLowerCase() === normalizedDepartment
-    );
-
-    if (matchingDepartments.length !== 1) {
       return NextResponse.json(
-        { error: `Department "${department}" is not available. Please select a valid department.` },
+        { error: "Department is required." },
         { status: 400 }
       );
     }
 
-    const selectedDepartment = matchingDepartments[0].name;
-    const allowedEmploymentTypes = ["full_time", "contract", "intern"] as const;
-    if (!allowedEmploymentTypes.includes(employment_type as (typeof allowedEmploymentTypes)[number])) {
+    const departmentResult = await validateDepartment(
+      auth.admin,
+      department
+    );
+
+    if ("error" in departmentResult) {
       return NextResponse.json(
-        { error: "Employment type is required. Please select a valid type." },
+        { error: departmentResult.error },
+        { status: 400 }
+      );
+    }
+
+    if (
+      !allowedEmploymentTypes.includes(
+        employment_type as (typeof allowedEmploymentTypes)[number]
+      )
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Employment type is required. Please select a valid type.",
+        },
         { status: 400 }
       );
     }
 
     if (!work_location) {
-      return NextResponse.json({ error: "Work location is required." }, { status: 400 });
+      return NextResponse.json(
+        { error: "Work location is required." },
+        { status: 400 }
+      );
     }
 
     const { data: candidate, error } = await auth.admin
@@ -250,16 +479,31 @@ export async function POST(request: Request) {
         personal_email,
         mobile_number,
         designation,
+
+        // Joining date and probation are not part of candidate creation.
         joining_date: null,
-        annual_ctc: Math.round(ctcInLakhs * 100000),
-        gender,
         probation_period_months: null,
-        department: selectedDepartment,
+
+        // Convert lakhs to rupees before saving.
+        annual_ctc: Math.round(ctcInLakhs * 100000),
+
+        gender,
+        department: departmentResult.department,
         employment_type,
         work_location,
+
         experience_level: experience.experience_level,
-        total_experience_years: experience.total_experience_years,
-        total_experience_months: experience.total_experience_months,
+        total_experience_years:
+          experience.total_experience_years,
+        total_experience_months:
+          experience.total_experience_months,
+
+        // HR-confirmed statutory applicability.
+        pf_eligible: statutory.data.pf_eligible,
+        esi_eligible: statutory.data.esi_eligible,
+        pt_eligible: statutory.data.pt_eligible,
+        tds_eligible: statutory.data.tds_eligible,
+
         created_by: auth.user.id,
         status: "selected",
       })
@@ -267,9 +511,14 @@ export async function POST(request: Request) {
       .single();
 
     if (error) throw error;
-    return NextResponse.json({ candidate }, { status: 201 });
+
+    return NextResponse.json(
+      { candidate },
+      { status: 201 }
+    );
   } catch (error) {
     console.error("POST /api/joining failed:", error);
+
     return NextResponse.json(
       { error: "Failed to create joining candidate" },
       { status: 500 }
@@ -280,140 +529,255 @@ export async function POST(request: Request) {
 export async function PATCH(request: Request) {
   try {
     const auth = await getAuthorizedHr();
+
     if ("error" in auth) {
-      return NextResponse.json({ error: auth.error }, { status: auth.status });
+      return NextResponse.json(
+        { error: auth.error },
+        { status: auth.status }
+      );
     }
 
     let body: Record<string, unknown>;
+
     try {
       const parsedBody: unknown = await request.json();
-      if (
-        typeof parsedBody !== "object" ||
-        parsedBody === null ||
-        Array.isArray(parsedBody)
-      ) {
-        return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
+
+      if (!isObjectBody(parsedBody)) {
+        return NextResponse.json(
+          { error: "Invalid request body." },
+          { status: 400 }
+        );
       }
-      body = parsedBody as Record<string, unknown>;
+
+      body = parsedBody;
     } catch {
-      return NextResponse.json({ error: "Invalid JSON request body." }, { status: 400 });
+      return NextResponse.json(
+        { error: "Invalid JSON request body." },
+        { status: 400 }
+      );
     }
 
-    const id = typeof body.id === "string" ? body.id.trim() : "";
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
-      return NextResponse.json({ error: "Invalid candidate ID." }, { status: 400 });
+    const id =
+      typeof body.id === "string"
+        ? body.id.trim()
+        : "";
+
+    if (!uuidPattern.test(id)) {
+      return NextResponse.json(
+        { error: "Invalid candidate ID." },
+        { status: 400 }
+      );
     }
 
-    const first_name = typeof body.first_name === "string" ? body.first_name.trim() : "";
-    const last_name = typeof body.last_name === "string" ? body.last_name.trim() : "";
-    const mobile_number = typeof body.mobile_number === "string" ? body.mobile_number.trim() : "";
-    const gender = typeof body.gender === "string" ? body.gender.trim() : "";
-    const designation = typeof body.designation === "string" ? body.designation.trim() : "";
-    const department = typeof body.department === "string" ? body.department.trim() : "";
+    const first_name =
+      typeof body.first_name === "string"
+        ? body.first_name.trim()
+        : "";
+
+    const last_name =
+      typeof body.last_name === "string"
+        ? body.last_name.trim()
+        : "";
+
+    const mobile_number =
+      typeof body.mobile_number === "string"
+        ? body.mobile_number.trim()
+        : "";
+
+    const gender =
+      typeof body.gender === "string"
+        ? body.gender.trim()
+        : "";
+
+    const designation =
+      typeof body.designation === "string"
+        ? body.designation.trim()
+        : "";
+
+    const department =
+      typeof body.department === "string"
+        ? body.department.trim()
+        : "";
+
     const employment_type =
-      typeof body.employment_type === "string" ? body.employment_type.trim() : "";
+      typeof body.employment_type === "string"
+        ? body.employment_type.trim()
+        : "";
+
     const work_location =
-      typeof body.work_location === "string" ? body.work_location.trim() : "";
+      typeof body.work_location === "string"
+        ? body.work_location.trim()
+        : "";
+
     const annual_ctc = Number(body.annual_ctc);
 
     if (
-      !first_name || !last_name || !mobile_number || !gender || !designation ||
-      !department || !work_location || !Number.isFinite(annual_ctc) || annual_ctc < 0
+      !first_name ||
+      !last_name ||
+      !mobile_number ||
+      !gender ||
+      !designation ||
+      !department ||
+      !work_location ||
+      body.annual_ctc === null ||
+      body.annual_ctc === undefined ||
+      body.annual_ctc === "" ||
+      !Number.isFinite(annual_ctc) ||
+      annual_ctc < 0
     ) {
       return NextResponse.json(
-        { error: "Please enter all required candidate and offer details." },
+        {
+          error:
+            "Please enter all required candidate and offer details.",
+        },
         { status: 400 }
       );
     }
 
-    const { data: availableDepartments, error: departmentError } = await auth.admin
-      .from("departments")
-      .select("id, name");
-    if (departmentError) throw departmentError;
+    if (mobile_number.length < 7 || mobile_number.length > 20) {
+      return NextResponse.json(
+        { error: "Enter a valid mobile number." },
+        { status: 400 }
+      );
+    }
 
-    const normalizedDepartment =
-      department.toLowerCase() === "human resources" ? "hr" : department.toLowerCase();
-    const matchingDepartments = (availableDepartments ?? []).filter(
-      (item) => item.name.trim().toLowerCase() === normalizedDepartment
+    if (
+      !allowedGenders.includes(
+        gender as (typeof allowedGenders)[number]
+      )
+    ) {
+      return NextResponse.json(
+        { error: "Select a valid gender." },
+        { status: 400 }
+      );
+    }
+
+    if (
+      !allowedEmploymentTypes.includes(
+        employment_type as (typeof allowedEmploymentTypes)[number]
+      )
+    ) {
+      return NextResponse.json(
+        { error: "Select a valid employment type." },
+        { status: 400 }
+      );
+    }
+
+    const departmentResult = await validateDepartment(
+      auth.admin,
+      department
     );
 
-    if (matchingDepartments.length !== 1) {
+    if ("error" in departmentResult) {
       return NextResponse.json(
-        { error: `Department "${department}" is not available. Please select a valid department.` },
+        { error: departmentResult.error },
         { status: 400 }
       );
     }
 
-    const selectedDepartment = matchingDepartments[0].name;
-    if (mobile_number.length < 7 || mobile_number.length > 20) {
-      return NextResponse.json({ error: "Enter a valid mobile number." }, { status: 400 });
-    }
-
-    const allowedGenders = ["male", "female", "non_binary", "prefer_not_to_say"];
-    if (!allowedGenders.includes(gender)) {
-      return NextResponse.json({ error: "Select a valid gender." }, { status: 400 });
-    }
-
-    const allowedEmploymentTypes = ["full_time", "contract", "intern"];
-    if (!allowedEmploymentTypes.includes(employment_type)) {
-      return NextResponse.json({ error: "Select a valid employment type." }, { status: 400 });
-    }
-
-    const { data: existingCandidate, error: lookupError } = await auth.admin
-      .from("joining_candidates")
-      .select("id, status, experience_level, total_experience_years, total_experience_months")
-      .eq("id", id)
-      .maybeSingle();
+    const { data: existingCandidate, error: lookupError } =
+      await auth.admin
+        .from("joining_candidates")
+        .select(
+          "id, status, experience_level, total_experience_years, total_experience_months"
+        )
+        .eq("id", id)
+        .maybeSingle();
 
     if (lookupError) throw lookupError;
+
     if (!existingCandidate) {
-      return NextResponse.json({ error: "Joining candidate not found." }, { status: 404 });
+      return NextResponse.json(
+        { error: "Joining candidate not found." },
+        { status: 404 }
+      );
     }
-    if (!["selected", "offer_sent"].includes(existingCandidate.status)) {
-      return NextResponse.json({ error: "This candidate can no longer be edited." }, { status: 409 });
+
+    if (
+      !["selected", "offer_sent"].includes(
+        existingCandidate.status
+      )
+    ) {
+      return NextResponse.json(
+        { error: "This candidate can no longer be edited." },
+        { status: 409 }
+      );
     }
 
     // Preserve saved experience when an older client omits these fields.
     const experience = parseExperience({
       experience_level:
-        body.experience_level ?? existingCandidate.experience_level ?? "fresher",
+        body.experience_level ??
+        existingCandidate.experience_level ??
+        "fresher",
+
       total_experience_years:
-        body.total_experience_years ?? existingCandidate.total_experience_years ?? 0,
+        body.total_experience_years ??
+        existingCandidate.total_experience_years ??
+        0,
+
       total_experience_months:
-        body.total_experience_months ?? existingCandidate.total_experience_months ?? 0,
+        body.total_experience_months ??
+        existingCandidate.total_experience_months ??
+        0,
     });
 
     if ("error" in experience) {
-      return NextResponse.json({ error: experience.error }, { status: 400 });
+      return NextResponse.json(
+        { error: experience.error },
+        { status: 400 }
+      );
     }
 
-    const { data: candidate, error: updateError } = await auth.admin
-      .from("joining_candidates")
-      .update({
-        first_name,
-        last_name,
-        mobile_number,
-        gender,
-        designation,
-        department: selectedDepartment,
-        employment_type,
-        work_location,
-        annual_ctc: Math.round(annual_ctc),
-        experience_level: experience.experience_level,
-        total_experience_years: experience.total_experience_years,
-        total_experience_months: experience.total_experience_months,
-      })
-      .eq("id", id)
-      .select("*")
-      .single();
+    const statutory = parseStatutoryApplicability(body);
+
+    if ("error" in statutory) {
+      return NextResponse.json(
+        { error: statutory.error },
+        { status: 400 }
+      );
+    }
+
+    const { data: candidate, error: updateError } =
+      await auth.admin
+        .from("joining_candidates")
+        .update({
+          first_name,
+          last_name,
+          mobile_number,
+          gender,
+          designation,
+          department: departmentResult.department,
+          employment_type,
+          work_location,
+
+          // PATCH receives the stored CTC in rupees.
+          annual_ctc: Math.round(annual_ctc),
+
+          experience_level: experience.experience_level,
+          total_experience_years:
+            experience.total_experience_years,
+          total_experience_months:
+            experience.total_experience_months,
+
+          pf_eligible: statutory.data.pf_eligible,
+          esi_eligible: statutory.data.esi_eligible,
+          pt_eligible: statutory.data.pt_eligible,
+          tds_eligible: statutory.data.tds_eligible,
+        })
+        .eq("id", id)
+        .select("*")
+        .single();
 
     if (updateError) throw updateError;
+
     return NextResponse.json({
       message: "Candidate offer details updated successfully.",
       candidate,
     });
   } catch (error) {
     console.error("PATCH /api/joining failed:", error);
+
     return NextResponse.json(
       { error: "Failed to update candidate offer details." },
       { status: 500 }

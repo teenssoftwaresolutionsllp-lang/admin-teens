@@ -610,6 +610,11 @@ export class DataStore {
       client_type: empData.client_type || null,
       company_name: empData.company_name || null,
 
+      probation_duration: empData.probation_duration ?? 6,
+      experience_level: empData.experience_level || null,
+      total_experience_years: empData.total_experience_years ?? null,
+      total_experience_months: empData.total_experience_months ?? null,
+
       status: empData.status || "active",
       salary: empData.salary ?? 0,
 
@@ -636,6 +641,7 @@ export class DataStore {
       pan_number: empData.pan_number || null,
       aadhar_number: empData.aadhar_number || null,
       passport_number: empData.passport_number || null,
+      driving_license_number: empData.driving_license_number || null,
 
       // =========================
       // ACCESSORIES
@@ -782,12 +788,13 @@ export class DataStore {
       this.seedEmployeeToCache(data as Employee);
 
       return data as Employee;
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errObj = error as { message?: string; details?: string; hint?: string; code?: string } | null;
       console.error("updateEmployee failed:", error);
-      console.error("Message:", error?.message);
-      console.error("Details:", error?.details);
-      console.error("Hint:", error?.hint);
-      console.error("Code:", error?.code);
+      console.error("Message:", errObj?.message);
+      console.error("Details:", errObj?.details);
+      console.error("Hint:", errObj?.hint);
+      console.error("Code:", errObj?.code);
 
       throw error;
     }
@@ -906,7 +913,7 @@ export class DataStore {
       if (requests.length === 0) return [];
 
       const requestIds = requests
-        .map((request: any) => request.id)
+        .map((request: { id?: string }) => request.id)
         .filter(Boolean);
 
       const { data: documents, error: documentsError } = await supabase
@@ -918,7 +925,7 @@ export class DataStore {
 
       if (documentsError) throw documentsError;
 
-      const documentsByRequest = new Map<string, any[]>();
+      const documentsByRequest = new Map<string, unknown[]>();
 
       for (const document of documents ?? []) {
         const requestId = document.profile_change_request_id;
@@ -930,10 +937,10 @@ export class DataStore {
         documentsByRequest.set(requestId, current);
       }
 
-      return requests.map((request: any) => ({
+      return requests.map((request: { id: string }) => ({
         ...request,
         supporting_documents: documentsByRequest.get(request.id) ?? [],
-      })) as ProfileChangeRequest[];
+      })) as unknown as ProfileChangeRequest[];
     } catch (error) {
       console.error("Failed to load profile change requests:", error);
       throw error;
@@ -947,8 +954,8 @@ export class DataStore {
     previousValues,
   }: {
     employeeId: string;
-    requestedChanges: Record<string, any>;
-    previousValues?: Record<string, any>;
+    requestedChanges: Record<string, unknown>;
+    previousValues?: Record<string, unknown>;
   }): Promise<ProfileChangeRequest> {
     const cache = getCache();
     const employee = await this.getEmployeeById(employeeId);
@@ -1258,7 +1265,7 @@ export class DataStore {
     }
 
     return (data || [])
-      .map((row: any) => {
+      .map((row: { holiday_date?: string | null }) => {
         const date =
           String(
             row.holiday_date
@@ -3012,7 +3019,7 @@ static async reviewLeaveRequest({
       const deductions: Array<{
         year: number;
         days: number;
-        balance: Record<string, any>;
+        balance: Record<string, unknown>;
       }> = [];
 
       // 5. Prepare deductions for each calendar year.
@@ -3830,7 +3837,10 @@ static async reviewLeaveRequest({
     // CREATE HOLIDAY MAP
     // =========================================================
 
-    const holidayMap = new Map<string, any[]>();
+    const holidayMap = new Map<
+      string,
+      Array<{ is_working_day?: boolean | null; is_optional?: boolean | null }>
+    >();
 
     for (const holiday of holidayRows || []) {
       const holidayDate = String(
@@ -4082,7 +4092,7 @@ static async reviewLeaveRequest({
 
         const leave =
           (empLeaves || []).find(
-            (request: any) => {
+            (request: { start_date?: string | null; end_date?: string | null }) => {
               const startDate =
                 String(
                   request.start_date
@@ -4372,7 +4382,7 @@ static async reviewLeaveRequest({
         ? existingPayslip.earnings_breakup
         : [];
 
-      const existingAdditionalEarningBreakup = existingEarningsBreakup.filter((earning: any) => earning?.code === "INCENTIVE" || earning?.code === "BONUS" || earning?.code === "COMPENSATION");
+      const existingAdditionalEarningBreakup = existingEarningsBreakup.filter((earning: { code?: string }) => earning?.code === "INCENTIVE" || earning?.code === "BONUS" || earning?.code === "COMPENSATION");
       // -------------------------------------------------------
       // NEW ADDITIONAL EARNING BREAKUP
       // -------------------------------------------------------
@@ -4510,14 +4520,14 @@ static async reviewLeaveRequest({
       // SAVE / UPDATE PAYSLIP
       // =======================================================
 
-      let savedPayslip: any = null;
-      let payslipError: any = null;
+      let savedPayslip: Record<string, unknown> | null = null;
+      let payslipError: { message?: string } | null = null;
 
-      if ((existingPayslip as any)?.id) {
+      if ((existingPayslip as { id?: string })?.id) {
         const res = await supabase
           .from("payslips")
           .update(payslipData)
-          .eq("id", (existingPayslip as any).id)
+          .eq("id", (existingPayslip as { id: string }).id)
           .select()
           .single();
         savedPayslip = res.data;
@@ -4543,7 +4553,7 @@ static async reviewLeaveRequest({
       // =======================================================
 
       const payslip: Payslip = {
-        ...(savedPayslip as Payslip),
+        ...(savedPayslip as unknown as Payslip),
         employee: emp,
       };
 

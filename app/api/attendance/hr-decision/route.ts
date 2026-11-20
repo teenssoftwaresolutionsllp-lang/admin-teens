@@ -8,21 +8,6 @@ const ALLOWED_STATUSES = ["present", "absent", "half_day"] as const;
 
 type DecisionStatus = (typeof ALLOWED_STATUSES)[number];
 
-type Employee = {
-  id: string;
-  employee_id: string;
-  first_name: string | null;
-  last_name: string | null;
-  status: string;
-  joining_date: string;
-  exit_date: string | null;
-  planned_last_working_date: string | null;
-  project_id: string | null;
-  retained_calendar_id: string | null;
-  retained_shift_start_time: string | null;
-  retained_shift_end_time: string | null;
-  shift_type: string | null;
-};
 
 function indiaToday(): string {
   return new Intl.DateTimeFormat("en-CA", {

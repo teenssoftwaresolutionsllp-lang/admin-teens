@@ -8,6 +8,7 @@ import {
   Project,
   HolidayCalendar,
 } from "@/lib/types";
+import Image from "next/image";
 import {
   Clock,
   Search,
@@ -167,7 +168,6 @@ export default function AttendanceManager({
   projects,
   approvedLeaves,
   attendanceSettings,
-  holidayCalendars,
   canManageAttendanceSettings,
   globalAttendanceSetting,
 }: AttendanceManagerProps) {
@@ -1133,10 +1133,12 @@ export default function AttendanceManager({
                       <div className="flex items-center gap-3">
                         <div className="h-9 w-9 shrink-0 overflow-hidden rounded-full bg-indigo-100">
                           {emp.profile_photo_url ? (
-                            <img
+                            <Image
                               src={emp.profile_photo_url}
                               alt={`${emp.first_name ?? ""} ${emp.last_name ?? ""}`}
-                              className="h-full w-full object-cover"
+                              width={40}
+                              height={40}
+                              className="w-full h-full object-cover"
                             />
                           ) : (
                             <div className="flex h-full w-full items-center justify-center bg-indigo-600 text-[10px] font-bold text-white">

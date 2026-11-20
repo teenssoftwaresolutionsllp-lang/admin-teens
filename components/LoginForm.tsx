@@ -33,8 +33,9 @@ export default function LoginForm() {
       const data = await res.json();
       router.push(data.redirectTo || "/dashboard");
       router.refresh();
-    } catch (err: any) {
-      setError(err.message || "An error occurred during sign in");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "An error occurred during sign in";
+      setError(message);
     } finally {
       setLoading(false);
     }

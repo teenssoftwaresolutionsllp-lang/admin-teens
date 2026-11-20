@@ -41,7 +41,6 @@ const ALLOWED_TYPES = [
   "image/png",
 ];
 const ALLOWED_EXTENSIONS = ["pdf", "jpg", "jpeg", "png"];
-const DOCUMENT_TYPE = "Resignation Letter";
 
 function getLocalDateString() {
   const today = new Date();
@@ -94,8 +93,10 @@ export default function ResignationForm({ employeeId }: Props) {
     ? addDays(resignationDate, noticePeriodDays)
     : "";
 
-  const loadRequests = useCallback(async () => {
-    setLoading(true);
+  const loadRequests = useCallback(async (showLoading = false) => {
+    if (showLoading) {
+      setLoading(true);
+    }
 
     try {
       const response = await fetch("/api/resignations", {
@@ -111,6 +112,7 @@ export default function ResignationForm({ employeeId }: Props) {
       }
 
       setRequests(data.requests ?? []);
+      setError("");
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Unable to load requests."
@@ -121,8 +123,45 @@ export default function ResignationForm({ employeeId }: Props) {
   }, []);
 
   useEffect(() => {
-    void loadRequests();
-  }, [loadRequests]);
+    let cancelled = false;
+
+    const fetchRequests = async () => {
+      try {
+        const response = await fetch("/api/resignations", {
+          cache: "no-store",
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(
+            data.error || "Unable to load resignation requests."
+          );
+        }
+
+        if (!cancelled) {
+          setRequests(data.requests ?? []);
+          setError("");
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(
+            err instanceof Error ? err.message : "Unable to load requests."
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    };
+
+    void fetchRequests();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Keep today's minimum date current while the page remains open.
   useEffect(() => {

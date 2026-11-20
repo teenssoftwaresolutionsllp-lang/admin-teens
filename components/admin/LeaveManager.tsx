@@ -20,6 +20,7 @@ import {
   ArrowUpRight,
 } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 
 interface LeaveManagerProps {
   leaveTypes: LeaveType[];
@@ -902,7 +903,13 @@ export default function LeaveManager({
                       >
                         <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[10px] font-bold shrink-0 overflow-hidden">
                           {employee.profile_photo_url ? (
-                            <img src={employee.profile_photo_url} alt="" className="w-full h-full object-cover" />
+                            <Image
+                            src={employee.profile_photo_url}
+                            alt=""
+                            width={40}
+                            height={40}
+                            className="w-full h-full object-cover"
+                          />
                           ) : (
                             <>{employee.first_name?.[0]}{employee.last_name?.[0]}</>
                           )}
@@ -929,7 +936,13 @@ export default function LeaveManager({
                   <div className="flex items-center gap-2.5 min-w-0">
                     <div className="w-9 h-9 rounded-full bg-indigo-600 text-white flex items-center justify-center text-xs font-bold shrink-0 overflow-hidden">
                       {selectedEmployee.profile_photo_url ? (
-                        <img src={selectedEmployee.profile_photo_url} alt="" className="w-full h-full object-cover" />
+                        <Image
+                          src={selectedEmployee.profile_photo_url}
+                          alt=""
+                          width={40}
+                          height={40}
+                          className="w-full h-full object-cover"
+                        />
                       ) : (
                         <>{selectedEmployee.first_name?.[0]}{selectedEmployee.last_name?.[0]}</>
                       )}

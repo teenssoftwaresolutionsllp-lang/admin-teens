@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, startTransition } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   ProfileChangeRequest,
@@ -8,6 +8,7 @@ import {
   ResignationRequest,
   WfhRequest,
 } from "@/lib/types";
+import Image from "next/image";
 import {
   CheckSquare,
   UserCheck,
@@ -37,6 +38,14 @@ interface ApprovalsHubProps {
 type Feedback = {
   msg: string;
   type: "success" | "error";
+};
+
+type DepartmentRecord = {
+  employee?: {
+    department?: { name?: string | null } | null;
+    departments?: { name?: string | null } | null;
+    department_name?: string | null;
+  } | null;
 };
 
 export default function ApprovalsHub({
@@ -77,7 +86,7 @@ export default function ApprovalsHub({
   const [resignationRequests, setResignationRequests] = useState<ResignationRequest[]>(initialResignationRequests);
   const [noticePeriodValue, setNoticePeriodValue] = useState("30");
   const [noticePeriodUnit, setNoticePeriodUnit] = useState<"days" | "months">("days");
-  const [temporaryLoginDays, setTemporaryLoginDays] = useState("0");
+  const [temporaryLoginDays] = useState("0");
   const [wfhRequests, setWfhRequests] = useState<WfhRequest[]>(initialWfhRequests);
 
 
@@ -114,20 +123,28 @@ export default function ApprovalsHub({
 
 
   useEffect(() => {
-    setActiveTab(selectedLeaveId || requestedTab === "leaves" || requestedLeaveType !== "ALL" ? "leaves" : "profile");
-    setProfileStatusFilter("all");
-    setLeaveDepartmentFilter("all");
-    setLeaveDurationFilter("all");
-    setLeaveEmployeeSearch("");
-    setLeaveHistoryStatusFilter("all");
-    setLeaveFromDate("");
-    setLeaveToDate("");
-    setLeaveTypeFilter(requestedLeaveType);
-    setResignationDepartmentFilter("all");
-    setResignationHistoryStatusFilter("all");
-    setResignationEmployeeSearch("");
-    setResignationFromDate("");
-    setResignationToDate("");
+    startTransition(() => {
+      setActiveTab(
+        selectedLeaveId ||
+          requestedTab === "leaves" ||
+          requestedLeaveType !== "ALL"
+          ? "leaves"
+          : "profile"
+      );
+      setProfileStatusFilter("all");
+      setLeaveDepartmentFilter("all");
+      setLeaveDurationFilter("all");
+      setLeaveEmployeeSearch("");
+      setLeaveHistoryStatusFilter("all");
+      setLeaveFromDate("");
+      setLeaveToDate("");
+      setLeaveTypeFilter(requestedLeaveType);
+      setResignationDepartmentFilter("all");
+      setResignationHistoryStatusFilter("all");
+      setResignationEmployeeSearch("");
+      setResignationFromDate("");
+      setResignationToDate("");
+    });
   }, [isHistoryView, selectedLeaveId, requestedLeaveType, requestedTab]);
 
 
@@ -813,7 +830,7 @@ export default function ApprovalsHub({
 
   // Always show the department name, never a raw department ID.
   // The data query must include employee.department.name for this to populate.
-  const getDepartmentKey = (record: any): string => {
+  const getDepartmentKey = (record: DepartmentRecord): string => {
     const employee = record?.employee;
     const departmentName =
       employee?.department?.name ??
@@ -1817,9 +1834,11 @@ export default function ApprovalsHub({
                             <div className="flex items-center gap-3">
                               <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-indigo-600 text-xs font-bold text-white">
                                 {emp?.profile_photo_url ? (
-                                  <img
+                                  <Image
                                     src={emp.profile_photo_url}
                                     alt={`${emp.first_name ?? ""} ${emp.last_name ?? ""}`}
+                                    width={36}
+                                    height={36}
                                     className="h-full w-full object-cover"
                                   />
                                 ) : (
@@ -1964,11 +1983,13 @@ export default function ApprovalsHub({
                             <div className="flex items-center gap-3">
                               <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-indigo-600 text-xs font-bold text-white">
                                 {emp?.profile_photo_url ? (
-                                  <img
-                                    src={emp.profile_photo_url}
-                                    alt={`${emp.first_name ?? ""} ${emp.last_name ?? ""}`}
-                                    className="h-full w-full object-cover"
-                                  />
+                                  <Image
+                                  src={emp.profile_photo_url}
+                                  alt={`${emp.first_name ?? ""} ${emp.last_name ?? ""}`}
+                                  width={36}
+                                  height={36}
+                                  className="h-full w-full object-cover"
+                                />
                                 ) : (
                                   <>
                                     {emp?.first_name?.charAt(0)?.toUpperCase() ||

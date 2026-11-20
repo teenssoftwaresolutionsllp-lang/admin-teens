@@ -10,6 +10,34 @@ import DocumentUpload from "./DocumentUpload";
 
 const companies = companiesData.companies;
 
+interface JoiningCandidate {
+  id: string;
+  first_name: string;
+  last_name: string;
+  personal_email: string | null;
+  mobile_number: string | null;
+  designation: string | null;
+  joining_date: string | null;
+  annual_ctc: number | null;
+  status: string;
+  gender: string | null;
+  probation_period_months: number | null;
+  department: string | null;
+  employment_type: string | null;
+  work_location: string | null;
+  experience_level: string | null;
+  total_experience_years: number | null;
+  total_experience_months: number | null;
+  pf_eligible: boolean;
+  esi_eligible: boolean;
+  pt_eligible: boolean;
+  tds_eligible: boolean;
+  onboarding_status: string;
+  onboarding_submission_id: string | null;
+  conversion_status: string;
+  employee_record_id: string | null;
+}
+
 interface EmployeeFormProps {
   employee?: Employee;
   departments: Department[];
@@ -17,10 +45,11 @@ interface EmployeeFormProps {
   generatedEmployeeId?: string;
   mode: "add" | "edit";
   role: UserRole;
+  candidate?: JoiningCandidate | null;
 }
 
 
-export default function EmployeeForm({ employee, departments, projects, generatedEmployeeId, mode, role }: EmployeeFormProps) {
+export default function EmployeeForm({ employee, departments, projects, generatedEmployeeId, mode, role,candidate = null, }: EmployeeFormProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState(0);
   const [isEmailEditing, setIsEmailEditing] = useState(false);
@@ -74,7 +103,7 @@ export default function EmployeeForm({ employee, departments, projects, generate
 
 
     // Employment Information
-    employee_id: employee?.employee_id || "",
+    employee_id: employee?.employee_id || generatedEmployeeId || "",
     department_id: employee?.department_id || "",
     project_id: employee?.project_id || "",
     shift_type: employee?.shift_type || "general",
@@ -145,25 +174,25 @@ export default function EmployeeForm({ employee, departments, projects, generate
     // Initial Login
     initial_password: "Employee@123",
 
-  } as any);
+  } as Partial<Employee> & { initial_password?: string });
 
   useEffect(() => {
-  if (mode === "add") {
-    fetch("/api/employees/next-id")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.employee_id) {
-          setFormData((prev) => ({
-            ...prev,
-            employee_id: data.employee_id,
-          }));
-        }
-      })
-      .catch((error) => {
-        console.error("Failed to generate employee ID:", error);
-      });
-  }
-  }, [mode]);
+    if (mode === "add" && !candidate) {
+      fetch("/api/employees/next-id")
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.employee_id) {
+            setFormData((prev) => ({
+              ...prev,
+              employee_id: data.employee_id,
+            }));
+          }
+        })
+        .catch((error) => {
+          console.error("Failed to fetch employee ID:", error);
+        });
+    }
+  }, [mode, candidate]);
 
   useEffect(() => {
     if (!employee) return;
@@ -171,6 +200,7 @@ export default function EmployeeForm({ employee, departments, projects, generate
     // =========================
     // STATUTORY
     // =========================
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setEsiEligible(employee.esi_healthcare_eligible ?? false);
     setEsiNumber(employee.esi_number ?? "");
 
@@ -303,7 +333,7 @@ export default function EmployeeForm({ employee, departments, projects, generate
 
       // Don't change this in edit
       initial_password: "Employee@123",
-    } as any);
+    } as Partial<Employee> & { initial_password?: string });
   }, [employee]);
 
 
@@ -406,8 +436,9 @@ const handleManagerPermission = async () => {
     setIsReportingManager(nextValue);
     toast.success(data.message || "Manager permission updated successfully");
     router.refresh();
-  } catch (err: any) {
-    toast.error(err?.message || "Failed to update manager permission");
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Failed to update manager permission";
+    toast.error(message);
   } finally {
     setIsManagerPermissionLoading(false);
   }
@@ -540,12 +571,12 @@ const handleSubmit = async (e: React.FormEvent) => {
     const method = mode === "add" ? "POST" : "PUT";
 
       const {
-        initial_password,
+        initial_password: _initial_password,
         ...employeeData
       } = formData;
+      void _initial_password;
 
-
-    let payload: any = {
+    const payload: Record<string, unknown> = {
       ...employeeData,
 
       // Client
@@ -618,11 +649,11 @@ const handleSubmit = async (e: React.FormEvent) => {
     );
 
     router.refresh();
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Employee save error:", err);
 
     const message =
-      err?.message || "Failed to save employee";
+      err instanceof Error ? err.message : "Failed to save employee";
 
     setError([message]);
     toast.error(message);
@@ -836,7 +867,7 @@ const handleSubmit = async (e: React.FormEvent) => {
                   <input
                     type="text"
                     name="initial_password"
-                    value={(formData as any).initial_password || "Employee@123"}
+                    value={formData.initial_password || "Employee@123"}
                     onChange={handleChange}
                     className="w-full max-w-xs rounded-xl border border-indigo-300 bg-white px-3.5 py-2 text-sm font-mono text-indigo-950 font-bold shadow-sm"
                   />
@@ -1325,7 +1356,7 @@ const handleSubmit = async (e: React.FormEvent) => {
               </select>
 
               <p className="text-[11px] text-slate-500 mt-1.5">
-                Applies when no project is assigned. An assigned project's shift settings always take priority.
+                Applies when no project is assigned. An assigned project&apos;s shift settings always take priority.
               </p>
             </div>
 
@@ -1353,7 +1384,7 @@ const handleSubmit = async (e: React.FormEvent) => {
                 </select>
 
                 <p className="text-[11px] text-slate-500 mt-1.5">
-                  Project assignment is optional. When assigned, the project's timezone,
+                  Project assignment is optional. When assigned, the project&apos;s timezone,
                   shift rules, and linked holiday calendar take priority over the employee shift.
                 </p>
               </div>
@@ -2447,4 +2478,3 @@ const handleSubmit = async (e: React.FormEvent) => {
     </div>
   );
 }
-

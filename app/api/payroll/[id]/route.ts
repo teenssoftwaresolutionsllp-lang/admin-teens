@@ -4,20 +4,21 @@ import {
   createClient,
   createAdminClient,
 } from "@/lib/supabase-server";
-import { Payslip } from "@/lib/types";
+import { Payslip, Employee } from "@/lib/types";
 
 // Employer-paid amounts must never appear in employee payslip data.
 function isEmployerContribution(
   key: string,
-  value: any
+  value: unknown
 ): boolean {
+  const v = value as Record<string, unknown> | null | undefined;
   const text = [
     key,
-    value?.name,
-    value?.component_name,
-    value?.code,
-    value?.component_code,
-    value?.type,
+    v?.name,
+    v?.component_name,
+    v?.code,
+    v?.component_code,
+    v?.type,
   ]
     .filter(Boolean)
     .join(" ")
@@ -35,7 +36,7 @@ function isEmployerContribution(
 }
 
 // Supports both array-based and object-based breakup formats.
-function filterEmployeeBreakup(value: any): any {
+function filterEmployeeBreakup(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.filter(
       (item) => !isEmployerContribution("", item)
@@ -129,11 +130,11 @@ export async function GET(
       );
     }
 
-    let employee: any = null;
+    let employee: Partial<Employee> | null = null;
 
     if (isAdmin) {
       // Preserve the existing HR/CEO employee details.
-      employee = payslip.employee;
+      employee = payslip.employee || null;
 
       if (!employee && payslip.employee_id) {
         employee =
@@ -224,18 +225,18 @@ export async function GET(
       ytd.netSalary += Number(slip.net_salary || 0);
       ytd.lopDeduction += Number(slip.lop_deduction || 0);
 
-      const earnings = isAdmin
+      const earnings = (isAdmin
         ? slip.earnings_breakup || {}
-        : filterEmployeeBreakup(slip.earnings_breakup || {});
+        : filterEmployeeBreakup(slip.earnings_breakup || {})) as Record<string, unknown>;
 
       for (const [key, value] of Object.entries(earnings)) {
         ytd.earnings[key] =
           (ytd.earnings[key] || 0) + Number(value || 0);
       }
 
-      const deductions = isAdmin
+      const deductions = (isAdmin
         ? slip.deductions_breakup || {}
-        : filterEmployeeBreakup(slip.deductions_breakup || {});
+        : filterEmployeeBreakup(slip.deductions_breakup || {})) as Record<string, unknown>;
 
       for (const [key, value] of Object.entries(deductions)) {
         ytd.deductions[key] =

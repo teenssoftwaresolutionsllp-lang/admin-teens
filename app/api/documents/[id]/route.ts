@@ -72,15 +72,17 @@ export async function DELETE(
     return NextResponse.json({
       message: 'Document deleted successfully',
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error(
       'API Error in DELETE /api/documents/[id]:',
       error
     );
 
+    const message = error instanceof Error ? error.message : 'Internal server error';
+
     return NextResponse.json(
       {
-        error: error?.message || 'Internal server error',
+        error: message,
       },
       { status: 500 }
     );
