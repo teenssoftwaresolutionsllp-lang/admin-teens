@@ -10,6 +10,34 @@ import DocumentUpload from "./DocumentUpload";
 
 const companies = companiesData.companies;
 
+interface JoiningCandidate {
+  id: string;
+  first_name: string;
+  last_name: string;
+  personal_email: string | null;
+  mobile_number: string | null;
+  designation: string | null;
+  joining_date: string | null;
+  annual_ctc: number | null;
+  status: string;
+  gender: string | null;
+  probation_period_months: number | null;
+  department: string | null;
+  employment_type: string | null;
+  work_location: string | null;
+  experience_level: string | null;
+  total_experience_years: number | null;
+  total_experience_months: number | null;
+  pf_eligible: boolean;
+  esi_eligible: boolean;
+  pt_eligible: boolean;
+  tds_eligible: boolean;
+  onboarding_status: string;
+  onboarding_submission_id: string | null;
+  conversion_status: string;
+  employee_record_id: string | null;
+}
+
 interface EmployeeFormProps {
   employee?: Employee;
   departments: Department[];
@@ -17,10 +45,11 @@ interface EmployeeFormProps {
   generatedEmployeeId?: string;
   mode: "add" | "edit";
   role: UserRole;
+  candidate?: JoiningCandidate | null;
 }
 
 
-export default function EmployeeForm({ employee, departments, projects, generatedEmployeeId, mode, role }: EmployeeFormProps) {
+export default function EmployeeForm({ employee, departments, projects, generatedEmployeeId, mode, role,candidate = null, }: EmployeeFormProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState(0);
   const [isEmailEditing, setIsEmailEditing] = useState(false);
@@ -148,22 +177,22 @@ export default function EmployeeForm({ employee, departments, projects, generate
   } as Partial<Employee> & { initial_password?: string });
 
   useEffect(() => {
-  if (mode === "add") {
-    fetch("/api/employees/next-id")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.employee_id) {
-          setFormData((prev) => ({
-            ...prev,
-            employee_id: data.employee_id,
-          }));
-        }
-      })
-      .catch((error) => {
-        console.error("Failed to generate employee ID:", error);
-      });
-  }
-  }, [mode]);
+    if (mode === "add" && !candidate) {
+      fetch("/api/employees/next-id")
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.employee_id) {
+            setFormData((prev) => ({
+              ...prev,
+              employee_id: data.employee_id,
+            }));
+          }
+        })
+        .catch((error) => {
+          console.error("Failed to fetch employee ID:", error);
+        });
+    }
+  }, [mode, candidate]);
 
   useEffect(() => {
     if (!employee) return;
@@ -2449,4 +2478,3 @@ const handleSubmit = async (e: React.FormEvent) => {
     </div>
   );
 }
-

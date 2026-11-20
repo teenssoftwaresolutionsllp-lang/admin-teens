@@ -610,6 +610,11 @@ export class DataStore {
       client_type: empData.client_type || null,
       company_name: empData.company_name || null,
 
+      probation_duration: empData.probation_duration ?? 6,
+      experience_level: empData.experience_level || null,
+      total_experience_years: empData.total_experience_years ?? null,
+      total_experience_months: empData.total_experience_months ?? null,
+
       status: empData.status || "active",
       salary: empData.salary ?? 0,
 
@@ -636,6 +641,7 @@ export class DataStore {
       pan_number: empData.pan_number || null,
       aadhar_number: empData.aadhar_number || null,
       passport_number: empData.passport_number || null,
+      driving_license_number: empData.driving_license_number || null,
 
       // =========================
       // ACCESSORIES

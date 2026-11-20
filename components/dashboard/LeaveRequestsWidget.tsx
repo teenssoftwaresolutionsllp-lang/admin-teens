@@ -1,6 +1,8 @@
+"use client";
+
 import Image from "next/image";
 import Link from "next/link";
-import { CalendarDays, Clock3 } from "lucide-react";
+import { CalendarDays, CalendarCheck, Clock3, ArrowRight } from "lucide-react";
 
 export interface DashboardLeaveRequest {
   id: string;
@@ -41,10 +43,10 @@ function StatusBadge({
   status: DashboardLeaveRequest["status"];
 }) {
   const styles = {
-    pending: "bg-amber-50 text-amber-700",
-    approved: "bg-green-50 text-green-700",
-    rejected: "bg-red-50 text-red-700",
-    cancelled: "bg-slate-100 text-slate-600",
+    pending: "bg-[#eef2ff] text-[#4f46e5] border border-indigo-100",
+    approved: "bg-[#e6f9f0] text-[#059669] border border-emerald-100",
+    rejected: "bg-[#fef2f2] text-[#e11d48] border border-rose-100",
+    cancelled: "bg-slate-100 text-slate-600 border border-slate-200",
   };
 
   const labels = {
@@ -56,7 +58,7 @@ function StatusBadge({
 
   return (
     <span
-      className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-semibold ${styles[status]}`}
+      className={`inline-flex whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold ${styles[status]}`}
     >
       {labels[status]}
     </span>
@@ -67,90 +69,94 @@ export default function LeaveRequestsWidget({
   requests,
 }: LeaveRequestsWidgetProps) {
   return (
-    <section className="flex h-full min-h-[400px] min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <section className="flex h-full min-w-0 w-full flex-col justify-between overflow-hidden rounded-2xl border border-slate-200/90 bg-white p-5 shadow-sm transition-all">
       {/* Header */}
-      <div className="mb-4 flex shrink-0 items-center justify-between gap-3">
-        <div>
-          <h2 className="text-base font-semibold text-slate-800">
-            Leave Requests
-          </h2>
-          <p className="mt-1 text-xs text-slate-500">
-            This Week
-          </p>
+      <div>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-purple-50 text-purple-600">
+              <CalendarCheck className="h-4 w-4 text-purple-600" />
+            </div>
+            <div>
+              <h2 className="text-sm sm:text-base font-bold text-slate-900">
+                Leave Requests
+              </h2>
+              <p className="text-xs text-slate-400 font-medium">This Week</p>
+            </div>
+          </div>
+
+          <Link
+            href="/dashboard/approvals"
+            className="flex shrink-0 items-center gap-1 text-xs font-semibold text-indigo-600 transition hover:text-indigo-800"
+          >
+            View All <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
         </div>
 
-        <Link
-          href="/dashboard/approvals"
-          className="shrink-0 text-xs font-semibold text-indigo-600 hover:text-indigo-800"
-        >
-          View All
-        </Link>
+        {/* Request list */}
+        {requests.length > 0 ? (
+          <div className="mt-3 divide-y divide-slate-100 overflow-y-auto max-h-[220px] pr-1">
+            {requests.slice(0, 4).map((request) => (
+              <Link
+                key={request.id}
+                href={`/dashboard/approvals?status=${
+                  request.status === "pending" ? "pending" : "history"
+                }&leaveId=${encodeURIComponent(request.id)}`}
+                className="flex items-center gap-3 py-2.5 transition hover:bg-slate-50/70 rounded-xl px-1.5"
+              >
+                {/* Employee photo */}
+                {request.employeePhoto ? (
+                  <Image
+                    src={request.employeePhoto}
+                    alt={request.employeeName}
+                    width={40}
+                    height={40}
+                    unoptimized
+                    className="h-10 w-10 shrink-0 rounded-full object-cover border border-slate-100"
+                  />
+                ) : (
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-indigo-50 text-xs font-bold text-indigo-600 border border-indigo-100/60">
+                    {getInitials(request.employeeName)}
+                  </div>
+                )}
+
+                {/* Employee details */}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-xs sm:text-sm font-bold text-slate-900">
+                    {request.employeeName}
+                  </p>
+
+                  <p className="truncate text-xs font-medium text-slate-500">
+                    {request.leaveType}
+                  </p>
+
+                  <div className="mt-0.5 flex min-w-0 items-center gap-1 text-[11px] text-slate-400">
+                    <CalendarDays size={11} className="shrink-0 text-slate-400" />
+                    <span className="truncate">
+                      {formatDate(request.startDate)} – {formatDate(request.endDate)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Status Badge */}
+                <div className="shrink-0">
+                  <StatusBadge status={request.status} />
+                </div>
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <div className="flex min-h-[180px] flex-col items-center justify-center text-center mt-3">
+            <Clock3 className="mb-2 text-slate-300" size={26} />
+            <p className="text-xs font-medium text-slate-600">
+              No leave requests this week
+            </p>
+            <p className="mt-0.5 text-[11px] text-slate-400">
+              New requests will appear here
+            </p>
+          </div>
+        )}
       </div>
-
-      {/* Request list */}
-      {requests.length > 0 ? (
-        <div className="min-h-0 flex-1 space-y-0 overflow-y-auto pr-1">
-          {requests.map((request) => (
-            <Link
-              key={request.id}
-              href={`/dashboard/approvals?status=${
-                request.status === "pending" ? "pending" : "history"
-              }&leaveId=${encodeURIComponent(request.id)}`}
-              className="flex items-center gap-3 border-b border-slate-100 py-4 transition-colors hover:bg-indigo-50/50 first:pt-2 last:border-0 last:pb-2"
-            >
-              {/* Employee photo */}
-              {request.employeePhoto ? (
-                <Image
-                  src={request.employeePhoto}
-                  alt={request.employeeName}
-                  width={42}
-                  height={42}
-                  unoptimized
-                  className="h-10 w-10 shrink-0 rounded-full object-cover"
-                />
-              ) : (
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-indigo-50 text-xs font-bold text-indigo-600">
-                  {getInitials(request.employeeName)}
-                </div>
-              )}
-
-              {/* Employee details */}
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold text-slate-800">
-                  {request.employeeName}
-                </p>
-
-                <p className="mt-1 truncate text-xs text-slate-500">
-                  {request.leaveType}
-                </p>
-
-                <div className="mt-1.5 flex min-w-0 items-center gap-1 text-[11px] text-slate-400">
-                  <CalendarDays size={12} className="shrink-0" />
-                  <span className="truncate">
-                    {formatDate(request.startDate)} -{" "}
-                    {formatDate(request.endDate)}
-                  </span>
-                </div>
-              </div>
-
-              {/* Status */}
-              <div className="shrink-0">
-                <StatusBadge status={request.status} />
-              </div>
-            </Link>
-          ))}
-        </div>
-      ) : (
-        <div className="flex min-h-0 flex-1 flex-col items-center justify-center text-center">
-          <Clock3 className="mb-2 text-slate-300" size={28} />
-          <p className="text-sm font-medium text-slate-600">
-            No leave requests this week
-          </p>
-          <p className="mt-1 text-xs text-slate-400">
-            New requests will appear here
-          </p>
-        </div>
-      )}
     </section>
   );
 }

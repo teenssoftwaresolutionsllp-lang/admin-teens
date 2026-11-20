@@ -320,15 +320,6 @@ export default async function EmployeesPage({
           </p>
         </div>
 
-        {role === "hr" && (
-          <Link
-            href="/dashboard/employees/add"
-            className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-semibold text-white shadow-sm transition hover:bg-indigo-700 self-start sm:self-auto"
-          >
-            <UserPlus className="h-4 w-4" />
-            <span>Add Employee</span>
-          </Link>
-        )}
       </div>
 
       {/* KPI Overview Cards - Shown on All Employees view */}
