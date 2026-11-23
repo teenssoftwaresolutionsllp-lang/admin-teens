@@ -5,52 +5,85 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 type Props = {
-  leaveId: string;
+  leaveId?: string | null;
 };
+
+type ActionStatus = "approved" | "rejected";
+
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export default function ManagerLeaveActions({ leaveId }: Props) {
   const router = useRouter();
 
-  const [loading, setLoading] = useState<
-    "approved" | "rejected" | null
-  >(null);
-
+  const [loading, setLoading] = useState<ActionStatus | null>(null);
   const [error, setError] = useState("");
 
   async function handleAction(
-    status: "approved" | "rejected",
+    status: ActionStatus,
     rejectionReason?: string
   ) {
     try {
       setLoading(status);
       setError("");
 
-      const response = await fetch(
-        `/api/manager/leaves/${leaveId}`,
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-          },
-          credentials: "same-origin",
-          body: JSON.stringify({
-            status,
-            rejectionReason,
-          }),
-        }
-      );
+      // Validate leave ID before calling the backend.
+      if (!leaveId || !UUID_REGEX.test(leaveId)) {
+        throw new Error(
+          "Invalid leave request ID. Please refresh the page and try again."
+        );
+      }
 
-      const data = await response.json();
+      const apiUrl = `/api/managerleaves/${leaveId}`;
 
-      if (!response.ok) {
+      console.log("Manager Leave API URL:", apiUrl);
+      console.log("Manager Leave ID:", leaveId);
+      console.log("Action:", status);
+
+      const response = await fetch(apiUrl, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        credentials: "same-origin",
+        body: JSON.stringify({
+          status,
+          rejectionReason,
+        }),
+      });
+
+      const responseText = await response.text();
+
+      console.log("API Status:", response.status);
+      console.log("API Response:", responseText);
+
+      let data: {
+        success?: boolean;
+        message?: string;
+        error?: string;
+      };
+
+      try {
+        data = JSON.parse(responseText);
+      } catch {
+        throw new Error(
+          `API did not return valid JSON. HTTP Status: ${response.status}. Check the API route and server terminal.`
+        );
+      }
+
+      if (!response.ok || !data.success) {
         throw new Error(
           data.error || "Unable to update leave request."
         );
       }
 
+      alert(data.message || "Leave request updated successfully.");
+
       router.refresh();
     } catch (err) {
+      console.error("Manager leave action error:", err);
+
       setError(
         err instanceof Error
           ? err.message
@@ -62,6 +95,8 @@ export default function ManagerLeaveActions({ leaveId }: Props) {
   }
 
   function approveLeave() {
+    if (loading !== null) return;
+
     if (!window.confirm("Approve this leave request?")) {
       return;
     }
@@ -70,6 +105,8 @@ export default function ManagerLeaveActions({ leaveId }: Props) {
   }
 
   function rejectLeave() {
+    if (loading !== null) return;
+
     const reason = window.prompt(
       "Enter the reason for rejecting this leave request:"
     );

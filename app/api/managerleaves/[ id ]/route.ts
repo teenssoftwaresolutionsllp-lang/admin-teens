@@ -7,12 +7,25 @@ import {
 
 export const dynamic = "force-dynamic";
 
+// Check whether a value is a valid UUID
+function isValidUUID(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      value
+    )
+  );
+}
+
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    // Authenticate manager
+    // =====================================================
+    // 1. AUTHENTICATE USER
+    // =====================================================
+
     const supabase = await createClient();
 
     const {
@@ -22,15 +35,66 @@ export async function PATCH(
 
     if (authError || !user) {
       return NextResponse.json(
-        { success: false, error: "Unauthorized" },
+        {
+          success: false,
+          error: "Unauthorized. Please log in again.",
+        },
         { status: 401 }
       );
     }
 
+    if (!isValidUUID(user.id)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Invalid logged-in user ID.",
+        },
+        { status: 400 }
+      );
+    }
+
+    // =====================================================
+    // 2. GET AND VALIDATE LEAVE REQUEST ID
+    // =====================================================
+
     const { id } = await params;
-    const body = await request.json();
+
+    console.log("Manager API - Leave ID:", id);
+    console.log("Manager API - User ID:", user.id);
+
+    if (!isValidUUID(id)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Invalid leave request ID: ${String(id)}`,
+        },
+        { status: 400 }
+      );
+    }
+
+    // =====================================================
+    // 3. READ REQUEST BODY
+    // =====================================================
+
+    let body: {
+      status?: string;
+      rejectionReason?: string;
+    };
+
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Invalid request body.",
+        },
+        { status: 400 }
+      );
+    }
 
     const status = String(body.status || "");
+
     const rejectionReason = String(
       body.rejectionReason || ""
     ).trim();
@@ -57,7 +121,10 @@ export async function PATCH(
 
     const admin = await createAdminClient();
 
-    // Find the logged-in manager's employee record.
+    // =====================================================
+    // 4. FIND LOGGED-IN REPORTING MANAGER
+    // =====================================================
+
     const { data: manager, error: managerError } = await admin
       .from("employees")
       .select("id, user_id, is_reporting_manager")
@@ -65,7 +132,9 @@ export async function PATCH(
       .maybeSingle();
 
     if (managerError) {
-      throw new Error(managerError.message);
+      throw new Error(
+        `Manager lookup failed: ${managerError.message}`
+      );
     }
 
     if (!manager || manager.is_reporting_manager !== true) {
@@ -78,15 +147,33 @@ export async function PATCH(
       );
     }
 
-    // Find the leave request.
-    const { data: leaveRequest, error: leaveError } = await admin
-      .from("leave_requests")
-      .select("id, employee_id, start_date, end_date, status")
-      .eq("id", id)
-      .maybeSingle();
+    if (!isValidUUID(manager.id)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Invalid reporting manager employee ID.",
+        },
+        { status: 400 }
+      );
+    }
+
+    // =====================================================
+    // 5. FIND LEAVE REQUEST
+    // =====================================================
+
+    const { data: leaveRequest, error: leaveError } =
+      await admin
+        .from("leave_requests")
+        .select(
+          "id, employee_id, leave_type_id, start_date, end_date, status"
+        )
+        .eq("id", id)
+        .maybeSingle();
 
     if (leaveError) {
-      throw new Error(leaveError.message);
+      throw new Error(
+        `Leave request lookup failed: ${leaveError.message}`
+      );
     }
 
     if (!leaveRequest) {
@@ -99,21 +186,61 @@ export async function PATCH(
       );
     }
 
-    // Confirm that this employee reports to this manager.
-    const { data: employee, error: employeeError } = await admin
-      .from("employees")
-      .select("id, first_name, last_name, reporting_manager_id")
-      .eq("id", leaveRequest.employee_id)
-      .maybeSingle();
+    // =====================================================
+    // 6. VALIDATE EMPLOYEE ID
+    // =====================================================
 
-    if (employeeError) {
-      throw new Error(employeeError.message);
+    console.log("DEBUG UUID VALUES:", {
+      leaveRequestId: id,
+      employeeId: leaveRequest.employee_id,
+      managerId: manager.id,
+    });
+
+    if (!isValidUUID(leaveRequest.employee_id)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Invalid employee ID in this leave request. Check leave_requests.employee_id.",
+        },
+        { status: 400 }
+      );
     }
 
-    if (
-      !employee ||
-      employee.reporting_manager_id !== manager.id
-    ) {
+    // =====================================================
+    // 7. FIND EMPLOYEE
+    // =====================================================
+
+    const { data: employee, error: employeeError } =
+      await admin
+        .from("employees")
+        .select(
+          "id, user_id, first_name, last_name, reporting_manager_id"
+        )
+        .eq("id", leaveRequest.employee_id)
+        .maybeSingle();
+
+    if (employeeError) {
+      throw new Error(
+        `Employee lookup failed: ${employeeError.message}`
+      );
+    }
+
+    if (!employee) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Employee record not found.",
+        },
+        { status: 404 }
+      );
+    }
+
+    // =====================================================
+    // 8. VERIFY REPORTING MANAGER
+    // =====================================================
+
+    if (employee.reporting_manager_id !== manager.id) {
       return NextResponse.json(
         {
           success: false,
@@ -123,18 +250,28 @@ export async function PATCH(
       );
     }
 
+    // =====================================================
+    // 9. CHECK CURRENT LEAVE STATUS
+    // =====================================================
+
     if (leaveRequest.status !== "pending_manager") {
       return NextResponse.json(
         {
           success: false,
-          error: `This request is not waiting for manager review. Current status: ${leaveRequest.status}`,
+          error:
+            `This request is not waiting for manager review. ` +
+            `Current status: ${leaveRequest.status}`,
         },
         { status: 409 }
       );
     }
 
-    // Manager approval sends the request to HR.
-    // HR's existing API accepts status "pending".
+    // =====================================================
+    // 10. UPDATE LEAVE REQUEST
+    // =====================================================
+
+    // Manager approval moves the request to HR.
+    // HR API expects status "pending".
     const nextStatus =
       status === "approved" ? "pending" : "rejected";
 
@@ -146,7 +283,9 @@ export async function PATCH(
           manager_reviewed_by: user.id,
           manager_reviewed_at: new Date().toISOString(),
           manager_rejection_reason:
-            status === "rejected" ? rejectionReason : null,
+            status === "rejected"
+              ? rejectionReason
+              : null,
         })
         .eq("id", id)
         .eq("status", "pending_manager")
@@ -154,7 +293,9 @@ export async function PATCH(
         .maybeSingle();
 
     if (updateError) {
-      throw new Error(updateError.message);
+      throw new Error(
+        `Leave update failed: ${updateError.message}`
+      );
     }
 
     if (!updatedRequest) {
@@ -167,7 +308,10 @@ export async function PATCH(
       );
     }
 
-    // Send notifications. Notification failure must not undo review.
+    // =====================================================
+    // 11. CREATE NOTIFICATIONS
+    // =====================================================
+
     try {
       const employeeName =
         `${employee.first_name || ""} ${employee.last_name || ""}`.trim();
@@ -175,70 +319,80 @@ export async function PATCH(
       const dateRange =
         `${leaveRequest.start_date} to ${leaveRequest.end_date}`;
 
-      if (status === "approved") {
-        // Notify employee that manager approved the request.
-        await admin.from("notifications").insert({
-          recipient_user_id: (
-            await admin
-              .from("employees")
-              .select("user_id")
-              .eq("id", employee.id)
-              .maybeSingle()
-          ).data?.user_id,
-          title: "Leave Approved by Manager",
-          message: `Your leave request (${dateRange}) was approved by your reporting manager and sent to HR for final approval.`,
-          type: "leave",
-          is_read: false,
-        });
+      const notificationRows: {
+        recipient_user_id: string;
+        title: string;
+        message: string;
+        type: string;
+        is_read: boolean;
+      }[] = [];
 
-        // Notify HR that the request is ready for final review.
-        const { data: hrProfiles, error: hrError } = await admin
-          .from("profiles")
-          .select("id")
-          .eq("role", "hr");
+      // MANAGER APPROVED: NOTIFY HR ONLY
+
+      if (status === "approved") {
+        const { data: hrProfiles, error: hrError } =
+          await admin
+            .from("profiles")
+            .select("id")
+            .eq("role", "hr");
 
         if (hrError) {
-          throw new Error(hrError.message);
+          throw new Error(
+            `Could not find HR users: ${hrError.message}`
+          );
         }
 
-        const hrNotifications = (hrProfiles || []).map(
-          (profile) => ({
+        for (const profile of hrProfiles || []) {
+          if (!isValidUUID(profile.id)) {
+            console.error(
+              "Skipping HR notification: invalid profile ID",
+              profile.id
+            );
+            continue;
+          }
+
+          notificationRows.push({
             recipient_user_id: profile.id,
             title: "Leave Request - HR Approval",
-            message: `${employeeName} has received manager approval for leave from ${dateRange}. Please review the request.`,
+            message:
+              `${employeeName} has received reporting manager approval ` +
+              `for leave from ${dateRange}. Please review the request.`,
             type: "leave",
             is_read: false,
-          })
+          });
+        }
+      }
+
+      // MANAGER REJECTED: NOTIFY EMPLOYEE
+
+      if (status === "rejected") {
+        if (isValidUUID(employee.user_id)) {
+          notificationRows.push({
+            recipient_user_id: employee.user_id,
+            title: "Leave Request Rejected by Manager",
+            message:
+              `Your leave request (${dateRange}) was rejected by your ` +
+              `reporting manager. Reason: ${rejectionReason}`,
+            type: "leave",
+            is_read: false,
+          });
+        }
+      }
+
+      // INSERT NOTIFICATIONS
+
+      if (notificationRows.length > 0) {
+        const { error: notificationError } = await admin
+          .from("notifications")
+          .insert(notificationRows);
+
+        if (notificationError) {
+          throw new Error(notificationError.message);
+        }
+
+        console.log(
+          `Created ${notificationRows.length} leave notification(s).`
         );
-
-        if (hrNotifications.length > 0) {
-          const { error } = await admin
-            .from("notifications")
-            .insert(hrNotifications);
-
-          if (error) throw new Error(error.message);
-        }
-      } else {
-        // Notify employee when manager rejects the request.
-        const { data: employeeUser } = await admin
-          .from("employees")
-          .select("user_id")
-          .eq("id", employee.id)
-          .maybeSingle();
-
-        if (employeeUser?.user_id) {
-          const { error } = await admin
-            .from("notifications")
-            .insert({
-              recipient_user_id: employeeUser.user_id,
-              title: "Leave Request Rejected by Manager",
-              message: `Your leave request (${dateRange}) was rejected by your reporting manager. Reason: ${rejectionReason}`,
-              type: "leave",
-              is_read: false,
-            });
-
-          if (error) throw new Error(error.message);
-        }
       }
     } catch (notificationError) {
       console.error(
@@ -246,6 +400,10 @@ export async function PATCH(
         notificationError
       );
     }
+
+    // =====================================================
+    // 12. SUCCESS RESPONSE
+    // =====================================================
 
     return NextResponse.json({
       success: true,
@@ -261,10 +419,16 @@ export async function PATCH(
         ? error.message
         : "An unexpected error occurred.";
 
-    console.error("Manager leave review API error:", message);
+    console.error(
+      "Manager leave review API error:",
+      message
+    );
 
     return NextResponse.json(
-      { success: false, error: message },
+      {
+        success: false,
+        error: message,
+      },
       { status: 500 }
     );
   }

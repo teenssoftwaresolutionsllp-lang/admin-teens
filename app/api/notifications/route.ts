@@ -70,6 +70,28 @@ async function getEmployeeId(
   return employeeQuery.data?.id ?? null;
 }
 
+// Check whether the logged-in employee is a Reporting Manager.
+async function isReportingManager(
+  admin: Awaited<ReturnType<typeof createAdminClient>>,
+  employeeId: string | null
+): Promise<boolean> {
+  if (!employeeId) {
+    return false;
+  }
+
+  const { data, error } = await admin
+    .from("employees")
+    .select("is_reporting_manager")
+    .eq("id", employeeId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data?.is_reporting_manager === true;
+}
+
 // GET: Fetch notifications for the logged-in user.
 export async function GET() {
   try {
@@ -95,11 +117,14 @@ export async function GET() {
       user.email
     );
 
-    // 1. Fetch notifications assigned directly to the user.
-    const {
-      data: recipientRows,
-      error: recipientError,
-    } = await admin
+    // Check Reporting Manager status.
+    const reportingManager = await isReportingManager(
+      admin,
+      employeeId
+    );
+
+    // Fetch notifications assigned directly to the logged-in user.
+    let recipientQuery = admin
       .from("notifications")
       .select(
         "id, recipient_user_id, employee_id, title, message, type, is_read, created_at"
@@ -108,11 +133,25 @@ export async function GET() {
       .order("created_at", { ascending: false })
       .limit(50);
 
+    // Normal employees should not receive manager-only notifications.
+    // Reporting Managers should receive manager_leave notifications.
+    if (!reportingManager) {
+      recipientQuery = recipientQuery.neq(
+        "type",
+        "manager_leave"
+      );
+    }
+
+    const {
+      data: recipientRows,
+      error: recipientError,
+    } = await recipientQuery;
+
     if (recipientError) {
       throw new Error(recipientError.message);
     }
 
-    // 2. Fetch employee-linked notifications.
+    // Fetch employee-linked notifications.
     let employeeRows: typeof recipientRows = [];
 
     if (employeeId) {
@@ -133,7 +172,7 @@ export async function GET() {
       employeeRows = data ?? [];
     }
 
-    // 3. Combine notifications and remove duplicates.
+    // Combine notifications and remove duplicates.
     const uniqueRows = new Map(
       [
         ...(recipientRows ?? []),
@@ -141,7 +180,7 @@ export async function GET() {
       ].map((item) => [item.id, item])
     );
 
-    // 4. Sort newest first and format response.
+    // Sort newest first and format response.
     const notifications = [...uniqueRows.values()]
       .sort(
         (a, b) =>
@@ -236,7 +275,7 @@ export async function PATCH(request: Request) {
     const requestedId =
       body.notificationId ?? body.id;
 
-    // 1. Mark one notification as read.
+    // Mark one notification as read.
     if (
       requestedId !== undefined &&
       requestedId !== null
@@ -253,7 +292,7 @@ export async function PATCH(request: Request) {
         );
       }
 
-      // First check notifications assigned directly to user.
+      // First check notifications assigned directly to the user.
       const {
         data: recipientNotification,
         error: recipientError,
@@ -291,23 +330,39 @@ export async function PATCH(request: Request) {
         updatedNotification = data;
       }
 
-      // Handle an already-read notification.
+      // Check whether the notification already exists and belongs to the user.
       if (!updatedNotification) {
-        const { data: existingNotification, error } =
+        const { data: directExisting, error: directError } =
           await admin
             .from("notifications")
             .select("id")
             .eq("id", notificationId)
-            .or(
-              `recipient_user_id.eq.${user.id},employee_id.eq.${employeeId ?? "00000000-0000-0000-0000-000000000000"}`
-            )
+            .eq("recipient_user_id", user.id)
             .maybeSingle();
 
-        if (error) {
-          throw new Error(error.message);
+        if (directError) {
+          throw new Error(directError.message);
         }
 
-        if (!existingNotification) {
+        let employeeExisting = null;
+
+        if (!directExisting && employeeId) {
+          const { data, error } = await admin
+            .from("notifications")
+            .select("id")
+            .eq("id", notificationId)
+            .eq("employee_id", employeeId)
+            .is("recipient_user_id", null)
+            .maybeSingle();
+
+          if (error) {
+            throw new Error(error.message);
+          }
+
+          employeeExisting = data;
+        }
+
+        if (!directExisting && !employeeExisting) {
           return jsonResponse(
             {
               success: false,
@@ -325,7 +380,8 @@ export async function PATCH(request: Request) {
       });
     }
 
-    // 2. Mark all direct user notifications as read.
+    // Mark all direct notifications as read.
+    // This includes manager_leave notifications for Reporting Managers.
     const { error: recipientError } = await admin
       .from("notifications")
       .update({ is_read: true })
@@ -336,7 +392,7 @@ export async function PATCH(request: Request) {
       throw new Error(recipientError.message);
     }
 
-    // 3. Mark all employee-linked notifications as read.
+    // Mark all employee-linked notifications as read.
     if (employeeId) {
       const { error } = await admin
         .from("notifications")

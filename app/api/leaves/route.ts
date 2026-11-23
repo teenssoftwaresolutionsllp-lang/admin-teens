@@ -28,7 +28,6 @@ function isValidDate(value: string): boolean {
 }
 
 // Calendar days: includes Saturdays and Sundays.
-// Used for CL, SL, EL, ML and PL.
 function getInclusiveDays(
   startDate: string,
   endDate: string
@@ -40,7 +39,6 @@ function getInclusiveDays(
 }
 
 // Working days: excludes Saturdays and Sundays.
-// Used only for LOP.
 function getWorkingDays(
   startDate: string,
   endDate: string
@@ -488,13 +486,7 @@ export async function POST(request: Request) {
         employeeRecord.gender || ""
       ).toLowerCase();
 
-      // =====================================================
       // MATERNITY LEAVE
-      // 3 months = 90 calendar days
-      // 6 months = 180 calendar days
-      // Weekends are included.
-      // =====================================================
-
       if (code === "ML") {
         if (employeeGender !== "female") {
           return NextResponse.json(
@@ -537,12 +529,7 @@ export async function POST(request: Request) {
         days = maternityDays;
       }
 
-      // =====================================================
       // PATERNITY LEAVE
-      // 2, 7, 14, 21 or 28 calendar days.
-      // Weekends are included.
-      // =====================================================
-
       if (code === "PL") {
         if (employeeGender !== "male") {
           return NextResponse.json(
@@ -580,12 +567,7 @@ export async function POST(request: Request) {
         days = paternityDuration;
       }
     } else if (!isHalfDay) {
-      // =====================================================
       // REGULAR LEAVE VALIDATION
-      // LOP = working days only.
-      // CL, SL and EL = calendar days.
-      // =====================================================
-
       const expectedDays =
         code === "LOP" ? workingDays : inclusiveDays;
 
@@ -612,9 +594,62 @@ export async function POST(request: Request) {
     }
 
     // =====================================================
+    // GET REPORTING MANAGER
+    // =====================================================
+
+    const {
+      data: employeeManagerData,
+      error: managerLookupError,
+    } = await admin
+      .from("employees")
+      .select("reporting_manager_id")
+      .eq("id", employeeId)
+      .maybeSingle();
+
+    if (managerLookupError) {
+      throw new Error(
+        `Could not find reporting manager: ${managerLookupError.message}`
+      );
+    }
+
+    const reportingManagerId =
+      employeeManagerData?.reporting_manager_id;
+
+    if (!reportingManagerId) {
+      return NextResponse.json(
+        {
+          error:
+            "No reporting manager is assigned to this employee. Please contact HR before applying for leave.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const { data: manager, error: managerError } =
+      await admin
+        .from("employees")
+        .select("id, user_id, first_name, last_name")
+        .eq("id", reportingManagerId)
+        .maybeSingle();
+
+    if (managerError) {
+      throw new Error(
+        `Could not load reporting manager: ${managerError.message}`
+      );
+    }
+
+    if (!manager || !manager.user_id) {
+      return NextResponse.json(
+        {
+          error:
+            "The assigned reporting manager does not have a linked user account. Please contact HR.",
+        },
+        { status: 400 }
+      );
+    }
+
+    // =====================================================
     // CHECK OVERLAPPING LEAVE REQUESTS
-    // Check pending and approved requests for this employee.
-    // This applies to every leave type.
     // =====================================================
 
     const { data: overlappingLeaves, error: overlapError } =
@@ -622,7 +657,12 @@ export async function POST(request: Request) {
         .from("leave_requests")
         .select("id, leave_type_id, start_date, end_date, status")
         .eq("employee_id", employeeId)
-        .in("status", ["pending", "approved"])
+        .in("status", [
+          "pending",
+          "pending_manager",
+          "pending_hr",
+          "approved",
+        ])
         .lte("start_date", endDate)
         .gte("end_date", startDate);
 
@@ -651,7 +691,6 @@ export async function POST(request: Request) {
 
     // =====================================================
     // UPLOAD SUPPORTING DOCUMENT
-    // Upload happens only after overlap validation succeeds.
     // =====================================================
 
     if (supportingFile) {
@@ -666,6 +705,7 @@ export async function POST(request: Request) {
 
     // =====================================================
     // CREATE LEAVE REQUEST
+    // DataStore creates it with pending_manager status.
     // =====================================================
 
     const leaveReq = await DataStore.createLeaveRequest({
@@ -689,49 +729,39 @@ export async function POST(request: Request) {
     });
 
     // =====================================================
-    // NOTIFY HR USERS
+    // NOTIFY REPORTING MANAGER ONLY
+    // HR WILL BE NOTIFIED AFTER MANAGER APPROVAL
     // =====================================================
 
     try {
-      const { data: hrProfiles, error: hrProfilesError } =
+      const notificationMessage =
+        `${employee.first_name || ""} ${employee.last_name || ""}`.trim() +
+        ` has submitted a ${leaveType.name} leave request from ${startDate} to ${endDate}.`;
+
+      const { error: notificationInsertError } =
         await admin
-          .from("profiles")
-          .select("id")
-          .eq("role", "hr");
+          .from("notifications")
+          .insert({
+            recipient_user_id: manager.user_id,
+            title: "New Leave Request",
+            message: notificationMessage,
+            type: "manager_leave",
+            is_read: false,
+          });
 
-      if (hrProfilesError) {
-        throw new Error(hrProfilesError.message);
+      if (notificationInsertError) {
+        throw new Error(notificationInsertError.message);
       }
 
-      if (hrProfiles && hrProfiles.length > 0) {
-        const notificationRows = hrProfiles.map((hrProfile) => ({
-          recipient_user_id: hrProfile.id,
-          title: "New Leave Request",
-          message: `An employee has submitted a ${leaveType.name} leave request from ${startDate} to ${endDate}.`,
-          type: "leave",
-          is_read: false,
-        }));
-
-        const { error: notificationInsertError } =
-          await admin
-            .from("notifications")
-            .insert(notificationRows);
-
-        if (notificationInsertError) {
-          throw new Error(notificationInsertError.message);
-        }
-
-        console.log(
-          `Created leave notifications for ${hrProfiles.length} HR user(s).`
-        );
-      } else {
-        console.warn(
-          "No profiles with role 'hr' were found. Leave notification was not created."
-        );
-      }
+      console.log(
+        "Reporting Manager leave notification created:",
+        manager.user_id
+      );
     } catch (notificationError) {
+      // Do not cancel a successfully created leave request
+      // if notification creation fails.
       console.error(
-        "HR leave notification creation failed:",
+        "Reporting Manager notification creation failed:",
         notificationError
       );
     }
