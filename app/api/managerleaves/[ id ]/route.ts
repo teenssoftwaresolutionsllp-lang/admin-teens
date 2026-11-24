@@ -7,7 +7,6 @@ import {
 
 export const dynamic = "force-dynamic";
 
-// Check whether a value is a valid UUID
 function isValidUUID(value: unknown): value is string {
   return (
     typeof value === "string" &&
@@ -17,14 +16,52 @@ function isValidUUID(value: unknown): value is string {
   );
 }
 
+// Supports both [id] and [leaveId] parameter names.
+// Falls back to the actual request URL if params are missing.
+async function getLeaveId(
+  request: Request,
+  params: Promise<{
+    id?: string;
+    leaveId?: string;
+  }>
+): Promise<string | undefined> {
+  const routeParams = await params;
+
+  let id = routeParams?.id || routeParams?.leaveId;
+
+  if (!id) {
+    const segments = new URL(request.url).pathname.split("/");
+    const managerIndex = segments.indexOf("managerleaves");
+
+    if (managerIndex !== -1) {
+      const rawId = segments[managerIndex + 1];
+
+      if (rawId) {
+        try {
+          id = decodeURIComponent(rawId);
+        } catch {
+          id = rawId;
+        }
+      }
+    }
+  }
+
+  return id;
+}
+
 export async function PATCH(
   request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: {
+    params: Promise<{
+      id?: string;
+      leaveId?: string;
+    }>;
+  }
 ) {
   try {
-    // =====================================================
+    // =========================================
     // 1. AUTHENTICATE USER
-    // =====================================================
+    // =========================================
 
     const supabase = await createClient();
 
@@ -53,28 +90,31 @@ export async function PATCH(
       );
     }
 
-    // =====================================================
+    // =========================================
     // 2. GET AND VALIDATE LEAVE REQUEST ID
-    // =====================================================
+    // =========================================
 
-    const { id } = await params;
+    const id = await getLeaveId(request, params);
 
-    console.log("Manager API - Leave ID:", id);
-    console.log("Manager API - User ID:", user.id);
+    console.log("========== MANAGER API DEBUG ==========");
+    console.log("Request URL:", request.url);
+    console.log("Resolved Leave ID:", id);
+    console.log("Logged-in User ID:", user.id);
+    console.log("========================================");
 
     if (!isValidUUID(id)) {
       return NextResponse.json(
         {
           success: false,
-          error: `Invalid leave request ID: ${String(id)}`,
+          error: `Invalid leave request ID: ${String(id)}. Check the managerleaves route parameter.`,
         },
         { status: 400 }
       );
     }
 
-    // =====================================================
+    // =========================================
     // 3. READ REQUEST BODY
-    // =====================================================
+    // =========================================
 
     let body: {
       status?: string;
@@ -121,15 +161,16 @@ export async function PATCH(
 
     const admin = await createAdminClient();
 
-    // =====================================================
+    // =========================================
     // 4. FIND LOGGED-IN REPORTING MANAGER
-    // =====================================================
+    // =========================================
 
-    const { data: manager, error: managerError } = await admin
-      .from("employees")
-      .select("id, user_id, is_reporting_manager")
-      .eq("user_id", user.id)
-      .maybeSingle();
+    const { data: manager, error: managerError } =
+      await admin
+        .from("employees")
+        .select("id, user_id, is_reporting_manager")
+        .eq("user_id", user.id)
+        .maybeSingle();
 
     if (managerError) {
       throw new Error(
@@ -157,9 +198,9 @@ export async function PATCH(
       );
     }
 
-    // =====================================================
+    // =========================================
     // 5. FIND LEAVE REQUEST
-    // =====================================================
+    // =========================================
 
     const { data: leaveRequest, error: leaveError } =
       await admin
@@ -186,9 +227,9 @@ export async function PATCH(
       );
     }
 
-    // =====================================================
+    // =========================================
     // 6. VALIDATE EMPLOYEE ID
-    // =====================================================
+    // =========================================
 
     console.log("DEBUG UUID VALUES:", {
       leaveRequestId: id,
@@ -207,9 +248,9 @@ export async function PATCH(
       );
     }
 
-    // =====================================================
+    // =========================================
     // 7. FIND EMPLOYEE
-    // =====================================================
+    // =========================================
 
     const { data: employee, error: employeeError } =
       await admin
@@ -236,23 +277,24 @@ export async function PATCH(
       );
     }
 
-    // =====================================================
+    // =========================================
     // 8. VERIFY REPORTING MANAGER
-    // =====================================================
+    // =========================================
 
     if (employee.reporting_manager_id !== manager.id) {
       return NextResponse.json(
         {
           success: false,
-          error: "You cannot review this employee's leave request.",
+          error:
+            "You cannot review this employee's leave request.",
         },
         { status: 403 }
       );
     }
 
-    // =====================================================
+    // =========================================
     // 9. CHECK CURRENT LEAVE STATUS
-    // =====================================================
+    // =========================================
 
     if (leaveRequest.status !== "pending_manager") {
       return NextResponse.json(
@@ -266,9 +308,9 @@ export async function PATCH(
       );
     }
 
-    // =====================================================
+    // =========================================
     // 10. UPDATE LEAVE REQUEST
-    // =====================================================
+    // =========================================
 
     // Manager approval moves the request to HR.
     // HR API expects status "pending".
@@ -308,9 +350,9 @@ export async function PATCH(
       );
     }
 
-    // =====================================================
+    // =========================================
     // 11. CREATE NOTIFICATIONS
-    // =====================================================
+    // =========================================
 
     try {
       const employeeName =
@@ -401,9 +443,9 @@ export async function PATCH(
       );
     }
 
-    // =====================================================
+    // =========================================
     // 12. SUCCESS RESPONSE
-    // =====================================================
+    // =========================================
 
     return NextResponse.json({
       success: true,

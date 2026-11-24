@@ -1,4 +1,3 @@
-
 import { NextResponse } from 'next/server';
 import { DataStore } from '@/lib/data-store';
 import {
@@ -44,12 +43,46 @@ const CERTIFICATION_DATE_FIELDS = [
   'professional_certification_expiry_date',
 ];
 
+// Qualification Details fields stored inside JSONB.
+const EDUCATION_FIELDS: string[] = [
+  'education_10th_institution',
+  'education_10th_board',
+  'education_10th_year',
+  'education_10th_result_type',
+  'education_10th_result',
+
+  'education_12th_institution',
+  'education_12th_board',
+  'education_12th_year',
+  'education_12th_result_type',
+  'education_12th_result',
+
+  'education_graduation_institution',
+  'education_graduation_board',
+  'education_graduation_year',
+  'education_graduation_result_type',
+  'education_graduation_result',
+
+  'education_post_graduation_institution',
+  'education_post_graduation_board',
+  'education_post_graduation_year',
+  'education_post_graduation_result_type',
+  'education_post_graduation_result',
+
+  'education_diploma_institution',
+  'education_diploma_board',
+  'education_diploma_year',
+  'education_diploma_result_type',
+  'education_diploma_result',
+];
+
 // These fields are updated directly.
 // They do not require HR approval.
 const DIRECT_UPDATE_FIELDS = [
   ...CERTIFICATION_TEXT_FIELDS,
   ...CERTIFICATION_DATE_FIELDS,
   'technical_skills',
+  'educational_details',
 ];
 
 // ======================================================
@@ -257,6 +290,75 @@ export async function POST(request: Request) {
     }
 
     // --------------------------------------------------
+    // VALIDATE QUALIFICATION DETAILS
+    // Store all education fields in educational_details.
+    // No HR approval is required.
+    // --------------------------------------------------
+
+    if (
+      Object.prototype.hasOwnProperty.call(
+        requestedChanges,
+        'educational_details',
+      )
+    ) {
+      const education = requestedChanges.educational_details;
+
+      if (
+        !education ||
+        typeof education !== 'object' ||
+        Array.isArray(education)
+      ) {
+        return NextResponse.json(
+          {
+            error: 'Invalid qualification details.',
+          },
+          { status: 400 },
+        );
+      }
+
+      const invalidFields = Object.keys(education).filter(
+        (field) => !EDUCATION_FIELDS.includes(field),
+      );
+
+      if (invalidFields.length > 0) {
+        return NextResponse.json(
+          {
+            error: `Invalid qualification field: ${invalidFields[0]}`,
+          },
+          { status: 400 },
+        );
+      }
+
+      const cleanedEducation: Record<string, string> = {};
+
+      for (const field of EDUCATION_FIELDS) {
+        const value = education[field];
+
+        if (
+          value !== undefined &&
+          value !== null &&
+          typeof value !== 'string' &&
+          typeof value !== 'number'
+        ) {
+          return NextResponse.json(
+            {
+              error: `Invalid qualification field: ${field}`,
+            },
+            { status: 400 },
+          );
+        }
+
+        cleanedEducation[field] =
+          value === undefined || value === null
+            ? ''
+            : String(value).trim();
+      }
+
+      requestedChanges.educational_details =
+        cleanedEducation;
+    }
+
+    // --------------------------------------------------
     // VALIDATE CERTIFICATION TEXT FIELDS
     // --------------------------------------------------
 
@@ -376,20 +478,9 @@ export async function POST(request: Request) {
     const hasApprovalChanges =
       Object.keys(approvalChanges).length > 0;
 
-    console.log(
-      'DIRECT CHANGES:',
-      directChanges,
-    );
-
-    console.log(
-      'APPROVAL CHANGES:',
-      approvalChanges,
-    );
-
-    console.log(
-      'EMPLOYEE UUID:',
-      employeeId,
-    );
+    console.log('DIRECT CHANGES:', directChanges);
+    console.log('APPROVAL CHANGES:', approvalChanges);
+    console.log('EMPLOYEE UUID:', employeeId);
 
     // --------------------------------------------------
     // PREPARE SENSITIVE DOCUMENTS
@@ -479,7 +570,6 @@ export async function POST(request: Request) {
 
     // --------------------------------------------------
     // VALIDATE SENSITIVE DOCUMENTS
-    // These documents must be pending and unlinked.
     // --------------------------------------------------
 
     for (const item of normalizedDocuments) {
@@ -532,15 +622,6 @@ export async function POST(request: Request) {
 
     // --------------------------------------------------
     // VALIDATE OPTIONAL CERTIFICATION DOCUMENT
-    //
-    // Professional Certification is not an approval
-    // document. The upload API normally saves it with
-    // verification_status = approved.
-    //
-    // Accept approved or pending for compatibility
-    // with previously uploaded certification documents.
-    //
-    // Never link it to a profile-change request.
     // --------------------------------------------------
 
     if (normalizedCertificationDocumentId) {
@@ -611,7 +692,8 @@ export async function POST(request: Request) {
     }
 
     // --------------------------------------------------
-    // SAVE CERTIFICATION AND SKILLS DIRECTLY
+    // SAVE DIRECT FIELDS
+    // QUALIFICATION, CERTIFICATION AND SKILLS
     // NO HR APPROVAL REQUIRED
     // --------------------------------------------------
 
@@ -628,6 +710,7 @@ export async function POST(request: Request) {
         .eq('id', employeeId)
         .select(`
           id,
+          educational_details,
           professional_certification_name,
           professional_certification_organization,
           professional_certification_credential_id,
@@ -646,10 +729,7 @@ export async function POST(request: Request) {
         throw updateError;
       }
 
-      console.log(
-        'UPDATED EMPLOYEE DATA:',
-        data,
-      );
+      console.log('UPDATED EMPLOYEE DATA:', data);
 
       if (!data) {
         throw new Error(
@@ -722,6 +802,52 @@ export async function POST(request: Request) {
     }
 
     // --------------------------------------------------
+    // PREPARE DIRECT UPDATE LABELS
+    // --------------------------------------------------
+
+    const directUpdateLabels: string[] = [];
+
+    if (
+      Object.prototype.hasOwnProperty.call(
+        directChanges,
+        'educational_details',
+      )
+    ) {
+      directUpdateLabels.push('Qualification Details');
+    }
+
+    if (
+      CERTIFICATION_TEXT_FIELDS.some((field) =>
+        Object.prototype.hasOwnProperty.call(
+          directChanges,
+          field,
+        ),
+      ) ||
+      CERTIFICATION_DATE_FIELDS.some((field) =>
+        Object.prototype.hasOwnProperty.call(
+          directChanges,
+          field,
+        ),
+      )
+    ) {
+      directUpdateLabels.push(
+        'Professional Certification',
+      );
+    }
+
+    if (
+      Object.prototype.hasOwnProperty.call(
+        directChanges,
+        'technical_skills',
+      )
+    ) {
+      directUpdateLabels.push('Technical Skills');
+    }
+
+    const directUpdateText =
+      directUpdateLabels.join(', ');
+
+    // --------------------------------------------------
     // SEND INFORMATIONAL NOTIFICATION TO HR
     // --------------------------------------------------
 
@@ -735,15 +861,10 @@ export async function POST(request: Request) {
         .eq('role', 'hr');
 
       if (hrProfilesError) {
-        throw new Error(
-          hrProfilesError.message,
-        );
+        throw new Error(hrProfilesError.message);
       }
 
-      if (
-        !hrProfiles ||
-        hrProfiles.length === 0
-      ) {
+      if (!hrProfiles || hrProfiles.length === 0) {
         console.warn(
           'No HR profiles found. Notification was not created.',
         );
@@ -767,11 +888,11 @@ export async function POST(request: Request) {
           hasApprovalChanges
         ) {
           notificationMessage =
-            `${employeeName} updated Professional Certification and Technical Skills. ` +
+            `${employeeName} updated ${directUpdateText}. ` +
             `Other profile changes are waiting for HR approval. Request ID: ${newRequest?.id}`;
         } else if (hasDirectChanges) {
           notificationMessage =
-            `${employeeName} updated Professional Certification and Technical Skills. No approval is required.`;
+            `${employeeName} updated ${directUpdateText}. No HR approval is required.`;
         } else {
           notificationMessage =
             `${employeeName} submitted a profile change request. Request ID: ${newRequest?.id}`;
@@ -799,9 +920,7 @@ export async function POST(request: Request) {
           );
 
         if (notificationError) {
-          throw new Error(
-            notificationError.message,
-          );
+          throw new Error(notificationError.message);
         }
 
         console.log(
@@ -823,16 +942,25 @@ export async function POST(request: Request) {
     // SUCCESS RESPONSE
     // --------------------------------------------------
 
+    let successMessage = '';
+
+    if (hasDirectChanges && hasApprovalChanges) {
+      successMessage =
+        `${directUpdateText} updated successfully. ` +
+        'Other profile changes were submitted for HR approval.';
+    } else if (hasDirectChanges) {
+      successMessage =
+        `${directUpdateText} updated successfully.`;
+    } else {
+      successMessage =
+        'Profile change request submitted successfully.';
+    }
+
     return NextResponse.json(
       {
         success: true,
 
-        message:
-          hasDirectChanges && hasApprovalChanges
-            ? 'Professional Certification and Technical Skills updated. Other profile changes were submitted for HR approval.'
-            : hasDirectChanges
-              ? 'Professional Certification and Technical Skills updated successfully.'
-              : 'Profile change request submitted successfully.',
+        message: successMessage,
 
         directUpdate: directChanges,
 

@@ -229,6 +229,7 @@ export interface Employee {
   pan_number?: string | null;
   aadhar_number?: string | null;
   passport_number?:string |null;
+  driving_license_number?: string | null;
   payment_mode?:string | null;
 
 

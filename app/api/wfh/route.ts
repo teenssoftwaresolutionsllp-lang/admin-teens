@@ -1,11 +1,19 @@
+
 import { NextResponse } from "next/server";
-import { createClient, createAdminClient } from "@/lib/supabase-server";
+import {
+  createClient,
+  createAdminClient,
+} from "@/lib/supabase-server";
 import {
   getAuthFailureStatus,
   getAuthFailureMessage,
 } from "@/lib/supabase-auth-error";
 
 export const dynamic = "force-dynamic";
+
+// =========================================
+// GET INDIA TODAY
+// =========================================
 
 function getIndiaToday(): string {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -21,6 +29,10 @@ function getIndiaToday(): string {
 
   return `${year}-${month}-${day}`;
 }
+
+// =========================================
+// AUTHENTICATE EMPLOYEE
+// =========================================
 
 async function getAuthenticatedEmployee() {
   const supabase = await createClient();
@@ -72,6 +84,7 @@ async function getAuthenticatedEmployee() {
     employee = userIdMatches[0];
   }
 
+  // Fallback using email.
   if (!employee && user.email) {
     const { data: emailMatches, error: emailError } = await admin
       .from("employees")
@@ -126,7 +139,10 @@ async function getAuthenticatedEmployee() {
   };
 }
 
-// GET: Fetch employee WFH requests.
+// =========================================
+// GET: FETCH EMPLOYEE WFH REQUESTS
+// =========================================
+
 export async function GET() {
   try {
     const result = await getAuthenticatedEmployee();
@@ -176,9 +192,15 @@ export async function GET() {
   }
 }
 
-// POST: Create WFH request and notify assigned reporting manager.
+// =========================================
+// POST: CREATE WFH REQUEST
+// AND NOTIFY REPORTING MANAGER
+// =========================================
+
 export async function POST(request: Request) {
   try {
+    // 1. Authenticate employee.
+
     const result = await getAuthenticatedEmployee();
 
     if ("error" in result) {
@@ -189,6 +211,8 @@ export async function POST(request: Request) {
     }
 
     const { employee, admin } = result;
+
+    // 2. Read request body.
 
     let body: Record<string, unknown>;
 
@@ -211,7 +235,8 @@ export async function POST(request: Request) {
         ? body.reason.trim()
         : "";
 
-    // Validate date format.
+    // 3. Validate date format.
+
     if (!/^\d{4}-\d{2}-\d{2}$/.test(requestDate)) {
       return NextResponse.json(
         { error: "Please provide a valid WFH date." },
@@ -219,7 +244,8 @@ export async function POST(request: Request) {
       );
     }
 
-    // Validate actual calendar date.
+    // 4. Validate actual calendar date.
+
     const [year, month, day] = requestDate.split("-").map(Number);
 
     const parsedDate = new Date(Date.UTC(year, month - 1, day));
@@ -236,7 +262,8 @@ export async function POST(request: Request) {
       );
     }
 
-    // Do not allow past dates.
+    // 5. Prevent past dates.
+
     if (requestDate < getIndiaToday()) {
       return NextResponse.json(
         { error: "WFH requests cannot be submitted for past dates." },
@@ -244,10 +271,13 @@ export async function POST(request: Request) {
       );
     }
 
-    // Validate reason.
+    // 6. Validate reason.
+
     if (!reason || reason.length < 5) {
       return NextResponse.json(
-        { error: "Please provide a reason of at least 5 characters." },
+        {
+          error: "Please provide a reason of at least 5 characters.",
+        },
         { status: 400 }
       );
     }
@@ -259,7 +289,8 @@ export async function POST(request: Request) {
       );
     }
 
-    // Find assigned reporting manager.
+    // 7. Verify reporting manager assignment.
+
     if (!employee.reporting_manager_id) {
       return NextResponse.json(
         {
@@ -295,7 +326,8 @@ export async function POST(request: Request) {
       );
     }
 
-    // Create WFH request for manager review.
+    // 8. Create WFH request for manager review.
+
     const { data, error } = await admin
       .from("wfh_requests")
       .insert({
@@ -308,27 +340,43 @@ export async function POST(request: Request) {
       .single();
 
     if (error) {
+      console.error("WFH request creation failed:", {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code,
+      });
+
       if (error.code === "23505") {
         return NextResponse.json(
-          { error: "You already have a WFH request for this date." },
+          {
+            error: "You already have a WFH request for this date.",
+          },
           { status: 409 }
         );
       }
 
-      console.error("WFH request creation failed:", error);
-
+      // Temporary diagnostic response.
       return NextResponse.json(
-        { error: "Unable to submit WFH request." },
+        {
+          error: "Unable to submit WFH request.",
+          details: error.message,
+          code: error.code,
+          hint: error.hint,
+        },
         { status: 500 }
       );
     }
+
+    // 9. Prepare employee name.
 
     const employeeName =
       `${employee.first_name ?? ""} ${employee.last_name ?? ""}`.trim() ||
       employee.employee_id ||
       "An employee";
 
-    // Notify assigned manager.
+    // 10. Notify assigned reporting manager.
+
     const { error: notificationError } = await admin
       .from("notifications")
       .insert({
@@ -341,11 +389,15 @@ export async function POST(request: Request) {
       });
 
     if (notificationError) {
-      console.error(
-        "WFH manager notification failed:",
-        notificationError
-      );
+      console.error("WFH manager notification failed:", {
+        message: notificationError.message,
+        details: notificationError.details,
+        hint: notificationError.hint,
+        code: notificationError.code,
+      });
     }
+
+    // 11. Return success.
 
     return NextResponse.json(
       {
@@ -353,6 +405,7 @@ export async function POST(request: Request) {
         message:
           "WFH request submitted successfully and sent to your reporting manager.",
         request: data,
+        notificationSent: !notificationError,
       },
       { status: 201 }
     );

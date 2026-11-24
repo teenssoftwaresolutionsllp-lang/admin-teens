@@ -185,11 +185,12 @@ export async function POST(request: Request) {
     // Preserve existing redirects.
     // Preserve HR/CEO routing.
     // Designated reporting managers get a workspace selector.
-    const isReportingManager =
-      role === 'employee' && employee?.is_reporting_manager === true;
+    const isReportingManager = role === 'employee' && employee?.is_reporting_manager === true;
+    const mustChangePassword = role === 'employee' && profile?.must_change_password === true;
 
-    const redirectTo =
-      role === 'employee'
+    const redirectTo = mustChangePassword
+      ? '/change-password'
+      : role === 'employee'
         ? isReportingManager
           ? '/workspace'
           : '/portal'
@@ -200,6 +201,7 @@ export async function POST(request: Request) {
       profile: profile || null,
       role,
       isReportingManager,
+      mustChangePassword,
       redirectTo,
     });
   } catch (error) {

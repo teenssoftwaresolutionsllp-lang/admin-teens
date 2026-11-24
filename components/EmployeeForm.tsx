@@ -10,6 +10,34 @@ import DocumentUpload from "./DocumentUpload";
 
 const companies = companiesData.companies;
 
+interface JoiningCandidate {
+  id: string;
+  first_name: string;
+  last_name: string;
+  personal_email: string | null;
+  mobile_number: string | null;
+  designation: string | null;
+  joining_date: string | null;
+  annual_ctc: number | null;
+  status: string;
+  gender: string | null;
+  probation_period_months: number | null;
+  department: string | null;
+  employment_type: string | null;
+  work_location: string | null;
+  experience_level: string | null;
+  total_experience_years: number | null;
+  total_experience_months: number | null;
+  pf_eligible: boolean;
+  esi_eligible: boolean;
+  pt_eligible: boolean;
+  tds_eligible: boolean;
+  onboarding_status: string;
+  onboarding_submission_id: string | null;
+  conversion_status: string;
+  employee_record_id: string | null;
+}
+
 interface EmployeeFormProps {
   employee?: Employee;
   departments: Department[];
@@ -17,10 +45,11 @@ interface EmployeeFormProps {
   generatedEmployeeId?: string;
   mode: "add" | "edit";
   role: UserRole;
+  candidate?: JoiningCandidate | null;
 }
 
 
-export default function EmployeeForm({ employee, departments, projects, generatedEmployeeId, mode, role }: EmployeeFormProps) {
+export default function EmployeeForm({ employee, departments, projects, generatedEmployeeId, mode, role,candidate = null, }: EmployeeFormProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState(0);
   const [isEmailEditing, setIsEmailEditing] = useState(false);
@@ -192,22 +221,22 @@ technical_skills: employee?.technical_skills || [],
   } as Partial<Employee> & { initial_password?: string });
 
   useEffect(() => {
-  if (mode === "add") {
-    fetch("/api/employees/next-id")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.employee_id) {
-          setFormData((prev) => ({
-            ...prev,
-            employee_id: data.employee_id,
-          }));
-        }
-      })
-      .catch((error) => {
-        console.error("Failed to generate employee ID:", error);
-      });
-  }
-  }, [mode]);
+    if (mode === "add" && !candidate) {
+      fetch("/api/employees/next-id")
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.employee_id) {
+            setFormData((prev) => ({
+              ...prev,
+              employee_id: data.employee_id,
+            }));
+          }
+        })
+        .catch((error) => {
+          console.error("Failed to fetch employee ID:", error);
+        });
+    }
+  }, [mode, candidate]);
 
   useEffect(() => {
     if (!employee) return;
@@ -695,16 +724,16 @@ const handleSubmit = async (e: React.FormEvent) => {
 };
 
   const tabs = [
-    { name: "personal", icon: User},
-    { name: "CurrentEmployment", icon: Briefcase },
-    { name: "Statutory", icon: File},
-    { name: "Skills & Certifications", icon: KeyRound },
-    { name: "Bank & Identity", icon: CreditCard },
-    { name: "Address & Emergency", icon: MapPin },
-    { name: "Documentation", icon: FileText },
-    { name:"Accessory Management", icon: LaptopMinimal},
-   
-  ]
+  { name: "personal", icon: User },
+  { name: "CurrentEmployment", icon: Briefcase },
+  { name: "Statutory", icon: File },
+  { name: "Education", icon: File },
+  { name: "Skills & Certifications", icon: KeyRound },
+  { name: "Bank & Identity", icon: CreditCard },
+  { name: "Address & Emergency", icon: MapPin },
+  { name: "Documentation", icon: FileText },
+  { name: "Accessory Management", icon: LaptopMinimal },
+];
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-200/90 overflow-hidden">
       {/* Tabs Bar */}
@@ -1468,7 +1497,7 @@ const handleSubmit = async (e: React.FormEvent) => {
         </div>
 
         {/* Tab 4:  Bank & Identity*/}
-        <div className={activeTab === 4? "block" : "hidden"}>
+        <div className={activeTab === 5? "block" : "hidden"}>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
 
             {/* Bank Name */}
@@ -1571,7 +1600,7 @@ const handleSubmit = async (e: React.FormEvent) => {
           </div>
         </div>
         {/* Tab 5 : ADDRESS & EMERGENCY */}
-        <div className={activeTab === 5 ? "block" : "hidden"}>
+        <div className={activeTab === 6 ? "block" : "hidden"}>
 
           {/* Main Address Container */}
           <div className="space-y-8">
@@ -1767,11 +1796,6 @@ const handleSubmit = async (e: React.FormEvent) => {
 
               </div>
             </section>
-
-
-    
-
-
 {/* 
               </div>
             </section> */}
@@ -2010,7 +2034,7 @@ const handleSubmit = async (e: React.FormEvent) => {
           </div>
         </div>
         {/* Tab 6: Documents */}
-        {activeTab === 6 && (
+        {activeTab === 7 && (
           <div>
             <DocumentUpload
             documents={documents || []}
@@ -2020,7 +2044,7 @@ const handleSubmit = async (e: React.FormEvent) => {
         )}
 
         {/* Tab 3: Skills & Certification */}
-<div className={activeTab === 3 ? "block" : "hidden"}>
+<div className={activeTab === 4 ? "block" : "hidden"}>
   <div className="space-y-6">
 
     {/* Professional Certification */}
@@ -2217,7 +2241,7 @@ const handleSubmit = async (e: React.FormEvent) => {
 </div>
 
         {/* Tab 7: Accessory management*/}
-        {activeTab === 7 && (
+        {activeTab === 8 && (
           <div className="space-y-6">
 
             {/* ================= ASSIGNED EQUIPMENT ================= */}
@@ -2715,4 +2739,3 @@ const handleSubmit = async (e: React.FormEvent) => {
     </div>
   );
 }
-

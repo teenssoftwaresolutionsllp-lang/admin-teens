@@ -5,7 +5,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 type Props = {
-  leaveId?: string | null;
+  leaveId: string | null | undefined;
 };
 
 type ActionStatus = "approved" | "rejected";
@@ -27,18 +27,41 @@ export default function ManagerLeaveActions({ leaveId }: Props) {
       setLoading(status);
       setError("");
 
-      // Validate leave ID before calling the backend.
+      // =========================================
+      // 1. DEBUG LEAVE ID
+      // =========================================
+
+      console.log("========== MANAGER LEAVE DEBUG ==========");
+      console.log("Received leaveId:", leaveId);
+      console.log("Leave ID type:", typeof leaveId);
+      console.log(
+        "Is valid UUID:",
+        typeof leaveId === "string" && UUID_REGEX.test(leaveId)
+      );
+      console.log("Action:", status);
+      console.log("=========================================");
+
+      // =========================================
+      // 2. VALIDATE LEAVE ID
+      // =========================================
+
       if (!leaveId || !UUID_REGEX.test(leaveId)) {
         throw new Error(
-          "Invalid leave request ID. Please refresh the page and try again."
+          `Invalid leave request ID: ${String(leaveId)}. Please refresh the manager page.`
         );
       }
 
-      const apiUrl = `/api/managerleaves/${leaveId}`;
+      // =========================================
+      // 3. BUILD API URL
+      // =========================================
+
+      const apiUrl = `/api/managerleaves/${encodeURIComponent(leaveId)}`;
 
       console.log("Manager Leave API URL:", apiUrl);
-      console.log("Manager Leave ID:", leaveId);
-      console.log("Action:", status);
+
+      // =========================================
+      // 4. CALL API
+      // =========================================
 
       const response = await fetch(apiUrl, {
         method: "PATCH",
@@ -47,11 +70,16 @@ export default function ManagerLeaveActions({ leaveId }: Props) {
           Accept: "application/json",
         },
         credentials: "same-origin",
+        cache: "no-store",
         body: JSON.stringify({
           status,
           rejectionReason,
         }),
       });
+
+      // =========================================
+      // 5. READ API RESPONSE
+      // =========================================
 
       const responseText = await response.text();
 
@@ -72,13 +100,26 @@ export default function ManagerLeaveActions({ leaveId }: Props) {
         );
       }
 
-      if (!response.ok || !data.success) {
+      // =========================================
+      // 6. CHECK API RESULT
+      // =========================================
+
+      if (!response.ok || data.success !== true) {
         throw new Error(
-          data.error || "Unable to update leave request."
+          data.error ||
+            data.message ||
+            `Unable to ${status === "approved" ? "approve" : "reject"} leave request.`
         );
       }
 
-      alert(data.message || "Leave request updated successfully.");
+      // =========================================
+      // 7. SUCCESS
+      // =========================================
+
+      alert(
+        data.message ||
+          `Leave request ${status} successfully.`
+      );
 
       router.refresh();
     } catch (err) {
@@ -94,6 +135,10 @@ export default function ManagerLeaveActions({ leaveId }: Props) {
     }
   }
 
+  // =========================================
+  // APPROVE LEAVE
+  // =========================================
+
   function approveLeave() {
     if (loading !== null) return;
 
@@ -103,6 +148,10 @@ export default function ManagerLeaveActions({ leaveId }: Props) {
 
     void handleAction("approved");
   }
+
+  // =========================================
+  // REJECT LEAVE
+  // =========================================
 
   function rejectLeave() {
     if (loading !== null) return;
@@ -118,6 +167,10 @@ export default function ManagerLeaveActions({ leaveId }: Props) {
     void handleAction("rejected", reason.trim());
   }
 
+  // =========================================
+  // UI
+  // =========================================
+
   return (
     <div className="flex flex-col items-end gap-2">
       <div className="flex items-center gap-2">
@@ -127,7 +180,9 @@ export default function ManagerLeaveActions({ leaveId }: Props) {
           disabled={loading !== null}
           className="rounded-lg bg-green-600 px-3 py-2 text-xs font-semibold text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {loading === "approved" ? "Approving..." : "Approve"}
+          {loading === "approved"
+            ? "Approving..."
+            : "Approve"}
         </button>
 
         <button
@@ -136,7 +191,9 @@ export default function ManagerLeaveActions({ leaveId }: Props) {
           disabled={loading !== null}
           className="rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {loading === "rejected" ? "Rejecting..." : "Reject"}
+          {loading === "rejected"
+            ? "Rejecting..."
+            : "Reject"}
         </button>
       </div>
 

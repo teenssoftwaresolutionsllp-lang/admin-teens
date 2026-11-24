@@ -13,6 +13,8 @@ import DocumentUpload from "./DocumentUpload";
 interface EmployeeDetailProps {
   employee: Employee;
   documents: EmployeeDocument[];
+  educationRecords: Record<string, unknown>[];
+  previousEmploymentRecords: Record<string, unknown>[];
   role: UserRole;
 }
 
@@ -38,7 +40,7 @@ function DetailTile({ label, value }: { label: string; value: React.ReactNode })
   );
 }
 
-export default function EmployeeDetail({ employee, documents, role }: EmployeeDetailProps) {
+export default function EmployeeDetail({ employee, documents, educationRecords,previousEmploymentRecords,role }: EmployeeDetailProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
@@ -173,6 +175,19 @@ export default function EmployeeDetail({ employee, documents, role }: EmployeeDe
     early_release_reason?: string | null;
   };
 
+  const educationDetails =
+  (employee as Employee & {
+    educational_details?: Record<string, string> | null;
+  }).educational_details || {};
+
+const educationSections = [
+  { title: "10th", prefix: "education_10th" },
+  { title: "12th", prefix: "education_12th" },
+  { title: "Graduation", prefix: "education_graduation" },
+  { title: "Post Graduation", prefix: "education_post_graduation" },
+  { title: "Diploma", prefix: "education_diploma" },
+];
+
   const isOnNotice = noticeEmployee.notice_status === "notice_period" || employee.status?.toLowerCase() === "on_notice";
 
   const plannedLastWorkingDate = noticeEmployee.planned_last_working_date || calculatePlannedLastWorkingDate(
@@ -203,14 +218,14 @@ export default function EmployeeDetail({ employee, documents, role }: EmployeeDe
   };
 
   useEffect(() => {
-    if (activeTab === 7) {
+    if (activeTab === 10) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       void loadGratuity();
     }
   }, [activeTab]);
 
   {/* Tab : Skills & Certification */}
-<div className={activeTab === 3 ? "block" : "hidden"}>
+<div className={activeTab === 5 ? "block" : "hidden"}>
   <div className="space-y-6">
 
     {/* Professional Certification */}
@@ -619,17 +634,16 @@ const getEmployeeStatusLabel = () => {
 
   const tabs = [
     { name: "Personal", icon: User },
-    { name: "CurrentEmployment", icon: Briefcase },
-    // {name : "PreviousEmployment", icon: Briefcase},
-    { name: "Statutory", icon: File},
+    { name: "Current Employment", icon: Briefcase },
+    { name: "Previous Employment", icon: Briefcase },
+    { name: "Education", icon: FileText },
+    { name: "Statutory", icon: File },
     { name: "Skills & Certification", icon: FileText },
     { name: "Bank & Identity", icon: CreditCard },
     { name: "Address & Emergency", icon: MapPin },
     { name: "Documentation", icon: FileText },
-    { name:"Accessory Management", icon: LaptopMinimal},
-    
+    { name: "Accessory Management", icon: LaptopMinimal },
     { name: "Gratuity", icon: Gift },
-
     ...(!isExitStatus ? [{ name: "Terminated", icon: DeleteIcon }] : []),
   ];
 
@@ -790,7 +804,7 @@ const getEmployeeStatusLabel = () => {
             </div>
           )}
 
-          {/* Employment */}
+          {/*Curr Employment */}
           {activeTab === 1 && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <DetailTile label="Employee ID" value={employee.employee_id} />
@@ -809,7 +823,7 @@ const getEmployeeStatusLabel = () => {
           )}
 
 {/* Skills & Certification */}
-{activeTab === 3 && (
+{activeTab === 5 && (
   <div className="space-y-6">
 
     {/* Professional Certification */}
@@ -925,7 +939,7 @@ const getEmployeeStatusLabel = () => {
 )}
 
           {/* Bank & Identity */}
-          {activeTab === 4 && (
+          {activeTab === 6 && (
             <div className="space-y-6">
               <div>
                 <h3 className="text-sm font-bold text-slate-900 mb-3 uppercase tracking-wider text-slate-400">Financial Details</h3>
@@ -943,13 +957,14 @@ const getEmployeeStatusLabel = () => {
                   {renderSensitiveField("PAN Number",employee.pan_number,"pan_number")}
                   {renderSensitiveField("Aadhaar Number",employee.aadhar_number,"aadhar_number")}
                   {renderSensitiveField("Passport Number",employee.passport_number,"passport_number")}
+                  {renderSensitiveField("Driving License",employee.driving_license_number,"driving_license_number")}
                 </div>
               </div>
             </div>
           )}
 
           {/* Address & Emergency */}
-          {activeTab === 5 && (
+          {activeTab === 7 && (
             <div className="space-y-8">
 
               {/* ================= COMMUNICATION ADDRESS ================= */}
@@ -1139,7 +1154,7 @@ const getEmployeeStatusLabel = () => {
           )}
 
           {/* Documents */}
-          {activeTab === 6 && (
+          {activeTab === 8 && (
             <div>
               <DocumentUpload
                 employeeId={employee.id}
@@ -1148,10 +1163,183 @@ const getEmployeeStatusLabel = () => {
               />
             </div>
           )}
+          {/* Education - Read Only */}
+          {/* {activeTab === 3 && (
+            <div className="space-y-5">
+              <div>
+                <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400">
+                  Education Details
+                </h3>
+                <p className="mt-1 text-xs text-slate-500">
+                  Education records submitted during onboarding. These records are read-only.
+                </p>
+              </div>
 
+              {educationRecords.length > 0 ? (
+                <div className="space-y-4">
+                  {educationRecords.map((record, index) => (
+                    <div
+                      key={String(record.id ?? index)}
+                      className="rounded-xl border border-slate-200 bg-white p-5"
+                    >
+                      <h4 className="mb-4 text-sm font-bold text-slate-900">
+                        {String(record.qualification_name || record.qualification_type || `Qualification ${index + 1}`)}
+                      </h4>
 
-          {/* Tab 5: Accessory Management*/}
-          {activeTab === 7 && (
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                        {record.qualification_type === "10th" && (
+                          <>
+                            {Boolean(record.institution_name) && (
+                              <DetailTile label="School Name" value={String(record.institution_name)} />
+                            )}
+                            {Boolean(record.board) && (
+                              <DetailTile label="Board" value={String(record.board)} />
+                            )}
+                          </>
+                        )}
+
+                        {record.qualification_type === "12th" && (
+                          <>
+                            {Boolean(record.institution_name) && (
+                              <DetailTile label="College Name" value={String(record.institution_name)} />
+                            )}
+                            {Boolean(record.board) && (
+                              <DetailTile label="Board" value={String(record.board)} />
+                            )}
+                            {Boolean(record.stream) && (
+                              <DetailTile label="Stream" value={String(record.stream)} />
+                            )}
+                          </>
+                        )}
+
+                        {(record.qualification_type === "Graduation" ||
+                          record.qualification_type === "Post Graduation") && (
+                          <>
+                            {Boolean(record.institution_name) && (
+                              <DetailTile label="Institution Name" value={String(record.institution_name)} />
+                            )}
+                            {Boolean(record.university) && (
+                              <DetailTile label="University" value={String(record.university)} />
+                            )}
+                            {Boolean(record.course) && (
+                              <DetailTile label="Course" value={String(record.course)} />
+                            )}
+                            {Boolean(record.specialization) && (
+                              <DetailTile label="Specialization" value={String(record.specialization)} />
+                            )}
+                          </>
+                        )}
+
+                        {record.qualification_type === "Other" && (
+                          <>
+                            {Boolean(record.institution_name) && (
+                              <DetailTile label="Institution Name" value={String(record.institution_name)} />
+                            )}
+                            {Boolean(record.board) && (
+                              <DetailTile label="Board / Issuing Authority" value={String(record.board)} />
+                            )}
+                          </>
+                        )}
+
+                        {record.qualification_type === "twelfth" && (
+                          <>
+                            {record.institution_name && <DetailTile label="College" value={record.institution_name as string} />}
+                            {record.board && <DetailTile label="Board" value={record.board as string} />}
+                            {record.stream && <DetailTile label="Stream" value={record.stream as string} />}
+                          </>
+                        )}
+
+                        {(record.qualification_type === "graduation" ||
+                          record.qualification_type === "post_graduation") && (
+                          <>
+                            {record.course && <DetailTile label="Course" value={record.course as string} />}
+                            {record.specialization && <DetailTile label="Specialization" value={record.specialization as string} />}
+                            {record.institution_name && <DetailTile label="Institution" value={record.institution_name as string} />}
+                            {record.university && <DetailTile label="University" value={record.university as string} />}
+                          </>
+                        )}
+
+                        {record.qualification_type === "other" && (
+                          <>
+                            {record.institution_name && <DetailTile label="Institution" value={record.institution_name as string} />}
+                            {record.board && <DetailTile label="Authority" value={record.board as string} />}
+                          </>
+                        )}
+
+                        {Boolean(record.year_of_passing) && (
+                          <DetailTile label="Year of Passing" value={record.year_of_passing as string} />
+                        )}
+
+                        {Boolean(record.result_type) && (
+                          <DetailTile label="Result Type" value={record.result_type as string} />
+                        )}
+
+                        {Boolean(record.result_value) && (
+                          <DetailTile
+                            label="Result"
+                            value={`${record.result_value}${record.result_total ? ` / ${record.result_total}` : ""}`}
+                          />
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center">
+                  <p className="text-sm text-slate-500">
+                    No education records available.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}  */}
+
+          {/* Previous Employment - Read Only */}
+          {activeTab === 2 && (
+            <div className="space-y-5">
+              <div>
+                <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400">
+                  Previous Employment Details
+                </h3>
+                <p className="mt-1 text-xs text-slate-500">
+                  Previous employment history submitted during onboarding. These records are read-only.
+                </p>
+              </div>
+
+              {previousEmploymentRecords.length > 0 ? (
+                <div className="space-y-4">
+                  {previousEmploymentRecords.map((record, index) => (
+                    <div
+                      key={String(record.id ?? index)}
+                      className="rounded-xl border border-slate-200 bg-white p-5"
+                    >
+                      <h4 className="mb-4 text-sm font-bold text-slate-900">
+                        {String(record.company_name || `Previous Employer ${index + 1}`)}
+                      </h4>
+
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                        <DetailTile label="Designation" value={record.designation as string} />
+                        <DetailTile label="Employment Start Date" value={record.employment_start_date as string} />
+                        <DetailTile label="Employment End Date" value={record.employment_end_date as string} />
+                        <DetailTile label="Reference Person" value={record.reference_person_name as string} />
+                        <DetailTile label="Reference Designation" value={record.reference_person_designation as string} />
+                        <DetailTile label="Reference Contact" value={record.reference_contact_number as string} />
+                        <DetailTile label="Reference Official Email" value={record.reference_official_email as string} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center">
+                  <p className="text-sm text-slate-500">
+                    No previous employment records available.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 9 && (
             <div className="space-y-6">
 
               {/* Main Accessory */}
@@ -1219,7 +1407,7 @@ const getEmployeeStatusLabel = () => {
           )}
 
           {/* {tab 2: options to selct eligabilty of pt ,tds} */}
-          {activeTab === 2 && (
+          {activeTab === 4 && (
             <div className="space-y-6">
 
               <div>
@@ -1297,7 +1485,7 @@ const getEmployeeStatusLabel = () => {
           )}
 
           {/* ================= GRATUITY ================= */}
-          {activeTab === 8 && (
+          {activeTab === 10 && (
             <div className="space-y-6">
 
               {/* HEADER */}
@@ -1505,7 +1693,7 @@ const getEmployeeStatusLabel = () => {
           )}
 
           {/* Delete */}
-          {!isExitStatus && activeTab === 9 && (
+          {!isExitStatus && activeTab === 11 && (
             <div className="space-y-6">
               {isOnNotice && (
                 <div className="rounded-xl border border-amber-200 bg-amber-50 p-5 space-y-4">

@@ -83,6 +83,8 @@ type EmployeeProfileData = Employee & {
   esi?: string | null;
   pt?: string | null;
   tds?: string | null;
+
+ educational_details?: Record<string, string> | null;
 professional_certification_name?: string | null;
 professional_certification_organization?: string | null;
 professional_certification_credential_id?: string | null;
@@ -570,6 +572,8 @@ const removeTechnicalSkill = (skill: string) => {
   const openEditSection = (section: EditSection) => {
     const data = employeeData;
 
+    const education = data.educational_details || {};
+
     setEditFormData({
       phone: data.phone || "",
       date_of_birth: data.date_of_birth || "",
@@ -622,41 +626,42 @@ const removeTechnicalSkill = (skill: string) => {
 
 // EDUCATION DETAILS
 
+// EDUCATION DETAILS
+
 // 10th Standard
-education_10th_institution: "",
-education_10th_board: "",
-education_10th_year: "",
-education_10th_result_type: "",
-education_10th_result: "",
+education_10th_institution: education.education_10th_institution || "",
+education_10th_board: education.education_10th_board || "",
+education_10th_year: education.education_10th_year || "",
+education_10th_result_type: education.education_10th_result_type || "",
+education_10th_result: education.education_10th_result || "",
 
 // 12th / Intermediate
-education_12th_institution: "",
-education_12th_board: "",
-education_12th_year: "",
-education_12th_result_type: "",
-education_12th_result: "",
+education_12th_institution: education.education_12th_institution || "",
+education_12th_board: education.education_12th_board || "",
+education_12th_year: education.education_12th_year || "",
+education_12th_result_type: education.education_12th_result_type || "",
+education_12th_result: education.education_12th_result || "",
 
 // Graduation
-education_graduation_institution: "",
-education_graduation_board: "",
-education_graduation_year: "",
-education_graduation_result_type: "",
-education_graduation_result: "",
+education_graduation_institution: education.education_graduation_institution || "",
+education_graduation_board: education.education_graduation_board || "",
+education_graduation_year: education.education_graduation_year || "",
+education_graduation_result_type: education.education_graduation_result_type || "",
+education_graduation_result: education.education_graduation_result || "",
 
 // Post-Graduation
-education_post_graduation_institution: "",
-education_post_graduation_board: "",
-education_post_graduation_year: "",
-education_post_graduation_result_type: "",
-education_post_graduation_result: "",
+education_post_graduation_institution: education.education_post_graduation_institution || "",
+education_post_graduation_board: education.education_post_graduation_board || "",
+education_post_graduation_year: education.education_post_graduation_year || "",
+education_post_graduation_result_type: education.education_post_graduation_result_type || "",
+education_post_graduation_result: education.education_post_graduation_result || "",
 
 // Diploma
-education_diploma_institution: "",
-education_diploma_board: "",
-education_diploma_year: "",
-education_diploma_result_type: "",
-education_diploma_result: "",
-
+education_diploma_institution: education.education_diploma_institution || "",
+education_diploma_board: education.education_diploma_board || "",
+education_diploma_year: education.education_diploma_year || "",
+education_diploma_result_type: education.education_diploma_result_type || "",
+education_diploma_result: education.education_diploma_result || "",
 // PROFESSIONAL CERTIFICATION
 // PROFESSIONAL CERTIFICATION
 professional_certification_name:
@@ -1944,7 +1949,63 @@ if (!allowedFields.includes(field)) {
           }
         }
       );
+      // SAVE QUALIFICATION DETAILS DIRECTLY
 
+if (editSection === "education" || editSection === "all") {
+  const educationFields = [
+    "education_10th_institution",
+    "education_10th_board",
+    "education_10th_year",
+    "education_10th_result_type",
+    "education_10th_result",
+
+    "education_12th_institution",
+    "education_12th_board",
+    "education_12th_year",
+    "education_12th_result_type",
+    "education_12th_result",
+
+    "education_graduation_institution",
+    "education_graduation_board",
+    "education_graduation_year",
+    "education_graduation_result_type",
+    "education_graduation_result",
+
+    "education_post_graduation_institution",
+    "education_post_graduation_board",
+    "education_post_graduation_year",
+    "education_post_graduation_result_type",
+    "education_post_graduation_result",
+
+    "education_diploma_institution",
+    "education_diploma_board",
+    "education_diploma_year",
+    "education_diploma_result_type",
+    "education_diploma_result",
+  ] as const;
+
+  const oldEducation =
+    employeeData.educational_details || {};
+
+  const newEducation: Record<string, string> = {};
+
+  educationFields.forEach((field) => {
+    newEducation[field] = String(
+      editFormData[field] ?? ""
+    ).trim();
+  });
+
+  const hasEducationChanges = educationFields.some(
+    (field) =>
+      String(oldEducation[field] ?? "").trim() !==
+      newEducation[field]
+  );
+
+  if (hasEducationChanges) {
+    changedFields.educational_details = newEducation;
+    previousValues.educational_details = oldEducation;
+  }
+}
       console.log("[PROFILE CHANGE] Submit handler started");
 
 // DEBUG: Check certification and technical skills

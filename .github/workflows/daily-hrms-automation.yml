@@ -16,7 +16,6 @@ on:
 concurrency:
   group: daily-hrms-automation
   cancel-in-progress: false
-
 permissions:
   contents: read
 

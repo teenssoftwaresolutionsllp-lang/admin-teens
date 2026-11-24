@@ -4,8 +4,22 @@ import { useEffect, useState } from "react";
 import { toast } from "react-hot-toast";
 import { useRouter } from "next/navigation";
 import { EmployeeDocument } from "@/lib/types";
-import { Upload, FileText, Trash2, Download, Eye, Loader2, EyeOff, Copy, Landmark } from "lucide-react";
-
+import {
+  Upload,
+  FileText,
+  Trash2,
+  Download,
+  Eye,
+  Loader2,
+  EyeOff,
+  Copy,
+  Landmark,
+  IdCard,
+  GraduationCap,
+  BriefcaseBusiness,
+  FileCheck,
+  Image as ImageIcon,
+} from "lucide-react";
 interface DocumentUploadProps {
   employeeId?: string;
   documents: EmployeeDocument[];
@@ -228,20 +242,34 @@ export default function DocumentUpload({ employeeId, documents: initialDocs, onU
             <p className="text-xs text-slate-400 font-medium">No documents uploaded yet for this employee record.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
 
             {documents.map((doc, index) => (
               <div
                 key={`${doc.id}-${index}`}
-                className="flex items-start justify-between gap-3 rounded-xl border border-slate-200/90 bg-white p-4 shadow-sm transition-shadow hover:shadow-md"
+                className="flex min-w-0 flex-col items-stretch gap-3 rounded-xl border border-slate-200/90 bg-white p-4 shadow-sm transition-all hover:border-indigo-200 hover:shadow-md"
               >
                 <div className="min-w-0 flex-1">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
-                    <FileText className="h-5 w-5" />
+                  <div className="mx-auto flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
+                    {doc.document_type === "Bank Passbook" ? (
+                      <Landmark className="h-7 w-7" />
+                    ) : ["Aadhar Card", "PAN Card", "Passport"].includes(doc.document_type) ? (
+                      <IdCard className="h-7 w-7" />
+                    ) : ["10th Certificate", "12th Certificate", "Graduation Certificate", "Post-Graduation Certificate"].includes(doc.document_type) ? (
+                      <GraduationCap className="h-7 w-7" />
+                    ) : ["Experience Letter", "Relieving Letter"].includes(doc.document_type) ? (
+                      <BriefcaseBusiness className="h-7 w-7" />
+                    ) : doc.document_type === "Offer Letter" ? (
+                      <FileCheck className="h-7 w-7" />
+                    ) : doc.document_type.toLowerCase().includes("photo") ? (
+                      <ImageIcon className="h-7 w-7" />
+                    ) : (
+                      <FileText className="h-7 w-7" />
+                    )}
                   </div>
 
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-xs font-bold text-slate-900">
+                    <p className="truncate text-center text-xs font-bold text-slate-900">
                       {doc.document_name}
                     </p>
 
@@ -501,7 +529,7 @@ export default function DocumentUpload({ employeeId, documents: initialDocs, onU
                   </div>
                 </div>
 
-                <div className="ml-1 flex shrink-0 items-center gap-1">
+                <div className="mt-auto flex w-full items-center justify-center gap-3 border-t border-slate-100 pt-3">
                   <a
                     href={`/api/documents/${doc.id}/view`}
                     target="_blank"

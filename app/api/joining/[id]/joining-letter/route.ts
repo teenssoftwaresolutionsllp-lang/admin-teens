@@ -234,7 +234,7 @@ export async function POST(
     const { data: candidate, error: candidateError } = await auth.admin
       .from("joining_candidates")
       .select(
-        "id, first_name, last_name, personal_email, designation, joining_date, annual_ctc, status, department, employment_type, work_location, joining_letter_sent_at, joining_letter_send_status"
+        "id, first_name, last_name, personal_email, designation, joining_date, annual_ctc, status, department, employment_type, work_location, joining_letter_sent_at, joining_letter_send_status, onboarding_verified_at, onboarding_verified_by"
       )
       .eq("id", id)
       .maybeSingle();
@@ -247,6 +247,15 @@ export async function POST(
       return NextResponse.json(
         { error: "Joining candidate not found." },
         { status: 404 }
+      );
+    }
+
+    // HR must explicitly complete onboarding verification first.
+    if (!candidate.onboarding_verified_at || !candidate.onboarding_verified_by)
+    {
+      return NextResponse.json(
+        {error: "Complete HR onboarding verification before generating the joining letter.",},
+        { status: 409 }
       );
     }
 

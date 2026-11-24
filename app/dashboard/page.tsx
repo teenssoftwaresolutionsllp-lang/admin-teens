@@ -15,6 +15,8 @@ import { DataStore } from '@/lib/data-store';
 import { Employee } from '@/lib/types';
 
 import DashboardCharts from '@/components/dashboard/DashboardCharts';
+import QuickActions from '@/components/dashboard/QuickActions';
+import DepartmentEmployeesWidget from '@/components/dashboard/DepartmentEmployeesWidget';
 import LeaveRequestsWidget from '@/components/dashboard/LeaveRequestsWidget';
 import RecentJoiningsWidget from '@/components/dashboard/RecentJoiningsWidget';
 import UpcomingHolidaysWidget from '@/components/dashboard/UpcomingHolidaysWidget';
@@ -655,29 +657,32 @@ export default async function DashboardPage({
             todayDate={todayIndia}
           />
 
-          {/* Charts and weekly leave requests */}
-          <div className="grid grid-cols-1 items-stretch gap-5 xl:grid-cols-12">
-            <div className="min-w-0 xl:col-span-8">
-              <DashboardCharts employees={allEmployees} />
-
+          {/* Row 1: Quick Actions, Department-wise Employees, Leave Requests */}
+          <div className="grid grid-cols-1 items-stretch gap-5 lg:grid-cols-12">
+            <div className="flex min-w-0 lg:col-span-4">
+              <QuickActions />
             </div>
 
-            <div className="min-w-0 xl:col-span-4 [&>section]:h-full">
+            <div className="flex min-w-0 lg:col-span-4">
+              <DepartmentEmployeesWidget employees={allEmployees} />
+            </div>
+
+            <div className="flex min-w-0 lg:col-span-4">
               <LeaveRequestsWidget requests={weeklyLeaveRequests} />
             </div>
           </div>
 
-          {/* Recent joinings, upcoming holidays and quick actions */}
-          <div className="grid grid-cols-1 items-stretch gap-5 xl:grid-cols-12">
-            <div className="min-w-0 xl:col-span-5">
+          {/* Row 2: Recent Joinings, Upcoming Holidays, Probation Completion Tracker */}
+          <div className="grid grid-cols-1 items-stretch gap-5 lg:grid-cols-12">
+            <div className="flex min-w-0 lg:col-span-3">
               <RecentJoiningsWidget employees={recentJoinings} />
             </div>
 
-            <div className="min-w-0 xl:col-span-3">
+            <div className="flex min-w-0 lg:col-span-3">
               <UpcomingHolidaysWidget holidays={upcomingHolidays} />
             </div>
 
-            <div className="min-w-0 xl:col-span-4">
+            <div className="flex min-w-0 lg:col-span-6">
               <ProbationCompletionTracker employees={allEmployees} />
             </div>
           </div>

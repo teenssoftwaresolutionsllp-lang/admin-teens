@@ -8,6 +8,7 @@ import Link from "next/link";
 import AddEmployeeButton from "@/components/manager/AddEmployeeButton";
 import ManagerLeaveActions from "@/components/manager/ApprovalManagerLeave";
 import ManagerNotificationBell from "@/components/manager/Notificationbell";
+import TeamWFHRequests from "@/components/manager/TeamWFHRequest";
 
 import {
   Home,
@@ -16,7 +17,6 @@ import {
   LayoutGrid,
   MessageCircle,
   CalendarDays,
-  Bell,
   Users,
   Settings,
   Search,
@@ -218,7 +218,7 @@ export default async function ManagerPage() {
 
   const firstName = employee.first_name || "Manager";
 
-  // TODAY'S DATE
+  // TODAY'S DATE - INDIA TIMEZONE
   const today = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Kolkata",
     year: "numeric",
@@ -241,6 +241,19 @@ export default async function ManagerPage() {
 
   const teamMembers = teamMembersData || [];
   const teamIds = teamMembers.map((member) => member.id);
+
+  // EMPLOYEE NAME HELPER
+  function getEmployeeName(employeeId: string) {
+    const member = teamMembers.find(
+      (item) => item.id === employeeId
+    );
+
+    if (!member) return "Employee";
+
+    return [member.first_name, member.last_name]
+      .filter(Boolean)
+      .join(" ");
+  }
 
   // PROJECTS
   const { data: projectsData } =
@@ -266,7 +279,7 @@ export default async function ManagerPage() {
   const projects = projectsData || [];
 
   // TODAY'S TEAM ATTENDANCE
-  const { data: attendanceData } =
+  const { data: attendanceData, error: attendanceError } =
     teamIds.length > 0
       ? await admin
           .from("attendance_logs")
@@ -275,10 +288,18 @@ export default async function ManagerPage() {
           )
           .in("employee_id", teamIds)
           .eq("attendance_date", today)
-      : { data: [] };
+      : { data: [], error: null };
+
+  if (attendanceError) {
+    console.error(
+      "Manager attendance fetch error:",
+      attendanceError.message
+    );
+  }
 
   const attendance = attendanceData || [];
 
+  // PRESENT COUNT
   const presentCount = attendance.filter((item) => {
     const status = String(item.status || "").toLowerCase();
 
@@ -289,9 +310,68 @@ export default async function ManagerPage() {
     );
   }).length;
 
+  // LATE ARRIVALS COUNT
   const lateCount = attendance.filter(
     (item) => item.is_late === true
   ).length;
+
+  // TODAY'S HR-APPROVED WFH REQUESTS
+  const {
+    data: approvedWfhData,
+    error: approvedWfhError,
+  } = teamIds.length > 0
+    ? await admin
+        .from("wfh_requests")
+        .select("employee_id")
+        .in("employee_id", teamIds)
+        .eq("request_date", today)
+        .eq("status", "approved")
+    : { data: [], error: null };
+
+  if (approvedWfhError) {
+    console.error(
+      "Approved WFH fetch error:",
+      approvedWfhError.message
+    );
+  }
+
+  const approvedWfhEmployeeIds = new Set(
+    (approvedWfhData || []).map((item) => item.employee_id)
+  );
+
+  // WFH COUNT
+  const wfhCount = approvedWfhEmployeeIds.size;
+
+  // WFO COUNT
+  const wfoCount = attendance.filter((item) => {
+    const status = String(item.status || "").toLowerCase();
+
+    const isPresent =
+      status.includes("present") ||
+      status.includes("late") ||
+      Boolean(item.check_in_time);
+
+    return (
+      isPresent &&
+      !approvedWfhEmployeeIds.has(item.employee_id)
+    );
+  }).length;
+
+  // EMPLOYEES TO DISPLAY IN TODAY'S ATTENDANCE
+  const attendanceDisplayRows = teamMembers
+    .filter(
+      (member) =>
+        attendance.some(
+          (record) => record.employee_id === member.id
+        ) || approvedWfhEmployeeIds.has(member.id)
+    )
+    .map((member) => ({
+      member,
+      record: attendance.find(
+        (item) => item.employee_id === member.id
+      ),
+      isApprovedWfh: approvedWfhEmployeeIds.has(member.id),
+    }));
 
   // TEAM LEAVE REQUESTS
   const {
@@ -306,7 +386,7 @@ export default async function ManagerPage() {
         .in("employee_id", teamIds)
         .order("created_at", { ascending: false })
         .limit(20)
-    : { data: [] };
+    : { data: [], error: null };
 
   if (leaveRequestsError) {
     console.error(
@@ -315,12 +395,12 @@ export default async function ManagerPage() {
     );
   }
 
-  const leaveRequests = leaveRequestsData || [];
+ const leaveRequests = (leaveRequestsData || []).filter(
+  (leave) =>
+    String(leave.status || "").toLowerCase() === "pending_manager"
+);
 
-  const pendingLeaves = leaveRequests.filter(
-    (leave) =>
-      String(leave.status || "").toLowerCase() === "pending_manager"
-  );
+const pendingLeaves = leaveRequests;
 
   // TEAM WFH REQUESTS
   const {
@@ -334,8 +414,8 @@ export default async function ManagerPage() {
         )
         .in("employee_id", teamIds)
         .order("created_at", { ascending: false })
-        .limit(8)
-    : { data: [] };
+        .limit(20)
+    : { data: [], error: null };
 
   if (wfhRequestsError) {
     console.error(
@@ -346,11 +426,17 @@ export default async function ManagerPage() {
 
   const wfhRequests = wfhRequestsData || [];
 
-  const pendingWFHRequests = wfhRequests.filter((request) =>
-    ["pending", "pending_manager"].includes(
-      String(request.status || "").toLowerCase()
+  // ONLY REQUESTS WAITING FOR MANAGER APPROVAL
+  const pendingWFHRequests = wfhRequests
+    .filter(
+      (request) =>
+        String(request.status || "").toLowerCase() ===
+        "pending_manager"
     )
-  );
+    .map((request) => ({
+      ...request,
+      employeeName: getEmployeeName(request.employee_id),
+    }));
 
   // MANAGER NOTIFICATIONS
   const {
@@ -371,11 +457,6 @@ export default async function ManagerPage() {
   }
 
   const notifications: any[] = notificationsData || [];
-
-  // UNREAD NOTIFICATIONS
-  const unreadNotifications = notifications.filter(
-    (notification) => notification.is_read === false
-  ).length;
 
   // STATISTICS
   const stats = [
@@ -413,46 +494,45 @@ export default async function ManagerPage() {
     },
   ];
 
-  function getEmployeeName(employeeId: string) {
-    const member = teamMembers.find(
-      (item) => item.id === employeeId
-    );
-
-    if (!member) return "Employee";
-
-    return [member.first_name, member.last_name]
-      .filter(Boolean)
-      .join(" ");
-  }
-
   return (
     <main className="min-h-screen bg-[#f5f6f8] text-slate-900">
       <div className="mx-auto flex min-h-screen max-w-[1800px]">
 
-        {/* SIDEBAR */}
-        <aside className="sticky top-0 hidden h-screen w-[245px] shrink-0 flex-col overflow-y-auto border-r border-slate-200 bg-white px-5 py-7 lg:flex">
+        {/* SIDEBAR - DARK NAVY DESIGN */}
+        <aside className="sticky top-0 hidden h-screen w-[245px] shrink-0 flex-col overflow-y-auto bg-[#0f172a] px-4 py-6 text-white lg:flex">
+
+          {/* LOGO */}
           <Link
             href="/manager"
-            className="mb-9 flex items-center justify-between px-1"
+            className="mb-9 flex items-center gap-3 px-2"
           >
-            <div className="flex items-center gap-2.5">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-purple-700 text-white">
-                <span className="text-lg font-bold">Z</span>
-              </div>
-              <span className="text-xl font-bold">Zendo</span>
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white text-sm font-extrabold text-purple-700">
+              TS
             </div>
-            <LayoutGrid className="h-4 w-4 text-slate-500" />
+
+            <div>
+              <h2 className="text-base font-bold text-white">
+                Teens Software
+              </h2>
+              <p className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                Manager Portal
+              </p>
+            </div>
           </Link>
 
-          <div className="mb-8 flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2.5">
+          {/* SEARCH */}
+          <div className="mb-7 flex items-center gap-3 rounded-xl border border-slate-700 bg-[#172238] px-3 py-3">
             <Search className="h-4 w-4 text-slate-400" />
             <input
               placeholder="Search"
-              className="w-full bg-transparent text-sm outline-none placeholder:text-slate-400"
+              className="w-full bg-transparent text-sm text-white outline-none placeholder:text-slate-400"
             />
           </div>
 
-          <p className="mb-3 px-2 text-xs text-slate-400">Home</p>
+          {/* MAIN MENU */}
+          <p className="mb-3 px-3 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+            Main Menu
+          </p>
 
           <nav className="space-y-1.5">
             {sidebarItems.map((item) => {
@@ -462,33 +542,27 @@ export default async function ManagerPage() {
                 <Link
                   key={item.label}
                   href={item.href}
-                  className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition ${
+                  className={`flex items-center gap-3 rounded-xl px-3 py-3 text-sm transition-all duration-200 ${
                     item.active
-                      ? "bg-black font-medium text-white"
-                      : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+                      ? "bg-[#5538f5] font-semibold text-white shadow-lg shadow-purple-900/30"
+                      : "text-slate-300 hover:bg-[#1e293b] hover:text-white"
                   }`}
                 >
-                  <Icon className="h-[18px] w-[18px]" />
-                  {item.label}
-
-                  {item.label === "Notifications" &&
-                    unreadNotifications > 0 && (
-                      <span className="ml-auto rounded-full bg-red-500 px-2 py-0.5 text-[10px] text-white">
-                        {unreadNotifications}
-                      </span>
-                    )}
+                  <Icon className="h-[18px] w-[18px] shrink-0" />
+                  <span>{item.label}</span>
                 </Link>
               );
             })}
           </nav>
 
-          <p className="mb-3 mt-9 px-2 text-xs text-slate-400">
+          {/* OTHERS */}
+          <p className="mb-3 mt-9 px-3 text-[10px] font-bold uppercase tracking-widest text-slate-500">
             Others
           </p>
 
           <Link
             href="/manager/team"
-            className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-slate-500 hover:bg-slate-100"
+            className="flex items-center gap-3 rounded-xl px-3 py-3 text-sm text-slate-300 transition hover:bg-[#1e293b] hover:text-white"
           >
             <Users className="h-[18px] w-[18px]" />
             Team Members
@@ -496,22 +570,23 @@ export default async function ManagerPage() {
 
           <Link
             href="/settings"
-            className="mt-1 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-slate-500 hover:bg-slate-100"
+            className="mt-1 flex items-center gap-3 rounded-xl px-3 py-3 text-sm text-slate-300 transition hover:bg-[#1e293b] hover:text-white"
           >
             <Settings className="h-[18px] w-[18px]" />
             Account Settings
           </Link>
 
-          <div className="mt-auto border-t border-slate-100 pt-5">
+          {/* BOTTOM */}
+          <div className="mt-auto border-t border-slate-700 pt-5">
             <Link
               href="/workspace"
-              className="flex items-center gap-2 rounded-xl px-3 py-3 text-sm font-medium text-slate-500 hover:bg-slate-100"
+              className="flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium text-slate-300 transition hover:bg-[#1e293b] hover:text-white"
             >
-              <ArrowLeft className="h-4 w-4" />
+              <ArrowLeft className="h-[18px] w-[18px]" />
               Switch Workspace
             </Link>
 
-            <div className="mt-3 flex items-center gap-2 px-3 text-xs text-emerald-600">
+            <div className="mt-4 flex items-center gap-2 px-3 text-[10px] text-emerald-400">
               <ShieldCheck className="h-4 w-4" />
               Manager access verified
             </div>
@@ -578,6 +653,7 @@ export default async function ManagerPage() {
                     >
                       <Icon className="h-5 w-5" />
                     </div>
+
                     <div className="min-w-0">
                       <p className="text-xs text-slate-500">
                         {stat.title}
@@ -602,6 +678,7 @@ export default async function ManagerPage() {
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm xl:col-span-3">
               <div className="mb-5 flex items-center justify-between">
                 <h2 className="text-sm font-bold">Project Overview</h2>
+
                 <Link
                   href="/manager/projects"
                   className="text-xs font-medium text-purple-700 hover:underline"
@@ -687,17 +764,19 @@ export default async function ManagerPage() {
               )}
             </div>
 
-            {/* ATTENDANCE */}
+            {/* TODAY'S ATTENDANCE */}
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm xl:col-span-2">
               <div className="mb-5 flex items-center justify-between">
                 <h2 className="text-sm font-bold">
                   Today's Attendance
                 </h2>
+
                 <span className="text-[10px] text-slate-400">
                   {formatDate(today)}
                 </span>
               </div>
 
+              {/* ATTENDANCE COUNTS */}
               <div className="mb-4 grid grid-cols-2 gap-3">
                 <div className="rounded-xl bg-emerald-50 p-3">
                   <p className="text-[10px] text-emerald-700">
@@ -716,9 +795,28 @@ export default async function ManagerPage() {
                     {lateCount}
                   </p>
                 </div>
+
+                <div className="rounded-xl bg-purple-50 p-3">
+                  <p className="text-[10px] text-purple-700">
+                    WFH
+                  </p>
+                  <p className="mt-1 text-2xl font-bold text-purple-700">
+                    {wfhCount}
+                  </p>
+                </div>
+
+                <div className="rounded-xl bg-blue-50 p-3">
+                  <p className="text-[10px] text-blue-700">
+                    WFO
+                  </p>
+                  <p className="mt-1 text-2xl font-bold text-blue-700">
+                    {wfoCount}
+                  </p>
+                </div>
               </div>
 
-              {attendance.length === 0 ? (
+              {/* EMPLOYEE ATTENDANCE LIST */}
+              {attendanceDisplayRows.length === 0 ? (
                 <div className="py-8 text-center">
                   <CalendarCheck className="mx-auto mb-2 h-8 w-8 text-slate-300" />
                   <p className="text-xs text-slate-500">
@@ -727,54 +825,64 @@ export default async function ManagerPage() {
                 </div>
               ) : (
                 <div className="max-h-[260px] space-y-3 overflow-y-auto">
-                  {attendance.slice(0, 8).map((record) => {
-                    const member = teamMembers.find(
-                      (item) => item.id === record.employee_id
-                    );
+                  {attendanceDisplayRows.slice(0, 8).map(
+                    ({ member, record, isApprovedWfh }) => {
+                      const workMode = isApprovedWfh
+                        ? "WFH"
+                        : record?.work_mode || "WFO";
 
-                    return (
-                      <div
-                        key={record.id}
-                        className="flex items-center justify-between gap-2 border-b border-slate-100 pb-3 last:border-0"
-                      >
-                        <div className="flex min-w-0 items-center gap-2">
-                          <EmployeeAvatar
-                            photoUrl={member?.profile_photo_url}
-                            firstName={member?.first_name}
-                            lastName={member?.last_name}
-                            size={32}
-                          />
+                      return (
+                        <div
+                          key={member.id}
+                          className="flex items-center justify-between gap-2 border-b border-slate-100 pb-3 last:border-0"
+                        >
+                          <div className="flex min-w-0 items-center gap-2">
+                            <EmployeeAvatar
+                              photoUrl={member.profile_photo_url}
+                              firstName={member.first_name}
+                              lastName={member.last_name}
+                              size={32}
+                            />
 
-                          <div className="min-w-0">
-                            <p className="truncate text-[11px] font-semibold">
-                              {getEmployeeName(record.employee_id)}
-                            </p>
-                            <p className="text-[9px] text-slate-400">
-                              Check in: {formatTime(record.check_in_time)}
+                            <div className="min-w-0">
+                              <p className="truncate text-[11px] font-semibold">
+                                {getEmployeeName(member.id)}
+                              </p>
+
+                              <p className="text-[9px] text-slate-400">
+                                Check in:{" "}
+                                {formatTime(record?.check_in_time)}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="text-right">
+                            <span
+                              className={`rounded-full px-2 py-1 text-[9px] font-semibold ${
+                                isApprovedWfh
+                                  ? "bg-purple-50 text-purple-700"
+                                  : statusStyle(
+                                      record?.is_late
+                                        ? "late"
+                                        : record?.status
+                                    )
+                              }`}
+                            >
+                              {isApprovedWfh
+                                ? "WFH"
+                                : record?.is_late
+                                  ? "Late"
+                                  : record?.status || "Present"}
+                            </span>
+
+                            <p className="mt-1 text-[9px] text-slate-400">
+                              {workMode}
                             </p>
                           </div>
                         </div>
-
-                        <div className="text-right">
-                          <span
-                            className={`rounded-full px-2 py-1 text-[9px] font-semibold ${statusStyle(
-                              record.is_late ? "late" : record.status
-                            )}`}
-                          >
-                            {record.is_late
-                              ? "Late"
-                              : record.status || "Present"}
-                          </span>
-
-                          {record.work_mode && (
-                            <p className="mt-1 text-[9px] text-slate-400">
-                              {record.work_mode}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    }
+                  )}
                 </div>
               )}
             </div>
@@ -813,8 +921,6 @@ export default async function ManagerPage() {
               ) : (
                 <div className="space-y-3">
                   {leaveRequests.map((leave) => {
-                    console.log("MANAGER LEAVE DATA:", leave);
-                    console.log("MANAGER LEAVE ID:", leave.id);
                     const isManagerPending =
                       String(leave.status || "").toLowerCase() ===
                       "pending_manager";
@@ -871,10 +977,7 @@ export default async function ManagerPage() {
                               This request is waiting for your approval.
                             </p>
 
-                            {/* IMPORTANT: Pass leaveId, not leaveRequestId */}
-                         <ManagerLeaveActions
-                          leaveId={leave.id}
-                        />
+                            <ManagerLeaveActions leaveId={leave.id} />
                           </div>
                         )}
 
@@ -896,6 +999,7 @@ export default async function ManagerPage() {
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm xl:col-span-2">
               <div className="mb-5 flex items-center justify-between">
                 <h2 className="text-sm font-bold">Team Members</h2>
+
                 <Link
                   href="/manager/team"
                   className="text-xs font-medium text-purple-700 hover:underline"
@@ -961,73 +1065,21 @@ export default async function ManagerPage() {
                     Team WFH Requests
                   </h2>
                 </div>
+
                 <p className="mt-1 text-[10px] text-slate-400">
-                  Work from home requests submitted by your team
+                  Review work from home requests submitted by your team
                 </p>
               </div>
 
               <span className="rounded-full bg-purple-50 px-2.5 py-1 text-[10px] font-semibold text-purple-700">
-                {pendingWFHRequests.length} Pending
+                {pendingWFHRequests.length} Awaiting Your Review
               </span>
             </div>
 
-            {wfhRequests.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-slate-200 py-10 text-center">
-                <House className="mx-auto mb-2 h-8 w-8 text-slate-300" />
-                <p className="text-sm font-medium text-slate-600">
-                  No WFH requests
-                </p>
-                <p className="mt-1 text-xs text-slate-400">
-                  Your team's work from home requests will appear here.
-                </p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                {wfhRequests.map((request) => (
-                  <div
-                    key={request.id}
-                    className="flex items-start justify-between gap-3 rounded-xl border border-slate-100 p-3"
-                  >
-                    <div className="flex min-w-0 items-start gap-3">
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-purple-50 text-purple-600">
-                        <House className="h-4 w-4" />
-                      </div>
-
-                      <div className="min-w-0">
-                        <p className="truncate text-xs font-bold">
-                          {getEmployeeName(request.employee_id)}
-                        </p>
-
-                        <p className="mt-1 text-[10px] text-slate-500">
-                          {formatDate(request.request_date)}
-                        </p>
-
-                        <p className="mt-1 break-words text-[10px] text-slate-400">
-                          {request.reason || "No reason provided"}
-                        </p>
-
-                        {request.rejection_reason && (
-                          <p className="mt-2 text-[10px] text-red-600">
-                            Rejection reason: {request.rejection_reason}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-
-                    <span
-                      className={`shrink-0 rounded-full px-2.5 py-1 text-[9px] font-semibold ${statusStyle(
-                        request.status
-                      )}`}
-                    >
-                      {request.status || "Unknown"}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
+            <TeamWFHRequests requests={pendingWFHRequests} />
           </div>
 
-          {/* MY TASKS - DISPLAY ONLY */}
+          {/* MY TASKS */}
           <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="mb-4 flex items-center justify-between">
               <div>
@@ -1036,6 +1088,7 @@ export default async function ManagerPage() {
                   Task management is not enabled in this workspace.
                 </p>
               </div>
+
               <ListTodo className="h-5 w-5 text-slate-400" />
             </div>
 

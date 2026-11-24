@@ -145,4 +145,3 @@ export default async function EditEmployeePage(props: { params: Promise<{ id: st
     </div>
   );
 }
-
