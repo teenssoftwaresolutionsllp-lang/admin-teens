@@ -128,8 +128,12 @@ export default function EmployeeForm({ employee, departments, projects, generate
   );
   
   // Basic form state
-  const [formData, setFormData] = useState<Partial<Employee>& { initial_password?: string }>({
-
+const [formData, setFormData] = useState<
+  Partial<Employee> & {
+    initial_password?: string;
+    educational_details?: Record<string, string>;
+  }
+>({
     // Personal Information
     first_name: employee?.first_name || "",
     last_name: employee?.last_name || "",
@@ -197,7 +201,6 @@ export default function EmployeeForm({ employee, departments, projects, generate
     emergency_contact_relation_3: employee?.emergency_contact_relation_3 || "",
     emergency_contact_phone_3: employee?.emergency_contact_phone_3 || "",
 
-
     // Skills & Certification
 professional_certification_name:
   employee?.professional_certification_name || "",
@@ -220,6 +223,39 @@ technical_skills: employee?.technical_skills || [],
     // Statutory Information
     esi_number: employee?.esi_number || "",
     uan_number: employee?.uan_number || "",
+
+    // Education Information
+educational_details: {
+  education_10th_institution: "",
+  education_10th_board: "",
+  education_10th_year: "",
+  education_10th_result_type: "",
+  education_10th_result: "",
+
+  education_12th_institution: "",
+  education_12th_board: "",
+  education_12th_year: "",
+  education_12th_result_type: "",
+  education_12th_result: "",
+
+  education_graduation_institution: "",
+  education_graduation_board: "",
+  education_graduation_year: "",
+  education_graduation_result_type: "",
+  education_graduation_result: "",
+
+  education_post_graduation_institution: "",
+  education_post_graduation_board: "",
+  education_post_graduation_year: "",
+  education_post_graduation_result_type: "",
+  education_post_graduation_result: "",
+
+  education_diploma_institution: "",
+  education_diploma_board: "",
+  education_diploma_year: "",
+  education_diploma_result_type: "",
+  education_diploma_result: "",
+},
 
     // Profile / Status
     status: employee?.status || "active",
@@ -398,6 +434,11 @@ technical_skills: employee.technical_skills ?? [],
       // Statutory
       esi_number: employee.esi_number ?? "",
       uan_number: employee.uan_number ?? "",
+      // Education
+educational_details:
+  (employee as Employee & {
+    educational_details?: Record<string, string>;
+  }).educational_details || {},
       // Status
       status: employee.status ?? "active",
 
@@ -2252,6 +2293,139 @@ const handleSubmit = async (e: React.FormEvent) => {
       </div>
     </section>
 
+  </div>
+</div>
+
+{/* Tab 3: Education */}
+<div className={activeTab === 3 ? "block" : "hidden"}>
+  <div className="space-y-6">
+    <div>
+      <h3 className="text-sm font-bold uppercase tracking-wider text-slate-900">
+        Education Details
+      </h3>
+      <p className="mt-1 text-xs text-slate-500">
+        Add the employee's educational qualifications.
+      </p>
+    </div>
+
+    {[
+      { key: "10th", label: "10th / SSC" },
+      { key: "12th", label: "Intermediate / 12th" },
+      { key: "graduation", label: "Graduation" },
+      { key: "post_graduation", label: "Post Graduation" },
+      { key: "diploma", label: "Diploma" },
+    ].map((education) => {
+      const details = formData.educational_details || {};
+
+      const updateEducation = (
+        field: string,
+        value: string
+      ) => {
+        setFormData((prev) => ({
+          ...prev,
+          educational_details: {
+            ...(prev.educational_details || {}),
+            [`education_${education.key}_${field}`]: value,
+          },
+        }));
+      };
+
+      return (
+        <section
+          key={education.key}
+          className="rounded-xl border border-slate-200 p-5 space-y-4"
+        >
+          <h4 className="text-sm font-bold text-slate-900">
+            {education.label}
+          </h4>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                Institution Name
+              </label>
+              <input
+                type="text"
+                value={
+                  details[`education_${education.key}_institution`] || ""
+                }
+                onChange={(e) =>
+                  updateEducation("institution", e.target.value)
+                }
+                placeholder="Enter institution name"
+                className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                Board / University
+              </label>
+              <input
+                type="text"
+                value={details[`education_${education.key}_board`] || ""}
+                onChange={(e) =>
+                  updateEducation("board", e.target.value)
+                }
+                placeholder="Enter board or university"
+                className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                Passing Year
+              </label>
+              <input
+                type="text"
+                value={details[`education_${education.key}_year`] || ""}
+                onChange={(e) =>
+                  updateEducation("year", e.target.value)
+                }
+                placeholder="e.g. 2022"
+                maxLength={4}
+                className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                Result Type
+              </label>
+              <select
+                value={
+                  details[`education_${education.key}_result_type`] || ""
+                }
+                onChange={(e) =>
+                  updateEducation("result_type", e.target.value)
+                }
+                className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+              >
+                <option value="">Select Result Type</option>
+                <option value="Percentage">Percentage</option>
+                <option value="CGPA">CGPA</option>
+                <option value="Grade">Grade</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                Result
+              </label>
+              <input
+                type="text"
+                value={details[`education_${education.key}_result`] || ""}
+                onChange={(e) =>
+                  updateEducation("result", e.target.value)
+                }
+                placeholder="Enter percentage, CGPA or grade"
+                className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm"
+              />
+            </div>
+          </div>
+        </section>
+      );
+    })}
   </div>
 </div>
 
