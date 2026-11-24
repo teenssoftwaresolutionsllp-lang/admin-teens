@@ -70,6 +70,13 @@ export default function EmployeeDetail({ employee, documents, educationRecords,p
   const [exitLoginDays, setExitLoginDays] = useState("45");
   const [exitDocument, setExitDocument] = useState<File | null>(null);
 
+  const certificationDocuments = (documents || []).filter((doc) => {
+  return (
+    String(doc.document_type || "").toLowerCase() ===
+    "professional certification"
+  );
+});
+
   const maskString = (str?: string | null, visibleCount = 4) => {
     if (!str) return "N/A";
     if (str.length <= visibleCount) return str;
@@ -238,6 +245,19 @@ export default function EmployeeDetail({ employee, documents, educationRecords,p
     early_release_reason?: string | null;
   };
 
+  const educationDetails =
+  (employee as Employee & {
+    educational_details?: Record<string, string> | null;
+  }).educational_details || {};
+
+const educationSections = [
+  { title: "10th", prefix: "education_10th" },
+  { title: "12th", prefix: "education_12th" },
+  { title: "Graduation", prefix: "education_graduation" },
+  { title: "Post Graduation", prefix: "education_post_graduation" },
+  { title: "Diploma", prefix: "education_diploma" },
+];
+
   const isOnNotice = noticeEmployee.notice_status === "notice_period" || employee.status?.toLowerCase() === "on_notice";
 
   const plannedLastWorkingDate = noticeEmployee.planned_last_working_date || calculatePlannedLastWorkingDate(
@@ -266,11 +286,96 @@ export default function EmployeeDetail({ employee, documents, educationRecords,p
   };
 
   useEffect(() => {
-    if (activeTab === 9) {
+    if (activeTab === 10) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       void loadGratuity();
     }
   }, [activeTab]);
+
+  {/* Tab : Skills & Certification */}
+<div className={activeTab === 5 ? "block" : "hidden"}>
+  <div className="space-y-6">
+
+    {/* Professional Certification */}
+    <section className="rounded-xl border border-slate-200 p-5">
+      <h3 className="mb-4 text-sm font-bold uppercase tracking-wider text-slate-900">
+        Professional Certification
+      </h3>
+
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+
+        <div>
+          <label className="mb-1.5 block text-xs font-bold text-slate-700">
+            Certification Name
+          </label>
+        <div>
+  <label className="mb-1.5 block text-xs font-bold text-slate-700">
+    Certification Name
+  </label>
+  <p className="text-sm text-slate-900">
+    {employee.professional_certification_name || "Not provided"}
+  </p>
+</div>
+        </div>
+
+        <div>
+  <label className="mb-1.5 block text-xs font-bold text-slate-700">
+    Organization
+  </label>
+  <p className="text-sm text-slate-900">
+    {employee.professional_certification_organization || "Not provided"}
+  </p>
+</div>
+
+     <div>
+  <label className="mb-1.5 block text-xs font-bold text-slate-700">
+    Credential ID
+  </label>
+  <p className="text-sm text-slate-900">
+    {employee.professional_certification_credential_id || "Not provided"}
+  </p>
+</div>
+
+        <div>
+  <label className="mb-1.5 block text-xs font-bold text-slate-700">
+    Issue Date
+  </label>
+  <p className="text-sm text-slate-900">
+    {employee.professional_certification_issue_date || "Not provided"}
+  </p>
+</div>
+
+<div>
+  <label className="mb-1.5 block text-xs font-bold text-slate-700">
+    Expiry Date
+  </label>
+  <p className="text-sm text-slate-900">
+    {employee.professional_certification_expiry_date || "Not provided"}
+  </p>
+</div>
+      </div>
+    </section>
+
+    {/* Technical Skills */}
+    <section className="rounded-xl border border-slate-200 p-5">
+      <h3 className="mb-4 text-sm font-bold uppercase tracking-wider text-slate-900">
+        Technical Skills
+      </h3>
+
+      <div className="flex flex-wrap gap-2">
+  {(employee.technical_skills ?? []).map((skill, index) => (
+    <span
+      key={`${skill}-${index}`}
+      className="rounded-full bg-indigo-50 px-3 py-2 text-sm text-indigo-700"
+    >
+      {skill}
+    </span>
+  ))}
+</div>
+    </section>
+
+  </div>
+</div>
 
 const getEmployeeStatusLabel = () => {
   const status = String(employee.status || "").toLowerCase();
@@ -600,11 +705,12 @@ const getEmployeeStatusLabel = () => {
     { name: "Current Employment", icon: Briefcase },
     { name: "Previous Employment", icon: Briefcase },
     { name: "Education", icon: FileText },
+    { name: "Statutory", icon: File },
+    { name: "Skills & Certification", icon: FileText },
     { name: "Bank & Identity", icon: CreditCard },
     { name: "Address & Emergency", icon: MapPin },
     { name: "Documentation", icon: FileText },
     { name: "Accessory Management", icon: LaptopMinimal },
-    { name: "Statutory", icon: File },
     { name: "Gratuity", icon: Gift },
     ...(!isExitStatus ? [{ name: "Terminated", icon: DeleteIcon }] : []),
   ];
@@ -811,8 +917,124 @@ const getEmployeeStatusLabel = () => {
             </div>
           )}
 
+{/* Skills & Certification */}
+{activeTab === 5 && (
+  <div className="space-y-6">
+
+    {/* Professional Certification */}
+    <section className="rounded-xl border border-slate-200 bg-white p-5">
+      <h3 className="mb-4 text-sm font-bold uppercase tracking-wider text-slate-900">
+        Professional Certification
+      </h3>
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <DetailTile
+          label="Certification Name"
+          value={employee.professional_certification_name}
+        />
+
+        <DetailTile
+          label="Organization"
+          value={employee.professional_certification_organization}
+        />
+
+        <DetailTile
+          label="Credential ID"
+          value={employee.professional_certification_credential_id}
+        />
+
+        <DetailTile
+          label="Issue Date"
+          value={formatDate(employee.professional_certification_issue_date)}
+        />
+
+        <DetailTile
+          label="Expiry Date"
+          value={formatDate(employee.professional_certification_expiry_date)}
+        />
+      </div>
+    </section>
+
+    {/* Technical Skills */}
+    <section className="rounded-xl border border-slate-200 bg-white p-5">
+      <h3 className="mb-4 text-sm font-bold uppercase tracking-wider text-slate-900">
+        Technical Skills
+      </h3>
+
+      <div className="flex flex-wrap gap-2">
+        {Array.isArray(employee.technical_skills) &&
+        employee.technical_skills.length > 0 ? (
+          employee.technical_skills.map((skill, index) => (
+            <span
+              key={`${skill}-${index}`}
+              className="rounded-full bg-blue-50 px-3 py-1.5 text-sm font-medium text-blue-700"
+            >
+              {skill}
+            </span>
+          ))
+        ) : (
+          <p className="text-sm text-slate-500">
+            No technical skills added.
+          </p>
+        )}
+      </div>
+    </section>
+
+    {/* Uploaded Certification Documents */}
+    <section className="rounded-xl border border-slate-200 bg-white p-5">
+      <h3 className="mb-4 text-sm font-bold uppercase tracking-wider text-slate-900">
+        Uploaded Certification
+      </h3>
+
+      {certificationDocuments.length > 0 ? (
+        <div className="space-y-3">
+          {certificationDocuments.map((doc) => (
+            <div
+              key={doc.id}
+              className="flex flex-col justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center"
+            >
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="rounded-lg bg-indigo-100 p-3">
+                  <FileText className="h-5 w-5 text-indigo-600" />
+                </div>
+
+                <div className="min-w-0">
+                  <p className="break-words text-sm font-semibold text-slate-900">
+                    {doc.document_name || "Professional Certification"}
+                  </p>
+
+                  <p className="text-xs text-slate-500">
+                    Professional Certification
+                  </p>
+                </div>
+              </div>
+
+              {doc.document_url && (
+                <a
+                  href={doc.document_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-700"
+                >
+                  <Eye className="h-4 w-4" />
+                  View Certificate
+                </a>
+              )}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-sm text-slate-500">
+          No certification document uploaded.
+        </p>
+      )}
+    </section>
+
+  </div>
+)}
+
           {/* Bank & Identity */}
-          {activeTab === 4 && (
+          {activeTab === 6 && (
             <div className="space-y-6">
               <div>
                 <h3 className="text-sm font-bold text-slate-900 mb-3 uppercase tracking-wider text-slate-400">Financial Details</h3>
@@ -837,9 +1059,50 @@ const getEmployeeStatusLabel = () => {
           )}
 
           {/* Address & Emergency */}
-          {activeTab === 5 && (
+          {activeTab === 7 && (
             <div className="space-y-8">
 
+              {/* ================= COMMUNICATION ADDRESS ================= */}
+              <div className="pt-6 border-t border-slate-100">
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
+                    <MapPin className="w-4 h-4 text-blue-600" />
+                  </div>
+
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900">
+                      Communication Address
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                      Employee&apos;s current or temporary residential address
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div className="md:col-span-2 lg:col-span-3">
+                    <DetailTile
+                      label="Address"
+                      value={employee.temporary_address}
+                    />
+                  </div>
+
+                  <DetailTile
+                    label="City"
+                    value={employee.temporary_city}
+                  />
+
+                  <DetailTile
+                    label="State"
+                    value={employee.temporary_state}
+                  />
+
+                  <DetailTile
+                    label="Pincode"
+                    value={employee.temporary_pincode}
+                  />
+                </div>
+              </div>
               {/* ================= PERMANENT ADDRESS ================= */}
               <div>
                 <div className="flex items-center gap-2 mb-4">
@@ -883,47 +1146,7 @@ const getEmployeeStatusLabel = () => {
               </div>
 
 
-              {/* ================= COMMUNICATION ADDRESS ================= */}
-              <div className="pt-6 border-t border-slate-100">
-                <div className="flex items-center gap-2 mb-4">
-                  <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
-                    <MapPin className="w-4 h-4 text-blue-600" />
-                  </div>
-
-                  <div>
-                    <h3 className="text-sm font-bold text-slate-900">
-                      Communication Address
-                    </h3>
-                    <p className="text-xs text-slate-500">
-                      Employee&apos;s current or temporary residential address
-                    </p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <div className="md:col-span-2 lg:col-span-3">
-                    <DetailTile
-                      label="Address"
-                      value={employee.temporary_address}
-                    />
-                  </div>
-
-                  <DetailTile
-                    label="City"
-                    value={employee.temporary_city}
-                  />
-
-                  <DetailTile
-                    label="State"
-                    value={employee.temporary_state}
-                  />
-
-                  <DetailTile
-                    label="Pincode"
-                    value={employee.temporary_pincode}
-                  />
-                </div>
-              </div>
+              
 
 
               {/* ================= EMERGENCY CONTACTS ================= */}
@@ -1026,7 +1249,7 @@ const getEmployeeStatusLabel = () => {
           )}
 
           {/* Documents */}
-          {activeTab === 6 && (
+          {activeTab === 8 && (
             <div>
               <DocumentUpload
                 employeeId={employee.id}
@@ -1035,9 +1258,8 @@ const getEmployeeStatusLabel = () => {
               />
             </div>
           )}
-
           {/* Education - Read Only */}
-          {activeTab === 3 && (
+          {/* {activeTab === 3 && (
             <div className="space-y-5">
               <div>
                 <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400">
@@ -1165,7 +1387,7 @@ const getEmployeeStatusLabel = () => {
                 </div>
               )}
             </div>
-          )}
+          )}  */}
 
           {/* Previous Employment - Read Only */}
           {activeTab === 2 && (
@@ -1212,8 +1434,7 @@ const getEmployeeStatusLabel = () => {
             </div>
           )}
 
-          {/* Tab 7: Accessory Management*/}
-          {activeTab === 7 && (
+          {activeTab === 9 && (
             <div className="space-y-6">
 
               {/* Main Accessory */}
@@ -1280,8 +1501,8 @@ const getEmployeeStatusLabel = () => {
             </div>
           )}
 
-          {/* {tab : options to selct eligabilty of pt ,tds} */}
-          {activeTab === 8 && (
+          {/* {tab 2: options to selct eligabilty of pt ,tds} */}
+          {activeTab === 4 && (
             <div className="space-y-6">
 
               <div>
@@ -1359,7 +1580,7 @@ const getEmployeeStatusLabel = () => {
           )}
 
           {/* ================= GRATUITY ================= */}
-          {activeTab === 9 && (
+          {activeTab === 10 && (
             <div className="space-y-6">
 
               {/* HEADER */}
@@ -1567,7 +1788,7 @@ const getEmployeeStatusLabel = () => {
           )}
 
           {/* Delete */}
-          {!isExitStatus && activeTab === 10 && (
+          {!isExitStatus && activeTab === 11 && (
             <div className="space-y-6">
               {isOnNotice && (
                 <div className="rounded-xl border border-amber-200 bg-amber-50 p-5 space-y-4">

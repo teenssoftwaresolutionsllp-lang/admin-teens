@@ -232,6 +232,17 @@ export interface Employee {
   driving_license_number?: string | null;
   payment_mode?:string | null;
 
+
+    // ==============================
+  // Skills & Certification
+  // ==============================
+  professional_certification_name?: string | null;
+  professional_certification_organization?: string | null;
+  professional_certification_credential_id?: string | null;
+  professional_certification_issue_date?: string | null;
+  professional_certification_expiry_date?: string | null;
+  technical_skills?: string[] | null;
+
   // ==============================
   // Accessories Information
   // ==============================

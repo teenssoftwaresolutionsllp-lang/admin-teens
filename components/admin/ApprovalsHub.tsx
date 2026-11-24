@@ -1503,6 +1503,13 @@ export default function ApprovalsHub({
                     tds: "Statutory Information",
                     tds_eligible: "Statutory Information",
 
+                    professional_certification_name: "Professional Certification",
+                    professional_certification_organization: "Professional Certification",
+                    professional_certification_credential_id: "Professional Certification",
+                    professional_certification_issue_date: "Professional Certification",
+                    professional_certification_expiry_date: "Professional Certification",
+                    technical_skills: "Professional Certification",
+
                     emergency_contact_name: "Emergency Contact Information",
                     emergency_contact_phone: "Emergency Contact Information",
                     emergency_contact_relation: "Emergency Contact Information",
@@ -1529,10 +1536,11 @@ export default function ApprovalsHub({
                     peripherals: "Accessory Information",
                   };
 
-                  const sectionOrder = [
+                 const sectionOrder = [
                     "Personal Information",
                     "Contact Information",
                     "Employment Information",
+                    "Professional Certification",
                     "Bank & Identity Information",
                     "Statutory Information",
                     "Emergency Contact Information",
@@ -1565,6 +1573,10 @@ export default function ApprovalsHub({
                             if (typeof item === "string" && item.trim() === "") {
                               return "(empty)";
                             }
+                           if (Array.isArray(item)) {
+                              return item.length > 0 ? item.join(", ") : "(empty)";
+                            }
+
                             return typeof item === "object"
                               ? JSON.stringify(item, null, 2)
                               : String(item);

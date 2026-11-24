@@ -2,10 +2,13 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase-server";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(request: Request) {
   try {
     const supabase = await createClient();
 
+    // 1. Authenticate user
     const {
       data: { user },
       error: authError,
@@ -18,6 +21,27 @@ export async function GET(request: Request) {
       );
     }
 
+    // 2. Get logged-in user's role
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (profileError || !profile) {
+      return NextResponse.json(
+        { error: "Unable to verify user permissions." },
+        { status: 403 }
+      );
+    }
+
+    const role = String(profile.role ?? "")
+      .trim()
+      .toLowerCase();
+
+    const isHR = ["hr", "ceo"].includes(role);
+
+    // 3. Get employee ID from query
     const { searchParams } = new URL(request.url);
     const employeeId = searchParams.get("employee_id");
 
@@ -28,7 +52,47 @@ export async function GET(request: Request) {
       );
     }
 
-    // Fetch the requested employee's documents.
+    // 4. Verify employee access
+    const { data: employee, error: employeeError } = await supabase
+      .from("employees")
+      .select(
+        "id, user_id, email, bank_name, bank_account_number, ifsc_code"
+      )
+      .eq("id", employeeId)
+      .maybeSingle();
+
+    if (employeeError) {
+      console.error("Employee lookup error:", employeeError);
+
+      return NextResponse.json(
+        { error: "Unable to verify employee." },
+        { status: 500 }
+      );
+    }
+
+    if (!employee) {
+      return NextResponse.json(
+        { error: "Employee not found." },
+        { status: 404 }
+      );
+    }
+
+    const isOwner =
+      String(employee.user_id ?? "") === String(user.id) ||
+      (
+        !!user.email &&
+        String(employee.email ?? "").trim().toLowerCase() ===
+          user.email.trim().toLowerCase()
+      );
+
+    if (!isHR && !isOwner) {
+      return NextResponse.json(
+        { error: "You are not allowed to view these documents." },
+        { status: 403 }
+      );
+    }
+
+    // 5. Fetch employee documents
     const { data: documents, error: documentsError } = await supabase
       .from("employee_documents")
       .select(`
@@ -40,6 +104,8 @@ export async function GET(request: Request) {
         uploaded_at,
         verification_status,
         previous_document_id,
+        profile_change_request_id,
+        profile_change_approved,
         aadhaar_number,
         pan_number,
         passport_number
@@ -51,24 +117,26 @@ export async function GET(request: Request) {
       console.error("Failed to fetch documents:", documentsError);
 
       return NextResponse.json(
-        { error: "Failed to fetch documents" },
+        { error: "Failed to fetch documents." },
         { status: 500 }
       );
     }
 
-    const normalizeType = (value: string | null | undefined) => value?.trim().toLowerCase() ?? "";
+    const normalizeType = (
+      value: string | null | undefined
+    ) => value?.trim().toLowerCase() ?? "";
 
+    // 6. Hide superseded documents
     const visibleDocuments = (documents ?? []).filter((doc) => {
-    const status = normalizeType(doc.verification_status);
+      const status = normalizeType(doc.verification_status);
 
-    // Never display an old version after it has been superseded.
-    if (status === "superseded") return false;
-
-    return true;
+      return status !== "superseded";
     });
 
+    // 7. Check for bank passbook
     const hasBankPassbook = visibleDocuments.some(
-      (doc) => normalizeType(doc.document_type) === "bank passbook"
+      (doc) =>
+        normalizeType(doc.document_type) === "bank passbook"
     );
 
     let bankDetails = {
@@ -77,54 +145,46 @@ export async function GET(request: Request) {
       ifsc_code: null as string | null,
     };
 
+    // 8. Include bank details when a passbook exists
     if (hasBankPassbook) {
-      const { data: employee, error: employeeError } = await supabase
-        .from("employees")
-        .select("bank_name, bank_account_number, ifsc_code")
-        .eq("id", employeeId)
-        .maybeSingle();
-
-      if (employeeError) {
-        console.error("Failed to fetch employee bank details:", employeeError);
-
-        return NextResponse.json(
-          { error: "Failed to fetch employee bank details" },
-          { status: 500 }
-        );
-      }
-
-      if (employee) {
-        bankDetails = {
-          bank_name: employee.bank_name ?? null,
-          bank_account_number: employee.bank_account_number ?? null,
-          ifsc_code: employee.ifsc_code ?? null,
-        };
-      } else {
-        console.warn(
-          "No employee row found for the supplied employee UUID."
-        );
-      }
+      bankDetails = {
+        bank_name: employee.bank_name ?? null,
+        bank_account_number: employee.bank_account_number ?? null,
+        ifsc_code: employee.ifsc_code ?? null,
+      };
     }
 
+    // 9. Attach bank details to bank passbook
     const result = visibleDocuments.map((doc) =>
       normalizeType(doc.document_type) === "bank passbook"
         ? { ...doc, ...bankDetails }
         : doc
     );
 
+    // 10. Return documents
     return NextResponse.json(
-      { documents: result },
+      {
+        success: true,
+        documents: result,
+      },
       {
         headers: {
-          "Cache-Control": "no-store, max-age=0",
+          "Cache-Control": "no-store, no-cache, must-revalidate",
+          Pragma: "no-cache",
+          Expires: "0",
         },
       }
     );
-  } catch (error) {
+  } catch (error: unknown) {
     console.error("GET /api/documents error:", error);
 
     return NextResponse.json(
-      { error: "Internal server error" },
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Internal server error",
+      },
       { status: 500 }
     );
   }
