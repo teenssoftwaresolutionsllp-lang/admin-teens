@@ -6,9 +6,18 @@ import { useRouter } from "next/navigation";
 import { Department, Employee, UserRole, EmployeeDocument, Project, } from "@/lib/types";
 import { User, Briefcase, Loader2, KeyRound, File, CreditCard, FileText, MapPin, Copy, LaptopMinimal } from "lucide-react";
 import companiesData from "@/data/companies.json";
+import jobTitlesData from "@/data/employee_job_titles.json";
 import DocumentUpload from "./DocumentUpload";
 
 const companies = companiesData.companies;
+const jobTitlesList: string[] = Array.from(
+  new Set(
+    (
+      (jobTitlesData as { departments?: Array<{ titles?: string[] }> })
+        ?.departments || []
+    ).flatMap((dept) => dept.titles || [])
+  )
+).sort((a, b) => a.localeCompare(b));
 
 interface JoiningCandidate {
   id: string;
@@ -962,11 +971,17 @@ const handleSubmit = async (e: React.FormEvent) => {
               <input
                 type="text"
                 name="designation"
+                list="employee-job-titles-datalist"
                 value={formData.designation || ""}
                 onChange={handleChange}
                 required
                 className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
               />
+              <datalist id="employee-job-titles-datalist">
+                {jobTitlesList.map((title) => (
+                  <option key={title} value={title} />
+                ))}
+              </datalist>
             </div>
 
             {/* Employment Type */}

@@ -14,10 +14,12 @@ import {
   CalendarDays,
   CheckSquare,
   ChevronDown,
+  Settings,
   ChevronRight,
   Clock,
   Database,
   FileText,
+  FileUserIcon,
   Globe,
   LayoutDashboard,
   ListChecks,
@@ -26,10 +28,8 @@ import {
   PanelLeftOpen,
   ShieldCheck,
   UserCheck,
-  UserMinus,
   UserPlus,
   UserRound,
-  UserX,
   Users,
 } from "lucide-react";
 
@@ -129,6 +129,14 @@ export default function Sidebar({ role, designation }: SidebarProps) {
       icon: LayoutDashboard,
       roles: ["ceo", "hr"],
     },
+    {
+      name: "Offers & Pre-Onboarding",
+      href: "/dashboard/joining",
+      icon: FileUserIcon,
+      roles: ["hr"],
+    },
+
+
     ...(isTeamReportDesignation(designation)
       ? [
           {
@@ -145,7 +153,13 @@ export default function Sidebar({ role, designation }: SidebarProps) {
       roles: ["ceo", "hr"],
       children: [
         {
-          name: "All",
+          name: "Add New Employee",
+          href: "/dashboard/employees/add",
+          icon: UserPlus,
+          roles: ["hr"],
+        },
+        {
+          name: "Employee Directory",
           href: "/dashboard/employees",
           icon: Users,
           roles: ["ceo", "hr"],
@@ -156,56 +170,44 @@ export default function Sidebar({ role, designation }: SidebarProps) {
           icon: UserPlus,
           roles: ["ceo", "hr"],
         },
-        {
-          name: "Terminated",
-          href: "/dashboard/employees?status=terminated",
-          icon: UserX,
-          roles: ["ceo", "hr"],
-        },
-        {
-          name: "Layoff",
-          href: "/dashboard/employees?status=laid_off",
-          icon: UserMinus,
-          roles: ["ceo", "hr"],
-        },
-        {
-          name: "Resignation",
-          icon: CalendarClock,
-          roles: ["ceo", "hr"],
-          children: [
-            {
-              name: "On Notice",
-              href: "/dashboard/employees?status=resigned&notice=notice_period",
-              icon: Clock,
-              roles: ["ceo", "hr"],
-            },
-            {
-              name: "Notice Completed",
-              href: "/dashboard/employees?status=resigned&notice=notice_completed",
-              icon: CalendarCheck,
-              roles: ["ceo", "hr"],
-            },
-            {
-              name: "Early Released",
-              href: "/dashboard/employees?status=resigned&notice=early_release",
-              icon: UserMinus,
-              roles: ["ceo", "hr"],
-            },
-          ],
-        },
+        // {
+        //   name: "Terminated",
+        //   href: "/dashboard/employees?status=terminated",
+        //   icon: UserX,
+        //   roles: ["ceo", "hr"],
+        // },
+        // {
+        //   name: "Layoff",
+        //   href: "/dashboard/employees?status=laid_off",
+        //   icon: UserMinus,
+        //   roles: ["ceo", "hr"],
+        // },
+        // {
+        //   name: "Resignation",
+        //   icon: CalendarClock,
+        //   roles: ["ceo", "hr"],
+        //   children: [
+        //     {
+        //       name: "On Notice",
+        //       href: "/dashboard/employees?status=resigned&notice=notice_period",
+        //       icon: Clock,
+        //       roles: ["ceo", "hr"],
+        //     },
+        //     {
+        //       name: "Notice Completed",
+        //       href: "/dashboard/employees?status=resigned&notice=notice_completed",
+        //       icon: CalendarCheck,
+        //       roles: ["ceo", "hr"],
+        //     },
+        //     {
+        //       name: "Early Released",
+        //       href: "/dashboard/employees?status=resigned&notice=early_release",
+        //       icon: UserMinus,
+        //       roles: ["ceo", "hr"],
+        //     },
+        //   ],
+        // },
       ],
-    },
-    {
-      name: "Add Employee",
-      href: "/dashboard/employees/add",
-      icon: UserPlus,
-      roles: ["hr"],
-    },
-    {
-      name: "Add Joining",
-      href: "/dashboard/joining",
-      icon: UserPlus,
-      roles: ["hr"],
     },
     {
       name: "Approval Hub",
@@ -280,6 +282,12 @@ export default function Sidebar({ role, designation }: SidebarProps) {
       name: "Policies",
       href: "/dashboard/policies",
       icon: ShieldCheck,
+      roles: ["ceo", "hr"],
+    },
+    {
+      name: "Settings",
+      href: "/dashboard/settings",
+      icon: Settings,
       roles: ["ceo", "hr"],
     },
   ];

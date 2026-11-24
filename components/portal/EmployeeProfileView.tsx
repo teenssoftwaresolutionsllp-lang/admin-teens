@@ -20,6 +20,16 @@ import type {
   EmployeeDocument,
   ProfileChangeRequest,
 } from "@/lib/types";
+import jobTitlesData from "@/data/employee_job_titles.json";
+
+const jobTitlesList: string[] = Array.from(
+  new Set(
+    (
+      (jobTitlesData as { departments?: Array<{ titles?: string[] }> })
+        ?.departments || []
+    ).flatMap((dept) => dept.titles || [])
+  )
+).sort((a, b) => a.localeCompare(b));
 
 import {
   User,
@@ -4757,6 +4767,7 @@ if (!profilePhotoUrl?.trim()) {
                         <input
                           id="designation"
                           name="designation"
+                          list="profile-designation-options"
                           value={
                             editFormData.designation
                           }
@@ -4766,6 +4777,12 @@ if (!profilePhotoUrl?.trim()) {
                           placeholder="Enter designation"
                           className={inputClass}
                         />
+
+                        <datalist id="profile-designation-options">
+                          {jobTitlesList.map((title) => (
+                            <option key={title} value={title} />
+                          ))}
+                        </datalist>
 
                       </div>
 

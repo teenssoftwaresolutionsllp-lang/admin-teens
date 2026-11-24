@@ -227,10 +227,12 @@ export async function GET(request: Request) {
     };
 
     let documents: JoiningDocumentRow[] = [];
+    let tokens: { candidate_id: string; action: string; used_at: string | null }[] = [];
+    let submissions: { candidate_id: string; created_at: string; status: string }[] = [];
 
     if (candidateIds.length > 0) {
-      const { data: documentRows, error: documentsError } =
-        await auth.admin
+      const [documentsResult, tokensResult, submissionsResult] = await Promise.all([
+        auth.admin
           .from("joining_documents")
           .select(
             "id, candidate_id, document_type, version, created_at, sent_at, file_name, mime_type"
@@ -242,23 +244,66 @@ export async function GET(request: Request) {
             "resume",
             "experience_document",
           ])
-          .order("version", { ascending: false });
+          .order("version", { ascending: false }),
+        auth.admin
+          .from("joining_action_tokens")
+          .select("candidate_id, action, used_at")
+          .in("candidate_id", candidateIds)
+          .eq("action", "accept_offer")
+          .not("used_at", "is", null),
+        auth.admin
+          .from("joining_onboarding_submissions")
+          .select("candidate_id, created_at, status")
+          .in("candidate_id", candidateIds)
+          .order("created_at", { ascending: false }),
+      ]);
 
-      if (documentsError) throw documentsError;
+      if (documentsResult.error) throw documentsResult.error;
 
-      documents = (documentRows ?? []) as JoiningDocumentRow[];
+      documents = (documentsResult.data ?? []) as JoiningDocumentRow[];
+      tokens = (tokensResult.data ?? []) as typeof tokens;
+      submissions = (submissionsResult.data ?? []) as typeof submissions;
     }
 
-    const candidatesWithDocuments = (candidates ?? []).map(
-      (candidate) => ({
+    const candidatesWithDocuments = (candidates ?? []).map((candidate) => {
+      const candidateDocs = documents.filter(
+        (document) => document.candidate_id === candidate.id
+      );
+      const offerDoc = candidateDocs.find(
+        (d) => d.document_type === "offer_letter" && d.sent_at
+      );
+      const joiningDoc = candidateDocs.find(
+        (d) => d.document_type === "joining_letter" && d.sent_at
+      );
+      const acceptToken = tokens.find(
+        (t) => t.candidate_id === candidate.id
+      );
+      const submission = submissions.find(
+        (s) => s.candidate_id === candidate.id
+      );
+
+      return {
         ...candidate,
-        joining_documents: documents
-          .filter(
-            (document) => document.candidate_id === candidate.id
-          )
-          .sort((a, b) => b.version - a.version),
-      })
-    );
+        joining_documents: candidateDocs.sort((a, b) => b.version - a.version),
+        timeline_history: {
+          offer_sent_at: offerDoc?.sent_at || null,
+          offer_accepted_at:
+            acceptToken?.used_at ||
+            (candidate.status === "offer_accepted" || candidate.add_employee_moved_at
+              ? candidate.add_employee_moved_at || candidate.updated_at || null
+              : null),
+          onboarding_submitted_at:
+            submission?.created_at ||
+            (candidate.onboarding_status === "submitted" ||
+            candidate.onboarding_status === "verified"
+              ? candidate.onboarding_verified_at || candidate.updated_at || null
+              : null),
+          onboarding_verified_at: candidate.onboarding_verified_at || null,
+          joining_letter_sent_at:
+            candidate.joining_letter_sent_at || joiningDoc?.sent_at || null,
+        },
+      };
+    });
 
     return NextResponse.json(
       { candidates: candidatesWithDocuments },

@@ -1,4 +1,3 @@
-
 import { NextRequest, NextResponse } from "next/server";
 import {
   createHash,
@@ -25,6 +24,7 @@ const DOCUMENT_TYPES = [
   "address_proof",
   "education_10th",
   "education_12th",
+  "education_diploma",
   "education_graduation",
   "education_post_graduation",
   "education_other",

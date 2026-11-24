@@ -142,6 +142,78 @@ export default function EmployeeDetail({ employee, documents, educationRecords,p
     return new Date(dateStr).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
   };
 
+
+  const parseLocalDate = (value?: string | null): Date | null => {
+    if (!value) return null;
+
+    const date = new Date(`${value.slice(0, 10)}T00:00:00`);
+    return Number.isNaN(date.getTime()) ? null : date;
+  };
+
+  const getCompletedMonths = (
+    startValue?: string | null,
+    endValue?: string | null
+  ): number => {
+    const start = parseLocalDate(startValue);
+    const end = parseLocalDate(endValue);
+
+    if (!start || !end || end < start) return 0;
+
+    let months =
+      (end.getFullYear() - start.getFullYear()) * 12 +
+      (end.getMonth() - start.getMonth());
+
+    if (end.getDate() < start.getDate()) {
+      months--;
+    }
+
+    return Math.max(0, months);
+  };
+
+  const formatExperience = (totalMonths: number): string => {
+    const years = Math.floor(totalMonths / 12);
+    const months = totalMonths % 12;
+
+    return `${years} Years, ${months} Months`;
+  };
+
+  const today = new Date();
+  const todayString = [
+    today.getFullYear(),
+    String(today.getMonth() + 1).padStart(2, "0"),
+    String(today.getDate()).padStart(2, "0"),
+  ].join("-");
+
+  const currentWorkingMonths = getCompletedMonths(
+    employee.joining_date,
+    todayString
+  );
+
+  const previousCompanyMonths = previousEmploymentRecords.reduce(
+    (total, record) => {
+      const startDate =
+        typeof record.employment_start_date === "string"
+          ? record.employment_start_date
+          : null;
+
+      const endDate =
+        typeof record.employment_end_date === "string"
+          ? record.employment_end_date
+          : null;
+
+      return total + getCompletedMonths(startDate, endDate);
+    },
+    0
+  );
+
+  const totalProfessionalMonths =
+    currentWorkingMonths + previousCompanyMonths;
+
+  const currentExperienceClassification =
+    currentWorkingMonths >= 12 ? "Experienced" : "Fresher";
+
+
+
   const calculatePlannedLastWorkingDate = (date: string,days: number) => 
   {
     if (!date || !Number.isInteger(days) || days < 1) return "";
@@ -156,8 +228,6 @@ export default function EmployeeDetail({ employee, documents, educationRecords,p
       String(result.getDate()).padStart(2, "0"),
     ].join("-");
   };
-
-
 
   const noticeEmployee = employee as Employee & {
     resignation_date?: string | null;
@@ -174,8 +244,6 @@ export default function EmployeeDetail({ employee, documents, educationRecords,p
       noticeEmployee.resignation_date || resignationDate,
       noticeEmployee.notice_period_days ?? effectiveNoticeDays,
     );
-
-
 
   const loadGratuity = async () => {
     try {
@@ -709,8 +777,35 @@ const getEmployeeStatusLabel = () => {
               <DetailTile label="Probation End Date" value={formatDate(employee.probation_end_date)} />
               <DetailTile label="Confirmation Date" value={formatDate(employee.confirmation_date)} />
               <DetailTile label="Shift" value={ employee.shift_type === "night" ? "Night (06:30 PM – 03:30 AM)" : "General (09:00 AM – 06:00 PM)"}/>
-              <DetailTile label="Experience Level" value={employee.experience_level === "fresher" ? "Fresher" : employee.experience_level === "experienced" ? "Experienced": "Not provided"}/>
-              <DetailTile label="Total Experience" value={employee.experience_level === "fresher"? "0 Years, 0 Months" : employee.experience_level === "experienced" ? employee.total_experience_years == null && employee.total_experience_months == null ? "Not provided": `${employee.total_experience_years ?? 0} Years, ${employee.total_experience_months ?? 0} Months` : "Not provided"}/>
+
+<DetailTile
+  label="Current Experience Classification"
+  value={currentExperienceClassification}
+/>
+
+<DetailTile
+  label="Current Working Experience"
+  value={
+    employee.joining_date
+      ? formatExperience(currentWorkingMonths)
+      : "Not provided"
+  }
+/>
+
+<DetailTile
+  label="Previous Company Experience"
+  value={formatExperience(previousCompanyMonths)}
+/>
+
+<DetailTile
+  label="Total Professional Experience"
+  value={
+    employee.joining_date
+      ? formatExperience(totalProfessionalMonths)
+      : "Not provided"
+  }
+/>
+
               <DetailTile label="Reporting Manager" value={employee.assigned_reporting_manager_name || "Not Assigned"} />
               <DetailTile label="Work Location" value={employee.work_location} />
             </div>

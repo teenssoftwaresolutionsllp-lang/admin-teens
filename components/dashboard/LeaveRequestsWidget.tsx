@@ -11,7 +11,13 @@ export interface DashboardLeaveRequest {
   leaveType: string;
   startDate: string;
   endDate: string;
-  status: "pending" | "approved" | "rejected" | "cancelled";
+  status:
+  | "pending"
+  | "pending_manager"
+  | "approved"
+  | "rejected"
+  | "expired"
+  | "cancelled";
 }
 
 interface LeaveRequestsWidgetProps {
@@ -42,19 +48,23 @@ function StatusBadge({
 }: {
   status: DashboardLeaveRequest["status"];
 }) {
-  const styles = {
-    pending: "bg-[#eef2ff] text-[#4f46e5] border border-indigo-100",
-    approved: "bg-[#e6f9f0] text-[#059669] border border-emerald-100",
-    rejected: "bg-[#fef2f2] text-[#e11d48] border border-rose-100",
-    cancelled: "bg-slate-100 text-slate-600 border border-slate-200",
-  };
+    const styles = {
+      pending: "bg-[#eef2ff] text-[#4f46e5] border border-indigo-100",
+      pending_manager: "bg-[#fff7ed] text-[#c2410c] border border-orange-100",
+      approved: "bg-[#e6f9f0] text-[#059669] border border-emerald-100",
+      rejected: "bg-[#fef2f2] text-[#e11d48] border border-rose-100",
+      expired: "bg-slate-100 text-slate-500 border border-slate-200",
+      cancelled: "bg-slate-100 text-slate-600 border border-slate-200",
+    };
 
-  const labels = {
-    pending: "Pending",
-    approved: "Approved",
-    rejected: "Rejected",
-    cancelled: "Cancelled",
-  };
+    const labels = {
+      pending: "Pending",
+      pending_manager: "Pending Manager",
+      approved: "Approved",
+      rejected: "Rejected",
+      expired: "Expired",
+      cancelled: "Cancelled",
+    };
 
   return (
     <span

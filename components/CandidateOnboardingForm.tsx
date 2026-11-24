@@ -106,6 +106,16 @@ type FormValues = {
     twelfthResult: string;
     twelfthResultTotal: string;
 
+
+    diplomaInstitution: string;
+    diplomaAuthority: string;
+    diplomaCourse: string;
+    diplomaSpecialization: string;
+    diplomaYearOfPassing: string;
+    diplomaResultType: string;
+    diplomaResult: string;
+    diplomaResultTotal: string;
+
     graduationInstitution: string;
     graduationUniversity: string;
     graduationCourse: string;
@@ -290,6 +300,17 @@ function emptyForm(): FormValues {
       twelfthResultType: "",
       twelfthResult: "",
       twelfthResultTotal: "",
+
+
+      diplomaInstitution: "",
+      diplomaAuthority: "",
+      diplomaCourse: "",
+      diplomaSpecialization: "",
+      diplomaYearOfPassing: "",
+      diplomaResultType: "",
+      diplomaResult: "",
+      diplomaResultTotal: "",
+
 
 
       graduationInstitution: "",
@@ -515,7 +536,20 @@ function validateFinalSubmission(form: FormValues): string | null {
       ],
     },
     {
-      label: "Graduation",
+      label: "Diploma",
+      fields: [
+        ["Course", education.diplomaCourse],
+        ["Board / Authority", education.diplomaAuthority],
+        ["Institution Name", education.diplomaInstitution],
+        ["Specialization", education.diplomaSpecialization],
+        ["Year of Passing", education.diplomaYearOfPassing],
+        ["Result Type", education.diplomaResultType],
+        ["Result", education.diplomaResult],
+        ["Total Marks / Scale", education.diplomaResultTotal],
+      ],
+    },
+    {
+      label: "UG (Undergraduate)",
       fields: [
         ["College Name", education.graduationInstitution],
         ["University", education.graduationUniversity],
@@ -527,7 +561,7 @@ function validateFinalSubmission(form: FormValues): string | null {
       ],
     },
     {
-      label: "Post-Graduation",
+      label: "PG (Postgraduate)",
       fields: [
         ["College Name", education.postGraduationInstitution],
         ["University", education.postGraduationUniversity],
@@ -539,7 +573,7 @@ function validateFinalSubmission(form: FormValues): string | null {
       ],
     },
     {
-      label: "Other Qualification",
+      label: "Additional Qualifications / Certifications",
       fields: [
         ["Qualification Name", education.otherQualification],
         ["Institution Name", education.otherInstitution],
@@ -2352,7 +2386,7 @@ export default function CandidateOnboardingForm({
                         />
 
                         <Field
-                        label="Stream (Science / Commerce / Arts / Other)"
+                        label="Stream"
                         value={form.educationDetails.twelfthStream}
                         maxLength={100}
                         onChange={(value) =>
@@ -2400,11 +2434,50 @@ export default function CandidateOnboardingForm({
                     />
                     </div>
 
-                    {/* GRADUATION */}
+                    {/* DIPLOMA (OPTIONAL) */}
                     <div className="space-y-4 rounded-lg border border-slate-200 p-4">
                     <h3 className="text-sm font-semibold text-slate-800">
-                        3. Graduation
+                        3. Diploma (Optional)
                     </h3>
+
+                    <div className="grid gap-4 sm:grid-cols-2">
+                        <Field label="Course" value={form.educationDetails.diplomaCourse} maxLength={150}
+                          onChange={(value) => updateSection("educationDetails", "diplomaCourse", value)} />
+                        <Field label="Board / Authority" value={form.educationDetails.diplomaAuthority} maxLength={200}
+                          onChange={(value) => updateSection("educationDetails", "diplomaAuthority", value)} />
+                        <Field label="Institution Name" value={form.educationDetails.diplomaInstitution} maxLength={200}
+                          onChange={(value) => updateSection("educationDetails", "diplomaInstitution", value)} />
+                        <Field label="Specialization" value={form.educationDetails.diplomaSpecialization} maxLength={150}
+                          onChange={(value) => updateSection("educationDetails", "diplomaSpecialization", value)} />
+                        <Field label="Year of Passing" value={form.educationDetails.diplomaYearOfPassing} maxLength={4}
+                          onChange={(value) => updateSection("educationDetails", "diplomaYearOfPassing", value.replace(/\D/g, ""))} />
+                        <EducationResultFields
+                          resultType={form.educationDetails.diplomaResultType}
+                          result={form.educationDetails.diplomaResult}
+                          resultTotal={form.educationDetails.diplomaResultTotal}
+                          onResultTypeChange={(value) => updateSection("educationDetails", "diplomaResultType", value)}
+                          onResultChange={(value) => updateSection("educationDetails", "diplomaResult", value)}
+                          onResultTotalChange={(value) => updateSection("educationDetails", "diplomaResultTotal", value)}
+                        />
+                    </div>
+
+                    <DocumentUpload
+                        documentType="education_diploma"
+                        label="Diploma Certificate"
+                        documents={documents}
+                        uploading={uploading}
+                        onUpload={uploadDocument}
+                        correctionItems={correctionItems}
+                        isCorrection={isCorrection}
+                    />
+                    </div>
+
+                    {/* UG (UNDERGRADUATE) */}
+                    <div className="space-y-4 rounded-lg border border-slate-200 p-4">
+                    <h3 className="text-sm font-semibold text-slate-800">
+                        4. UG (Undergraduate)
+                    </h3>
+                    <p className="text-xs text-slate-500">Enter B.Tech, B.E., B.Sc., B.Com., BBA, BCA, BA or an equivalent bachelor’s qualification here.</p>
 
                     <div className="grid gap-4 sm:grid-cols-2">
                         <Field
@@ -2478,7 +2551,7 @@ export default function CandidateOnboardingForm({
 
                     <DocumentUpload
                         documentType="education_graduation"
-                        label="Graduation Certificate"
+                        label="UG Certificate"
                         documents={documents}
                         uploading={uploading}
                         onUpload={uploadDocument}
@@ -2487,11 +2560,12 @@ export default function CandidateOnboardingForm({
                     />
                     </div>
 
-                    {/* POST-GRADUATION */}
+                    {/* PG (POSTGRADUATE) */}
                     <div className="space-y-4 rounded-lg border border-slate-200 p-4">
                     <h3 className="text-sm font-semibold text-slate-800">
-                        4. Post-Graduation
+                        5. PG (Postgraduate)
                     </h3>
+                    <p className="text-xs text-slate-500">Enter M.Tech, M.E., MBA, MCA, PhD or any equivalent postgraduate qualification here.</p>
 
                     <div className="grid gap-4 sm:grid-cols-2">
                         <Field
@@ -2585,7 +2659,7 @@ export default function CandidateOnboardingForm({
 
                     <DocumentUpload
                         documentType="education_post_graduation"
-                        label="Post-Graduation Certificate"
+                        label="PG Certificate"
                         documents={documents}
                         uploading={uploading}
                         onUpload={uploadDocument}
@@ -2594,10 +2668,10 @@ export default function CandidateOnboardingForm({
                     />
                     </div>
 
-                    {/* OTHER QUALIFICATION */}
+                    {/* ADDITIONAL QUALIFICATIONS */}
                     <div className="space-y-4 rounded-lg border border-slate-200 p-4">
                     <h3 className="text-sm font-semibold text-slate-800">
-                        5. Other Qualification (Diploma / ITI / Vocational / Other)
+                        6. Additional Qualifications / Certifications (Optional)
                     </h3>
 
                     <div className="grid gap-4 sm:grid-cols-2">
