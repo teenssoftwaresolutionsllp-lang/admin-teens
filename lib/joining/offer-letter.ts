@@ -1,5 +1,6 @@
-
 import PDFDocument from "pdfkit";
+import fs from "node:fs";
+import path from "node:path";
 
 export interface OfferSalaryLine {
   label: string;
@@ -35,6 +36,8 @@ export interface OfferSalaryBreakdown {
 export interface OfferLetterDetails {
   firstName: string;
   lastName: string;
+  gender?: string | null;
+  personalEmail?: string | null;
   designation: string;
   annualCtc: number;
   candidateId: string;
@@ -46,6 +49,11 @@ export interface OfferLetterDetails {
   ptEligible: boolean;
   tdsEligible: boolean;
   salaryBreakdown: OfferSalaryBreakdown;
+  joiningDate?: string | null;
+  offerDate?: string | null;
+  acceptanceDeadlineDate?: string | null;
+  hrName?: string | null;
+  hrTitle?: string | null;
 }
 
 function formatIndianCurrency(amount: number): string {
@@ -56,23 +64,39 @@ function formatIndianCurrency(amount: number): string {
   }).format(amount);
 }
 
-function formatCurrentDate(): string {
-  return new Intl.DateTimeFormat("en-IN", {
-    day: "2-digit",
-    month: "long",
-    year: "numeric",
-    timeZone: "Asia/Kolkata",
-  }).format(new Date());
+function formatCurrencyAmount(amount: number): string {
+  return "₹ " + new Intl.NumberFormat("en-IN", {
+    maximumFractionDigits: 0,
+  }).format(amount);
 }
 
-function formatEmploymentType(value: string): string {
-  const types: Record<string, string> = {
-    full_time: "Full-time",
-    contract: "Contract",
-    intern: "Intern",
-  };
+function formatCurrentDate(dateStr?: string | null): string {
+  const d = dateStr ? new Date(dateStr) : new Date();
+  return new Intl.DateTimeFormat("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "Asia/Kolkata",
+  }).format(d);
+}
 
-  return types[value] || value;
+function formatAcceptanceDate(offerDateStr?: string | null, days = 7): string {
+  const base = offerDateStr ? new Date(offerDateStr) : new Date();
+  base.setDate(base.getDate() + days);
+  return new Intl.DateTimeFormat("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "Asia/Kolkata",
+  }).format(base);
+}
+
+function getSalutation(gender?: string | null): string {
+  const g = String(gender || "").trim().toLowerCase();
+  if (g === "female" || g === "f") {
+    return "Miss/Mrs.";
+  }
+  return "Mr.";
 }
 
 function isValidAmount(value: number): boolean {
@@ -162,18 +186,19 @@ export async function generateOfferLetterPdf(
 
   const breakdown = details.salaryBreakdown;
 
+  // A4 paper dimensions: 595.28 x 841.89
   const document = new PDFDocument({
     size: "A4",
     margins: {
-      top: 55,
-      bottom: 55,
-      left: 45,
-      right: 45,
+      top: 0,
+      bottom: 0,
+      left: 0,
+      right: 0,
     },
     info: {
-      Title: "Offer Letter",
+      Title: "Offer Letter - Teens Software Solutions LLP",
       Author: "TEENS SOFTWARE SOLUTIONS LLP",
-      Subject: "Employment Offer",
+      Subject: "Employment Offer Letter",
     },
   });
 
@@ -191,584 +216,794 @@ export async function generateOfferLetterPdf(
     document.on("error", reject);
   });
 
-  const left = 45;
-  const right = 550;
-  const contentWidth = right - left;
-  const pageBottom = 787;
+  const pageWidth = 595.28;
+  const pageHeight = 841.89;
+  const marginX = 36;
+  const contentWidth = pageWidth - marginX * 2; // 523.28
 
-  // Check available space before drawing a section or block.
-  const ensureSpace = (height = 35) => {
-    if (document.y + height > pageBottom) {
-      document.addPage();
-    }
-  };
+  // ============================================================
+  // 1. TOP-RIGHT & BOTTOM-RIGHT GEOMETRIC BLUE ACCENTS
+  // ============================================================
 
-  const addSection = (heading: string) => {
-    ensureSpace(40);
+  // Top-Right Geometric Triangles / Polygons
+  document.save();
+  // Cyan/sky blue background angle
+  document
+    .polygon([390, 0], [450, 0], [pageWidth, 145], [pageWidth, 85])
+    .fillColor("#38BDF8")
+    .fill();
 
-    document.moveDown(0.6);
+  // Vibrant medium blue accent
+  document
+    .polygon([440, 0], [490, 0], [pageWidth, 115], [pageWidth, 65])
+    .fillColor("#0284C7")
+    .fill();
 
-    document
-      .font("Helvetica-Bold")
-      .fontSize(12)
-      .fillColor("#111827")
-      .text(heading, left, document.y, {
-        width: contentWidth,
-      });
+  // Deep Navy main corner polygon
+  document
+    .polygon([480, 0], [pageWidth, 0], [pageWidth, 145], [540, 145])
+    .fillColor("#0B3B60")
+    .fill();
+  document.restore();
 
-    document.moveDown(0.35);
+  // Bottom-Right Geometric Triangles / Polygons
+  document.save();
+  // Sky blue lower triangle
+  document
+    .polygon([380, pageHeight], [pageWidth, pageHeight - 140], [pageWidth, pageHeight])
+    .fillColor("#38BDF8")
+    .fill();
 
-    document
-      .moveTo(left, document.y)
-      .lineTo(right, document.y)
-      .strokeColor("#CBD5E1")
-      .lineWidth(0.7)
-      .stroke();
+  // Vibrant blue mid triangle
+  document
+    .polygon([430, pageHeight], [pageWidth, pageHeight - 110], [pageWidth, pageHeight])
+    .fillColor("#0284C7")
+    .fill();
 
-    document.moveDown(0.5);
-  };
+  // Deep navy corner triangle
+  document
+    .polygon([490, pageHeight], [pageWidth, pageHeight - 75], [pageWidth, pageHeight])
+    .fillColor("#0B3B60")
+    .fill();
+  document.restore();
 
-  const addText = (value: string, fontSize = 10) => {
-    ensureSpace(30);
-
-    document
-      .font("Helvetica")
-      .fontSize(fontSize)
-      .fillColor("#222222")
-      .text(value, {
-        width: contentWidth,
-        lineGap: 2,
-      });
-  };
-
-  type SalaryPanelRow = {
-    label: string;
-    monthly: number | null;
-    annual?: number | null;
-    note?: string;
-  };
-
-  const PANEL_HEADER_HEIGHT = 32;
-  const PANEL_ROW_HEIGHT = 34;
-  const PANEL_FOOTER_HEIGHT = 42;
-  const PANEL_BOTTOM_PADDING = 12;
-
-  // Calculate panel height without drawing it.
-  const calculatePanelHeight = (rows: SalaryPanelRow[]): number => {
-    return (
-      PANEL_HEADER_HEIGHT +
-      rows.length * PANEL_ROW_HEIGHT +
-      PANEL_FOOTER_HEIGHT +
-      PANEL_BOTTOM_PADDING
-    );
-  };
-
-  // Draw one payslip-style salary panel.
-  const drawSalaryPanel = (
-    x: number,
-    y: number,
-    width: number,
-    title: string,
-    rows: SalaryPanelRow[],
-    totalLabel: string,
-    totalAmount: number,
-    options?: {
-      showAnnual?: boolean;
-      totalNote?: string;
-    }
-  ): number => {
-    const panelHeight = calculatePanelHeight(rows);
-
-    // Panel border.
-    document
-      .roundedRect(x, y, width, panelHeight, 3)
-      .lineWidth(0.8)
-      .strokeColor("#CBD5E1")
-      .stroke();
-
-    // Header background.
-    document
-      .rect(x, y, width, PANEL_HEADER_HEIGHT)
-      .fillColor("#EEF2F7")
-      .fill();
-
-    document
-      .font("Helvetica-Bold")
-      .fontSize(8)
-      .fillColor("#111827")
-      .text(title, x + 7, y + 10, {
-        width: width - 14,
-        align: "center",
-      });
-
-    let rowY = y + PANEL_HEADER_HEIGHT + 12;
-
-    for (const row of rows) {
-      const labelWidth = width * 0.54;
-      const amountWidth = width - labelWidth - 16;
-
-      // Component label.
-      document
-        .font("Helvetica")
-        .fontSize(7)
-        .fillColor("#374151")
-        .text(row.label, x + 8, rowY, {
-          width: labelWidth,
-          height: 19,
-          lineGap: 0,
-        });
-
-      // Monthly amount.
-      const monthlyText =
-        row.monthly === null
-          ? "TBD"
-          : formatIndianCurrency(row.monthly);
-
+  // ============================================================
+  // 2. HEADER: COMPANY LOGO & SLOGAN
+  // ============================================================
+  const logoPath = path.join(process.cwd(), "public", "logo.png");
+  if (fs.existsSync(logoPath)) {
+    try {
+      document.image(logoPath, marginX, 22, { width: 145 });
+    } catch {
+      // Fallback text if logo load fails
       document
         .font("Helvetica-Bold")
-        .fontSize(7)
-        .fillColor("#111827")
-        .text(monthlyText, x + width - amountWidth - 8, rowY, {
-          width: amountWidth,
-          align: "right",
-          lineBreak: false,
-        });
-
-      // Annual amount.
-      if (options?.showAnnual) {
-        const annualText =
-          row.annual === null || row.annual === undefined
-            ? "Annual: TBD"
-            : `Annual: ${formatIndianCurrency(row.annual)}`;
-
-        document
-          .font("Helvetica")
-          .fontSize(6)
-          .fillColor("#64748B")
-          .text(annualText, x + 8, rowY + 14, {
-            width: width - 16,
-            align: "right",
-            lineBreak: false,
-          });
-      }
-
-      rowY += PANEL_ROW_HEIGHT;
-    }
-
-    // Footer separator.
-    const footerY = y + panelHeight - PANEL_FOOTER_HEIGHT;
-
-    document
-      .moveTo(x + 8, footerY)
-      .lineTo(x + width - 8, footerY)
-      .strokeColor("#CBD5E1")
-      .lineWidth(0.7)
-      .stroke();
-
-    // Total label.
-    document
-      .font("Helvetica-Bold")
-      .fontSize(7.5)
-      .fillColor("#111827")
-      .text(totalLabel, x + 8, footerY + 9, {
-        width: width - 16,
-        align: "left",
-      });
-
-    // Total amount.
-    document
-      .font("Helvetica-Bold")
-      .fontSize(8)
-      .fillColor("#111827")
-      .text(formatIndianCurrency(totalAmount), x + 8, footerY + 22, {
-        width: width - 16,
-        align: "right",
-      });
-
-    if (options?.totalNote) {
-      document
+        .fontSize(16)
+        .fillColor("#0B3B60")
+        .text("TEENS", marginX, 24)
         .font("Helvetica")
-        .fontSize(5.5)
-        .fillColor("#64748B")
-        .text(options.totalNote, x + 8, footerY + 33, {
-          width: width - 16,
-          lineBreak: false,
-        });
+        .fontSize(8)
+        .fillColor("#0369A1")
+        .text("SOFTWARE SOLUTIONS LLP", marginX, 42);
     }
-
-    return panelHeight;
-  };
-
-  // ============================================================
-  // COMPANY HEADER
-  // ============================================================
-
-  document
-    .font("Helvetica-Bold")
-    .fontSize(18)
-    .fillColor("#111827")
-    .text("TEENS SOFTWARE SOLUTIONS LLP", {
-      align: "center",
-    });
-
-  document
-    .moveDown(0.3)
-    .font("Helvetica")
-    .fontSize(10)
-    .fillColor("#555555")
-    .text("Hyderabad, Telangana, India", {
-      align: "center",
-    });
-
-  document.moveDown(1.2);
-
-  document
-    .font("Helvetica-Bold")
-    .fontSize(16)
-    .fillColor("#111827")
-    .text("EMPLOYMENT OFFER LETTER", {
-      align: "center",
-    });
-
-  document.moveDown(1.2);
-
-  // ============================================================
-  // CANDIDATE DETAILS
-  // ============================================================
-
-  addText(`Date: ${formatCurrentDate()}`);
-  document.moveDown(0.4);
-
-  addText(`Candidate: ${details.firstName} ${details.lastName}`);
-  document.moveDown(0.4);
-
-  addText(`Dear ${details.firstName},`);
-  document.moveDown(0.4);
-
-  addText(
-    "We are pleased to extend an employment offer to you at " +
-      "TEENS SOFTWARE SOLUTIONS LLP, subject to the terms and " +
-      "conditions set out in the final employment agreement."
-  );
-
-  // ============================================================
-  // EMPLOYMENT DETAILS
-  // ============================================================
-
-  addSection("Offer Details");
-
-  addText(`Position: ${details.designation}`);
-  addText(`Department: ${details.department}`);
-  addText(`Employment Type: ${formatEmploymentType(details.employmentType)}`);
-  addText(`Work Location: ${details.workLocation}`);
-
-  // ============================================================
-  // THREE-COLUMN SALARY BREAKDOWN
-  // ============================================================
-
-  const gap = 8;
-  const panelWidth = (contentWidth - gap * 2) / 3;
-
-  // Standard salary components.
-  const standardSalaryRows: SalaryPanelRow[] =
-    breakdown.earnings.map((item) => ({
-      label: item.label,
-      monthly: item.monthlyAmount,
-      annual: item.annualAmount,
-    }));
-
-  // Employer contributions included in CTC.
-  // These are not employee deductions.
-  for (const contribution of breakdown.employerContributions) {
-    if (contribution.includedInCtc) {
-      standardSalaryRows.push({
-        label: `${contribution.label} (Employer)`,
-        monthly: contribution.monthlyAmount,
-        annual: contribution.annualAmount,
-      });
-    }
+  } else {
+    document
+      .font("Helvetica-Bold")
+      .fontSize(16)
+      .fillColor("#0B3B60")
+      .text("TEENS", marginX, 24)
+      .font("Helvetica")
+      .fontSize(8)
+      .fillColor("#0369A1")
+      .text("SOFTWARE SOLUTIONS LLP", marginX, 42);
   }
 
-  const standardTotal = breakdown.monthlyCtc;
-
-  // Earnings summary.
-  const earningsRows: SalaryPanelRow[] = [
-    {
-      label: "Monthly Gross Earnings",
-      monthly: breakdown.monthlyGross,
-      annual: Math.round(breakdown.monthlyGross * 12),
-    },
-    {
-      label: "Arrears",
-      monthly: 0,
-      annual: 0,
-    },
-    {
-      label: "Incentive / Bonus",
-      monthly: 0,
-      annual: 0,
-    },
-  ];
-
-  // Employee deductions.
-  const deductionRows: SalaryPanelRow[] =
-    breakdown.employeeDeductions.map((item) => ({
-      label: item.label,
-      monthly: item.monthlyAmount,
-      annual: item.annualAmount,
-      note: item.note,
-    }));
-
-  // Only known deductions are totalled.
-  // Unknown TDS is not falsely displayed as zero.
-  const knownDeductions = deductionRows.reduce(
-    (total, item) => total + (item.monthly ?? 0),
-    0
-  );
-
-  const hasPendingDeduction = deductionRows.some(
-    (item) => item.monthly === null
-  );
-
-  // Calculate all panel heights before drawing.
-  const standardPanelHeight = calculatePanelHeight(standardSalaryRows);
-  const earningsPanelHeight = calculatePanelHeight(earningsRows);
-  const deductionsPanelHeight = calculatePanelHeight(deductionRows);
-
-  const panelHeight = Math.max(
-    standardPanelHeight,
-    earningsPanelHeight,
-    deductionsPanelHeight
-  );
-
-  // Reserve space for heading + all three panels + spacing.
-  // If they cannot fit, move the entire salary section to a new page.
-  ensureSpace(60 + panelHeight + 16);
-
-  addSection("Salary Components");
-
-  const panelY = document.y;
-
-  // Draw each panel exactly once.
-  drawSalaryPanel(
-    left,
-    panelY,
-    panelWidth,
-    "Standard Monthly Salary",
-    standardSalaryRows,
-    "Monthly CTC",
-    standardTotal,
-    { showAnnual: true }
-  );
-
-  drawSalaryPanel(
-    left + panelWidth + gap,
-    panelY,
-    panelWidth,
-    "Earnings",
-    earningsRows,
-    "Gross Earnings",
-    breakdown.monthlyGross,
-    { showAnnual: true }
-  );
-
-  drawSalaryPanel(
-    left + (panelWidth + gap) * 2,
-    panelY,
-    panelWidth,
-    "Deductions",
-    deductionRows,
-    hasPendingDeduction
-      ? "Known Deductions"
-      : "Total Deductions",
-    knownDeductions,
-    {
-      showAnnual: true,
-      totalNote: hasPendingDeduction
-        ? "Additional deduction pending"
-        : undefined,
-    }
-  );
-
-  // Update document cursor after the complete three-column layout.
-  document.y = panelY + panelHeight + 16;
-
-  // ============================================================
-  // ADDITIONAL EMPLOYER COSTS
-  // ============================================================
-
-  const additionalEmployerCosts =
-    breakdown.employerContributions.filter(
-      (item) => !item.includedInCtc
-    );
-
-  if (additionalEmployerCosts.length > 0) {
-    const additionalCostText = additionalEmployerCosts
-      .map(
-        (item) =>
-          `${item.label}: ${formatIndianCurrency(item.monthlyAmount)} per month`
-      )
-      .join(" | ");
-
-    addText(
-      `Additional employer costs (not deducted from employee salary): ${additionalCostText}`,
-      7.5
-    );
-
-    document.moveDown(0.4);
-  }
-
-  // ============================================================
-  // MONTHLY SALARY SUMMARY
-  // ============================================================
-
-  const summaryBoxHeight = 108;
-
-  // Reserve the heading and entire summary box together.
-  ensureSpace(60 + summaryBoxHeight + 12);
-
-  addSection("Monthly Salary Summary");
-
-  const summaryBoxY = document.y;
-
+  // Vertical separator beside logo
   document
-    .roundedRect(left, summaryBoxY, contentWidth, summaryBoxHeight, 3)
-    .lineWidth(0.8)
-    .strokeColor("#CBD5E1")
+    .moveTo(192, 25)
+    .lineTo(192, 57)
+    .strokeColor("#94A3B8")
+    .lineWidth(1)
     .stroke();
 
-  const summaryRows = [
-    {
-      label: "Gross Earnings (Before Employee Deductions)",
-      amount: formatIndianCurrency(breakdown.monthlyGross),
-    },
-    {
-      label: "Employee Deductions (Known)",
-      amount: `- ${formatIndianCurrency(knownDeductions)}`,
-    },
-  ];
+  // Slogan
+  document
+    .font("Helvetica-Bold")
+    .fontSize(10)
+    .fillColor("#0369A1")
+    .text("Innovate  •  Build  •  Grow", 202, 36);
 
-  let summaryRowY = summaryBoxY + 15;
+  // ============================================================
+  // 3. CENTER PILL BADGE: "OFFER LETTER"
+  // ============================================================
+  const pillW = 180;
+  const pillH = 26;
+  const pillX = (pageWidth - pillW) / 2;
+  const pillY = 68;
 
-  for (const item of summaryRows) {
+  document
+    .roundedRect(pillX, pillY, pillW, pillH, 13)
+    .fillColor("#0B3B60")
+    .fill();
+
+  document
+    .font("Helvetica-Bold")
+    .fontSize(12)
+    .fillColor("#FFFFFF")
+    .text("OFFER LETTER", pillX, pillY + 7, {
+      width: pillW,
+      align: "center",
+    });
+
+  // ============================================================
+  // 4. CANDIDATE ADDRESSING & INTRO
+  // ============================================================
+  const salutation = getSalutation(details.gender);
+  const formattedDate = formatCurrentDate(details.offerDate);
+  const acceptanceDate = details.acceptanceDeadlineDate || formatAcceptanceDate(details.offerDate, 7);
+
+  let curY = 104;
+
+  document
+    .font("Helvetica")
+    .fontSize(8.5)
+    .fillColor("#1E293B")
+    .text(`Date: ${formattedDate}`, marginX, curY);
+
+  curY += 14;
+  document
+    .font("Helvetica")
+    .fontSize(8.5)
+    .fillColor("#1E293B")
+    .text("To,", marginX, curY);
+
+  curY += 12;
+  document
+    .font("Helvetica-Bold")
+    .fontSize(9)
+    .fillColor("#0F172A")
+    .text(`${salutation} ${details.firstName} ${details.lastName}`, marginX, curY);
+
+  if (details.personalEmail) {
+    curY += 12;
     document
       .font("Helvetica")
-      .fontSize(9)
-      .fillColor("#1F2937")
-      .text(item.label, left + 12, summaryRowY, {
-        width: 340,
-      });
-
-    document
-      .font("Helvetica-Bold")
-      .fontSize(9)
-      .fillColor("#111827")
-      .text(item.amount, left + 355, summaryRowY, {
-        width: 135,
-        align: "right",
-      });
-
-    summaryRowY += 24;
+      .fontSize(8)
+      .fillColor("#475569")
+      .text(details.personalEmail, marginX, curY);
   }
 
-  document
-    .moveTo(left + 10, summaryRowY)
-    .lineTo(right - 10, summaryRowY)
-    .strokeColor("#CBD5E1")
-    .stroke();
-
-  summaryRowY += 12;
-
+  curY += 14;
   document
     .font("Helvetica-Bold")
-    .fontSize(11)
-    .fillColor("#111827")
-    .text("Estimated Monthly Take-Home", left + 12, summaryRowY, {
-      width: 340,
-    });
+    .fontSize(8.5)
+    .fillColor("#0F172A")
+    .text("Subject: Offer of Employment", marginX, curY);
 
-  document
-    .font("Helvetica-Bold")
-    .fontSize(13)
-    .fillColor("#15803D")
-    .text(
-      formatIndianCurrency(breakdown.estimatedMonthlyTakeHome),
-      left + 355,
-      summaryRowY - 2,
-      {
-        width: 135,
-        align: "right",
-      }
-    );
-
-  document.y = summaryBoxY + summaryBoxHeight + 12;
-
-  // ============================================================
-  // TAKE-HOME NOTES
-  // ============================================================
-
-  if (hasPendingDeduction) {
-    addText(
-      "Important: One or more deductions, such as TDS, are pending calculation. " +
-        "The estimated take-home shown above excludes those unknown deductions " +
-        "and may be lower after final payroll calculation.",
-      8
-    );
-  }
-
-  addText(
-    breakdown.takeHomeNote ||
-      "This is an estimated full-month take-home based on the current Master Payroll Engine. Actual payroll may vary based on statutory deductions, tax withholding, attendance and other payroll adjustments.",
-    8
-  );
-
-  // ============================================================
-  // OFFER ACCEPTANCE
-  // ============================================================
-
-  addSection("Offer Acceptance");
-
-  addText(
-    "Please review this offer and use the acceptance or decline instructions " +
-      "provided in the accompanying email. Your final employment terms will " +
-      "be documented in the applicable employment agreement."
-  );
-
-  // ============================================================
-  // SIGNATURE
-  // ============================================================
-
-  document.moveDown(1.2);
-
-  addText("Regards,");
-
-  document.moveDown(0.3);
-
-  ensureSpace(45);
-
-  document
-    .font("Helvetica-Bold")
-    .fontSize(10)
-    .fillColor("#222222")
-    .text("HR Team");
-
+  curY += 14;
   document
     .font("Helvetica")
-    .text("TEENS SOFTWARE SOLUTIONS LLP");
+    .fontSize(8.5)
+    .fillColor("#0F172A")
+    .text(`Dear ${details.firstName},`, marginX, curY);
 
-  // ============================================================
-  // INTERNAL REFERENCE
-  // ============================================================
-
-  document.moveDown(1.2);
-
-  ensureSpace(25);
-
+  curY += 13;
+  // Intro paragraph with bold designation and company
   document
     .font("Helvetica")
     .fontSize(8)
-    .fillColor("gray")
-    .text(`Internal Candidate Reference: ${details.candidateId}`);
+    .fillColor("#1E293B")
+    .text("We are pleased to offer you the position of ", marginX, curY, {
+      continued: true,
+      width: contentWidth,
+      lineGap: 2.5,
+    })
+    .font("Helvetica-Bold")
+    .text(details.designation, { continued: true })
+    .font("Helvetica")
+    .text(" at ")
+    .font("Helvetica-Bold")
+    .text("Teens Software Solutions LLP.", { continued: true })
+    .font("Helvetica")
+    .text(" We are impressed with your skills and experience, and we are excited to have you join our team.");
+
+  curY = document.y + 3;
+  document
+    .font("Helvetica")
+    .fontSize(8)
+    .fillColor("#1E293B")
+    .text("This offer is subject to the following terms and conditions:", marginX, curY);
+
+  // ============================================================
+  // 5. SALARY BREAKUP TABLE (TWO-COLUMN DUAL GRID)
+  // ============================================================
+  const tableY = curY + 14;
+  const tableW = contentWidth; // 523.28
+
+  // Main Header (Navy Blue rounded top)
+  document
+    .roundedRect(marginX, tableY, tableW, 19, 4)
+    .fillColor("#0B3B60")
+    .fill();
+
+  document
+    .font("Helvetica-Bold")
+    .fontSize(8.5)
+    .fillColor("#FFFFFF")
+    .text("Salary Breakup (Per Month & Per Annum)", marginX, tableY + 5.5, {
+      width: tableW,
+      align: "center",
+    });
+
+  // Table Column Coordinates:
+  // Left side: 261.64 pt total
+  //   Col 1 (Component): 111.64 pt
+  //   Col 2 (Per Month): 75.00 pt
+  //   Col 3 (Per Annum): 75.00 pt
+  // Right side: 261.64 pt total
+  //   Col 4 (Deductions): 111.64 pt
+  //   Col 5 (Per Month): 75.00 pt
+  //   Col 6 (Per Annum): 75.00 pt
+  const colW1 = 111.64;
+  const colW2 = 75;
+  const colW3 = 75;
+  const colW4 = 111.64;
+  const colW5 = 75;
+  const colW6 = 75;
+
+  const colX1 = marginX;
+  const colX2 = colX1 + colW1;
+  const colX3 = colX2 + colW2;
+  const colX4 = colX3 + colW3;
+  const colX5 = colX4 + colW4;
+  const colX6 = colX5 + colW5;
+
+  // Sub-header Row (Light Blue #E0F2FE)
+  const subHeaderY = tableY + 19;
+  const subHeaderH = 22;
+
+  document
+    .rect(marginX, subHeaderY, tableW, subHeaderH)
+    .fillColor("#E0F2FE")
+    .fill();
+
+  // Grid line for sub-header
+  document
+    .rect(marginX, subHeaderY, tableW, subHeaderH)
+    .strokeColor("#BAE6FD")
+    .lineWidth(0.6)
+    .stroke();
+
+  // Sub-header vertical divider lines
+  [colX2, colX3, colX4, colX5, colX6].forEach((x) => {
+    document
+      .moveTo(x, subHeaderY)
+      .lineTo(x, subHeaderY + subHeaderH)
+      .strokeColor("#BAE6FD")
+      .lineWidth(0.6)
+      .stroke();
+  });
+
+  // Sub-header texts
+  document
+    .font("Helvetica-Bold")
+    .fontSize(7.5)
+    .fillColor("#0F172A")
+    .text("Component", colX1 + 6, subHeaderY + 7, { width: colW1 - 12 })
+    .text("Per Month\n(INR)", colX2, subHeaderY + 3, { width: colW2, align: "center" })
+    .text("Per Annum\n(INR)", colX3, subHeaderY + 3, { width: colW3, align: "center" })
+    .text("Deductions", colX4 + 6, subHeaderY + 7, { width: colW4 - 12 })
+    .text("Per Month\n(INR)", colX5, subHeaderY + 3, { width: colW5, align: "center" })
+    .text("Per Annum\n(INR)", colX6, subHeaderY + 3, { width: colW6, align: "center" });
+
+  // Map earnings items
+  const earningsMap = new Map<string, OfferSalaryLine>();
+  breakdown.earnings.forEach((e) => {
+    const key = e.label.toLowerCase();
+    earningsMap.set(key, e);
+  });
+
+  const getEarning = (keySubstr: string) => {
+    for (const [k, v] of earningsMap.entries()) {
+      if (k.includes(keySubstr)) return v;
+    }
+    return null;
+  };
+
+  const basicItem = getEarning("basic") || { label: "Basic Salary", monthlyAmount: Math.round(breakdown.monthlyGross * 0.5), annualAmount: Math.round(breakdown.monthlyGross * 0.5 * 12) };
+  const hraItem = getEarning("hra") || getEarning("house rent") || { label: "HRA", monthlyAmount: Math.round(breakdown.monthlyGross * 0.2), annualAmount: Math.round(breakdown.monthlyGross * 0.2 * 12) };
+  const convItem = getEarning("conveyance") || { label: "Conveyance Allowance", monthlyAmount: 1600, annualAmount: 19200 };
+  const medItem = getEarning("medical") || { label: "Medical Allowance", monthlyAmount: 1250, annualAmount: 15000 };
+  const specialItem = getEarning("special") || {
+    label: "Special Allowance",
+    monthlyAmount: Math.max(0, breakdown.monthlyGross - (basicItem.monthlyAmount + hraItem.monthlyAmount + convItem.monthlyAmount + medItem.monthlyAmount)),
+    annualAmount: Math.max(0, breakdown.monthlyGross - (basicItem.monthlyAmount + hraItem.monthlyAmount + convItem.monthlyAmount + medItem.monthlyAmount)) * 12,
+  };
+
+  // Map deduction items
+  const deductionMap = new Map<string, OfferEmployeeDeduction>();
+  breakdown.employeeDeductions.forEach((d) => {
+    const key = d.label.toLowerCase();
+    deductionMap.set(key, d);
+  });
+
+  const getDeduction = (keySubstr: string) => {
+    for (const [k, v] of deductionMap.entries()) {
+      if (k.includes(keySubstr)) return v;
+    }
+    return null;
+  };
+
+  const pfItem = details.pfEligible
+    ? (getDeduction("pf") || getDeduction("provident") || { label: "Provident Fund (PF) (12% of Basic)", monthlyAmount: Math.round(basicItem.monthlyAmount * 0.12), annualAmount: Math.round(basicItem.monthlyAmount * 0.12 * 12) })
+    : { label: "Provident Fund (PF)", monthlyAmount: null, annualAmount: null, note: "Not Applicable" };
+
+  const esiItem = details.esiEligible
+    ? (getDeduction("esi") || { label: "Employee State Insurance (ESI) (0.75% of Gross)", monthlyAmount: Math.round(breakdown.monthlyGross * 0.0075), annualAmount: Math.round(breakdown.monthlyGross * 0.0075 * 12) })
+    : { label: "Employee State Insurance (ESI)", monthlyAmount: null, annualAmount: null, note: "Not Applicable" };
+
+  const ptItem = details.ptEligible
+    ? (getDeduction("pt") || getDeduction("professional") || { label: "Professional Tax (PT)*", monthlyAmount: 200, annualAmount: 2400 })
+    : { label: "Professional Tax (PT)*", monthlyAmount: null, annualAmount: null, note: "Not Applicable" };
+
+  const tdsItem = {
+    label: "Income Tax (TDS)**",
+    monthlyText: "As per slab",
+    annualText: "As per slab",
+  };
+
+  // Calculate total monthly and annual deductions
+  let totalDeductionsMonthly = 0;
+  let totalDeductionsAnnual = 0;
+
+  if (details.pfEligible && pfItem.monthlyAmount) {
+    totalDeductionsMonthly += pfItem.monthlyAmount;
+    totalDeductionsAnnual += pfItem.annualAmount || pfItem.monthlyAmount * 12;
+  }
+  if (details.esiEligible && esiItem.monthlyAmount) {
+    totalDeductionsMonthly += esiItem.monthlyAmount;
+    totalDeductionsAnnual += esiItem.annualAmount || esiItem.monthlyAmount * 12;
+  }
+  if (details.ptEligible && ptItem.monthlyAmount) {
+    totalDeductionsMonthly += ptItem.monthlyAmount;
+    totalDeductionsAnnual += ptItem.annualAmount || ptItem.monthlyAmount * 12;
+  }
+
+  const annualGross = breakdown.monthlyGross * 12;
+  const netTakeHomeMonthly = breakdown.estimatedMonthlyTakeHome > 0
+    ? breakdown.estimatedMonthlyTakeHome
+    : breakdown.monthlyGross - totalDeductionsMonthly;
+  const netTakeHomeAnnual = netTakeHomeMonthly * 12;
+
+  // Grid Data Rows: 6 structured rows
+  type TableRowDef = {
+    leftLabel: string;
+    leftMonthly?: string;
+    leftAnnual?: string;
+    isLeftHeader?: boolean;
+    rightLabel?: string;
+    rightMonthly?: string;
+    rightAnnual?: string;
+    rowHeight: number;
+  };
+
+  const rows: TableRowDef[] = [
+    {
+      leftLabel: "Earnings",
+      isLeftHeader: true,
+      rightLabel: details.pfEligible
+        ? "Provident Fund (PF)\n(12% of Basic)"
+        : "Provident Fund (PF)\n(Not Applicable)",
+      rightMonthly: details.pfEligible && pfItem.monthlyAmount ? formatCurrencyAmount(pfItem.monthlyAmount) : "—",
+      rightAnnual: details.pfEligible && pfItem.annualAmount ? formatCurrencyAmount(pfItem.annualAmount) : "—",
+      rowHeight: 20,
+    },
+    {
+      leftLabel: "Basic Salary",
+      leftMonthly: formatCurrencyAmount(basicItem.monthlyAmount),
+      leftAnnual: formatCurrencyAmount(basicItem.annualAmount),
+      rightLabel: details.esiEligible
+        ? "Employee State Insurance (ESI)\n(0.75% of Gross)"
+        : "Employee State Insurance (ESI)\n(Not Applicable)",
+      rightMonthly: details.esiEligible && esiItem.monthlyAmount ? formatCurrencyAmount(esiItem.monthlyAmount) : "—",
+      rightAnnual: details.esiEligible && esiItem.annualAmount ? formatCurrencyAmount(esiItem.annualAmount) : "—",
+      rowHeight: 20,
+    },
+    {
+      leftLabel: "HRA",
+      leftMonthly: formatCurrencyAmount(hraItem.monthlyAmount),
+      leftAnnual: formatCurrencyAmount(hraItem.annualAmount),
+      rightLabel: details.ptEligible
+        ? "Professional Tax (PT)*"
+        : "Professional Tax (PT)* (N/A)",
+      rightMonthly: details.ptEligible && ptItem.monthlyAmount ? formatCurrencyAmount(ptItem.monthlyAmount) : "—",
+      rightAnnual: details.ptEligible && ptItem.annualAmount ? formatCurrencyAmount(ptItem.annualAmount) : "—",
+      rowHeight: 16,
+    },
+    {
+      leftLabel: "Conveyance Allowance",
+      leftMonthly: formatCurrencyAmount(convItem.monthlyAmount),
+      leftAnnual: formatCurrencyAmount(convItem.annualAmount),
+      rightLabel: "Income Tax (TDS)**",
+      rightMonthly: tdsItem.monthlyText,
+      rightAnnual: tdsItem.annualText,
+      rowHeight: 16,
+    },
+    {
+      leftLabel: "Medical Allowance",
+      leftMonthly: formatCurrencyAmount(medItem.monthlyAmount),
+      leftAnnual: formatCurrencyAmount(medItem.annualAmount),
+      rightLabel: "",
+      rightMonthly: "",
+      rightAnnual: "",
+      rowHeight: 15,
+    },
+    {
+      leftLabel: "Special Allowance",
+      leftMonthly: formatCurrencyAmount(specialItem.monthlyAmount),
+      leftAnnual: formatCurrencyAmount(specialItem.annualAmount),
+      rightLabel: "",
+      rightMonthly: "",
+      rightAnnual: "",
+      rowHeight: 15,
+    },
+  ];
+
+  let currentTableRowY = subHeaderY + subHeaderH;
+
+  rows.forEach((r) => {
+    // Row background (white)
+    document
+      .rect(marginX, currentTableRowY, tableW, r.rowHeight)
+      .fillColor("#FFFFFF")
+      .fill();
+
+    // Row borders
+    document
+      .rect(marginX, currentTableRowY, tableW, r.rowHeight)
+      .strokeColor("#BAE6FD")
+      .lineWidth(0.5)
+      .stroke();
+
+    // Vertical column borders
+    [colX2, colX3, colX4, colX5, colX6].forEach((x) => {
+      document
+        .moveTo(x, currentTableRowY)
+        .lineTo(x, currentTableRowY + r.rowHeight)
+        .strokeColor("#BAE6FD")
+        .lineWidth(0.5)
+        .stroke();
+    });
+
+    // Left Col content
+    if (r.isLeftHeader) {
+      document
+        .font("Helvetica-Bold")
+        .fontSize(7.5)
+        .fillColor("#0F172A")
+        .text(r.leftLabel, colX1 + 6, currentTableRowY + 5, { width: colW1 - 12 });
+    } else {
+      document
+        .font("Helvetica")
+        .fontSize(7.2)
+        .fillColor("#334155")
+        .text(r.leftLabel, colX1 + 6, currentTableRowY + 4, { width: colW1 - 12 });
+
+      if (r.leftMonthly) {
+        document
+          .font("Helvetica")
+          .fontSize(7.2)
+          .fillColor("#0F172A")
+          .text(r.leftMonthly, colX2, currentTableRowY + 4, { width: colW2 - 8, align: "right" });
+      }
+      if (r.leftAnnual) {
+        document
+          .font("Helvetica")
+          .fontSize(7.2)
+          .fillColor("#0F172A")
+          .text(r.leftAnnual, colX3, currentTableRowY + 4, { width: colW3 - 8, align: "right" });
+      }
+    }
+
+    // Right Col content
+    if (r.rightLabel) {
+      document
+        .font("Helvetica")
+        .fontSize(7.0)
+        .fillColor("#334155")
+        .text(r.rightLabel, colX4 + 6, currentTableRowY + (r.rightLabel.includes("\n") ? 2 : 4), {
+          width: colW4 - 12,
+          lineGap: 1,
+        });
+
+      if (r.rightMonthly) {
+        const isMText = r.rightMonthly.includes("per");
+        document
+          .font(isMText ? "Helvetica" : "Helvetica")
+          .fontSize(isMText ? 6.5 : 7.2)
+          .fillColor("#0F172A")
+          .text(r.rightMonthly, colX5, currentTableRowY + 4, {
+            width: colW5 - 6,
+            align: isMText ? "center" : "right",
+          });
+      }
+
+      if (r.rightAnnual) {
+        const isAText = r.rightAnnual.includes("per");
+        document
+          .font(isAText ? "Helvetica" : "Helvetica")
+          .fontSize(isAText ? 6.5 : 7.2)
+          .fillColor("#0F172A")
+          .text(r.rightAnnual, colX6, currentTableRowY + 4, {
+            width: colW6 - 6,
+            align: isAText ? "center" : "right",
+          });
+      }
+    }
+
+    currentTableRowY += r.rowHeight;
+  });
+
+  // Gross Salary & Total Deductions Row (Light Blue Accent #E0F2FE)
+  const totalRowH = 17;
+  document
+    .rect(marginX, currentTableRowY, tableW, totalRowH)
+    .fillColor("#E0F2FE")
+    .fill();
+
+  document
+    .rect(marginX, currentTableRowY, tableW, totalRowH)
+    .strokeColor("#93C5FD")
+    .lineWidth(0.6)
+    .stroke();
+
+  [colX2, colX3, colX4, colX5, colX6].forEach((x) => {
+    document
+      .moveTo(x, currentTableRowY)
+      .lineTo(x, currentTableRowY + totalRowH)
+      .strokeColor("#93C5FD")
+      .lineWidth(0.6)
+      .stroke();
+  });
+
+  document
+    .font("Helvetica-Bold")
+    .fontSize(7.5)
+    .fillColor("#0F172A")
+    .text("Gross Salary", colX1 + 6, currentTableRowY + 4.5, { width: colW1 - 12 })
+    .text(formatCurrencyAmount(breakdown.monthlyGross), colX2, currentTableRowY + 4.5, {
+      width: colW2 - 8,
+      align: "right",
+    })
+    .text(formatCurrencyAmount(annualGross), colX3, currentTableRowY + 4.5, {
+      width: colW3 - 8,
+      align: "right",
+    })
+    .text("Total Deductions", colX4 + 6, currentTableRowY + 4.5, { width: colW4 - 12 })
+    .text(formatCurrencyAmount(totalDeductionsMonthly), colX5, currentTableRowY + 4.5, {
+      width: colW5 - 6,
+      align: "right",
+    })
+    .text(formatCurrencyAmount(totalDeductionsAnnual), colX6, currentTableRowY + 4.5, {
+      width: colW6 - 6,
+      align: "right",
+    });
+
+  currentTableRowY += totalRowH;
+
+  // Bottom Net Take-Home Salary Row (Navy Blue #0B3B60)
+  const netRowH = 19;
+  document
+    .roundedRect(marginX, currentTableRowY, tableW, netRowH, 4)
+    .fillColor("#0B3B60")
+    .fill();
+
+  // Spans left side
+  document
+    .font("Helvetica-Bold")
+    .fontSize(8)
+    .fillColor("#FFFFFF")
+    .text("Net Take-Home Salary (Approx.)", colX1 + 6, currentTableRowY + 5.5, {
+      width: colW1 + colW2 + colW3 - 12,
+      align: "center",
+    });
+
+  // Right side monthly & annual take home
+  document
+    .font("Helvetica-Bold")
+    .fontSize(8)
+    .fillColor("#FFFFFF")
+    .text(formatCurrencyAmount(netTakeHomeMonthly), colX5, currentTableRowY + 5.5, {
+      width: colW5 - 6,
+      align: "right",
+    })
+    .text(formatCurrencyAmount(netTakeHomeAnnual), colX6, currentTableRowY + 5.5, {
+      width: colW6 - 6,
+      align: "right",
+    });
+
+  currentTableRowY += netRowH;
+
+  // Notes under table
+  const notesY = currentTableRowY + 4;
+  document
+    .font("Helvetica-Bold")
+    .fontSize(6.5)
+    .fillColor("#0F172A")
+    .text("Notes:", marginX, notesY);
+
+  document
+    .font("Helvetica")
+    .fontSize(6)
+    .fillColor("#475569")
+    .text("*   Professional Tax (PT) is applicable as per state rules.", marginX + 3, notesY + 8)
+    .text("**  Income Tax (TDS) will be deducted as per your applicable tax slab and declarations.", marginX + 3, notesY + 16);
+
+  // ============================================================
+  // 6. OTHER TERMS SECTION
+  // ============================================================
+  const termsPillY = notesY + 28;
+  const termsPillW = 120;
+  const termsPillH = 17;
+
+  document
+    .roundedRect(marginX, termsPillY, termsPillW, termsPillH, 8.5)
+    .fillColor("#0B3B60")
+    .fill();
+
+  document
+    .font("Helvetica-Bold")
+    .fontSize(7.5)
+    .fillColor("#FFFFFF")
+    .text("3. Other Terms", marginX, termsPillY + 4.5, {
+      width: termsPillW,
+      align: "center",
+    });
+
+  let termItemY = termsPillY + termsPillH + 6;
+  const termItems = [
+    { num: "1.", title: "Probation Period: ", text: "You will be on probation for a period of 6 months from your date of joining." },
+    { num: "2.", title: "Working Hours: ", text: "9:00 AM to 6:00 PM, Monday to Friday (as per project requirements)." },
+    { num: "3.", title: "Leave Policy: ", text: "As per company policy." },
+    { num: "4.", title: "Confidentiality: ", text: "You are expected to maintain the confidentiality of company information." },
+    { num: "5.", title: "Termination: ", text: "Either party may terminate the employment with one month’s notice or payment in lieu thereof." },
+  ];
+
+  termItems.forEach((item) => {
+    document
+      .font("Helvetica-Bold")
+      .fontSize(7.2)
+      .fillColor("#0F172A")
+      .text(item.num, marginX + 8, termItemY, { width: 14 })
+      .text(item.title, marginX + 22, termItemY, { continued: true })
+      .font("Helvetica")
+      .fillColor("#334155")
+      .text(item.text);
+
+    termItemY = document.y + 2.5;
+  });
+
+  // ============================================================
+  // 7. CLOSING PARAGRAPHS & ACCEPTANCE
+  // ============================================================
+  curY = termItemY + 6;
+
+  document
+    .font("Helvetica")
+    .fontSize(7.4)
+    .fillColor("#1E293B")
+    .text(
+      "We believe that your skills and dedication will be valuable assets to our team. We look forward to your positive confirmation and welcoming you to Teens Software Solutions LLP.",
+      marginX,
+      curY,
+      { width: contentWidth, lineGap: 1.5 }
+    );
+
+  curY = document.y + 4;
+  document
+    .font("Helvetica")
+    .fontSize(7.4)
+    .fillColor("#1E293B")
+    .text(
+      `Please confirm your acceptance of this offer by signing and returning a copy of this letter by ${acceptanceDate}.`,
+      marginX,
+      curY,
+      { width: contentWidth }
+    );
+
+  curY = document.y + 4;
+  document
+    .font("Helvetica")
+    .fontSize(7.4)
+    .fillColor("#1E293B")
+    .text("Congratulations and best wishes for a successful career with us!", marginX, curY);
+
+  // ============================================================
+  // 8. SIGN-OFF & SIGNATURE
+  // ============================================================
+  curY = document.y + 6;
+  document
+    .font("Helvetica")
+    .fontSize(7.5)
+    .fillColor("#1E293B")
+    .text("Yours sincerely,", marginX, curY);
+
+  curY = document.y + 2;
+  document
+    .font("Helvetica-Bold")
+    .fontSize(8.5)
+    .fillColor("#0F172A")
+    .text("For Teens Software Solutions LLP", marginX, curY);
+
+  // Stylized cursive HR signature matching the image
+  const sigX = marginX + 6;
+  const sigY = curY + 12;
+
+  document.save();
+  document
+    .moveTo(sigX, sigY + 14)
+    .bezierCurveTo(sigX + 10, sigY - 10, sigX + 18, sigY + 16, sigX + 32, sigY + 4)
+    .bezierCurveTo(sigX + 44, sigY - 4, sigX + 54, sigY + 12, sigX + 70, sigY + 3)
+    .bezierCurveTo(sigX + 80, sigY - 2, sigX + 90, sigY + 10, sigX + 110, sigY + 2)
+    .moveTo(sigX + 8, sigY + 16)
+    .lineTo(sigX + 75, sigY + 16)
+    .strokeColor("#0284C7")
+    .lineWidth(1.2)
+    .stroke();
+  document.restore();
+
+  // HR Signatory Name & Title
+  const hrName = details.hrName || "Rohit Sharma";
+  const hrTitle = details.hrTitle || "Head – Human Resources";
+
+  const hrTextY = sigY + 24;
+  document
+    .font("Helvetica-Bold")
+    .fontSize(8.5)
+    .fillColor("#0F172A")
+    .text(hrName, marginX, hrTextY);
+
+  document
+    .font("Helvetica")
+    .fontSize(7.5)
+    .fillColor("#475569")
+    .text(hrTitle, marginX, hrTextY + 10);
+
+  // ============================================================
+  // 9. FOOTER BAR & SLOGAN
+  // ============================================================
+  const footerDividerY = pageHeight - 48;
+
+  // Thin line divider
+  document
+    .moveTo(marginX, footerDividerY)
+    .lineTo(pageWidth - marginX, footerDividerY)
+    .strokeColor("#CBD5E1")
+    .lineWidth(0.8)
+    .stroke();
+
+  // Contact Info Row
+  const contactY = footerDividerY + 6;
+  const contactText = "Plot No. 123, Tech Park, Hyderabad – 500081, India   |   hr@teenssoftwaresolutions.com   |   www.teenssoftwaresolutions.com";
+
+  document
+    .font("Helvetica")
+    .fontSize(6.5)
+    .fillColor("#334155")
+    .text(contactText, marginX, contactY, {
+      width: contentWidth,
+      align: "center",
+    });
+
+  // Bottom tagline slogan
+  document
+    .font("Helvetica-Oblique")
+    .fontSize(7.5)
+    .fillColor("#0369A1")
+    .text("Together for a Better Tomorrow", marginX, pageHeight - 24, {
+      width: contentWidth,
+      align: "right",
+    });
 
   document.end();
 

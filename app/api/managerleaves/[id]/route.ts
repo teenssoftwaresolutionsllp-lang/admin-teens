@@ -16,18 +16,15 @@ function isValidUUID(value: unknown): value is string {
   );
 }
 
-// Supports both [id] and [leaveId] parameter names.
-// Falls back to the actual request URL if params are missing.
 async function getLeaveId(
   request: Request,
   params: Promise<{
-    id?: string;
-    leaveId?: string;
+    id: string;
   }>
 ): Promise<string | undefined> {
   const routeParams = await params;
 
-  let id = routeParams?.id || routeParams?.leaveId;
+  let id = routeParams?.id;
 
   if (!id) {
     const segments = new URL(request.url).pathname.split("/");
@@ -53,8 +50,7 @@ export async function PATCH(
   request: Request,
   { params }: {
     params: Promise<{
-      id?: string;
-      leaveId?: string;
+      id: string;
     }>;
   }
 ) {

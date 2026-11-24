@@ -398,6 +398,10 @@ export async function PATCH(
     }
 
     const {
+      first_name,
+      last_name,
+      personal_email,
+      mobile_number,
       gender,
       designation,
       department,
@@ -408,6 +412,51 @@ export async function PATCH(
       total_experience_years,
       total_experience_months,
     } = body;
+
+    if (
+      typeof first_name === "string" &&
+      !first_name.trim()
+    ) {
+      return NextResponse.json(
+        { error: "First name is required." },
+        { status: 400 }
+      );
+    }
+
+    if (
+      typeof last_name === "string" &&
+      !last_name.trim()
+    ) {
+      return NextResponse.json(
+        { error: "Last name is required." },
+        { status: 400 }
+      );
+    }
+
+    if (
+      typeof personal_email === "string" &&
+      personal_email.trim()
+    ) {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(personal_email.trim())) {
+        return NextResponse.json(
+          { error: "Please enter a valid personal email." },
+          { status: 400 }
+        );
+      }
+    }
+
+    if (
+      typeof mobile_number === "string" &&
+      mobile_number.trim()
+    ) {
+      const cleanPhone = mobile_number.trim();
+      if (cleanPhone.length < 7 || cleanPhone.length > 20) {
+        return NextResponse.json(
+          { error: "Please enter a valid mobile number (7 to 20 digits)." },
+          { status: 400 }
+        );
+      }
+    }
 
     if (
       typeof gender !== "string" ||
@@ -554,24 +603,39 @@ export async function PATCH(
       );
     }
 
+    const updatePayload: Record<string, unknown> = {
+      gender,
+      designation: designation.trim(),
+      department: department.trim(),
+      employment_type,
+      work_location: work_location.trim(),
+      annual_ctc: ctc,
+      experience_level,
+      total_experience_years: years,
+      total_experience_months: months,
+      pf_eligible: statutory.data.pf_eligible,
+      esi_eligible: statutory.data.esi_eligible,
+      pt_eligible: statutory.data.pt_eligible,
+      tds_eligible: statutory.data.tds_eligible,
+    };
+
+    if (typeof first_name === "string" && first_name.trim()) {
+      updatePayload.first_name = first_name.trim();
+    }
+    if (typeof last_name === "string" && last_name.trim()) {
+      updatePayload.last_name = last_name.trim();
+    }
+    if (typeof personal_email === "string" && personal_email.trim()) {
+      updatePayload.personal_email = personal_email.trim().toLowerCase();
+    }
+    if (typeof mobile_number === "string" && mobile_number.trim()) {
+      updatePayload.mobile_number = mobile_number.trim();
+    }
+
     const { data: updatedCandidate, error: updateError } =
       await auth.admin
         .from("joining_candidates")
-        .update({
-          gender,
-          designation: designation.trim(),
-          department: department.trim(),
-          employment_type,
-          work_location: work_location.trim(),
-          annual_ctc: ctc,
-          experience_level,
-          total_experience_years: years,
-          total_experience_months: months,
-          pf_eligible: statutory.data.pf_eligible,
-          esi_eligible: statutory.data.esi_eligible,
-          pt_eligible: statutory.data.pt_eligible,
-          tds_eligible: statutory.data.tds_eligible,
-        })
+        .update(updatePayload)
         .eq("id", id)
         .select("*")
         .single();
@@ -653,7 +717,8 @@ function buildOfferSalaryBreakdown(
     tds_eligible: statutory.tds_eligible,
   };
 
-  const row = calculateMasterPayrollRow(
+  // 1. Initial master payroll calculation
+  const initialRow = calculateMasterPayrollRow(
     employee,
     30,
     0,
@@ -663,6 +728,88 @@ function buildOfferSalaryBreakdown(
       arrears: 0,
       advance: 0,
       tds: 0,
+      recoverPendingStatutory: false,
+    },
+    null,
+    {
+      pf: 0,
+      esi: 0,
+    },
+    30
+  );
+
+  // 2. Calculate ESI (Employee: 0.75%, Employer: 3.25%)
+  // If HR marked ESI eligible, ensure ESI is calculated on gross salary
+  const employeeEsi = statutory.esi_eligible
+    ? (initialRow.esic_emp > 0
+        ? initialRow.esic_emp
+        : Math.round(initialRow.gross_salary * 0.0075))
+    : 0;
+
+  const employerEsi = statutory.esi_eligible
+    ? (initialRow.esic_empr > 0
+        ? initialRow.esic_empr
+        : Math.round(initialRow.gross_salary * 0.0325))
+    : 0;
+
+  // 3. Calculate TDS (Income Tax withholding under New Tax Regime)
+  let monthlyTds = 0;
+  let annualTds = 0;
+  let tdsNote = "TDS marked as not applicable at the offer stage.";
+
+  if (statutory.tds_eligible) {
+    const annualGross = initialRow.gross_salary * 12;
+    const standardDeduction = 75000;
+    const taxableIncome = Math.max(0, annualGross - standardDeduction);
+
+    if (taxableIncome <= 700000) {
+      monthlyTds = 0;
+      annualTds = 0;
+      tdsNote =
+        "TDS applicable, but estimated tax is ₹0 due to Section 87A rebate (taxable income ≤ ₹7,00,000).";
+    } else {
+      let tax = 0;
+      if (taxableIncome > 1500000) {
+        tax += (taxableIncome - 1500000) * 0.3;
+        tax += 300000 * 0.2;
+        tax += 300000 * 0.15;
+        tax += 300000 * 0.1;
+        tax += 300000 * 0.05;
+      } else if (taxableIncome > 1200000) {
+        tax += (taxableIncome - 1200000) * 0.2;
+        tax += 300000 * 0.15;
+        tax += 300000 * 0.1;
+        tax += 300000 * 0.05;
+      } else if (taxableIncome > 900000) {
+        tax += (taxableIncome - 900000) * 0.15;
+        tax += 300000 * 0.1;
+        tax += 300000 * 0.05;
+      } else if (taxableIncome > 600000) {
+        tax += (taxableIncome - 600000) * 0.1;
+        tax += 300000 * 0.05;
+      } else if (taxableIncome > 300000) {
+        tax += (taxableIncome - 300000) * 0.05;
+      }
+
+      const cess = tax * 0.04;
+      annualTds = Math.round(tax + cess);
+      monthlyTds = Math.round(annualTds / 12);
+      tdsNote =
+        "Calculated based on New Tax Regime slabs (with standard deduction and 4% cess).";
+    }
+  }
+
+  // 4. Recalculate payroll with the computed TDS adjustment
+  const row = calculateMasterPayrollRow(
+    employee,
+    30,
+    0,
+    {
+      lopDays: 0,
+      incentive: 0,
+      arrears: 0,
+      advance: 0,
+      tds: monthlyTds,
       recoverPendingStatutory: false,
     },
     null,
@@ -712,8 +859,8 @@ function buildOfferSalaryBreakdown(
   const employerContributions: OfferEmployerContribution[] = [
     {
       label: "Employer ESI",
-      monthlyAmount: row.esic_empr,
-      annualAmount: annualize(row.esic_empr),
+      monthlyAmount: employerEsi,
+      annualAmount: annualize(employerEsi),
       includedInCtc: false,
     },
     {
@@ -732,8 +879,8 @@ function buildOfferSalaryBreakdown(
     },
     {
       label: "Employee ESI",
-      monthlyAmount: row.esic_emp,
-      annualAmount: annualize(row.esic_emp),
+      monthlyAmount: employeeEsi,
+      annualAmount: annualize(employeeEsi),
     },
     {
       label: "Professional Tax",
@@ -742,17 +889,23 @@ function buildOfferSalaryBreakdown(
     },
     {
       label: "Tax Deducted at Source (TDS)",
-      monthlyAmount: statutory.tds_eligible ? null : 0,
-      annualAmount: statutory.tds_eligible ? null : 0,
-      note: statutory.tds_eligible
-        ? "TDS applicability has been confirmed by HR. The actual withholding amount will be determined during payroll."
-        : "TDS marked as not applicable at the offer stage.",
+      monthlyAmount: monthlyTds,
+      annualAmount: annualTds,
+      note: tdsNote,
     },
   ];
 
-  const takeHomeNote = statutory.tds_eligible
-    ? "Estimated take-home excludes TDS because the current Master Payroll Engine does not calculate income-tax withholding automatically. Actual take-home will be lower if TDS applies. This estimate also excludes attendance-related LOP and other future payroll adjustments."
-    : "Estimated full-month take-home using the current Master Payroll Engine, assuming no LOP, advance, arrears, incentive, or other adjustments. Actual payroll may vary.";
+  const totalMonthlyDeductions =
+    row.epf + employeeEsi + row.pt + monthlyTds;
+  const estimatedMonthlyTakeHome = Math.max(
+    0,
+    row.gross_salary - totalMonthlyDeductions
+  );
+
+  const takeHomeNote =
+    statutory.tds_eligible && monthlyTds > 0
+      ? "Estimated full-month take-home after standard PF, ESI, PT, and TDS income tax withholding. Actual payroll may vary based on attendance, declarations, and other adjustments."
+      : "Estimated full-month take-home using standard payroll calculations, assuming no LOP, advance, arrears, incentive, or other adjustments. Actual payroll may vary.";
 
   return {
     annualCtc,
@@ -761,7 +914,7 @@ function buildOfferSalaryBreakdown(
     earnings,
     employerContributions,
     employeeDeductions,
-    estimatedMonthlyTakeHome: row.net_payout,
+    estimatedMonthlyTakeHome,
     takeHomeNote,
   };
 }
@@ -818,6 +971,7 @@ export async function POST(
       esi_eligible: boolean | null;
       pt_eligible: boolean | null;
       tds_eligible: boolean | null;
+      joining_date: string | null;
     };
 
     const {
@@ -826,7 +980,7 @@ export async function POST(
     } = await auth.admin
       .from("joining_candidates")
       .select(
-        "id, first_name, last_name, personal_email, designation, annual_ctc, status, gender, department, employment_type, work_location, experience_level, total_experience_years, total_experience_months, pf_eligible, esi_eligible, pt_eligible, tds_eligible"
+        "id, first_name, last_name, personal_email, designation, annual_ctc, status, gender, department, employment_type, work_location, experience_level, total_experience_years, total_experience_months, pf_eligible, esi_eligible, pt_eligible, tds_eligible, joining_date"
       )
       .eq("id", id)
       .maybeSingle();
@@ -1015,12 +1169,15 @@ export async function POST(
     const pdf = await generateOfferLetterPdf({
       firstName: candidate.first_name,
       lastName: candidate.last_name,
+      gender: candidate.gender,
+      personalEmail: candidate.personal_email,
       designation: candidate.designation,
       annualCtc: Number(candidate.annual_ctc),
       candidateId: candidate.id,
       department: candidate.department,
       employmentType: candidate.employment_type,
       workLocation: candidate.work_location,
+      joiningDate: candidate.joining_date,
 
       pfEligible: statutory.data.pf_eligible,
       esiEligible: statutory.data.esi_eligible,

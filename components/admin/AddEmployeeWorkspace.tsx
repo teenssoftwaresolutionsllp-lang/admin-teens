@@ -133,9 +133,10 @@ const documentLabels: Record<string, string> = {
   bank_account_proof: "Bank Account Proof",
   education_10th: "10th Certificate",
   education_12th: "12th Certificate",
-  education_graduation: "Graduation Certificate",
-  education_post_graduation: "Post Graduation Certificate",
-  education_other: "Other Education Certificate",
+  education_diploma: "Diploma Certificate",
+  education_graduation: "UG Certificate",
+  education_post_graduation: "PG Certificate",
+  education_other: "Additional Qualification / Certification",
   experience_document: "Experience Letter / Certificate",
   relieving_letter: "Relieving Letter",
   previous_joining_letter: "Previous Company Joining Letter",
@@ -162,6 +163,7 @@ const sectionDocuments: Record<string, string[]> = {
   education: [
     "education_10th",
     "education_12th",
+    "education_diploma",
     "education_graduation",
     "education_post_graduation",
     "education_other",
@@ -442,6 +444,7 @@ function getDocumentIcon(documentType: string) {
       return Landmark;
     case "education_10th":
     case "education_12th":
+    case "education_diploma":
     case "education_graduation":
     case "education_post_graduation":
     case "education_other":
@@ -906,7 +909,21 @@ function EducationSection({
       ],
     },
     {
-      title: "Graduation",
+      title: "Diploma",
+      documentType: "education_diploma",
+      fields: [
+        ["diplomaCourse", "Course"],
+        ["diplomaAuthority", "Board / Authority"],
+        ["diplomaInstitution", "Institution"],
+        ["diplomaSpecialization", "Specialization"],
+        ["diplomaResultType", "Result Type"],
+        ["diplomaResult", "Result"],
+        ["diplomaResultTotal", "Total Marks / Scale"],
+        ["diplomaYearOfPassing", "Year of Passing"],
+      ],
+    },
+    {
+      title: "UG (Undergraduate)",
       documentType: "education_graduation",
       fields: [
         ["graduationCourse", "Course"],
@@ -920,7 +937,7 @@ function EducationSection({
       ],
     },
     {
-      title: "Post-Graduation",
+      title: "PG (Postgraduate)",
       documentType: "education_post_graduation",
       fields: [
         ["postGraduationCourse", "Course"],
@@ -934,7 +951,7 @@ function EducationSection({
       ],
     },
     {
-      title: "Other Qualification",
+      title: "Additional Qualifications / Certifications",
       documentType: "education_other",
       fields: [
         ["highestQualification", "Highest Qualification"],
@@ -3062,6 +3079,14 @@ export default function AddEmployeeWorkspace({
     "twelfthResultType",
     "twelfthResult",
     "twelfthResultTotal",
+    "diplomaInstitution",
+    "diplomaAuthority",
+    "diplomaCourse",
+    "diplomaSpecialization",
+    "diplomaYearOfPassing",
+    "diplomaResultType",
+    "diplomaResult",
+    "diplomaResultTotal",
     "graduationInstitution",
     "graduationUniversity",
     "graduationCourse",
@@ -3099,6 +3124,17 @@ export default function AddEmployeeWorkspace({
       "twelfthResult",
     ]);
 
+    const hasDiploma = hasEducationValues([
+      "diplomaInstitution",
+      "diplomaAuthority",
+      "diplomaCourse",
+      "diplomaSpecialization",
+      "diplomaYearOfPassing",
+      "diplomaResultType",
+      "diplomaResult",
+      "diplomaResultTotal",
+    ]);
+
     const hasGraduation = hasEducationValues([
       "graduationInstitution",
       "graduationUniversity",
@@ -3130,6 +3166,10 @@ export default function AddEmployeeWorkspace({
 
     if (has12th || hasGraduation || hasPostGraduation) {
       requiredEducationTypes.push("education_12th");
+    }
+
+    if (hasDiploma) {
+      requiredEducationTypes.push("education_diploma");
     }
 
     if (hasGraduation || hasPostGraduation) {
@@ -3197,7 +3237,10 @@ export default function AddEmployeeWorkspace({
         "vocational",
       ].some((value) => highestQualification.includes(value));
 
-      if (isOther || isDiplomaOrVocational) {
+      if (isOther) {
+        requiredEducationTypes.push("education_other");
+      } else if (isDiplomaOrVocational) {
+        // Legacy submissions stored Diploma / ITI under the old Other section.
         requiredEducationTypes.push("education_other");
       } else if (!is10thOnly) {
         requiredEducationTypes.push("education_12th");
