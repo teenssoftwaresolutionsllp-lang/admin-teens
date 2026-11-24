@@ -149,78 +149,6 @@ export default function EmployeeDetail({ employee, documents, educationRecords,p
     return new Date(dateStr).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
   };
 
-
-  const parseLocalDate = (value?: string | null): Date | null => {
-    if (!value) return null;
-
-    const date = new Date(`${value.slice(0, 10)}T00:00:00`);
-    return Number.isNaN(date.getTime()) ? null : date;
-  };
-
-  const getCompletedMonths = (
-    startValue?: string | null,
-    endValue?: string | null
-  ): number => {
-    const start = parseLocalDate(startValue);
-    const end = parseLocalDate(endValue);
-
-    if (!start || !end || end < start) return 0;
-
-    let months =
-      (end.getFullYear() - start.getFullYear()) * 12 +
-      (end.getMonth() - start.getMonth());
-
-    if (end.getDate() < start.getDate()) {
-      months--;
-    }
-
-    return Math.max(0, months);
-  };
-
-  const formatExperience = (totalMonths: number): string => {
-    const years = Math.floor(totalMonths / 12);
-    const months = totalMonths % 12;
-
-    return `${years} Years, ${months} Months`;
-  };
-
-  const today = new Date();
-  const todayString = [
-    today.getFullYear(),
-    String(today.getMonth() + 1).padStart(2, "0"),
-    String(today.getDate()).padStart(2, "0"),
-  ].join("-");
-
-  const currentWorkingMonths = getCompletedMonths(
-    employee.joining_date,
-    todayString
-  );
-
-  const previousCompanyMonths = previousEmploymentRecords.reduce(
-    (total, record) => {
-      const startDate =
-        typeof record.employment_start_date === "string"
-          ? record.employment_start_date
-          : null;
-
-      const endDate =
-        typeof record.employment_end_date === "string"
-          ? record.employment_end_date
-          : null;
-
-      return total + getCompletedMonths(startDate, endDate);
-    },
-    0
-  );
-
-  const totalProfessionalMonths =
-    currentWorkingMonths + previousCompanyMonths;
-
-  const currentExperienceClassification =
-    currentWorkingMonths >= 12 ? "Experienced" : "Fresher";
-
-
-
   const calculatePlannedLastWorkingDate = (date: string,days: number) => 
   {
     if (!date || !Number.isInteger(days) || days < 1) return "";
@@ -235,6 +163,8 @@ export default function EmployeeDetail({ employee, documents, educationRecords,p
       String(result.getDate()).padStart(2, "0"),
     ].join("-");
   };
+
+
 
   const noticeEmployee = employee as Employee & {
     resignation_date?: string | null;
@@ -251,12 +181,33 @@ export default function EmployeeDetail({ employee, documents, educationRecords,p
   }).educational_details || {};
 
 const educationSections = [
-  { title: "10th", prefix: "education_10th" },
-  { title: "12th", prefix: "education_12th" },
+  { title: "10th / SSC", prefix: "education_10th" },
+  { title: "12th / Intermediate", prefix: "education_12th" },
   { title: "Graduation", prefix: "education_graduation" },
   { title: "Post Graduation", prefix: "education_post_graduation" },
   { title: "Diploma", prefix: "education_diploma" },
 ];
+const getEducationValue = (value: unknown): string => {
+  if (value === null || value === undefined) {
+    return "";
+  }
+
+  return String(value).trim();
+};
+
+
+//   const educationDetails =
+//   (employee as Employee & {
+//     educational_details?: Record<string, string> | null;
+//   }).educational_details || {};
+
+// const educationSections = [
+//   { title: "10th", prefix: "education_10th" },
+//   { title: "12th", prefix: "education_12th" },
+//   { title: "Graduation", prefix: "education_graduation" },
+//   { title: "Post Graduation", prefix: "education_post_graduation" },
+//   { title: "Diploma", prefix: "education_diploma" },
+// ];
 
   const isOnNotice = noticeEmployee.notice_status === "notice_period" || employee.status?.toLowerCase() === "on_notice";
 
@@ -883,35 +834,8 @@ const getEmployeeStatusLabel = () => {
               <DetailTile label="Probation End Date" value={formatDate(employee.probation_end_date)} />
               <DetailTile label="Confirmation Date" value={formatDate(employee.confirmation_date)} />
               <DetailTile label="Shift" value={ employee.shift_type === "night" ? "Night (06:30 PM – 03:30 AM)" : "General (09:00 AM – 06:00 PM)"}/>
-
-<DetailTile
-  label="Current Experience Classification"
-  value={currentExperienceClassification}
-/>
-
-<DetailTile
-  label="Current Working Experience"
-  value={
-    employee.joining_date
-      ? formatExperience(currentWorkingMonths)
-      : "Not provided"
-  }
-/>
-
-<DetailTile
-  label="Previous Company Experience"
-  value={formatExperience(previousCompanyMonths)}
-/>
-
-<DetailTile
-  label="Total Professional Experience"
-  value={
-    employee.joining_date
-      ? formatExperience(totalProfessionalMonths)
-      : "Not provided"
-  }
-/>
-
+              <DetailTile label="Experience Level" value={employee.experience_level === "fresher" ? "Fresher" : employee.experience_level === "experienced" ? "Experienced": "Not provided"}/>
+              <DetailTile label="Total Experience" value={employee.experience_level === "fresher"? "0 Years, 0 Months" : employee.experience_level === "experienced" ? employee.total_experience_years == null && employee.total_experience_months == null ? "Not provided": `${employee.total_experience_years ?? 0} Years, ${employee.total_experience_months ?? 0} Months` : "Not provided"}/>
               <DetailTile label="Reporting Manager" value={employee.assigned_reporting_manager_name || "Not Assigned"} />
               <DetailTile label="Work Location" value={employee.work_location} />
             </div>
@@ -1259,135 +1183,98 @@ const getEmployeeStatusLabel = () => {
             </div>
           )}
           {/* Education - Read Only */}
-          {/* {activeTab === 3 && (
-            <div className="space-y-5">
-              <div>
-                <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400">
-                  Education Details
-                </h3>
-                <p className="mt-1 text-xs text-slate-500">
-                  Education records submitted during onboarding. These records are read-only.
-                </p>
+          {/* Education - Read Only */}
+
+{/* Education Details - Read Only */}
+
+{/* Education Details - Read Only */}
+{activeTab === 3 && (
+  <div className="space-y-5">
+    <div>
+      <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400">
+        Education Details
+      </h3>
+      <p className="mt-1 text-xs text-slate-500">
+        Education records submitted during onboarding. These details are read-only.
+      </p>
+    </div>
+
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+      {educationSections.map((section) => {
+        const prefix = section.prefix;
+
+        const fields = [
+          {
+            label: "Institution / College",
+            value: getEducationValue(
+              educationDetails[`${prefix}_institution`]
+            ),
+          },
+          {
+            label: "Board / University",
+            value: getEducationValue(
+              educationDetails[`${prefix}_board`]
+            ),
+          },
+          {
+            label: "Year of Passing",
+            value: getEducationValue(
+              educationDetails[`${prefix}_year`]
+            ),
+          },
+          {
+            label: "Result Type",
+            value: getEducationValue(
+              educationDetails[`${prefix}_result_type`]
+            ),
+          },
+          {
+            label: "Percentage / CGPA",
+            value: getEducationValue(
+              educationDetails[`${prefix}_result`]
+            ),
+          },
+        ];
+
+        const hasData = fields.some((field) => field.value !== "");
+
+        return (
+          <div
+            key={prefix}
+            className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
+          >
+            <h4 className="mb-4 text-sm font-bold text-slate-800">
+              {section.title}
+            </h4>
+
+            {hasData ? (
+              <div className="space-y-3">
+                {fields.map((field) => (
+                  <div
+                    key={field.label}
+                    className="flex flex-col gap-1 border-b border-slate-100 pb-2 last:border-0"
+                  >
+                    <span className="text-xs font-medium text-slate-500">
+                      {field.label}
+                    </span>
+                    <span className="text-sm font-semibold text-slate-800">
+                      {field.value || "—"}
+                    </span>
+                  </div>
+                ))}
               </div>
+            ) : (
+              <p className="text-sm text-slate-400">
+                No details available
+              </p>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  </div>
+)}
 
-              {educationRecords.length > 0 ? (
-                <div className="space-y-4">
-                  {educationRecords.map((record, index) => (
-                    <div
-                      key={String(record.id ?? index)}
-                      className="rounded-xl border border-slate-200 bg-white p-5"
-                    >
-                      <h4 className="mb-4 text-sm font-bold text-slate-900">
-                        {String(record.qualification_name || record.qualification_type || `Qualification ${index + 1}`)}
-                      </h4>
-
-                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                        {record.qualification_type === "10th" && (
-                          <>
-                            {Boolean(record.institution_name) && (
-                              <DetailTile label="School Name" value={String(record.institution_name)} />
-                            )}
-                            {Boolean(record.board) && (
-                              <DetailTile label="Board" value={String(record.board)} />
-                            )}
-                          </>
-                        )}
-
-                        {record.qualification_type === "12th" && (
-                          <>
-                            {Boolean(record.institution_name) && (
-                              <DetailTile label="College Name" value={String(record.institution_name)} />
-                            )}
-                            {Boolean(record.board) && (
-                              <DetailTile label="Board" value={String(record.board)} />
-                            )}
-                            {Boolean(record.stream) && (
-                              <DetailTile label="Stream" value={String(record.stream)} />
-                            )}
-                          </>
-                        )}
-
-                        {(record.qualification_type === "Graduation" ||
-                          record.qualification_type === "Post Graduation") && (
-                          <>
-                            {Boolean(record.institution_name) && (
-                              <DetailTile label="Institution Name" value={String(record.institution_name)} />
-                            )}
-                            {Boolean(record.university) && (
-                              <DetailTile label="University" value={String(record.university)} />
-                            )}
-                            {Boolean(record.course) && (
-                              <DetailTile label="Course" value={String(record.course)} />
-                            )}
-                            {Boolean(record.specialization) && (
-                              <DetailTile label="Specialization" value={String(record.specialization)} />
-                            )}
-                          </>
-                        )}
-
-                        {record.qualification_type === "Other" && (
-                          <>
-                            {Boolean(record.institution_name) && (
-                              <DetailTile label="Institution Name" value={String(record.institution_name)} />
-                            )}
-                            {Boolean(record.board) && (
-                              <DetailTile label="Board / Issuing Authority" value={String(record.board)} />
-                            )}
-                          </>
-                        )}
-
-                        {record.qualification_type === "twelfth" && (
-                          <>
-                            {record.institution_name && <DetailTile label="College" value={record.institution_name as string} />}
-                            {record.board && <DetailTile label="Board" value={record.board as string} />}
-                            {record.stream && <DetailTile label="Stream" value={record.stream as string} />}
-                          </>
-                        )}
-
-                        {(record.qualification_type === "graduation" ||
-                          record.qualification_type === "post_graduation") && (
-                          <>
-                            {record.course && <DetailTile label="Course" value={record.course as string} />}
-                            {record.specialization && <DetailTile label="Specialization" value={record.specialization as string} />}
-                            {record.institution_name && <DetailTile label="Institution" value={record.institution_name as string} />}
-                            {record.university && <DetailTile label="University" value={record.university as string} />}
-                          </>
-                        )}
-
-                        {record.qualification_type === "other" && (
-                          <>
-                            {record.institution_name && <DetailTile label="Institution" value={record.institution_name as string} />}
-                            {record.board && <DetailTile label="Authority" value={record.board as string} />}
-                          </>
-                        )}
-
-                        {Boolean(record.year_of_passing) && (
-                          <DetailTile label="Year of Passing" value={record.year_of_passing as string} />
-                        )}
-
-                        {Boolean(record.result_type) && (
-                          <DetailTile label="Result Type" value={record.result_type as string} />
-                        )}
-
-                        {Boolean(record.result_value) && (
-                          <DetailTile
-                            label="Result"
-                            value={`${record.result_value}${record.result_total ? ` / ${record.result_total}` : ""}`}
-                          />
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center">
-                  <p className="text-sm text-slate-500">
-                    No education records available.
-                  </p>
-                </div>
-              )}
-            </div>
-          )}  */}
 
           {/* Previous Employment - Read Only */}
           {activeTab === 2 && (
