@@ -841,121 +841,121 @@ const getEmployeeStatusLabel = () => {
             </div>
           )}
 
-{/* Skills & Certification */}
-{activeTab === 5 && (
-  <div className="space-y-6">
+          {/* Skills & Certification */}
+          {activeTab === 5 && (
+            <div className="space-y-6">
 
-    {/* Professional Certification */}
-    <section className="rounded-xl border border-slate-200 bg-white p-5">
-      <h3 className="mb-4 text-sm font-bold uppercase tracking-wider text-slate-900">
-        Professional Certification
-      </h3>
+              {/* Professional Certification */}
+              <section className="rounded-xl border border-slate-200 bg-white p-5">
+                <h3 className="mb-4 text-sm font-bold uppercase tracking-wider text-slate-900">
+                  Professional Certification
+                </h3>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <DetailTile
-          label="Certification Name"
-          value={employee.professional_certification_name}
-        />
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <DetailTile
+                    label="Certification Name"
+                    value={employee.professional_certification_name}
+                  />
 
-        <DetailTile
-          label="Organization"
-          value={employee.professional_certification_organization}
-        />
+                  <DetailTile
+                    label="Organization"
+                    value={employee.professional_certification_organization}
+                  />
 
-        <DetailTile
-          label="Credential ID"
-          value={employee.professional_certification_credential_id}
-        />
+                  <DetailTile
+                    label="Credential ID"
+                    value={employee.professional_certification_credential_id}
+                  />
 
-        <DetailTile
-          label="Issue Date"
-          value={formatDate(employee.professional_certification_issue_date)}
-        />
+                  <DetailTile
+                    label="Issue Date"
+                    value={formatDate(employee.professional_certification_issue_date)}
+                  />
 
-        <DetailTile
-          label="Expiry Date"
-          value={formatDate(employee.professional_certification_expiry_date)}
-        />
-      </div>
-    </section>
-
-    {/* Technical Skills */}
-    <section className="rounded-xl border border-slate-200 bg-white p-5">
-      <h3 className="mb-4 text-sm font-bold uppercase tracking-wider text-slate-900">
-        Technical Skills
-      </h3>
-
-      <div className="flex flex-wrap gap-2">
-        {Array.isArray(employee.technical_skills) &&
-        employee.technical_skills.length > 0 ? (
-          employee.technical_skills.map((skill, index) => (
-            <span
-              key={`${skill}-${index}`}
-              className="rounded-full bg-blue-50 px-3 py-1.5 text-sm font-medium text-blue-700"
-            >
-              {skill}
-            </span>
-          ))
-        ) : (
-          <p className="text-sm text-slate-500">
-            No technical skills added.
-          </p>
-        )}
-      </div>
-    </section>
-
-    {/* Uploaded Certification Documents */}
-    <section className="rounded-xl border border-slate-200 bg-white p-5">
-      <h3 className="mb-4 text-sm font-bold uppercase tracking-wider text-slate-900">
-        Uploaded Certification
-      </h3>
-
-      {certificationDocuments.length > 0 ? (
-        <div className="space-y-3">
-          {certificationDocuments.map((doc) => (
-            <div
-              key={doc.id}
-              className="flex flex-col justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center"
-            >
-              <div className="flex min-w-0 items-center gap-3">
-                <div className="rounded-lg bg-indigo-100 p-3">
-                  <FileText className="h-5 w-5 text-indigo-600" />
+                  <DetailTile
+                    label="Expiry Date"
+                    value={formatDate(employee.professional_certification_expiry_date)}
+                  />
                 </div>
+              </section>
 
-                <div className="min-w-0">
-                  <p className="break-words text-sm font-semibold text-slate-900">
-                    {doc.document_name || "Professional Certification"}
-                  </p>
+              {/* Technical Skills */}
+              <section className="rounded-xl border border-slate-200 bg-white p-5">
+                <h3 className="mb-4 text-sm font-bold uppercase tracking-wider text-slate-900">
+                  Technical Skills
+                </h3>
 
-                  <p className="text-xs text-slate-500">
-                    Professional Certification
-                  </p>
+                <div className="flex flex-wrap gap-2">
+                  {Array.isArray(employee.technical_skills) &&
+                  employee.technical_skills.length > 0 ? (
+                    employee.technical_skills.map((skill, index) => (
+                      <span
+                        key={`${skill}-${index}`}
+                        className="rounded-full bg-blue-50 px-3 py-1.5 text-sm font-medium text-blue-700"
+                      >
+                        {skill}
+                      </span>
+                    ))
+                  ) : (
+                    <p className="text-sm text-slate-500">
+                      No technical skills added.
+                    </p>
+                  )}
                 </div>
-              </div>
+              </section>
 
-              {doc.document_url && (
-                <a
-                  href={doc.document_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-700"
-                >
-                  <Eye className="h-4 w-4" />
-                  View Certificate
-                </a>
-              )}
+              {/* Uploaded Certification Documents */}
+              <section className="rounded-xl border border-slate-200 bg-white p-5">
+                <h3 className="mb-4 text-sm font-bold uppercase tracking-wider text-slate-900">
+                  Uploaded Certification
+                </h3>
+
+                {certificationDocuments.length > 0 ? (
+                  <div className="space-y-3">
+                    {certificationDocuments.map((doc) => (
+                      <div
+                        key={doc.id}
+                        className="flex flex-col justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center"
+                      >
+                        <div className="flex min-w-0 items-center gap-3">
+                          <div className="rounded-lg bg-indigo-100 p-3">
+                            <FileText className="h-5 w-5 text-indigo-600" />
+                          </div>
+
+                          <div className="min-w-0">
+                            <p className="break-words text-sm font-semibold text-slate-900">
+                              {doc.document_name || "Professional Certification"}
+                            </p>
+
+                            <p className="text-xs text-slate-500">
+                              Professional Certification
+                            </p>
+                          </div>
+                        </div>
+
+                        {doc.document_url && (
+                          <a
+                            href={doc.document_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-700"
+                          >
+                            <Eye className="h-4 w-4" />
+                            View Certificate
+                          </a>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-500">
+                    No certification document uploaded.
+                  </p>
+                )}
+              </section>
+
             </div>
-          ))}
-        </div>
-      ) : (
-        <p className="text-sm text-slate-500">
-          No certification document uploaded.
-        </p>
-      )}
-    </section>
-
-  </div>
-)}
+          )}
 
           {/* Bank & Identity */}
           {activeTab === 6 && (
@@ -1182,99 +1182,152 @@ const getEmployeeStatusLabel = () => {
               />
             </div>
           )}
-          {/* Education - Read Only */}
-          {/* Education - Read Only */}
 
-{/* Education Details - Read Only */}
+          {/* Education Details - Read Only */}
+          {activeTab === 3 && (
+            <div className="space-y-5">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-lg font-bold text-slate-800">
+                    Education Details
+                  </h3>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Academic qualifications submitted during onboarding.
+                  </p>
+                </div>
 
-{/* Education Details - Read Only */}
-{activeTab === 3 && (
-  <div className="space-y-5">
-    <div>
-      <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400">
-        Education Details
-      </h3>
-      <p className="mt-1 text-xs text-slate-500">
-        Education records submitted during onboarding. These details are read-only.
-      </p>
-    </div>
-
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-      {educationSections.map((section) => {
-        const prefix = section.prefix;
-
-        const fields = [
-          {
-            label: "Institution / College",
-            value: getEducationValue(
-              educationDetails[`${prefix}_institution`]
-            ),
-          },
-          {
-            label: "Board / University",
-            value: getEducationValue(
-              educationDetails[`${prefix}_board`]
-            ),
-          },
-          {
-            label: "Year of Passing",
-            value: getEducationValue(
-              educationDetails[`${prefix}_year`]
-            ),
-          },
-          {
-            label: "Result Type",
-            value: getEducationValue(
-              educationDetails[`${prefix}_result_type`]
-            ),
-          },
-          {
-            label: "Percentage / CGPA",
-            value: getEducationValue(
-              educationDetails[`${prefix}_result`]
-            ),
-          },
-        ];
-
-        const hasData = fields.some((field) => field.value !== "");
-
-        return (
-          <div
-            key={prefix}
-            className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
-          >
-            <h4 className="mb-4 text-sm font-bold text-slate-800">
-              {section.title}
-            </h4>
-
-            {hasData ? (
-              <div className="space-y-3">
-                {fields.map((field) => (
-                  <div
-                    key={field.label}
-                    className="flex flex-col gap-1 border-b border-slate-100 pb-2 last:border-0"
-                  >
-                    <span className="text-xs font-medium text-slate-500">
-                      {field.label}
-                    </span>
-                    <span className="text-sm font-semibold text-slate-800">
-                      {field.value || "—"}
-                    </span>
-                  </div>
-                ))}
+                <span className="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700">
+                  {educationRecords.length} Qualifications
+                </span>
               </div>
-            ) : (
-              <p className="text-sm text-slate-400">
-                No details available
-              </p>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  </div>
-)}
 
+              {educationRecords.length > 0 ? (
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  {educationRecords.map((record, index) => {
+                    const getValue = (value: unknown): string =>
+                      value === null || value === undefined
+                        ? ""
+                        : String(value).trim();
+
+                    const qualification =
+                      getValue(record.qualification_name) ||
+                      getValue(record.qualification_type) ||
+                      `Education ${index + 1}`;
+
+                    const resultValue = getValue(record.result_value);
+                    const resultTotal = getValue(record.result_total);
+                    const resultType = getValue(record.result_type);
+
+                    const result =
+                      resultValue && resultTotal
+                        ? `${resultValue} / ${resultTotal}`
+                        : resultValue;
+
+                    const fields = [
+                      { label: "Course", value: getValue(record.course) },
+                      { label: "Specialization", value: getValue(record.specialization) },
+                      { label: "Stream", value: getValue(record.stream) },
+                      { label: "Institution / College", value: getValue(record.institution_name) },
+                      { label: "Board", value: getValue(record.board) },
+                      { label: "University", value: getValue(record.university) },
+                    ].filter((field) => field.value !== "");
+
+                    return (
+                      <div
+                        key={String(record.id ?? index)}
+                        className="flex flex-col rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition-all hover:border-blue-200 hover:shadow-md"
+                      >
+                        {/* Card Header */}
+                        <div className="mb-4 flex items-start gap-3">
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              width="21"
+                              height="21"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="1.8"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <path d="m22 10-10-5-10 5 10 5 10-5Z" />
+                              <path d="M6 12.5V17c3.5 2.5 8.5 2.5 12 0v-4.5" />
+                              <path d="M22 10v6" />
+                            </svg>
+                          </div>
+
+                          <div className="min-w-0 flex-1">
+                            <h4 className="text-sm font-bold text-slate-800">
+                              {qualification}
+                            </h4>
+                            <p className="mt-1 text-xs text-slate-400">
+                              Qualification {index + 1}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Passing Year */}
+                        {getValue(record.year_of_passing) && (
+                          <div className="mb-4 rounded-lg bg-slate-50 px-3 py-2">
+                            <p className="text-xs text-slate-400">Year of Passing</p>
+                            <p className="mt-1 text-sm font-semibold text-slate-700">
+                              {getValue(record.year_of_passing)}
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Academic Fields */}
+                        <div className="flex-1 space-y-3">
+                          {fields.map((field) => (
+                            <div
+                              key={field.label}
+                              className="border-b border-slate-100 pb-2 last:border-0"
+                            >
+                              <p className="text-xs font-medium text-slate-400">
+                                {field.label}
+                              </p>
+                              <p className="mt-1 break-words text-sm font-semibold text-slate-700">
+                                {field.value}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Result */}
+                        {(result || resultType) && (
+                          <div className="mt-4 border-t border-slate-100 pt-4">
+                            <p className="mb-2 text-xs font-medium text-slate-400">
+                              Academic Result
+                            </p>
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <span className="text-xs font-medium text-slate-500">
+                                {resultType || "Result"}
+                              </span>
+                              {result && (
+                                <span className="rounded-lg bg-emerald-50 px-3 py-1.5 text-sm font-bold text-emerald-700">
+                                  {result}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-10 text-center">
+                  <p className="text-sm font-semibold text-slate-600">
+                    No Education Records
+                  </p>
+                  <p className="mt-1 text-xs text-slate-400">
+                    Your submitted academic qualifications will appear here.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Previous Employment - Read Only */}
           {activeTab === 2 && (

@@ -69,6 +69,7 @@ interface EmployeeProfileViewProps {
   employee: Employee;
   pendingRequest: ProfileChangeRequest | null;
   departments: Department[];
+  educationRecords: Record<string, unknown>[];
 }
 const skillCategories = technicalSkillsData.categories;
 type EmployeeProfileData = Employee & {
@@ -384,6 +385,7 @@ export default function EmployeeProfileView({
   employee,
   pendingRequest: initialPendingRequest,
   departments,
+  educationRecords,
 }: EmployeeProfileViewProps) {
   const employeeData = employee as EmployeeProfileData;
 
@@ -2583,370 +2585,191 @@ const tabs: ProfileTab[] = [
             </div>
           )}
 
-{/* EDUCATION & CERTIFICATIONS */}
-{activeTab === "education" && (
-  <div className="space-y-6">
 
-    {/* EDUCATION DETAILS */}
-    <div className="rounded-xl border border-gray-200 bg-white p-6">
+          {/* EDUCATION DETAILS */}
+          {activeTab === "education" && (
+            <div className="space-y-6">
+              <div className="rounded-xl border border-gray-200 bg-white p-6">
+                <h2 className="text-lg font-bold text-gray-900">
+                  Education Details
+                </h2>
 
-      <h2 className="text-lg font-bold text-gray-900">
-        Education Details
-      </h2>
+                <p className="mt-1 text-sm text-gray-500">
+                  Your saved educational qualifications and academic results.
+                </p>
 
-      <p className="mt-1 text-sm text-gray-500">
-        Enter details separately for each completed qualification.
-        Upload the corresponding certificate for every qualification.
-      </p>
+                {!educationRecords || educationRecords.length === 0 ? (
+                  <div className="mt-6 rounded-lg border border-dashed border-gray-300 bg-gray-50 p-8 text-center">
+                    <GraduationCap className="mx-auto mb-3 h-9 w-9 text-gray-400" />
+                    <p className="text-sm font-semibold text-gray-700">
+                      No education records found
+                    </p>
+                    <p className="mt-1 text-xs text-gray-500">
+                      Your education details will appear here once available.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="mt-6 space-y-4">
+                    {educationRecords.map((record, index) => {
+                      const qualification =
+                        String(
+                          record.qualification_name ||
+                          record.qualification_type ||
+                          "Qualification"
+                        ).trim();
 
-      <div className="mt-6 space-y-5">
+                      const institution = String(
+                        record.institution_name || ""
+                      ).trim();
 
-        {/* 10TH STANDARD */}
-        <div className="rounded-xl border border-gray-200 p-4">
+                      const board = String(record.board || "").trim();
+                      const university = String(record.university || "").trim();
+                      const course = String(record.course || "").trim();
+                      const specialization = String(
+                        record.specialization || ""
+                      ).trim();
+                      const stream = String(record.stream || "").trim();
+                      const year = String(
+                        record.year_of_passing || ""
+                      ).trim();
 
-          <h3 className="mb-5 text-sm font-bold text-gray-900">
-            1. 10th Standard
-          </h3>
+                      const resultValue = String(
+                        record.result_value || ""
+                      ).trim();
 
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                      const resultTotal = String(
+                        record.result_total || ""
+                      ).trim();
 
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">
-                School Name
-              </label>
-              <input type="text" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
+                      const resultType = String(
+                        record.result_type || ""
+                      ).trim();
+
+                      const result = [
+                        resultValue
+                          ? resultTotal
+                            ? `${resultValue} / ${resultTotal}`
+                            : resultValue
+                          : "",
+                        resultType,
+                      ]
+                        .filter(Boolean)
+                        .join(" ");
+
+                      const details = [
+                        {
+                          label: "Institution",
+                          value: institution,
+                        },
+                        {
+                          label: "Board",
+                          value: board,
+                        },
+                        {
+                          label: "University",
+                          value: university,
+                        },
+                        {
+                          label: "Course / Degree",
+                          value: course,
+                        },
+                        {
+                          label: "Specialization",
+                          value: specialization,
+                        },
+                        {
+                          label: "Stream",
+                          value: stream,
+                        },
+                        {
+                          label: "Year of Passing",
+                          value: year,
+                        },
+                        {
+                          label: "Result",
+                          value: result,
+                        },
+                      ].filter((item) => item.value);
+
+                      return (
+                        <div
+                          key={
+                            String(record.id || "") ||
+                            `${qualification}-${index}`
+                          }
+                          className="rounded-xl border border-gray-200 p-5"
+                        >
+                          <div className="mb-4 flex items-center gap-3">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-50">
+                              <GraduationCap className="h-5 w-5 text-indigo-600" />
+                            </div>
+
+                            <div>
+                              <h3 className="text-sm font-bold text-gray-900">
+                                {qualification}
+                              </h3>
+                              <p className="text-xs text-gray-500">
+                                {year
+                                  ? `Year of Passing: ${year}`
+                                  : "Academic Qualification"}
+                              </p>
+                            </div>
+                          </div>
+
+                          {details.length > 0 ? (
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                              {details.map((item) => (
+                                <div
+                                  key={item.label}
+                                  className="rounded-lg bg-gray-50 p-3"
+                                >
+                                  <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+                                    {item.label}
+                                  </p>
+                                  <p className="mt-1 text-sm font-medium text-gray-900">
+                                    {item.value}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-sm text-gray-500">
+                              No additional details available.
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* PASSPORT SIZE PHOTO */}
+              <div className="rounded-xl border border-gray-200 bg-white p-6">
+
+                <h2 className="text-lg font-bold text-gray-900">
+                  Passport Size Photo
+                </h2>
+
+                <p className="mt-1 text-sm text-gray-500">
+                  Upload your passport-size photograph.
+                </p>
+
+                <div className="mt-5">
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png"
+                    className="w-full rounded-lg border border-gray-300 p-3 text-sm"
+                  />
+                </div>
+
+              </div>
+
             </div>
+          )}
 
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">
-                Board
-              </label>
-              <input type="text" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">
-                Year of Passing
-              </label>
-              <input type="number" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
-            </div>
-
-            {/* <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">
-                Result Type (Percentage / CGPA / Grade)
-              </label>
-              <input type="text" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
-            </div> */}
-
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">
-                Percentage / CGPA / Grade
-              </label>
-              <input type="text" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
-            </div>
-
-          </div>
-
-          <div className="mt-4 rounded-lg border border-dashed border-gray-300 bg-gray-50 p-3">
-            <label className="mb-2 block text-sm font-semibold text-gray-700">
-              10th Certificate
-            </label>
-            <input type="file" accept=".pdf,.jpg,.jpeg,.png" className="w-full text-sm" />
-          </div>
-
-        </div>
-
-        {/* 12TH STANDARD */}
-        <div className="rounded-xl border border-gray-200 p-4">
-
-          <h3 className="mb-5 text-sm font-bold text-gray-900">
-            2. 12th / Intermediate
-          </h3>
-
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">
-                School / College Name
-              </label>
-              <input type="text" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">
-                Board
-              </label>
-              <input type="text" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">
-                Stream (Science / Commerce / Arts / Other)
-              </label>
-              <input type="text" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">
-                Year of Passing
-              </label>
-              <input type="number" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
-            </div>
-
-            {/* <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">
-                Result Type (Percentage / CGPA / Grade)
-              </label>
-              <input type="text" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
-            </div> */}
-
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">
-                Percentage / CGPA / Grade
-              </label>
-              <input type="text" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
-            </div>
-
-          </div>
-
-          <div className="mt-4 rounded-lg border border-dashed border-gray-300 bg-gray-50 p-3">
-            <label className="mb-2 block text-sm font-semibold text-gray-700">
-              12th Certificate
-            </label>
-            <input type="file" accept=".pdf,.jpg,.jpeg,.png" className="w-full text-sm" />
-          </div>
-
-        </div>
-
-        {/* GRADUATION */}
-        <div className="rounded-xl border border-gray-200 p-4">
-
-          <h3 className="mb-5 text-sm font-bold text-gray-900">
-            3. Graduation
-          </h3>
-
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">
-                College Name
-              </label>
-              <input type="text" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">
-                University
-              </label>
-              <input type="text" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">
-                Degree (B.Tech / B.Sc / B.Com / Other)
-              </label>
-              <input type="text" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">
-                Specialization
-              </label>
-              <input type="text" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">
-                Year of Passing
-              </label>
-              <input type="number" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
-            </div>
-
-            {/* <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">
-                Result Type (Percentage / CGPA / Grade)
-              </label>
-              <input type="text" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
-            </div> */}
-
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">
-                Percentage / CGPA / Grade
-              </label>
-              <input type="text" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
-            </div>
-
-          </div>
-
-          <div className="mt-4 rounded-lg border border-dashed border-gray-300 bg-gray-50 p-3">
-            <label className="mb-2 block text-sm font-semibold text-gray-700">
-              Graduation Certificate
-            </label>
-            <input type="file" accept=".pdf,.jpg,.jpeg,.png" className="w-full text-sm" />
-          </div>
-
-        </div>
-
-        {/* POST GRADUATION */}
-        <div className="rounded-xl border border-gray-200 p-4">
-
-          <h3 className="mb-5 text-sm font-bold text-gray-900">
-            4. Post-Graduation
-          </h3>
-
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">
-                College Name
-              </label>
-              <input type="text" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">
-                University
-              </label>
-              <input type="text" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">
-                Degree (MCA / MBA / M.Tech / Other)
-              </label>
-              <input type="text" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">
-                Specialization
-              </label>
-              <input type="text" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">
-                Year of Passing
-              </label>
-              <input type="number" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
-            </div>
-
-            {/* <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">
-                Result Type (Percentage / CGPA / Grade)
-              </label>
-              <input type="text" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
-            </div> */}
-
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">
-                Percentage / CGPA / Grade
-              </label>
-              <input type="text" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
-            </div>
-
-          </div>
-
-          <div className="mt-4 rounded-lg border border-dashed border-gray-300 bg-gray-50 p-3">
-            <label className="mb-2 block text-sm font-semibold text-gray-700">
-              Post-Graduation Certificate
-            </label>
-            <input type="file" accept=".pdf,.jpg,.jpeg,.png" className="w-full text-sm" />
-          </div>
-
-        </div>
-
-        {/* DIPLOMA */}
-        <div className="rounded-xl border border-gray-200 p-4">
-
-          <h3 className="mb-5 text-sm font-bold text-gray-900">
-            5. Diploma
-          </h3>
-
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">
-                Institute Name
-              </label>
-              <input type="text" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">
-                Board / University
-              </label>
-              <input type="text" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">
-                Diploma / Branch
-              </label>
-              <input type="text" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">
-                Year of Passing
-              </label>
-              <input type="number" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
-            </div>
-{/* 
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">
-                Result Type (Percentage / CGPA / Grade)
-              </label>
-              <input type="text" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
-            </div> */}
-
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">
-                Percentage / CGPA / Grade
-              </label>
-              <input type="text" className="w-full rounded-lg border border-gray-300 p-3 text-sm" />
-            </div>
-
-          </div>
-
-          <div className="mt-4 rounded-lg border border-dashed border-gray-300 bg-gray-50 p-3">
-            <label className="mb-2 block text-sm font-semibold text-gray-700">
-              Diploma Certificate
-            </label>
-            <input type="file" accept=".pdf,.jpg,.jpeg,.png" className="w-full text-sm" />
-          </div>
-
-        </div>
-
-      </div>
-    </div>
-
-    {/* PASSPORT SIZE PHOTO */}
-    <div className="rounded-xl border border-gray-200 bg-white p-6">
-
-      <h2 className="text-lg font-bold text-gray-900">
-        Passport Size Photo
-      </h2>
-
-      <p className="mt-1 text-sm text-gray-500">
-        Upload your passport-size photograph.
-      </p>
-
-      <div className="mt-5">
-        <input
-          type="file"
-          accept="image/jpeg,image/png"
-          className="w-full rounded-lg border border-gray-300 p-3 text-sm"
-        />
-      </div>
-
-    </div>
-
-  </div>
-)}
-
-{/*certifications and skills*/}
-{/* PROFESSIONAL CERTIFICATIONS */}
+          {/*certifications and skills*/}
+          {/* PROFESSIONAL CERTIFICATIONS */}
 
           {/* ========================================================
               ADDRESS
