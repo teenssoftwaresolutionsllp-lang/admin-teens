@@ -3,10 +3,15 @@ import Link from "next/link";
 import {
   ChevronRight,
   UserRound,
+  ArrowLeft,
+  Users,
+  AlertCircle,
+  Sparkles,
 } from "lucide-react";
 import { redirect } from "next/navigation";
 import type { UserRole } from "@/lib/types";
 import AddEmployeeWorkspace from "@/components/admin/AddEmployeeWorkspace";
+import MovedCandidatesQueue from "@/components/admin/MovedCandidatesQueue";
 import { decryptOnboardingSensitiveFields } from "@/lib/onboarding-encryption";
 import { getAvailableOfficialEmail } from "@/lib/official-email";
 
@@ -123,66 +128,170 @@ export default async function AddEmployeePage({
       !item.employee_record_id
   );
 
-  // Select requested candidate if it belongs to this queue.
-  // Otherwise select the newest moved candidate automatically.
-  const candidate =
-    eligibleCandidates.find(
-      (item) =>
-        UUID_PATTERN.test(requestedCandidateId || "") &&
-        item.id === requestedCandidateId
-    ) ||
-    eligibleCandidates[0] ||
-    null;
+  const candidateIds = eligibleCandidates.map((c) => c.id);
+
+  let candidateDocuments: {
+    candidate_id: string;
+    document_type: string;
+    sent_at: string | null;
+    created_at: string;
+  }[] = [];
+
+  let candidateActionTokens: {
+    candidate_id: string;
+    action: string;
+    used_at: string | null;
+  }[] = [];
+
+  let candidateSubmissions: {
+    candidate_id: string;
+    created_at: string;
+    status: string;
+  }[] = [];
+
+  if (candidateIds.length > 0) {
+    const [docsRes, tokensRes, subsRes] = await Promise.all([
+      adminClient
+        .from("joining_documents")
+        .select("candidate_id, document_type, sent_at, created_at")
+        .in("candidate_id", candidateIds)
+        .in("document_type", ["offer_letter", "joining_letter"]),
+      adminClient
+        .from("joining_action_tokens")
+        .select("candidate_id, action, used_at")
+        .in("candidate_id", candidateIds)
+        .eq("action", "accept_offer")
+        .not("used_at", "is", null),
+      adminClient
+        .from("joining_onboarding_submissions")
+        .select("candidate_id, created_at, status")
+        .in("candidate_id", candidateIds)
+        .order("created_at", { ascending: false }),
+    ]);
+
+    candidateDocuments = (docsRes.data || []) as typeof candidateDocuments;
+    candidateActionTokens = (tokensRes.data || []) as typeof candidateActionTokens;
+    candidateSubmissions = (subsRes.data || []) as typeof candidateSubmissions;
+  }
+
+  const enrichedEligibleCandidates = eligibleCandidates.map((c) => {
+    const offerDoc = candidateDocuments.find(
+      (d) => d.candidate_id === c.id && d.document_type === "offer_letter" && d.sent_at
+    );
+    const joiningDoc = candidateDocuments.find(
+      (d) => d.candidate_id === c.id && d.document_type === "joining_letter" && d.sent_at
+    );
+    const acceptToken = candidateActionTokens.find(
+      (t) => t.candidate_id === c.id
+    );
+    const submission = candidateSubmissions.find(
+      (s) => s.candidate_id === c.id
+    );
+
+    return {
+      ...c,
+      timeline_history: {
+        offer_sent_at: offerDoc?.sent_at || null,
+        offer_accepted_at:
+          acceptToken?.used_at ||
+          c.add_employee_moved_at ||
+          null,
+        onboarding_submitted_at:
+          submission?.created_at ||
+          (c.onboarding_status === "submitted" || c.onboarding_status === "verified"
+            ? c.onboarding_verified_at || c.add_employee_moved_at
+            : null),
+        onboarding_verified_at: c.onboarding_verified_at || null,
+        joining_letter_sent_at:
+          c.joining_letter_sent_at || joiningDoc?.sent_at || null,
+      },
+    };
+  });
 
   // ---------------------------------------------------------
-  // 3. Empty queue
+  // 3. Normal /dashboard/employees/add: Show candidates list & filters
   // ---------------------------------------------------------
 
-  if (!candidate) {
+  if (!requestedCandidateId) {
     return (
-      <div className="mx-auto max-w-5xl space-y-6">
-        <nav className="flex items-center gap-2 text-xs font-semibold text-slate-400">
-          <Link
-            href="/dashboard"
-            className="hover:text-indigo-600"
-          >
-            Dashboard
-          </Link>
-
-          <ChevronRight className="h-3.5 w-3.5" />
-
-          <span className="text-slate-900">Add Employee</span>
-        </nav>
-
+      <div className="mx-auto max-w-7xl space-y-6 pb-12">
+        {/* Page Heading */}
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900">
             Add Employee
           </h1>
-
-          <p className="mt-1 text-sm text-slate-500">
-            Manage accepted candidates before final employee creation.
+          <p className="mt-1 text-xs sm:text-sm text-slate-500">
+            Candidates who accepted their offer and were moved to Add Employee. Select a candidate to review onboarding details and finalize employee creation.
           </p>
         </div>
 
-        <section className="space-y-3 rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center">
-          <UserRound className="mx-auto h-10 w-10 text-slate-400" />
+        {/* Candidates Queue with all filters */}
+        {enrichedEligibleCandidates.length === 0 ? (
+          <section className="space-y-4 rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center shadow-xs">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600 border border-indigo-100">
+              <UserRound className="h-7 w-7" />
+            </div>
 
-          <h2 className="text-lg font-bold text-slate-900">
-            No candidates in the Add Employee queue
-          </h2>
+            <h2 className="text-lg font-bold text-slate-900">
+              No candidates in the Add Employee queue
+            </h2>
 
-          <p className="mx-auto max-w-md text-sm text-slate-500">
-            Candidates appear here after HR accepts their offer
-            and explicitly moves them from Joining Candidates.
-          </p>
+            <p className="mx-auto max-w-md text-xs sm:text-sm text-slate-500 leading-relaxed">
+              Candidates appear here after their offer letter is accepted and they are explicitly moved to Add Employee from the Joining Candidates section.
+            </p>
+          </section>
+        ) : (
+          <MovedCandidatesQueue candidates={enrichedEligibleCandidates} />
+        )}
+      </div>
+    );
+  }
 
-          <Link
-            href="/dashboard/joining"
-            className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700"
-          >
-            View Joining Candidates
-            <ChevronRight className="h-4 w-4" />
+  // ---------------------------------------------------------
+  // 4. Candidate-specific view: /dashboard/employees/add?candidateId=XYZ
+  // ---------------------------------------------------------
+
+  const candidate =
+    enrichedEligibleCandidates.find(
+      (item) =>
+        UUID_PATTERN.test(requestedCandidateId) &&
+        item.id === requestedCandidateId
+    ) || null;
+
+  if (!candidate) {
+    return (
+      <div className="mx-auto max-w-5xl space-y-6 pb-12">
+        <nav className="flex items-center gap-2 text-xs font-semibold text-slate-400">
+          <Link href="/dashboard" className="hover:text-indigo-600">
+            Dashboard
           </Link>
+          <ChevronRight className="h-3.5 w-3.5" />
+          <Link href="/dashboard/employees/add" className="hover:text-indigo-600">
+            Add Employee
+          </Link>
+          <ChevronRight className="h-3.5 w-3.5" />
+          <span className="text-slate-900">Candidate Not Found</span>
+        </nav>
+
+        <section className="space-y-4 rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center shadow-xs">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-50 text-amber-600">
+            <AlertCircle className="h-6 w-6" />
+          </div>
+          <h2 className="text-lg font-bold text-slate-900">
+            Candidate not found in Add Employee queue
+          </h2>
+          <p className="mx-auto max-w-md text-xs sm:text-sm text-slate-500">
+            This candidate either does not exist, has already been converted to an active employee, or is not in the Add Employee queue.
+          </p>
+          <div className="pt-2">
+            <Link
+              href="/dashboard/employees/add"
+              className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-xs sm:text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 transition"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back to Candidates Queue
+            </Link>
+          </div>
         </section>
       </div>
     );
@@ -191,7 +300,7 @@ export default async function AddEmployeePage({
   const candidateId = candidate.id;
 
   // ---------------------------------------------------------
-  // 4. Verify exact accepted offer document and snapshot
+  // 5. Verify exact accepted offer document and snapshot
   // ---------------------------------------------------------
 
   let offer: {
@@ -274,7 +383,7 @@ export default async function AddEmployeePage({
   }
 
   // ---------------------------------------------------------
-  // 5. Load existing onboarding submission
+  // 6. Load existing onboarding submission
   // ---------------------------------------------------------
 
   let submission: {
@@ -422,10 +531,9 @@ export default async function AddEmployeePage({
   }
 
   // ---------------------------------------------------------
-  // 6. Load uploaded onboarding document metadata
+  // 7. Load uploaded onboarding document metadata
   // ---------------------------------------------------------
 
-  // Private storage paths are deliberately not selected or rendered here.
   if (submission) {
     const submissionHistoryResult: {
       data: Array<{
@@ -460,7 +568,6 @@ export default async function AddEmployeePage({
     const visitedSubmissionIds = new Set<string>();
     let currentSubmissionId: string | null = submission.id;
 
-    // Follow active submission ancestry: V3 -> V2 -> V1.
     for (
       let depth = 0;
       currentSubmissionId && depth < 20;
@@ -519,114 +626,124 @@ export default async function AddEmployeePage({
   }
 
   // ---------------------------------------------------------
-  // 7. Candidate display information
+  // 8. Candidate display information
   // ---------------------------------------------------------
 
   const onboardingStatus =
     candidate.onboarding_status || "not_started";
 
-  // ---------------------------------------------------------
-  // 8. Main page
-  // ---------------------------------------------------------
+  const candidateFullName = [candidate.first_name, candidate.last_name]
+    .filter(Boolean)
+    .join(" ") || "Candidate";
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
-      <nav className="flex items-center gap-2 text-xs font-semibold text-slate-400">
+    <div className="mx-auto max-w-5xl space-y-6 pb-12">
+      {/* Top Breadcrumbs & Back Navigation */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <nav className="flex items-center gap-2 text-xs font-semibold text-slate-400">
+          <Link href="/dashboard" className="hover:text-indigo-600 transition">
+            Dashboard
+          </Link>
+          <ChevronRight className="h-3.5 w-3.5" />
+          <Link href="/dashboard/employees/add" className="hover:text-indigo-600 transition">
+            Add Employee Queue
+          </Link>
+          <ChevronRight className="h-3.5 w-3.5" />
+          <span className="text-slate-900 font-bold truncate max-w-[200px]">
+            {candidateFullName}
+          </span>
+        </nav>
+
         <Link
-          href="/dashboard"
-          className="hover:text-indigo-600"
+          href="/dashboard/employees/add"
+          className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-700 shadow-xs transition hover:bg-slate-50 hover:text-indigo-600 w-fit"
         >
-          Dashboard
+          <ArrowLeft className="h-3.5 w-3.5" />
+          <span>Back to Candidates List</span>
         </Link>
-
-        <ChevronRight className="h-3.5 w-3.5" />
-
-        <Link
-          href="/dashboard/joining"
-          className="hover:text-indigo-600"
-        >
-          Joining Candidates
-        </Link>
-
-        <ChevronRight className="h-3.5 w-3.5" />
-
-        <span className="text-slate-900">Add Employee</span>
-      </nav>
-
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">
-          Add Employee
-        </h1>
-
-        <p className="mt-1 text-sm text-slate-500">
-          Review accepted candidates, complete onboarding, and verify
-          their information before final employee creation.
-        </p>
       </div>
 
-      {/* Candidate queue */}
-
-      <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="font-bold text-slate-900">
-              Add Employee Queue
-            </h2>
-
-            <p className="text-xs text-slate-500">
-              Candidates explicitly moved from Joining Candidates.
+      {/* Candidate Header Summary Card */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between rounded-2xl border border-indigo-100/80 bg-gradient-to-r from-indigo-50/70 via-white to-slate-50 p-5 shadow-xs">
+        <div className="flex items-center gap-3.5 min-w-0">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-600 to-indigo-800 text-white font-bold text-base shadow-xs">
+            {candidate.first_name?.[0] || "C"}
+            {candidate.last_name?.[0] || ""}
+          </div>
+          <div className="min-w-0">
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 truncate">
+              {candidateFullName}
+            </h1>
+            <p className="text-xs sm:text-sm text-slate-500 font-medium truncate mt-0.5">
+              {candidate.designation || "Designation pending"}{" "}
+              {candidate.department ? `• ${candidate.department}` : ""}
             </p>
           </div>
-
-          <span className="w-fit rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700">
-            {eligibleCandidates.length} candidates
-          </span>
         </div>
 
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-          {eligibleCandidates.map((item) => {
-            const itemName = [
-              item.first_name,
-              item.last_name,
-            ]
-              .filter(Boolean)
-              .join(" ");
-
-            const isSelected = item.id === candidate.id;
-
-            return (
-              <Link
-                key={item.id}
-                href={`/dashboard/employees/add?candidateId=${encodeURIComponent(item.id)}`}
-                className={`rounded-lg border p-2 transition ${
-                  isSelected
-                    ? "border-indigo-300 bg-indigo-50"
-                    : "border-slate-200 hover:border-indigo-200 hover:bg-slate-50"
-                }`}
-              >
-                <p className="truncate text-sm font-semibold text-slate-900">
-                  {itemName || "Candidate"}
-                </p>
-
-                <p className="mt-1 truncate text-xs text-slate-500">
-                  {item.designation || "Designation not provided"}
-                </p>
-
-                <p className="mt-1 truncate text-xs text-slate-500">
-                  {item.personal_email || "Email not provided"}
-                </p>
-
-                <p className="mt-2 text-xs font-medium text-indigo-700">
-                  {isSelected
-                    ? "Currently selected"
-                    : "View candidate"}
-                </p>
-              </Link>
-            );
-          })}
+        <div className="flex flex-wrap items-center gap-2">
+          {candidate.onboarding_verified_at || candidate.onboarding_status === "verified" ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 border border-emerald-200">
+              Verified & Ready
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700 border border-indigo-200">
+              Onboarding Review
+            </span>
+          )}
         </div>
-      </section>
+      </div>
 
+      {/* Candidate Queue Switcher (if more than 1 candidate in queue) */}
+      {eligibleCandidates.length > 1 && (
+        <section className="space-y-2.5 rounded-2xl border border-slate-200/90 bg-white p-4 shadow-xs">
+          <div className="flex items-center justify-between text-xs">
+            <span className="font-bold text-slate-700">
+              Add Employee Queue ({eligibleCandidates.length} candidates)
+            </span>
+            <Link
+              href="/dashboard/employees/add"
+              className="font-semibold text-indigo-600 hover:text-indigo-800 hover:underline"
+            >
+              View list with filters →
+            </Link>
+          </div>
+
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-1">
+            {eligibleCandidates.map((c) => {
+              const isSelected = c.id === candidate.id;
+              const name = [c.first_name, c.last_name].filter(Boolean).join(" ") || "Candidate";
+
+              return (
+                <Link
+                  key={c.id}
+                  href={`/dashboard/employees/add?candidateId=${encodeURIComponent(c.id)}`}
+                  className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-1.5 text-xs font-semibold transition shrink-0 ${
+                    isSelected
+                      ? "bg-indigo-600 text-white shadow-xs"
+                      : "bg-slate-50 border border-slate-200 text-slate-700 hover:bg-slate-100 hover:text-slate-900"
+                  }`}
+                >
+                  <span>{name}</span>
+                  {c.department && (
+                    <span
+                      className={`text-[10px] px-1.5 py-0.5 rounded-md font-medium ${
+                        isSelected
+                          ? "bg-indigo-500 text-white"
+                          : "bg-slate-200/70 text-slate-600"
+                      }`}
+                    >
+                      {c.department}
+                    </span>
+                  )}
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* Main Add Employee Workspace */}
       <AddEmployeeWorkspace
         candidate={{ ...candidate }}
         offer={offer ? { id: offer.id } : null}
@@ -702,12 +819,21 @@ export default async function AddEmployeePage({
         decryptionFailed={submissionDecryptionFailed}
       />
 
-      <div className="flex justify-end">
+      {/* Bottom Navigation */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-slate-200">
+        <Link
+          href="/dashboard/employees/add"
+          className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-slate-700 shadow-xs hover:bg-slate-50 transition"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          <span>Back to Candidates Queue</span>
+        </Link>
+
         <Link
           href="/dashboard/joining"
-          className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+          className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 hover:underline"
         >
-          Back to Joining Candidates
+          View Offers & Pre-Onboarding →
         </Link>
       </div>
     </div>

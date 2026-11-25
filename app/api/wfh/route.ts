@@ -1,12 +1,19 @@
 
 import { NextResponse } from "next/server";
-import { createClient, createAdminClient } from "@/lib/supabase-server";
+import {
+  createClient,
+  createAdminClient,
+} from "@/lib/supabase-server";
 import {
   getAuthFailureStatus,
   getAuthFailureMessage,
 } from "@/lib/supabase-auth-error";
 
 export const dynamic = "force-dynamic";
+
+// =========================================
+// GET INDIA TODAY
+// =========================================
 
 function getIndiaToday(): string {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -22,6 +29,10 @@ function getIndiaToday(): string {
 
   return `${year}-${month}-${day}`;
 }
+
+// =========================================
+// AUTHENTICATE EMPLOYEE
+// =========================================
 
 async function getAuthenticatedEmployee() {
   const supabase = await createClient();
@@ -42,17 +53,17 @@ async function getAuthenticatedEmployee() {
 
   const admin = await createAdminClient();
 
-  // First, find employee using authenticated user ID.
+  const employeeSelect =
+    "id, employee_id, user_id, reporting_manager_id, first_name, last_name, email, status";
+
   const { data: userIdMatches, error: userIdError } = await admin
     .from("employees")
-    .select(
-      "id, employee_id, user_id, first_name, last_name, email, status"
-    )
+    .select(employeeSelect)
     .eq("user_id", user.id)
     .limit(2);
 
   if (userIdError) {
-    console.error("WFH employee lookup by user ID failed:", userIdError);
+    console.error("WFH employee lookup failed:", userIdError);
 
     return {
       error: "Unable to verify employee account.",
@@ -63,30 +74,26 @@ async function getAuthenticatedEmployee() {
   let employee = null;
 
   if (userIdMatches && userIdMatches.length > 1) {
-    console.error("Multiple employees found for user:", user.id);
-
     return {
       error: "Multiple employee accounts found. Please contact HR.",
       status: 409 as const,
     };
   }
 
-  if (userIdMatches && userIdMatches.length === 1) {
+  if (userIdMatches?.length === 1) {
     employee = userIdMatches[0];
   }
 
-  // If user ID lookup fails, try authenticated user's email.
+  // Fallback using email.
   if (!employee && user.email) {
     const { data: emailMatches, error: emailError } = await admin
       .from("employees")
-      .select(
-        "id, employee_id, user_id, first_name, last_name, email, status"
-      )
+      .select(employeeSelect)
       .ilike("email", user.email.trim())
       .limit(2);
 
     if (emailError) {
-      console.error("WFH employee lookup by email failed:", emailError);
+      console.error("WFH email lookup failed:", emailError);
 
       return {
         error: "Unable to verify employee account.",
@@ -95,15 +102,13 @@ async function getAuthenticatedEmployee() {
     }
 
     if (emailMatches && emailMatches.length > 1) {
-      console.error("Multiple employees found for email:", user.email);
-
       return {
         error: "Multiple employee accounts found. Please contact HR.",
         status: 409 as const,
       };
     }
 
-    if (emailMatches && emailMatches.length === 1) {
+    if (emailMatches?.length === 1) {
       employee = emailMatches[0];
     }
   }
@@ -115,15 +120,12 @@ async function getAuthenticatedEmployee() {
     };
   }
 
-  // Allow active and on_notice employees.
   const employeeStatus = String(employee.status ?? "")
     .trim()
     .toLowerCase()
     .replace(/\s+/g, "_");
 
-  const allowedStatuses = ["active", "on_notice"];
-
-  if (!allowedStatuses.includes(employeeStatus)) {
+  if (!["active", "on_notice"].includes(employeeStatus)) {
     return {
       error: `Your employee account is '${employeeStatus || "not active"}'. Please contact HR.`,
       status: 403 as const,
@@ -137,7 +139,10 @@ async function getAuthenticatedEmployee() {
   };
 }
 
-// GET: Fetch authenticated employee's WFH requests.
+// =========================================
+// GET: FETCH EMPLOYEE WFH REQUESTS
+// =========================================
+
 export async function GET() {
   try {
     const result = await getAuthenticatedEmployee();
@@ -159,7 +164,7 @@ export async function GET() {
       .order("created_at", { ascending: false });
 
     if (error) {
-      console.error("WFH request history fetch failed:", error);
+      console.error("WFH history fetch failed:", error);
 
       return NextResponse.json(
         { error: "Unable to load WFH request history." },
@@ -178,7 +183,7 @@ export async function GET() {
       }
     );
   } catch (error) {
-    console.error("WFH GET API error:", error);
+    console.error("WFH GET error:", error);
 
     return NextResponse.json(
       { error: "Internal server error." },
@@ -187,9 +192,15 @@ export async function GET() {
   }
 }
 
-// POST: Create WFH request and notify HR.
+// =========================================
+// POST: CREATE WFH REQUEST
+// AND NOTIFY REPORTING MANAGER
+// =========================================
+
 export async function POST(request: Request) {
   try {
+    // 1. Authenticate employee.
+
     const result = await getAuthenticatedEmployee();
 
     if ("error" in result) {
@@ -200,6 +211,8 @@ export async function POST(request: Request) {
     }
 
     const { employee, admin } = result;
+
+    // 2. Read request body.
 
     let body: Record<string, unknown>;
 
@@ -222,7 +235,8 @@ export async function POST(request: Request) {
         ? body.reason.trim()
         : "";
 
-    // Validate date format.
+    // 3. Validate date format.
+
     if (!/^\d{4}-\d{2}-\d{2}$/.test(requestDate)) {
       return NextResponse.json(
         { error: "Please provide a valid WFH date." },
@@ -230,7 +244,8 @@ export async function POST(request: Request) {
       );
     }
 
-    // Validate actual calendar date.
+    // 4. Validate actual calendar date.
+
     const [year, month, day] = requestDate.split("-").map(Number);
 
     const parsedDate = new Date(Date.UTC(year, month - 1, day));
@@ -247,7 +262,8 @@ export async function POST(request: Request) {
       );
     }
 
-    // Do not allow past dates.
+    // 5. Prevent past dates.
+
     if (requestDate < getIndiaToday()) {
       return NextResponse.json(
         { error: "WFH requests cannot be submitted for past dates." },
@@ -255,10 +271,13 @@ export async function POST(request: Request) {
       );
     }
 
-    // Validate reason.
+    // 6. Validate reason.
+
     if (!reason || reason.length < 5) {
       return NextResponse.json(
-        { error: "Please provide a reason of at least 5 characters." },
+        {
+          error: "Please provide a reason of at least 5 characters.",
+        },
         { status: 400 }
       );
     }
@@ -270,81 +289,128 @@ export async function POST(request: Request) {
       );
     }
 
-    // Create WFH request.
+    // 7. Verify reporting manager assignment.
+
+    if (!employee.reporting_manager_id) {
+      return NextResponse.json(
+        {
+          error:
+            "No reporting manager is assigned to your account. Please contact HR.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const { data: manager, error: managerError } = await admin
+      .from("employees")
+      .select("id, user_id, first_name, last_name")
+      .eq("id", employee.reporting_manager_id)
+      .maybeSingle();
+
+    if (managerError) {
+      console.error("WFH manager lookup failed:", managerError);
+
+      return NextResponse.json(
+        { error: "Unable to find your reporting manager." },
+        { status: 500 }
+      );
+    }
+
+    if (!manager || !manager.user_id) {
+      return NextResponse.json(
+        {
+          error:
+            "Your reporting manager does not have a linked user account. Please contact HR.",
+        },
+        { status: 400 }
+      );
+    }
+
+    // 8. Create WFH request for manager review.
+
     const { data, error } = await admin
       .from("wfh_requests")
       .insert({
         employee_id: employee.id,
         request_date: requestDate,
         reason,
-        status: "pending",
+        status: "pending_manager",
       })
       .select("*")
       .single();
 
     if (error) {
+      console.error("WFH request creation failed:", {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code,
+      });
+
       if (error.code === "23505") {
         return NextResponse.json(
-          { error: "You already have a WFH request for this date." },
+          {
+            error: "You already have a WFH request for this date.",
+          },
           { status: 409 }
         );
       }
 
-      console.error("WFH request creation failed:", error);
-
+      // Temporary diagnostic response.
       return NextResponse.json(
-        { error: "Unable to submit WFH request." },
+        {
+          error: "Unable to submit WFH request.",
+          details: error.message,
+          code: error.code,
+          hint: error.hint,
+        },
         { status: 500 }
       );
     }
 
-    // Find all HR users.
-    const { data: hrProfiles, error: hrProfilesError } = await admin
-      .from("profiles")
-      .select("id")
-      .eq("role", "hr");
+    // 9. Prepare employee name.
 
-    if (hrProfilesError) {
-      console.error("WFH HR profiles lookup failed:", hrProfilesError);
-    } else if (hrProfiles && hrProfiles.length > 0) {
-      const employeeName =
-        `${employee.first_name ?? ""} ${employee.last_name ?? ""}`.trim() ||
-        employee.employee_id ||
-        "An employee";
+    const employeeName =
+      `${employee.first_name ?? ""} ${employee.last_name ?? ""}`.trim() ||
+      employee.employee_id ||
+      "An employee";
 
-      const notificationRows = hrProfiles.map((hrProfile) => ({
-        recipient_user_id: hrProfile.id,
+    // 10. Notify assigned reporting manager.
+
+    const { error: notificationError } = await admin
+      .from("notifications")
+      .insert({
+        recipient_user_id: manager.user_id,
         employee_id: employee.id,
-        title: "New WFH Request",
-        message: `${employeeName} has submitted a Work From Home request for ${requestDate}.`,
-        type: "wfh",
+        title: "New WFH Request - Manager Review",
+        message: `${employeeName} has submitted a Work From Home request for ${requestDate}. Please review it.`,
+        type: "manager_wfh",
         is_read: false,
-      }));
+      });
 
-      const { error: notificationError } = await admin
-        .from("notifications")
-        .insert(notificationRows);
-
-      if (notificationError) {
-        console.error(
-          "WFH notification insertion failed:",
-          notificationError
-        );
-      } else {
-        console.log("WFH notifications sent to HR successfully.");
-      }
+    if (notificationError) {
+      console.error("WFH manager notification failed:", {
+        message: notificationError.message,
+        details: notificationError.details,
+        hint: notificationError.hint,
+        code: notificationError.code,
+      });
     }
+
+    // 11. Return success.
 
     return NextResponse.json(
       {
         success: true,
-        message: "WFH request submitted successfully.",
+        message:
+          "WFH request submitted successfully and sent to your reporting manager.",
         request: data,
+        notificationSent: !notificationError,
       },
       { status: 201 }
     );
   } catch (error) {
-    console.error("WFH POST API error:", error);
+    console.error("WFH POST error:", error);
 
     return NextResponse.json(
       { error: "Internal server error." },

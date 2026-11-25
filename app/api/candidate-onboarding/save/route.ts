@@ -81,7 +81,17 @@ const SECTION_FIELDS = {
     twelfthResult: 30,
     twelfthResultTotal: 30,
 
-    // Graduation
+    // Diploma
+    diplomaInstitution: 200,
+    diplomaAuthority: 200,
+    diplomaCourse: 150,
+    diplomaSpecialization: 150,
+    diplomaYearOfPassing: 4,
+    diplomaResultType: 30,
+    diplomaResult: 30,
+    diplomaResultTotal: 30,
+
+    // Graduation (UG)
     graduationInstitution: 200,
     graduationUniversity: 200,
     graduationCourse: 150,

@@ -1,3 +1,4 @@
+
 "use client";
 
 import Image from "next/image";
@@ -12,12 +13,15 @@ import {
   CalendarCheck,
   CalendarClock,
   CalendarDays,
+  CalendarHeart,
   CheckSquare,
   ChevronDown,
+  Settings,
   ChevronRight,
   Clock,
   Database,
   FileText,
+  FileUserIcon,
   Globe,
   LayoutDashboard,
   ListChecks,
@@ -26,10 +30,8 @@ import {
   PanelLeftOpen,
   ShieldCheck,
   UserCheck,
-  UserMinus,
   UserPlus,
   UserRound,
-  UserX,
   Users,
 } from "lucide-react";
 
@@ -51,7 +53,10 @@ interface SidebarProps {
   designation?: string | null;
 }
 
-export default function Sidebar({ role, designation }: SidebarProps) {
+export default function Sidebar({
+  role,
+  designation,
+}: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -65,12 +70,14 @@ export default function Sidebar({ role, designation }: SidebarProps) {
     "Attendance & Shifts",
   ]);
 
+  // Read saved sidebar state only after the component mounts.
   useEffect(() => {
     try {
+      const savedState =
+        window.localStorage.getItem("sidebar-collapsed");
+
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setIsCollapsed(
-        window.localStorage.getItem("sidebar-collapsed") === "true"
-      );
+      setIsCollapsed(savedState === "true");
     } catch (error) {
       console.error("Unable to read sidebar state:", error);
     }
@@ -81,7 +88,10 @@ export default function Sidebar({ role, designation }: SidebarProps) {
       const next = !previous;
 
       try {
-        window.localStorage.setItem("sidebar-collapsed", String(next));
+        window.localStorage.setItem(
+          "sidebar-collapsed",
+          String(next)
+        );
       } catch (error) {
         console.error("Unable to save sidebar state:", error);
       }
@@ -106,13 +116,18 @@ export default function Sidebar({ role, designation }: SidebarProps) {
       });
 
       if (!response.ok) {
-        throw new Error(`Logout failed with status ${response.status}.`);
+        throw new Error(
+          `Logout failed with status ${response.status}.`
+        );
       }
 
       try {
         window.localStorage.removeItem("profile-avatar-url");
       } catch (error) {
-        console.error("Unable to clear local profile photo:", error);
+        console.error(
+          "Unable to clear local profile photo:",
+          error
+        );
       }
 
       router.push("/login");
@@ -122,6 +137,10 @@ export default function Sidebar({ role, designation }: SidebarProps) {
     }
   };
 
+  // ==========================================
+  // ADMIN / CEO / HR SIDEBAR
+  // ==========================================
+
   const adminNavItems: SidebarNavItem[] = [
     {
       name: "Dashboard",
@@ -129,6 +148,13 @@ export default function Sidebar({ role, designation }: SidebarProps) {
       icon: LayoutDashboard,
       roles: ["ceo", "hr"],
     },
+    {
+      name: "Offers & Pre-Onboarding",
+      href: "/dashboard/joining",
+      icon: FileUserIcon,
+      roles: ["hr"],
+    },
+
     ...(isTeamReportDesignation(designation)
       ? [
           {
@@ -139,13 +165,20 @@ export default function Sidebar({ role, designation }: SidebarProps) {
           },
         ]
       : []),
+
     {
       name: "Employees",
       icon: Users,
       roles: ["ceo", "hr"],
       children: [
         {
-          name: "All",
+          name: "Add New Employee",
+          href: "/dashboard/employees/add",
+          icon: UserPlus,
+          roles: ["hr"],
+        },
+        {
+          name: "Employee Directory",
           href: "/dashboard/employees",
           icon: Users,
           roles: ["ceo", "hr"],
@@ -156,57 +189,53 @@ export default function Sidebar({ role, designation }: SidebarProps) {
           icon: UserPlus,
           roles: ["ceo", "hr"],
         },
-        {
-          name: "Terminated",
-          href: "/dashboard/employees?status=terminated",
-          icon: UserX,
-          roles: ["ceo", "hr"],
-        },
-        {
-          name: "Layoff",
-          href: "/dashboard/employees?status=laid_off",
-          icon: UserMinus,
-          roles: ["ceo", "hr"],
-        },
-        {
-          name: "Resignation",
-          icon: CalendarClock,
-          roles: ["ceo", "hr"],
-          children: [
-            {
-              name: "On Notice",
-              href: "/dashboard/employees?status=resigned&notice=notice_period",
-              icon: Clock,
-              roles: ["ceo", "hr"],
-            },
-            {
-              name: "Notice Completed",
-              href: "/dashboard/employees?status=resigned&notice=notice_completed",
-              icon: CalendarCheck,
-              roles: ["ceo", "hr"],
-            },
-            {
-              name: "Early Released",
-              href: "/dashboard/employees?status=resigned&notice=early_release",
-              icon: UserMinus,
-              roles: ["ceo", "hr"],
-            },
-          ],
-        },
+        // {
+        //   name: "Terminated",
+        //   href: "/dashboard/employees?status=terminated",
+        //   icon: UserX,
+        //   roles: ["ceo", "hr"],
+        // },
+        // {
+        //   name: "Layoff",
+        //   href: "/dashboard/employees?status=laid_off",
+        //   icon: UserMinus,
+        //   roles: ["ceo", "hr"],
+        // },
+        // {
+        //   name: "Resignation",
+        //   icon: CalendarClock,
+        //   roles: ["ceo", "hr"],
+        //   children: [
+        //     {
+        //       name: "On Notice",
+        //       href: "/dashboard/employees?status=resigned&notice=notice_period",
+        //       icon: Clock,
+        //       roles: ["ceo", "hr"],
+        //     },
+        //     {
+        //       name: "Notice Completed",
+        //       href: "/dashboard/employees?status=resigned&notice=notice_completed",
+        //       icon: CalendarCheck,
+        //       roles: ["ceo", "hr"],
+        //     },
+        //     {
+        //       name: "Early Released",
+        //       href: "/dashboard/employees?status=resigned&notice=early_release",
+        //       icon: UserMinus,
+        //       roles: ["ceo", "hr"],
+        //     },
+        //   ],
+        // },
       ],
     },
+
     {
       name: "Add Employee",
       href: "/dashboard/employees/add",
       icon: UserPlus,
       roles: ["hr"],
     },
-    {
-      name: "Add Joining",
-      href: "/dashboard/joining",
-      icon: UserPlus,
-      roles: ["hr"],
-    },
+
     {
       name: "Approval Hub",
       icon: CheckSquare,
@@ -226,6 +255,7 @@ export default function Sidebar({ role, designation }: SidebarProps) {
         },
       ],
     },
+
     {
       name: "Attendance & Shifts",
       icon: Clock,
@@ -245,12 +275,21 @@ export default function Sidebar({ role, designation }: SidebarProps) {
         },
       ],
     },
+
     {
       name: "Leave Management",
       href: "/dashboard/leaves",
       icon: CalendarDays,
       roles: ["ceo", "hr"],
     },
+
+    {
+      name: "Events",
+      href: "/dashboard/events",
+      icon: CalendarHeart,
+      roles: ["ceo", "hr"],
+    },
+
     {
       name: "Payroll",
       icon: Banknote,
@@ -270,19 +309,31 @@ export default function Sidebar({ role, designation }: SidebarProps) {
         },
       ],
     },
+
     {
       name: role === "hr" ? "Events & Holiday Calendar" : "Projects & Calendars",
       href: "/dashboard/projects",
       icon: role === "hr" ? CalendarDays : Globe,
       roles: ["ceo", "hr"],
     },
+
     {
       name: "Policies",
       href: "/dashboard/policies",
       icon: ShieldCheck,
       roles: ["ceo", "hr"],
     },
+    {
+      name: "Settings",
+      href: "/dashboard/settings",
+      icon: Settings,
+      roles: ["ceo", "hr"],
+    },
   ];
+
+  // ==========================================
+  // EMPLOYEE SIDEBAR
+  // ==========================================
 
   const employeeNavItems: SidebarNavItem[] = [
     {
@@ -291,24 +342,28 @@ export default function Sidebar({ role, designation }: SidebarProps) {
       icon: UserCheck,
       roles: ["employee"],
     },
+
     {
       name: "My Profile",
       href: "/portal/profile",
       icon: UserCheck,
       roles: ["employee"],
     },
+
     {
       name: "Attendance",
       href: "/portal/attendance",
       icon: Clock,
       roles: ["employee"],
     },
+
     {
       name: "Timesheet",
       href: "/portal/timesheet",
       icon: CalendarClock,
       roles: ["employee"],
     },
+
     ...(isTeamReportDesignation(designation)
       ? [
           {
@@ -319,42 +374,57 @@ export default function Sidebar({ role, designation }: SidebarProps) {
           },
         ]
       : []),
+
     {
       name: "My Leaves",
       href: "/portal/leaves",
       icon: CalendarDays,
       roles: ["employee"],
     },
+
+    // {
+    //   name: "Apply Leave",
+    //   href: "/portal/leaves?view=apply",
+    //   icon: CalendarDays,
+    //   roles: ["employee"],
+    // },
+
+    // Employee Events page
     {
-      name: "Apply Leave",
-      href: "/portal/leaves?view=apply",
-      icon: CalendarDays,
+      name: "Events",
+      href: "/portal/event",
+      icon: CalendarHeart,
       roles: ["employee"],
     },
+
     {
       name: "Compensations",
       href: "/portal/payslips",
       icon: FileText,
       roles: ["employee"],
     },
+
     {
       name: "Rewards & Recognition",
       href: "/portal/rewards",
       icon: Award,
       roles: ["employee"],
     },
+
     {
       name: "LMS",
       href: "/portal/lms",
       icon: UserCheck,
       roles: ["employee"],
     },
+
     {
       name: "Policies",
       href: "/portal/policies",
       icon: UserCheck,
       roles: ["employee"],
     },
+
     {
       name: "My Resignation",
       href: "/portal/resignation",
@@ -363,9 +433,19 @@ export default function Sidebar({ role, designation }: SidebarProps) {
     },
   ];
 
+  // ==========================================
+  // VISIBLE SIDEBAR ITEMS
+  // ==========================================
+
   const visibleItems = (
-    role === "employee" ? employeeNavItems : adminNavItems
+    role === "employee"
+      ? employeeNavItems
+      : adminNavItems
   ).filter((item) => item.roles.includes(role));
+
+  // ==========================================
+  // ACTIVE ROUTE CHECK
+  // ==========================================
 
   const isPathActive = (href?: string): boolean => {
     if (!href) return false;
@@ -388,7 +468,9 @@ export default function Sidebar({ role, designation }: SidebarProps) {
     const expectedParams = new URLSearchParams(query);
 
     for (const [key, value] of expectedParams.entries()) {
-      if (searchParams.get(key) !== value) return false;
+      if (searchParams.get(key) !== value) {
+        return false;
+      }
     }
 
     return true;
@@ -398,9 +480,18 @@ export default function Sidebar({ role, designation }: SidebarProps) {
     (item.href ? isPathActive(item.href) : false) ||
     (item.children?.some(hasActiveChild) ?? false);
 
-  const renderNavItem = (item: SidebarNavItem, level = 0) => {
+  // ==========================================
+  // RENDER SIDEBAR ITEMS
+  // ==========================================
+
+  const renderNavItem = (
+    item: SidebarNavItem,
+    level = 0
+  ) => {
     const children =
-      item.children?.filter((child) => child.roles.includes(role)) ?? [];
+      item.children?.filter((child) =>
+        child.roles.includes(role)
+      ) ?? [];
 
     const hasChildren = children.length > 0;
     const isOpen = openMenus.includes(item.name);
@@ -423,7 +514,9 @@ export default function Sidebar({ role, designation }: SidebarProps) {
             title={isCollapsed ? item.name : undefined}
             aria-expanded={isOpen}
             className={`flex w-full items-center rounded-lg py-2.5 transition-all ${
-              isCollapsed ? "justify-center px-2" : "gap-3 px-3"
+              isCollapsed
+                ? "justify-center px-2"
+                : "gap-3 px-3"
             } ${
               isActive
                 ? "bg-slate-800 text-white"
@@ -434,7 +527,9 @@ export default function Sidebar({ role, designation }: SidebarProps) {
 
             <span
               className={
-                isCollapsed ? "sr-only" : "flex-1 text-left text-sm"
+                isCollapsed
+                  ? "sr-only"
+                  : "flex-1 text-left text-sm"
               }
             >
               {item.name}
@@ -464,8 +559,11 @@ export default function Sidebar({ role, designation }: SidebarProps) {
         key={`${level}-${item.name}`}
         href={item.href ?? "#"}
         title={isCollapsed ? item.name : undefined}
+        aria-current={isActive ? "page" : undefined}
         className={`flex w-full items-center rounded-lg py-2.5 transition-all ${
-          isCollapsed ? "justify-center px-2" : "gap-3 px-3"
+          isCollapsed
+            ? "justify-center px-2"
+            : "gap-3 px-3"
         } ${
           isActive
             ? "bg-indigo-600 text-white font-medium shadow-sm"
@@ -474,12 +572,18 @@ export default function Sidebar({ role, designation }: SidebarProps) {
       >
         <Icon className="h-4 w-4 shrink-0" />
 
-        <span className={isCollapsed ? "sr-only" : "text-sm"}>
+        <span
+          className={isCollapsed ? "sr-only" : "text-sm"}
+        >
           {item.name}
         </span>
       </Link>
     );
   };
+
+  // ==========================================
+  // SIDEBAR UI
+  // ==========================================
 
   return (
     <aside
@@ -487,6 +591,8 @@ export default function Sidebar({ role, designation }: SidebarProps) {
         isCollapsed ? "md:w-[72px]" : "md:w-64"
       }`}
     >
+      {/* LOGO AND HEADER */}
+
       <div
         className={`flex items-center border-b border-slate-800 p-4 sm:p-5 ${
           isCollapsed ? "justify-center" : "gap-3"
@@ -516,23 +622,33 @@ export default function Sidebar({ role, designation }: SidebarProps) {
         </div>
       </div>
 
+      {/* NAVIGATION MENU */}
+
       <div className="flex-1 overflow-y-auto px-3 py-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <div className="space-y-1">
           {visibleItems.map((item) => renderNavItem(item))}
         </div>
       </div>
 
+      {/* SIDEBAR FOOTER */}
+
       <div className="border-t border-slate-800 p-3">
         <div
           className={`flex items-center ${
-            isCollapsed ? "flex-col gap-2" : "gap-2"
+            isCollapsed
+              ? "flex-col gap-2"
+              : "gap-2"
           }`}
         >
           <button
             type="button"
             onClick={toggleSidebar}
-            aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-            title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-label={
+              isCollapsed ? "Expand sidebar" : "Collapse sidebar"
+            }
+            title={
+              isCollapsed ? "Expand sidebar" : "Collapse sidebar"
+            }
             className="hidden h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white md:inline-flex"
           >
             {isCollapsed ? (

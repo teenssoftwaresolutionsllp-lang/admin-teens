@@ -1,4 +1,3 @@
-
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createAdminClient } from "@/lib/supabase-server";
@@ -112,6 +111,14 @@ function getRequiredEducationDocuments(
     "twelfthResultType",
     "twelfthResult",
     "twelfthResultTotal",
+    "diplomaInstitution",
+    "diplomaAuthority",
+    "diplomaCourse",
+    "diplomaSpecialization",
+    "diplomaYearOfPassing",
+    "diplomaResultType",
+    "diplomaResult",
+    "diplomaResultTotal",
     "graduationInstitution",
     "graduationUniversity",
     "graduationCourse",
@@ -147,6 +154,17 @@ function getRequiredEducationDocuments(
       "twelfthResult",
     ]);
 
+    const hasDiploma = hasEducationValues(education, [
+      "diplomaInstitution",
+      "diplomaAuthority",
+      "diplomaCourse",
+      "diplomaSpecialization",
+      "diplomaYearOfPassing",
+      "diplomaResultType",
+      "diplomaResult",
+      "diplomaResultTotal",
+    ]);
+
     const hasGraduation = hasEducationValues(education, [
       "graduationInstitution",
       "graduationUniversity",
@@ -178,6 +196,10 @@ function getRequiredEducationDocuments(
 
     if (has12th || hasGraduation || hasPostGraduation) {
       required.push("education_12th");
+    }
+
+    if (hasDiploma) {
+      required.push("education_diploma");
     }
 
     if (hasGraduation || hasPostGraduation) {
@@ -483,7 +505,20 @@ function validateRequiredOnboardingFields(
       ],
     },
     {
-      label: "Graduation",
+      label: "Diploma",
+      fields: [
+        ["Course", "diplomaCourse"],
+        ["Board / Authority", "diplomaAuthority"],
+        ["Institution Name", "diplomaInstitution"],
+        ["Specialization", "diplomaSpecialization"],
+        ["Year of Passing", "diplomaYearOfPassing"],
+        ["Result Type", "diplomaResultType"],
+        ["Result", "diplomaResult"],
+        ["Total Marks / Scale", "diplomaResultTotal"],
+      ],
+    },
+    {
+      label: "UG (Undergraduate)",
       fields: [
         ["College Name", "graduationInstitution"],
         ["University", "graduationUniversity"],
@@ -496,7 +531,7 @@ function validateRequiredOnboardingFields(
       ],
     },
     {
-      label: "Post-Graduation",
+      label: "PG (Postgraduate)",
       fields: [
         ["College Name", "postGraduationInstitution"],
         ["University", "postGraduationUniversity"],
@@ -509,7 +544,7 @@ function validateRequiredOnboardingFields(
       ],
     },
     {
-      label: "Other Qualification",
+      label: "Additional Qualifications / Certifications",
       fields: [
         ["Qualification Name", "otherQualification"],
         ["Institution Name", "otherInstitution"],

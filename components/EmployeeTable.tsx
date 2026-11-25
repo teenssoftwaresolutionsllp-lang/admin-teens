@@ -1,9 +1,10 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { usePathname,useRouter,useSearchParams } from "next/navigation"
 import { exportToExcel } from "@/lib/excel/exportToExcel";
 import companiesData from "@/data/companies.json"
+import jobTitlesData from "@/data/employee_job_titles.json"
 import Link from "next/link"
 import Image from "next/image"
 import { Employee, Department, UserRole } from "@/lib/types"
@@ -18,10 +19,18 @@ import {
   ChevronDown,
   ChevronUp,
   Briefcase,
-  User,
   ShieldCheck,
-  LogOut,
+  GraduationCap,
+  Building2,
+  Calendar,
+  Filter,
+  RotateCcw,
+  Clock,
+  Building,
+  UserCheck,
+  Check,
 } from "lucide-react"
+// import { isExternal } from "util/types";
 
 const companies = companiesData.companies
 
@@ -56,6 +65,26 @@ type EmployeeFilterRecord = Employee & {
   experience_level?: "fresher" | "experienced" | null
   total_experience_years?: number | null
   total_experience_months?: number | null
+  shift_type?: string | null
+  education_records?: Array<{
+    id?: string
+    qualification_type?: string | null
+    qualification_name?: string | null
+    institution_name?: string | null
+    board?: string | null
+    university?: string | null
+    course?: string | null
+    specialization?: string | null
+    stream?: string | null
+    year_of_passing?: string | number | null
+  }>
+  previous_employment_records?: Array<{
+    id?: string
+    company_name?: string | null
+    designation?: string | null
+    employment_start_date?: string | null
+    employment_end_date?: string | null
+  }>
 }
 
 const companyOptions = [
@@ -70,30 +99,7 @@ const companyOptions = [
 ]
 
 
-const designationOptions = [
-  "Account",
-  "Back",
-  "Backend",
-  "Cloud",
-  "cwehih",
-  "Database",
-  "Developer",
-  "Digital",
-  "Finacla",
-  "Front",
-  "Frontend",
-  "frontendDeveloper",
-  "jh",
-  "Operations",
-  "QA",
-  "qs",
-  "sa",
-  "Sales",
-  "Senior Full Stack Developer",
-  "stock market",
-  "UI",
-  "UI/UX",
-]
+
 
 const employmentTypeOptions = [
   "full-time",
@@ -156,6 +162,175 @@ const formatOptionLabel = (value: string) =>
     .replace(/_/g, " ")
     .replace(/\b\w/g, (letter) => letter.toUpperCase())
 
+const jsonJobTitles: string[] = (
+  (jobTitlesData as { departments?: Array<{ titles?: string[] }> })
+    ?.departments || []
+).flatMap((dept) => dept.titles || [])
+
+const designationOptions = uniqueOptions(jsonJobTitles)
+
+function SearchableCombobox({
+  value,
+  onChange,
+  options,
+  placeholder,
+  allLabel = "All",
+  className = "",
+  variant = "default",
+}: {
+  value: string
+  onChange: (val: string) => void
+  options: string[]
+  placeholder: string
+  allLabel?: string
+  className?: string
+  variant?: "default" | "amber" | "indigo"
+}) {
+  const [isOpen, setIsOpen] = useState(false)
+  const [query, setQuery] = useState("")
+  // const [experienceLevel, setExperienceLevel] = useState("all");
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(event.target as Node)
+      ) {
+        setIsOpen(false)
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [])
+
+  const filtered = useMemo(() => {
+    if (!query.trim()) return options
+    const q = query.toLowerCase()
+    return options.filter((opt) => opt.toLowerCase().includes(q))
+  }, [options, query])
+
+  const isSelected = Boolean(value && value !== "all")
+  const displayLabel = isSelected ? value : allLabel
+
+  return (
+    <div className={`relative ${className}`} ref={containerRef}>
+      <button
+        type="button"
+        onClick={() => {
+          setIsOpen(!isOpen)
+          setQuery("")
+        }}
+        className={`flex w-full items-center justify-between rounded-xl border px-2.5 py-1.5 text-xs font-medium text-left transition outline-none ${
+          isSelected
+            ? variant === "amber"
+              ? "border-amber-400 bg-amber-50/50 text-amber-900 font-semibold shadow-2xs"
+              : "border-indigo-400 bg-indigo-50/50 text-indigo-900 font-semibold shadow-2xs"
+            : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 focus:border-indigo-500"
+        }`}
+      >
+        <span className="truncate mr-1">{displayLabel}</span>
+        <div className="flex items-center gap-1 shrink-0">
+          {isSelected && (
+            <span
+              role="button"
+              tabIndex={0}
+              onClick={(e) => {
+                e.stopPropagation()
+                onChange("all")
+              }}
+              className="rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-rose-600 transition"
+              title="Clear selection"
+            >
+              <X className="h-3 w-3" />
+            </span>
+          )}
+          <ChevronDown
+            className={`h-3.5 w-3.5 text-slate-400 transition-transform ${
+              isOpen ? "rotate-180" : ""
+            }`}
+          />
+        </div>
+      </button>
+
+      {isOpen && (
+        <div className="absolute left-0 top-full z-50 mt-1 max-h-64 w-full min-w-[220px] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl ring-1 ring-black/5 animate-in fade-in zoom-in-95 duration-100">
+          <div className="sticky top-0 z-10 border-b border-slate-100 bg-white p-1.5">
+            <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1">
+              <Search className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+              <input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={placeholder}
+                autoFocus
+                className="w-full bg-transparent text-xs text-slate-800 outline-none placeholder:text-slate-400"
+              />
+              {query && (
+                <button
+                  type="button"
+                  onClick={() => setQuery("")}
+                  className="text-slate-400 hover:text-slate-600"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="max-h-52 overflow-y-auto py-1">
+            <button
+              type="button"
+              onClick={() => {
+                onChange("all")
+                setIsOpen(false)
+              }}
+              className={`flex w-full items-center justify-between px-3 py-1.5 text-left text-xs transition ${
+                !isSelected
+                  ? "bg-indigo-50 text-indigo-700 font-semibold"
+                  : "text-slate-700 hover:bg-slate-50"
+              }`}
+            >
+              <span>{allLabel}</span>
+              {!isSelected && <Check className="h-3.5 w-3.5 text-indigo-600" />}
+            </button>
+
+            {filtered.length === 0 ? (
+              <div className="px-3 py-4 text-center text-xs text-slate-400">
+                No matching results
+              </div>
+            ) : (
+              filtered.map((opt) => {
+                const optSelected = value === opt
+                return (
+                  <button
+                    key={opt}
+                    type="button"
+                    onClick={() => {
+                      onChange(opt)
+                      setIsOpen(false)
+                    }}
+                    className={`flex w-full items-center justify-between px-3 py-1.5 text-left text-xs transition ${
+                      optSelected
+                        ? "bg-indigo-50 text-indigo-700 font-semibold"
+                        : "text-slate-700 hover:bg-slate-50"
+                    }`}
+                  >
+                    <span className="truncate">{opt}</span>
+                    {optSelected && (
+                      <Check className="h-3.5 w-3.5 text-indigo-600 shrink-0 ml-2" />
+                    )}
+                  </button>
+                )
+              })
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function EmployeeTable({
   employees,
   departments,
@@ -178,9 +353,6 @@ export default function EmployeeTable({
   const [typeFilter, setTypeFilter] = useState("all")
   const [fromDate, setFromDate] = useState("")
   const [toDate, setToDate] = useState("")
-  const [activeFilterTab, setActiveFilterTab] = useState("employee")
-  const [isFiltersCollapsed, setIsFiltersCollapsed] = useState(false)
-
 
   // Additional filters - All view only
   const [designationFilter, setDesignationFilter] = useState("all")
@@ -219,6 +391,39 @@ export default function EmployeeTable({
   const [exitDateFrom, setExitDateFrom] = useState("")
   const [exitDateTo, setExitDateTo] = useState("")
 
+  // Education filters
+  const [eduQualificationFilter, setEduQualificationFilter] = useState("all")
+  const [eduCourseFilter, setEduCourseFilter] = useState("all")
+  const [eduInstitutionFilter, setEduInstitutionFilter] = useState("all")
+  const [eduSpecializationFilter, setEduSpecializationFilter] = useState("all")
+  const [eduYearFilter, setEduYearFilter] = useState("all")
+
+  // Previous employment filters
+  const [prevCompanyFilter, setPrevCompanyFilter] = useState("all")
+  const [prevDesignationFilter, setPrevDesignationFilter] = useState("all")
+
+  // Shift filter
+  const [shiftFilter, setShiftFilter] = useState("all")
+
+  // Horizontal Quick Date & Master Filters
+  const [dateField, setDateField] = useState<string>("joining_date")
+  const [datePreset, setDatePreset] = useState<string>("all")
+  const [dateTypeFilter, setDateTypeFilter] = useState<string>("joining")
+  const [isMoreFiltersOpen, setIsMoreFiltersOpen] = useState(false)
+
+  // Calculated date ranges for presets
+  const now = new Date()
+  const todayStr = now.toISOString().slice(0, 10)
+  const currentYear = now.getFullYear()
+  const currentMonth = now.getMonth()
+  const thisMonthStart = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-01`
+  const thisMonthEnd = new Date(currentYear, currentMonth + 1, 0).toISOString().slice(0, 10)
+  const thisYearStart = `${currentYear}-01-01`
+  const thisYearEnd = `${currentYear}-12-31`
+  const past30DaysDate = new Date()
+  past30DaysDate.setDate(now.getDate() - 30)
+  const past30DaysStr = past30DaysDate.toISOString().slice(0, 10)
+
   const [selectedEmployees, setSelectedEmployees] = useState<string[]>([])
   const [isDownloading, setIsDownloading] = useState(false)
   const [currentPage, setCurrentPage] = useState(1);
@@ -241,10 +446,7 @@ export default function EmployeeTable({
     ...employees.map((employee) => employee.company_name || ""),
   ])
 
-  const availableDesignations = uniqueOptions([
-    ...designationOptions,
-    ...employees.map((employee) => employee.designation || ""),
-  ])
+  const availableDesignations = designationOptions
 
   const availableEmploymentTypes = uniqueOptions([
     ...employmentTypeOptions,
@@ -268,6 +470,126 @@ export default function EmployeeTable({
         })
     ).values()
   ).sort((a, b) => a.name.localeCompare(b.name))
+
+  // Education and Previous Employment options derived from employee records & catalogs
+  const defaultQualifications = [
+    "10th",
+    "10th Standard",
+    "12th",
+    "12th Standard",
+    "Diploma",
+    "Graduation",
+    "Post Graduation",
+    "B.Tech",
+    "B.Sc",
+    "BCA",
+    "MCA",
+    "MBA",
+  ]
+  const availableEducationQualifications = uniqueOptions([
+    ...defaultQualifications,
+    ...employees.flatMap((employee) =>
+      ((employee as EmployeeFilterRecord).education_records || []).map(
+        (edu) => edu.qualification_name || edu.qualification_type || ""
+      )
+    ),
+  ])
+
+  const availableEducationCourses = uniqueOptions(
+    employees.flatMap((employee) =>
+      ((employee as EmployeeFilterRecord).education_records || []).map(
+        (edu) => edu.course || edu.specialization || edu.stream || ""
+      )
+    ).filter(Boolean)
+  )
+
+  const availableEducationInstitutions = uniqueOptions(
+    employees.flatMap((employee) =>
+      ((employee as EmployeeFilterRecord).education_records || []).map(
+        (edu) => edu.institution_name || edu.university || edu.board || ""
+      )
+    ).filter(Boolean)
+  )
+
+  const availableEducationYears = uniqueOptions(
+    employees.flatMap((employee) =>
+      ((employee as EmployeeFilterRecord).education_records || []).map(
+        (edu) => (edu.year_of_passing ? String(edu.year_of_passing) : "")
+      )
+    ).filter(Boolean)
+  ).sort((a, b) => Number(b) - Number(a))
+
+  // Merge companies from employee records + companies.json (deduplicated, sorted)
+  const prevCompaniesFromRecords = employees.flatMap((employee) =>
+    ((employee as EmployeeFilterRecord).previous_employment_records || []).map(
+      (prev) => prev.company_name || ""
+    )
+  ).filter(Boolean)
+  const prevCompaniesFromJson = companies.map((c) => c.company_name)
+  const availablePreviousCompanies = uniqueOptions([
+    ...prevCompaniesFromRecords,
+    ...prevCompaniesFromJson,
+  ])
+
+  const availablePreviousDesignations = designationOptions
+
+  const shiftOptions = ["general", "night"]
+
+  // Master Filter Definitions that can be dynamically added
+  // Helper for quick date range binding
+  const getQuickDateValue = (type: "from" | "to"): string => {
+    switch (dateTypeFilter) {
+      case "joining":
+        return type === "from" ? fromDate : toDate
+      case "appointment":
+        return type === "from" ? appointmentDateFrom : appointmentDateTo
+      case "confirmation":
+        return type === "from" ? confirmationDateFrom : confirmationDateTo
+      case "probation_end":
+        return type === "from" ? probationEndFrom : probationEndTo
+      case "resignation":
+        return type === "from" ? resignationDateFrom : resignationDateTo
+      case "exit":
+        return type === "from" ? exitDateFrom : exitDateTo
+      case "dob":
+        return type === "from" ? dobFrom : dobTo
+      default:
+        return ""
+    }
+  }
+
+  const handleQuickDateChange = (type: "from" | "to", value: string) => {
+    switch (dateTypeFilter) {
+      case "joining":
+        if (type === "from") setFromDate(value)
+        else setToDate(value)
+        break
+      case "appointment":
+        if (type === "from") setAppointmentDateFrom(value)
+        else setAppointmentDateTo(value)
+        break
+      case "confirmation":
+        if (type === "from") setConfirmationDateFrom(value)
+        else setConfirmationDateTo(value)
+        break
+      case "probation_end":
+        if (type === "from") setProbationEndFrom(value)
+        else setProbationEndTo(value)
+        break
+      case "resignation":
+        if (type === "from") setResignationDateFrom(value)
+        else setResignationDateTo(value)
+        break
+      case "exit":
+        if (type === "from") setExitDateFrom(value)
+        else setExitDateTo(value)
+        break
+      case "dob":
+        if (type === "from") setDobFrom(value)
+        else setDobTo(value)
+        break
+    }
+  }
 
   const handleClearFilters = () => {
     setSearchTerm("")
@@ -315,6 +637,18 @@ export default function EmployeeTable({
     setResignationDateTo("")
     setExitDateFrom("")
     setExitDateTo("")
+
+    // Reset Education & Prev Work & Shift & Master filters
+    setEduQualificationFilter("all")
+    setEduCourseFilter("all")
+    setEduInstitutionFilter("all")
+    setEduSpecializationFilter("all")
+    setEduYearFilter("all")
+    setPrevCompanyFilter("all")
+    setPrevDesignationFilter("all")
+    setShiftFilter("all")
+    setDateField("joining_date")
+    setDatePreset("all")
 
     // Remove the department URL filter as well.
     const params = new URLSearchParams(searchParams.toString());
@@ -399,7 +733,15 @@ export default function EmployeeTable({
     probationDurationMin !== "" || probationDurationMax !== "" ||
     noticeDaysMin !== "" || noticeDaysMax !== "" ||
     resignationDateFrom !== "" || resignationDateTo !== "" ||
-    exitDateFrom !== "" || exitDateTo !== ""
+    exitDateFrom !== "" || exitDateTo !== "" ||
+    eduQualificationFilter !== "all" ||
+    eduCourseFilter !== "all" ||
+    eduInstitutionFilter !== "all" ||
+    eduSpecializationFilter !== "all" ||
+    eduYearFilter !== "all" ||
+    prevCompanyFilter !== "all" ||
+    prevDesignationFilter !== "all" ||
+    shiftFilter !== "all"
 
   const isFilterActive =
     searchTerm.trim() !== "" ||
@@ -407,10 +749,14 @@ export default function EmployeeTable({
     deptFilter !== "all" ||
     (isAllSubmenu && statusFilter !== "all") ||
     typeFilter !== "all" ||
+    datePreset !== "all" ||
     (fromDate !== "" || toDate !== "") ||
+    eduQualificationFilter !== "all" ||
+    prevCompanyFilter !== "all" ||
+    shiftFilter !== "all" ||
     (dashboardFilter?.joiningDateFrom != null ||
       dashboardFilter?.joiningDateTo != null) ||
-    (isAllSubmenu && additionalFiltersActive)
+    additionalFiltersActive
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -475,27 +821,144 @@ export default function EmployeeTable({
     })
   }
 
+  const parseExperienceDate = (value?: string | null): Date | null => {
+    if (!value) return null;
+
+    const date = new Date(`${value.slice(0, 10)}T00:00:00`);
+    return Number.isNaN(date.getTime()) ? null : date;
+  };
+
+  const getCompletedExperienceMonths = (
+    startValue?: string | null,
+    endValue?: string | null
+  ): number => {
+    const start = parseExperienceDate(startValue);
+    const end = parseExperienceDate(endValue);
+
+    if (!start || !end || end < start) return 0;
+
+    let months =
+      (end.getFullYear() - start.getFullYear()) * 12 +
+      end.getMonth() -
+      start.getMonth();
+
+    if (end.getDate() < start.getDate()) months--;
+
+    return Math.max(0, months);
+  };
+
+  const formatExperienceMonths = (totalMonths: number): string => {
+    const years = Math.floor(totalMonths / 12);
+    const months = totalMonths % 12;
+
+    return `${years} Year${years !== 1 ? "s" : ""} ${months} Month${months !== 1 ? "s" : ""}`;
+  };
+
+  const getCompletedMonths = (start: Date, end: Date): number => {
+    if (end < start) return 0;
+
+    let months =
+      (end.getFullYear() - start.getFullYear()) * 12 +
+      (end.getMonth() - start.getMonth());
+
+    if (end.getDate() < start.getDate()) months--;
+
+    return Math.max(0, months);
+  };
+
+  const parseLocalDate = (value?: string | null): Date | null => {
+    if (!value) return null;
+
+    const [year, month, day] = value.slice(0, 10).split("-").map(Number);
+    const date = new Date(year, month - 1, day);
+
+    return Number.isNaN(date.getTime()) ? null : date;
+  };
+
+  const formatMonths = (months: number): string => {
+    const years = Math.floor(months / 12);
+    const remainingMonths = months % 12;
+
+    return `${years} Year${years !== 1 ? "s" : ""} ${remainingMonths} Month${remainingMonths !== 1 ? "s" : ""}`;
+  };
+
   const formatTotalExperience = (emp: Employee): string => {
-    const details = emp as EmployeeFilterRecord
+    const details = emp as EmployeeFilterRecord;
+    const joiningDate = parseLocalDate(emp.joining_date);
 
-    if (!details.experience_level) return "—"
+    if (!joiningDate) return "—";
 
-    if (details.experience_level === "fresher") {
-      return "0 Years 0 Months"
+    const today = new Date();
+    const currentDate = new Date(
+      today.getFullYear(),
+      today.getMonth(),
+      today.getDate()
+    );
+
+    const lastWorkingDate = parseLocalDate(getLastWorkingDate(emp));
+    const currentEndDate = lastWorkingDate || currentDate;
+
+    const currentMonths = getCompletedMonths(joiningDate, currentEndDate);
+
+    const previousRecords = details.previous_employment_records || [];
+
+    const intervals = previousRecords
+      .map((record) => {
+        const start = parseLocalDate(record.employment_start_date);
+        const end = parseLocalDate(record.employment_end_date) || joiningDate;
+
+        if (!start || start >= joiningDate || end <= start) return null;
+
+        return {
+          start,
+          end: end > joiningDate ? joiningDate : end,
+        };
+      })
+      .filter(
+        (interval): interval is { start: Date; end: Date } =>
+          interval !== null
+      )
+      .sort((a, b) => a.start.getTime() - b.start.getTime());
+
+    // Merge overlapping previous employment periods to avoid double-counting.
+    const merged: { start: Date; end: Date }[] = [];
+
+    for (const interval of intervals) {
+      const last = merged[merged.length - 1];
+
+      if (last && interval.start <= last.end) {
+        if (interval.end > last.end) last.end = interval.end;
+      } else {
+        merged.push({ ...interval });
+      }
     }
 
-    if (
-      details.total_experience_years == null &&
-      details.total_experience_months == null
-    ) {
-      return "—"
-    }
+    const previousMonths = merged.reduce(
+      (total, interval) =>
+        total + getCompletedMonths(interval.start, interval.end),
+      0
+    );
 
-    const years = details.total_experience_years ?? 0
-    const months = details.total_experience_months ?? 0
+    return formatMonths(currentMonths + previousMonths);
+  };
 
-    return `${years} Year${years !== 1 ? "s" : ""} ${months} Month${months !== 1 ? "s" : ""}`
-  }
+  const getExperienceLevel = (emp: EmployeeFilterRecord) => {
+    const experience = formatTotalExperience(emp);
+
+    if (!experience || experience === "-") return null;
+
+    const years = parseInt(
+      experience.match(/(\d+)\s*Year/i)?.[1] || "0",
+      10
+    );
+
+    const months = parseInt(
+      experience.match(/(\d+)\s*Month/i)?.[1] || "0",
+      10
+    );
+
+    return years >= 1 || months >= 12 ? "experienced" : "fresher";
+  };
 
   const getLastWorkingDate = (emp: Employee): string | null => {
     const details = emp as EmployeeFilterRecord
@@ -658,6 +1121,33 @@ export default function EmployeeTable({
             ? "Experienced"
             : "N/A";
 
+      const educationStr = ((emp as EmployeeFilterRecord).education_records || [])
+        .map((edu) =>
+          [
+            edu.qualification_name || edu.qualification_type,
+            edu.course || edu.specialization,
+            edu.institution_name || edu.university,
+            edu.year_of_passing ? `(${edu.year_of_passing})` : "",
+          ]
+            .filter(Boolean)
+            .join(" - ")
+        )
+        .join("; ") || "N/A"
+
+      const prevWorkStr = ((emp as EmployeeFilterRecord).previous_employment_records || [])
+        .map((p) =>
+          [
+            p.designation ? `${p.designation} at ` : "",
+            p.company_name,
+            p.employment_start_date
+              ? `(${p.employment_start_date} to ${p.employment_end_date || "Present"})`
+              : "",
+          ]
+            .filter(Boolean)
+            .join("")
+        )
+        .join("; ") || (emp.experience_level === "fresher" ? "Fresher (No Prior Experience)" : "N/A")
+
       const employeeData: Record<string, unknown> = {
         employee_id: emp.employee_id || "N/A",
         first_name: emp.first_name || "N/A",
@@ -675,6 +1165,8 @@ export default function EmployeeTable({
         experience_level: experienceLevel,
         total_experience: formatTotalExperience(emp),
         joining_date: formatDate(emp.joining_date),
+        education: educationStr,
+        previous_work: prevWorkStr,
         probation_end_date: formatDate(emp.probation_end_date),
         confirmation_date: formatDate(emp.confirmation_date),
         reporting_manager: emp.reporting_manager || "N/A",
@@ -720,8 +1212,9 @@ export default function EmployeeTable({
         { header: "Designation", key: "designation", width: 22 },
         { header: "Employment Type", key: "employment_type", width: 18 },
         { header: "Experience Level", key: "experience_level", width: 18 },
-        { header: "Total Experience", key: "total_experience", width: 20 },
         { header: "Joining Date", key: "joining_date", width: 18 },
+        { header: "Education", key: "education", width: 30 },
+        { header: "Previous Work", key: "previous_work", width: 30 },
         { header: "Probation End Date", key: "probation_end_date", width: 20 },
         { header: "Confirmation Date", key: "confirmation_date", width: 20 },
         { header: "Reporting Manager", key: "reporting_manager", width: 22 },
@@ -762,6 +1255,20 @@ export default function EmployeeTable({
   };
 
 
+  console.table(
+    employees.map((employee) => {
+      const emp = employee as EmployeeFilterRecord
+
+      return {
+        name: `${emp.first_name || ""} ${emp.last_name || ""}`,
+        experience_level: emp.experience_level,
+        total_experience_years: emp.total_experience_years,
+        total_experience_months: emp.total_experience_months,
+      }
+    })
+  )
+
+
   // All-view filters are applied only when the All submenu is selected.
   const filteredEmployees = employees.filter((employee) => {
     const emp = employee as EmployeeFilterRecord
@@ -774,7 +1281,17 @@ export default function EmployeeTable({
         .includes(searchString) ||
       (emp.email || "").toLowerCase().includes(searchString) ||
       (emp.employee_id || "").toLowerCase().includes(searchString) ||
-      (emp.phone || "").toLowerCase().includes(searchString)
+      (emp.phone || "").toLowerCase().includes(searchString) ||
+      (emp.education_records?.some((edu) =>
+        (edu.qualification_name || "").toLowerCase().includes(searchString) ||
+        (edu.course || "").toLowerCase().includes(searchString) ||
+        (edu.institution_name || "").toLowerCase().includes(searchString) ||
+        (edu.specialization || "").toLowerCase().includes(searchString)
+      ) ?? false) ||
+      (emp.previous_employment_records?.some((prev) =>
+        (prev.company_name || "").toLowerCase().includes(searchString) ||
+        (prev.designation || "").toLowerCase().includes(searchString)
+      ) ?? false)
 
     const matchesDept =
       deptFilter === "all" ||
@@ -875,12 +1392,6 @@ export default function EmployeeTable({
       ? emp.joining_date?.slice(0, 10)
       : normalizedDate
 
-    const matchesFromDate =
-      !fromDate || (!!dateForRange && dateForRange >= fromDate)
-
-    const matchesToDate =
-      !toDate || (!!dateForRange && dateForRange <= toDate)
-
     // Dashboard New Joinings KPI date range.
     const dashboardJoiningFrom =
       dashboardFilter?.joiningDateFrom || "";
@@ -894,6 +1405,111 @@ export default function EmployeeTable({
       (!dashboardJoiningTo ||
         (!!dateForRange && dateForRange <= dashboardJoiningTo));
 
+    // Education matching: all active education criteria must match on the SAME record
+    const hasAnyEduFilter =
+      eduQualificationFilter !== "all" ||
+      eduCourseFilter !== "all" ||
+      eduInstitutionFilter !== "all" ||
+      eduYearFilter !== "all"
+
+    const matchesEducation =
+      !hasAnyEduFilter ||
+      (emp.education_records?.some((edu) => {
+        const qual = normalize(edu.qualification_name || edu.qualification_type)
+        const targetQual = normalize(eduQualificationFilter)
+        const matchesQual =
+          eduQualificationFilter === "all" ||
+          qual === targetQual ||
+          qual.includes(targetQual) ||
+          targetQual.includes(qual)
+
+        const course = normalize(edu.course || edu.specialization || edu.stream)
+        const targetCourse = normalize(eduCourseFilter)
+        const matchesCourse =
+          eduCourseFilter === "all" ||
+          course === targetCourse ||
+          course.includes(targetCourse)
+
+        const inst = normalize(edu.institution_name || edu.university || edu.board)
+        const targetInst = normalize(eduInstitutionFilter)
+        const matchesInst =
+          eduInstitutionFilter === "all" ||
+          inst === targetInst ||
+          inst.includes(targetInst)
+
+        const matchesYr =
+          eduYearFilter === "all" ||
+          String(edu.year_of_passing || "").trim() === String(eduYearFilter).trim()
+
+        return matchesQual && matchesCourse && matchesInst && matchesYr
+      }) ?? false)
+
+    // Previous employment matching: active prev company & designation must match on the SAME record
+    const hasAnyPrevFilter =
+      prevCompanyFilter !== "all" || prevDesignationFilter !== "all"
+
+    const matchesPreviousEmployment =
+      !hasAnyPrevFilter ||
+      (emp.previous_employment_records?.some((prev) => {
+        const matchesComp =
+          prevCompanyFilter === "all" ||
+          normalize(prev.company_name) === normalize(prevCompanyFilter)
+        const matchesDesig =
+          prevDesignationFilter === "all" ||
+          normalize(prev.designation) === normalize(prevDesignationFilter)
+        return matchesComp && matchesDesig
+      }) ?? false)
+
+    // Shift matching
+    const matchesShift =
+      shiftFilter === "all" ||
+      normalize(emp.shift_type) === normalize(shiftFilter)
+
+    // Date preset & custom range filtering
+    let matchesDateField = true
+    if (datePreset !== "all" || Boolean(fromDate) || Boolean(toDate)) {
+      let targetDate: string | null = null
+      switch (dateField) {
+        case "joining_date":
+          targetDate = emp.joining_date ? emp.joining_date.slice(0, 10) : null
+          break
+        case "appointment_date":
+          targetDate = emp.appointment_date ? emp.appointment_date.slice(0, 10) : null
+          break
+        case "confirmation_date":
+          targetDate = emp.confirmation_date ? emp.confirmation_date.slice(0, 10) : null
+          break
+        case "probation_end_date":
+          targetDate = emp.probation_end_date ? emp.probation_end_date.slice(0, 10) : null
+          break
+        case "resignation_date":
+          targetDate = emp.resignation_date ? emp.resignation_date.slice(0, 10) : null
+          break
+        case "exit_date":
+          targetDate = emp.exit_date ? emp.exit_date.slice(0, 10) : null
+          break
+        case "date_of_birth":
+          targetDate = emp.date_of_birth ? emp.date_of_birth.slice(0, 10) : null
+          break
+        default:
+          targetDate = emp.joining_date ? emp.joining_date.slice(0, 10) : null
+      }
+
+      if (!targetDate) {
+        matchesDateField = false
+      } else {
+        if (datePreset === "this_month") {
+          matchesDateField = targetDate >= thisMonthStart && targetDate <= thisMonthEnd
+        } else if (datePreset === "past_30") {
+          matchesDateField = targetDate >= past30DaysStr && targetDate <= todayStr
+        } else if (datePreset === "this_year") {
+          matchesDateField = targetDate >= thisYearStart && targetDate <= thisYearEnd
+        } else {
+          matchesDateField = (!fromDate || targetDate >= fromDate) && (!toDate || targetDate <= toDate)
+        }
+      }
+    }
+
     // Do not apply the additional filters to any other sidebar view.
     if (!isAllSubmenu) {
       return (
@@ -902,9 +1518,11 @@ export default function EmployeeTable({
         matchesStatus &&
         matchesType &&
         matchesCompany &&
-        matchesFromDate &&
-        matchesToDate && 
-        matchesDashboardJoiningDate
+        matchesDateField &&
+        matchesDashboardJoiningDate &&
+        matchesEducation &&
+        matchesPreviousEmployment &&
+        matchesShift
       )
     }
 
@@ -984,19 +1602,47 @@ export default function EmployeeTable({
       emp.notice_period_days, noticeDaysMin, noticeDaysMax
     )
 
-    const matchesExperienceLevel = experienceLevelFilter === "all" || normalize(emp.experience_level) === normalize(experienceLevelFilter)
+    const calculatedExperienceLevel = getExperienceLevel(emp as EmployeeFilterRecord);
+
+    const matchesExperienceLevel =
+      experienceLevelFilter === "all" ||
+      calculatedExperienceLevel === experienceLevelFilter;
+
+    const experienceText = formatTotalExperience(emp);
+
+    const experienceYears =
+      experienceText === "-"
+        ? null
+        : (() => {
+            const years = parseInt(
+              experienceText.match(/(\d+)\s*Year/i)?.[1] || "0",
+              10
+            );
+
+            const months = parseInt(
+              experienceText.match(/(\d+)\s*Month/i)?.[1] || "0",
+              10
+            );
+
+            return years + months / 12;
+          })();
 
     const matchesExperienceYears = matchesNumericRange(
-      emp.total_experience_years,
+      experienceYears,
       experienceYearsMin,
       experienceYearsMax
-    )
+    );
+
+    const experienceTotalMonths =
+      experienceYears === null
+        ? null
+        : Math.round(experienceYears * 12);
 
     const matchesExperienceMonths = matchesNumericRange(
-      emp.total_experience_months,
+      experienceTotalMonths,
       experienceMonthsMin,
       experienceMonthsMax
-    )
+    );
 
     const dob = emp.date_of_birth?.slice(0, 10)
 
@@ -1049,6 +1695,10 @@ export default function EmployeeTable({
       matchesSalaryMin &&
       matchesSalaryMax &&
       matchesDashboardJoiningDate &&
+      matchesDateField &&
+      matchesEducation &&
+      matchesPreviousEmployment &&
+      matchesShift &&
       matchesEligibility(pfFilter, emp.pf_eligible) &&
       matchesEligibility(esiFilter, emp.esi_healthcare_eligible) &&
       matchesEligibility(ptFilter, emp.pt_eligible) &&
@@ -1090,6 +1740,15 @@ export default function EmployeeTable({
     experienceYearsMax,
     experienceMonthsMin,
     experienceMonthsMax,
+    eduQualificationFilter,
+    eduCourseFilter,
+    eduInstitutionFilter,
+    eduYearFilter,
+    prevCompanyFilter,
+    prevDesignationFilter,
+    shiftFilter,
+    dateField,
+    datePreset,
   ]);
 
   const handleSelectEmployee = (employeeId: string) => {
@@ -1135,6 +1794,33 @@ export default function EmployeeTable({
       const rows: Record<string, unknown>[] = employeesToDownload.map((emp) => {
         const details = emp as EmployeeFilterRecord;
 
+        const educationStr = (details.education_records || [])
+          .map((edu) =>
+            [
+              edu.qualification_name || edu.qualification_type,
+              edu.course || edu.specialization,
+              edu.institution_name || edu.university,
+              edu.year_of_passing ? `(${edu.year_of_passing})` : "",
+            ]
+              .filter(Boolean)
+              .join(" - ")
+          )
+          .join("; ") || "N/A";
+
+        const prevWorkStr = (details.previous_employment_records || [])
+          .map((p) =>
+            [
+              p.designation ? `${p.designation} at ` : "",
+              p.company_name,
+              p.employment_start_date
+                ? `(${p.employment_start_date} to ${p.employment_end_date || "Present"})`
+                : "",
+            ]
+              .filter(Boolean)
+              .join("")
+          )
+          .join("; ") || (emp.experience_level === "fresher" ? "Fresher (No Prior Experience)" : "N/A");
+
         return {
           employee_id: emp.employee_id || "N/A",
           first_name: emp.first_name || "N/A",
@@ -1150,14 +1836,28 @@ export default function EmployeeTable({
           ...(role !== "hr" ? { project: details.project?.name || details.project_id || "N/A" } : {}),
           designation: emp.designation || "N/A",
           employment_type: emp.employment_type || "N/A",
-          experience_level:
-            details.experience_level === "fresher"
-              ? "Fresher"
-              : details.experience_level
-                ? "Experienced"
-                : "N/A",
+          experience_level: (() => {
+            const joiningDate = parseLocalDate(emp.joining_date);
+              if (!joiningDate) return "N/A";
+
+              const today = new Date();
+              const currentDate = new Date(
+                today.getFullYear(),
+                today.getMonth(),
+                today.getDate()
+              );
+
+              const lastWorkingDate = parseLocalDate(getLastWorkingDate(emp));
+              const endDate = lastWorkingDate || currentDate;
+
+              const months = getCompletedMonths(joiningDate, endDate);
+
+              return months >= 12 ? "Experienced" : "Fresher";
+            })(),
           total_experience: formatTotalExperience(emp),
           joining_date: formatDate(emp.joining_date),
+          education: educationStr,
+          previous_work: prevWorkStr,
           probation_end_date: formatDate(details.probation_end_date),
           confirmation_date: formatDate(details.confirmation_date),
           reporting_manager: emp.reporting_manager || "N/A",
@@ -1204,8 +1904,10 @@ export default function EmployeeTable({
         { header: "Designation", key: "designation", width: 22 },
         { header: "Employment Type", key: "employment_type", width: 18 },
         { header: "Experience Level", key: "experience_level", width: 18 },
-        { header: "Total Experience", key: "total_experience", width: 20 },
+        // { header: "Total Experience", key: "total_experience", width: 20 },
         { header: "Joining Date", key: "joining_date", width: 18 },
+        { header: "Education", key: "education", width: 30 },
+        { header: "Previous Work", key: "previous_work", width: 30 },
         { header: "Probation End Date", key: "probation_end_date", width: 20 },
         { header: "Confirmation Date", key: "confirmation_date", width: 20 },
         { header: "Reporting Manager", key: "reporting_manager", width: 22 },
@@ -1254,443 +1956,891 @@ export default function EmployeeTable({
     }
   };
 
-  const employeeEmploymentFiltersCount = [
-    compFilter !== "all",
-    deptFilter !== "all",
-    role !== "hr" && projectFilter !== "all",
-    designationFilter !== "all",
-    statusFilter !== (isAllSubmenu ? "all" : sidebarStatus),
-    typeFilter !== "all",
-    clientTypeFilter !== "all",
-    noticeFilter !== "all",
-    fromDate !== "" || toDate !== "",
-    appointmentDateFrom !== "" || appointmentDateTo !== "",
-    confirmationDateFrom !== "" || confirmationDateTo !== "",
-    probationEndFrom !== "" || probationEndTo !== "",
-    probationDurationMin !== "" || probationDurationMax !== "",
-    experienceLevelFilter !== "all",
-    experienceYearsMin !== "" || experienceYearsMax !== "",
-    experienceMonthsMin !== "" || experienceMonthsMax !== "",
-    noticeDaysMin !== "" || noticeDaysMax !== "",
-    salaryMin !== "" || salaryMax !== "",
-  ].filter(Boolean).length;
-
-  const personalFiltersCount = [
-    genderFilter !== "all",
-    maritalFilter !== "all",
-    bloodGroupFilter !== "all",
-    locationFilter !== "all",
-    dobFrom !== "" || dobTo !== "",
-  ].filter(Boolean).length;
-
-  const exitFiltersCount = [
-    resignationDateFrom !== "" || resignationDateTo !== "",
-    exitDateFrom !== "" || exitDateTo !== "",
-  ].filter(Boolean).length;
-
-  const statutoryFiltersCount = [
-    pfFilter !== "all",
-    esiFilter !== "all",
-    ptFilter !== "all",
-    tdsFilter !== "all",
-  ].filter(Boolean).length;
-
-  const filterTabs = [
-    {
-      id: "employee",
-      label: "Employment Details",
-      icon: Briefcase,
-      count: employeeEmploymentFiltersCount,
-    },
-    {
-      id: "personal",
-      label: "Personal Details",
-      icon: User,
-      count: personalFiltersCount,
-    },
-    {
-      id: "exit",
-      label: "Exit Details",
-      icon: LogOut,
-      count: exitFiltersCount,
-    },
-    {
-      id: "statutory",
-      label: "Statutory Eligibility",
-      icon: ShieldCheck,
-      count: statutoryFiltersCount,
-    },
-  ];
-
   return (
     <div className="flex flex-col gap-5">
-      {/* Filters */}
-      {isAllSubmenu ? (
-        <div className="w-full shrink-0">
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all">
-            {/* Header / Search bar */}
-            <div className="border-b border-slate-200 bg-slate-50/70 p-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="relative flex-1">
-                  <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                  <input
-                    type="text"
-                    value={searchTerm}
-                    onChange={(event) => setSearchTerm(event.target.value)}
-                    placeholder="Search by employee name, ID, email, or phone number..."
-                    className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-9 text-xs font-medium text-slate-800 placeholder-slate-400 transition focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100"
-                  />
-                  {searchTerm && (
-                    <button
-                      type="button"
-                      onClick={() => setSearchTerm("")}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-                      aria-label="Clear search"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  )}
-                </div>
+      {/* Redesigned Modern Horizontal Filter Card */}
+      <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-xs space-y-3.5">
+        {/* Tier 1: Search & Quick Summary / Reset */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          {/* Search Input */}
+          <div className="relative flex-1 max-w-lg">
+            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              placeholder="Search by name, ID, email, phone, education, or previous company..."
+              className="w-full rounded-xl border border-slate-200 bg-slate-50/70 py-2 pl-10 pr-9 text-xs font-medium text-slate-800 placeholder-slate-400 transition hover:bg-white focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100"
+            />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                aria-label="Clear search"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
 
-                <div className="flex items-center gap-2.5 self-end sm:self-auto shrink-0">
-                  <span className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-50 px-2.5 py-1.5 text-xs font-semibold text-indigo-700 ring-1 ring-inset ring-indigo-200">
-                    <span className="h-1.5 w-1.5 rounded-full bg-indigo-600" />
-                    {filteredEmployees.length} matching
-                  </span>
+          {/* Right Stats & Reset */}
+          <div className="flex items-center gap-2.5 shrink-0 self-end sm:self-auto">
+            <span className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 ring-1 ring-inset ring-indigo-200">
+              <span className="h-1.5 w-1.5 rounded-full bg-indigo-600" />
+              {filteredEmployees.length} of {employees.length} employees
+            </span>
 
-                  {isFilterActive && (
-                    <button
-                      type="button"
-                      onClick={handleClearFilters}
-                      className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 hover:text-slate-900"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                      <span>Clear filters</span>
-                    </button>
-                  )}
+            {isFilterActive && (
+              <button
+                type="button"
+                onClick={handleClearFilters}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50/60 px-3 py-1.5 text-xs font-semibold text-rose-700 shadow-2xs transition hover:bg-rose-100 hover:border-rose-300"
+                title="Reset all applied filters"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                <span>Reset Filters</span>
+              </button>
+            )}
+          </div>
+        </div>
 
+        {/* Tier 2: 6 Primary Horizontal Filter Dropdowns with Icon Labels */}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6 pt-3 border-t border-slate-100">
+          {/* 1. Department */}
+          <div>
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1 flex items-center gap-1">
+              <Building className="h-3 w-3 text-slate-400" />
+              Department
+            </label>
+            <select
+              value={deptFilter}
+              onChange={(e) => setDeptFilter(e.target.value)}
+              className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 outline-none transition hover:border-slate-300 focus:border-indigo-500"
+            >
+              <option value="all">All Departments</option>
+              {availableDepartments.map((department) => (
+                <option key={department.id} value={department.id}>
+                  {department.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* 2. Designation */}
+          <div>
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1 flex items-center gap-1">
+              <Briefcase className="h-3 w-3 text-slate-400" />
+              Designation
+            </label>
+            <SearchableCombobox
+              value={designationFilter}
+              onChange={setDesignationFilter}
+              options={availableDesignations}
+              placeholder="Search designation..."
+              allLabel="All Designations"
+            />
+          </div>
+
+          {/* 3. Education Qualification */}
+          <div>
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1 flex items-center gap-1 text-indigo-600">
+              <GraduationCap className="h-3 w-3 text-indigo-500" />
+              Education
+            </label>
+            <select
+              value={eduQualificationFilter}
+              onChange={(e) => setEduQualificationFilter(e.target.value)}
+              className={`w-full rounded-xl border px-2.5 py-1.5 text-xs font-medium outline-none transition ${
+                eduQualificationFilter !== "all"
+                  ? "border-indigo-400 bg-indigo-50/50 text-indigo-700 font-semibold"
+                  : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 focus:border-indigo-500"
+              }`}
+            >
+              <option value="all">All Qualifications</option>
+              {availableEducationQualifications.map((qualification) => (
+                <option key={qualification} value={qualification}>
+                  {qualification}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* 4. Previous Work Company */}
+          <div>
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1 flex items-center gap-1 text-amber-700">
+              <Building2 className="h-3 w-3 text-amber-500" />
+              Previous Company
+            </label>
+            <SearchableCombobox
+              value={prevCompanyFilter}
+              onChange={setPrevCompanyFilter}
+              options={availablePreviousCompanies}
+              placeholder="Search previous company..."
+              allLabel="All Previous Companies"
+              variant="amber"
+            />
+          </div>
+
+          {/* 5. Shift Type */}
+          <div>
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1 flex items-center gap-1">
+              <Clock className="h-3 w-3 text-slate-400" />
+              Shift Type
+            </label>
+            <select
+              value={shiftFilter}
+              onChange={(e) => setShiftFilter(e.target.value)}
+              className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 outline-none transition hover:border-slate-300 focus:border-indigo-500"
+            >
+              <option value="all">All Shifts</option>
+              <option value="general">General (09:00–18:00)</option>
+              <option value="night">Night (18:30–03:30)</option>
+            </select>
+          </div>
+
+          {/* 6. Employee Status */}
+          <div>
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1 flex items-center gap-1">
+              <UserCheck className="h-3 w-3 text-slate-400" />
+              Status
+            </label>
+            <select
+              value={isAllSubmenu ? statusFilter : sidebarStatus}
+              disabled={!isAllSubmenu}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 outline-none transition hover:border-slate-300 focus:border-indigo-500 disabled:bg-slate-50 disabled:text-slate-500"
+            >
+              <option value="all">All Statuses</option>
+              {statusOptions.map((status) => (
+                <option key={status} value={status}>
+                  {formatOptionLabel(status)}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Tier 3: Horizontal Date Filter & Master Filters Bar */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pt-3 border-t border-slate-100 text-xs">
+          {/* Quick Date Filter Row */}
+          <div className="flex flex-wrap items-center gap-2.5">
+            <div className="flex items-center gap-1.5 font-bold text-slate-600 uppercase tracking-wider text-[11px] shrink-0">
+              <Calendar className="h-3.5 w-3.5 text-indigo-500" />
+              Date Filter:
+            </div>
+
+            {/* Target Date Field */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-slate-500 text-[11px]">Field:</span>
+              <select
+                value={dateField}
+                onChange={(e) => setDateField(e.target.value)}
+                className="rounded-xl border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 outline-none transition hover:border-slate-300 focus:border-indigo-500"
+              >
+                <option value="joining_date">Joining Date</option>
+                <option value="appointment_date">Appointment Date</option>
+                <option value="confirmation_date">Confirmation Date</option>
+                <option value="probation_end_date">Probation End Date</option>
+                <option value="resignation_date">Resignation Date</option>
+                <option value="exit_date">Exit Date</option>
+                <option value="date_of_birth">Date of Birth</option>
+              </select>
+            </div>
+
+            {/* Date Preset */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-slate-500 text-[11px]">Period:</span>
+              <select
+                value={datePreset}
+                onChange={(e) => {
+                  const val = e.target.value
+                  setDatePreset(val)
+                  if (val !== "custom") {
+                    setFromDate("")
+                    setToDate("")
+                  }
+                }}
+                className="rounded-xl border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 outline-none transition hover:border-slate-300 focus:border-indigo-500"
+              >
+                <option value="all">Any Time</option>
+                <option value="this_month">This Month</option>
+                <option value="past_30">Past 30 Days</option>
+                <option value="this_year">This Year</option>
+                <option value="custom">Custom Range...</option>
+              </select>
+            </div>
+
+            {/* Inline Custom Range Inputs */}
+            {(datePreset === "custom" || fromDate || toDate) && (
+              <div className="flex items-center gap-1.5 bg-slate-50 px-2 py-0.5 rounded-xl border border-slate-200">
+                <span className="text-slate-500 text-[11px]">From:</span>
+                <input
+                  type="date"
+                  value={fromDate}
+                  onChange={(e) => {
+                    setFromDate(e.target.value)
+                    if (datePreset !== "custom") setDatePreset("custom")
+                  }}
+                  className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-700 outline-none focus:border-indigo-500"
+                />
+                <span className="text-slate-400 text-xs">to</span>
+                <input
+                  type="date"
+                  value={toDate}
+                  onChange={(e) => {
+                    setToDate(e.target.value)
+                    if (datePreset !== "custom") setDatePreset("custom")
+                  }}
+                  className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-700 outline-none focus:border-indigo-500"
+                />
+                {(fromDate || toDate) && (
                   <button
                     type="button"
-                    onClick={() => setIsFiltersCollapsed((prev) => !prev)}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-900"
-                    title={isFiltersCollapsed ? "Expand filters" : "Collapse filters"}
+                    onClick={() => {
+                      setFromDate("")
+                      setToDate("")
+                      setDatePreset("all")
+                    }}
+                    className="p-1 text-slate-400 hover:text-rose-600 rounded"
+                    title="Clear custom dates"
                   >
-                    <SlidersHorizontal className="h-3.5 w-3.5 text-slate-500" />
-                    <span>{isFiltersCollapsed ? "Show Filters" : "Hide Filters"}</span>
-                    {isFiltersCollapsed ? (
-                      <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
-                    ) : (
-                      <ChevronUp className="h-3.5 w-3.5 text-slate-400" />
-                    )}
+                    <X className="h-3 w-3" />
                   </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Right: More Filters Toggle */}
+          <div className="flex items-center gap-2 shrink-0">
+            {/* More Filters Toggle */}
+            <button
+              type="button"
+              onClick={() => setIsMoreFiltersOpen(!isMoreFiltersOpen)}
+              className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition ${
+                isMoreFiltersOpen
+                  ? "border-indigo-600 bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200"
+                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+              }`}
+            >
+              <SlidersHorizontal className="h-3.5 w-3.5" />
+              <span>More Filters</span>
+              {isMoreFiltersOpen ? (
+                <ChevronUp className="h-3 w-3" />
+              ) : (
+                <ChevronDown className="h-3 w-3" />
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Tier 5: More Filters Expandable Horizontal Shelf */}
+        {isMoreFiltersOpen && (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 pt-3.5 border-t border-slate-100 bg-slate-50/50 p-3.5 rounded-xl">
+            {/* Column 1: Role & Organization */}
+            <div className="space-y-2.5">
+              <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1">
+                <Building className="h-3.5 w-3.5 text-indigo-500" />
+                Role & Org
+              </h4>
+              <div>
+                <label className="mb-1 block text-[11px] font-medium text-slate-600">Company</label>
+                <select
+                  value={compFilter}
+                  onChange={(e) => setCompFilter(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-indigo-500"
+                >
+                  <option value="all">All Companies</option>
+                  {availableCompanies.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
+              {role !== "hr" && (
+                <div>
+                  <label className="mb-1 block text-[11px] font-medium text-slate-600">Project</label>
+                  <select
+                    value={projectFilter}
+                    onChange={(e) => setProjectFilter(e.target.value)}
+                    className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-indigo-500"
+                  >
+                    <option value="all">All Projects</option>
+                    {availableProjects.map((p) => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <div>
+                <label className="mb-1 block text-[11px] font-medium text-slate-600">Client Type</label>
+                <select
+                  value={clientTypeFilter}
+                  onChange={(e) => setClientTypeFilter(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-indigo-500"
+                >
+                  <option value="all">All Client Types</option>
+                  {clientTypeOptions.map((cl) => (
+                    <option key={cl} value={cl}>{formatOptionLabel(cl)}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-[11px] font-medium text-slate-600">Notice Status</label>
+                <select
+                  value={noticeFilter}
+                  onChange={(e) => setNoticeFilter(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-indigo-500"
+                >
+                  <option value="all">All Notice Statuses</option>
+                  {noticeStatusOptions.map((st) => (
+                    <option key={st} value={st}>{formatOptionLabel(st)}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-[11px] font-medium text-slate-600">Notice Period (Days)</label>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <input
+                    type="number"
+                    placeholder="Min"
+                    value={noticeDaysMin}
+                    onChange={(e) => setNoticeDaysMin(e.target.value)}
+                    className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus:border-indigo-500"
+                  />
+                  <input
+                    type="number"
+                    placeholder="Max"
+                    value={noticeDaysMax}
+                    onChange={(e) => setNoticeDaysMax(e.target.value)}
+                    className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus:border-indigo-500"
+                  />
                 </div>
               </div>
             </div>
 
-            {/* Active Filter Chips */}
-            {isFilterActive && (
-              <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-200/70 bg-indigo-50/30 px-4 py-2.5">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mr-1">
-                  Active Filters:
-                </span>
-                {searchTerm && (
-                  <span className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-xs font-medium text-slate-700 shadow-xs ring-1 ring-inset ring-slate-200">
-                    Search: &ldquo;{searchTerm}&rdquo;
-                    <button type="button" onClick={() => setSearchTerm("")} className="text-slate-400 hover:text-rose-600">
-                      <X className="h-3 w-3" />
-                    </button>
-                  </span>
-                )}
-                {compFilter !== "all" && (
-                  <span className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-xs font-medium text-slate-700 shadow-xs ring-1 ring-inset ring-slate-200">
-                    Company: {compFilter}
-                    <button type="button" onClick={() => setCompFilter("all")} className="text-slate-400 hover:text-rose-600">
-                      <X className="h-3 w-3" />
-                    </button>
-                  </span>
-                )}
-                {deptFilter !== "all" && (
-                  <span className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-xs font-medium text-slate-700 shadow-xs ring-1 ring-inset ring-slate-200">
-                    Dept: {availableDepartments.find((d) => d.id === deptFilter)?.name || deptFilter}
-                    <button type="button" onClick={() => setDeptFilter("all")} className="text-slate-400 hover:text-rose-600">
-                      <X className="h-3 w-3" />
-                    </button>
-                  </span>
-                )}
-                {role !== "hr" && projectFilter !== "all" && (
-                  <span className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-xs font-medium text-slate-700 shadow-xs ring-1 ring-inset ring-slate-200">
-                    Project: {availableProjects.find((p) => p.id === projectFilter)?.name || projectFilter}
-                    <button type="button" onClick={() => setProjectFilter("all")} className="text-slate-400 hover:text-rose-600">
-                      <X className="h-3 w-3" />
-                    </button>
-                  </span>
-                )}
-                {designationFilter !== "all" && (
-                  <span className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-xs font-medium text-slate-700 shadow-xs ring-1 ring-inset ring-slate-200">
-                    Designation: {designationFilter}
-                    <button type="button" onClick={() => setDesignationFilter("all")} className="text-slate-400 hover:text-rose-600">
-                      <X className="h-3 w-3" />
-                    </button>
-                  </span>
-                )}
-                {statusFilter !== "all" && (
-                  <span className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-xs font-medium text-slate-700 shadow-xs ring-1 ring-inset ring-slate-200">
-                    Status: {formatOptionLabel(statusFilter)}
-                    <button type="button" onClick={() => setStatusFilter("all")} className="text-slate-400 hover:text-rose-600">
-                      <X className="h-3 w-3" />
-                    </button>
-                  </span>
-                )}
-                {typeFilter !== "all" && (
-                  <span className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-xs font-medium text-slate-700 shadow-xs ring-1 ring-inset ring-slate-200">
-                    Type: {formatOptionLabel(typeFilter)}
-                    <button type="button" onClick={() => setTypeFilter("all")} className="text-slate-400 hover:text-rose-600">
-                      <X className="h-3 w-3" />
-                    </button>
-                  </span>
-                )}
-                {clientTypeFilter !== "all" && (
-                  <span className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-xs font-medium text-slate-700 shadow-xs ring-1 ring-inset ring-slate-200">
-                    Client: {formatOptionLabel(clientTypeFilter)}
-                    <button type="button" onClick={() => setClientTypeFilter("all")} className="text-slate-400 hover:text-rose-600">
-                      <X className="h-3 w-3" />
-                    </button>
-                  </span>
-                )}
-                {noticeFilter !== "all" && (
-                  <span className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-xs font-medium text-slate-700 shadow-xs ring-1 ring-inset ring-slate-200">
-                    Notice: {formatOptionLabel(noticeFilter)}
-                    <button type="button" onClick={() => setNoticeFilter("all")} className="text-slate-400 hover:text-rose-600">
-                      <X className="h-3 w-3" />
-                    </button>
-                  </span>
-                )}
-                {(fromDate || toDate) && (
-                  <span className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-xs font-medium text-slate-700 shadow-xs ring-1 ring-inset ring-slate-200">
-                    Joining: {fromDate || "Any"} to {toDate || "Any"}
-                    <button type="button" onClick={() => { setFromDate(""); setToDate(""); }} className="text-slate-400 hover:text-rose-600">
-                      <X className="h-3 w-3" />
-                    </button>
-                  </span>
-                )}
-                {(salaryMin || salaryMax) && (
-                  <span className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-xs font-medium text-slate-700 shadow-xs ring-1 ring-inset ring-slate-200">
-                    Salary: ₹{salaryMin || 0} - ₹{salaryMax || "Any"}
-                    <button type="button" onClick={() => { setSalaryMin(""); setSalaryMax(""); }} className="text-slate-400 hover:text-rose-600">
-                      <X className="h-3 w-3" />
-                    </button>
-                  </span>
-                )}
-                {experienceLevelFilter !== "all" && (
-                  <span className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-xs font-medium text-slate-700 shadow-xs ring-1 ring-inset ring-slate-200">
-                    Exp Level: {formatOptionLabel(experienceLevelFilter)}
-                    <button type="button" onClick={() => setExperienceLevelFilter("all")} className="text-slate-400 hover:text-rose-600">
-                      <X className="h-3 w-3" />
-                    </button>
-                  </span>
-                )}
-                {genderFilter !== "all" && (
-                  <span className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-xs font-medium text-slate-700 shadow-xs ring-1 ring-inset ring-slate-200">
-                    Gender: {formatOptionLabel(genderFilter)}
-                    <button type="button" onClick={() => setGenderFilter("all")} className="text-slate-400 hover:text-rose-600">
-                      <X className="h-3 w-3" />
-                    </button>
-                  </span>
-                )}
-                {locationFilter !== "all" && (
-                  <span className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-xs font-medium text-slate-700 shadow-xs ring-1 ring-inset ring-slate-200">
-                    Location: {locationFilter}
-                    <button type="button" onClick={() => setLocationFilter("all")} className="text-slate-400 hover:text-rose-600">
-                      <X className="h-3 w-3" />
-                    </button>
-                  </span>
-                )}
-                {maritalFilter !== "all" && (
-                  <span className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-xs font-medium text-slate-700 shadow-xs ring-1 ring-inset ring-slate-200">
-                    Marital: {formatOptionLabel(maritalFilter)}
-                    <button type="button" onClick={() => setMaritalFilter("all")} className="text-slate-400 hover:text-rose-600">
-                      <X className="h-3 w-3" />
-                    </button>
-                  </span>
-                )}
-                {bloodGroupFilter !== "all" && (
-                  <span className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-xs font-medium text-slate-700 shadow-xs ring-1 ring-inset ring-slate-200">
-                    Blood: {bloodGroupFilter}
-                    <button type="button" onClick={() => setBloodGroupFilter("all")} className="text-slate-400 hover:text-rose-600">
-                      <X className="h-3 w-3" />
-                    </button>
-                  </span>
-                )}
+            {/* Column 2: Education Details */}
+            <div className="space-y-2.5">
+              <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1">
+                <GraduationCap className="h-3.5 w-3.5 text-indigo-500" />
+                Education Details
+              </h4>
+              <div>
+                <label className="mb-1 block text-[11px] font-medium text-slate-600">Course / Stream</label>
+                <select
+                  value={eduCourseFilter}
+                  onChange={(e) => setEduCourseFilter(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-indigo-500"
+                >
+                  <option value="all">All Courses</option>
+                  {availableEducationCourses.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
               </div>
-            )}
+              <div>
+                <label className="mb-1 block text-[11px] font-medium text-slate-600">Institution</label>
+                <select
+                  value={eduInstitutionFilter}
+                  onChange={(e) => setEduInstitutionFilter(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-indigo-500"
+                >
+                  <option value="all">All Institutions</option>
+                  {availableEducationInstitutions.map((inst) => (
+                    <option key={inst} value={inst}>{inst}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-[11px] font-medium text-slate-600">Passing Year</label>
+                <select
+                  value={eduYearFilter}
+                  onChange={(e) => setEduYearFilter(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-indigo-500"
+                >
+                  <option value="all">All Years</option>
+                  {availableEducationYears.map((yr) => (
+                    <option key={yr} value={yr}>{yr}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
 
-            {/* Filter Tabs and Body (Collapsible) */}
-            {!isFiltersCollapsed && (
-              <>
-                <div className="overflow-x-auto border-b border-slate-200 bg-white">
-                  <div className="flex min-w-max gap-1 px-4 pt-2">
-                    {filterTabs.map((tab) => {
-                      const IconComponent = tab.icon;
+            {/* Column 3: Experience & Compensation */}
+            <div className="space-y-2.5">
+              <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1">
+                <Building2 className="h-3.5 w-3.5 text-amber-500" />
+                Experience & Salary
+              </h4>
+              <div>
+                <label className="mb-1 block text-[11px] font-medium text-slate-600">Previous Company</label>
+                <SearchableCombobox
+                  value={prevCompanyFilter}
+                  onChange={setPrevCompanyFilter}
+                  options={availablePreviousCompanies}
+                  placeholder="Search previous company..."
+                  allLabel="All Companies"
+                  variant="amber"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-[11px] font-medium text-slate-600">Previous Designation</label>
+                <SearchableCombobox
+                  value={prevDesignationFilter}
+                  onChange={setPrevDesignationFilter}
+                  options={availablePreviousDesignations}
+                  placeholder="Search previous role..."
+                  allLabel="All Roles"
+                  variant="amber"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-[11px] font-medium text-slate-600">
+                  Experience Level
+                </label>
+
+                <select
+                  value={experienceLevelFilter}
+                  onChange={(e) => {
+                    setExperienceLevelFilter(e.target.value)
+                    setExperienceYearsMin("")
+                    setExperienceYearsMax("")
+                  }}
+                  className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-indigo-500"
+                >
+                  <option value="all">All Levels</option>
+                  <option value="fresher">Fresher</option>
+                  <option value="experienced">Experienced</option>
+                </select>
+              </div>
+
+              {/* {experienceLevelFilter === "experienced" && (
+                <div>
+                  <div className="mb-1 flex items-center justify-between">
+                    <label className="text-[11px] font-medium text-slate-600">
+                      Experience (Years)
+                    </label>
+
+                    {experienceYearsMin && (
+                      <span className="text-[10px] font-semibold text-indigo-600">
+                        {experienceYearsMin}
+                        {experienceYearsMax ? `–${experienceYearsMax}` : "+"} yrs
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <input
+                      type="number"
+                      placeholder="Min Yrs (e.g. 5)"
+                      value={experienceYearsMin}
+                      onChange={(e) => setExperienceYearsMin(e.target.value)}
+                      min="0"
+                      className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus:border-indigo-500"
+                    />
+
+                    <input
+                      type="number"
+                      placeholder="Max Yrs"
+                      value={experienceYearsMax}
+                      onChange={(e) => setExperienceYearsMax(e.target.value)}
+                      min="0"
+                      className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus:border-indigo-500"
+                    />
+                  </div>
+
+                  <div className="mt-1.5 flex flex-wrap gap-1">
+                    {[
+                      { label: "1+ yr", min: "1", max: "" },
+                      { label: "3+ yrs", min: "3", max: "" },
+                      { label: "5+ yrs", min: "5", max: "" },
+                      { label: "8+ yrs", min: "8", max: "" },
+                      { label: "10+ yrs", min: "10", max: "" },
+                    ].map((preset) => {
+                      const isSelected =
+                        experienceYearsMin === preset.min &&
+                        experienceYearsMax === preset.max
+
                       return (
                         <button
-                          key={tab.id}
+                          key={preset.label}
                           type="button"
-                          onClick={() => setActiveFilterTab(tab.id)}
-                          className={`inline-flex items-center gap-2 rounded-t-xl border-b-2 px-4 py-3 text-xs font-semibold transition ${
-                            activeFilterTab === tab.id
-                              ? "border-indigo-600 bg-indigo-50/70 text-indigo-700"
-                              : "border-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-800"
+                          onClick={() => {
+                            if (isSelected) {
+                              setExperienceYearsMin("")
+                              setExperienceYearsMax("")
+                            } else {
+                              setExperienceYearsMin(preset.min)
+                              setExperienceYearsMax(preset.max)
+                              setExperienceLevelFilter("experienced")
+                            }
+                          }}
+                          className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold transition ${
+                            isSelected
+                              ? "bg-indigo-600 text-white shadow-2xs"
+                              : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                           }`}
                         >
-                          <IconComponent className="h-3.5 w-3.5" />
-                          <span>{tab.label}</span>
-                          {tab.count > 0 && (
-                            <span className="inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-indigo-600 px-1 text-[10px] font-bold text-white">
-                              {tab.count}
-                            </span>
-                          )}
+                          {preset.label}
                         </button>
-                      );
+                      )
                     })}
                   </div>
                 </div>
+              )} */}
 
-                <div className="p-4 sm:p-5">
-                  {/* COMBINED: Employee & Employment Details */}
-                  {activeFilterTab === "employee" && (
-                    <div className="space-y-5">
-                      {/* Sub-section 1: Role & Organization */}
-                      <div>
-                        <div className="mb-2.5 flex items-center gap-2">
-                          <span className="h-1.5 w-1.5 rounded-full bg-indigo-600" />
-                          <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                            Role & Organization
-                          </h4>
-                        </div>
-                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                          {renderSelect("Company", compFilter, setCompFilter, availableCompanies, "All Companies")}
-
-                          <div className="min-w-0">
-                            <label className="mb-1.5 block text-xs font-semibold text-slate-600">
-                              Department
-                            </label>
-                            <select
-                              value={deptFilter}
-                              onChange={(event) => setDeptFilter(event.target.value)}
-                              className={filterInputClass}
-                            >
-                              <option value="all">All Departments</option>
-                              {availableDepartments.map((department) => (
-                                <option key={department.id} value={department.id}>
-                                  {department.name}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-
-                          {role !== "hr" && (
-                            <div className="min-w-0">
-                              <label className="mb-1.5 block text-xs font-semibold text-slate-600">
-                                Project
-                              </label>
-                              <select
-                                value={projectFilter}
-                                onChange={(event) => setProjectFilter(event.target.value)}
-                                className={filterInputClass}
-                              >
-                                <option value="all">All Projects</option>
-                                {availableProjects.map((project) => (
-                                  <option key={project.id} value={project.id}>
-                                    {project.name}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-                          )}
-
-                          {renderSelect("Designation", designationFilter, setDesignationFilter, availableDesignations, "All Designations")}
-                          {renderSelect("Status", statusFilter, setStatusFilter, statusOptions, "All Statuses")}
-                          {renderSelect("Employment Type", typeFilter, setTypeFilter, availableEmploymentTypes, "All Types")}
-                          {renderSelect("Client Type", clientTypeFilter, setClientTypeFilter, clientTypeOptions, "All Client Types")}
-                          {renderSelect("Notice Status", noticeFilter, setNoticeFilter, noticeStatusOptions, "All Notice Statuses")}
-                        </div>
-                      </div>
-
-                      {/* Sub-section 2: Key Timeline Dates */}
-                      <div className="border-t border-slate-100 pt-4">
-                        <div className="mb-2.5 flex items-center gap-2">
-                          <span className="h-1.5 w-1.5 rounded-full bg-indigo-600" />
-                          <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                            Key Timeline Dates
-                          </h4>
-                        </div>
-                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                          {renderDateRange("Joining Date", fromDate, setFromDate, toDate, setToDate)}
-                          {renderDateRange("Appointment Date", appointmentDateFrom, setAppointmentDateFrom, appointmentDateTo, setAppointmentDateTo)}
-                          {renderDateRange("Confirmation Date", confirmationDateFrom, setConfirmationDateFrom, confirmationDateTo, setConfirmationDateTo)}
-                          {renderDateRange("Probation End Date", probationEndFrom, setProbationEndFrom, probationEndTo, setProbationEndTo)}
-                        </div>
-                      </div>
-
-                      {/* Sub-section 3: Experience & Compensation */}
-                      <div className="border-t border-slate-100 pt-4">
-                        <div className="mb-2.5 flex items-center gap-2">
-                          <span className="h-1.5 w-1.5 rounded-full bg-indigo-600" />
-                          <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                            Experience & Compensation
-                          </h4>
-                        </div>
-                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                          {renderSelect("Experience Level", experienceLevelFilter, setExperienceLevelFilter, ["fresher", "experienced"], "All Experience Levels")}
-                          {renderNumberRange("Experience Years", experienceYearsMin, setExperienceYearsMin, experienceYearsMax, setExperienceYearsMax, "years")}
-                          {renderNumberRange("Experience Months", experienceMonthsMin, setExperienceMonthsMin, experienceMonthsMax, setExperienceMonthsMax, "months")}
-                          {renderNumberRange("Probation Duration", probationDurationMin, setProbationDurationMin, probationDurationMax, setProbationDurationMax, "months")}
-                          {renderNumberRange("Notice Period Days", noticeDaysMin, setNoticeDaysMin, noticeDaysMax, setNoticeDaysMax, "days")}
-                          {renderNumberRange("Salary / CTC", salaryMin, setSalaryMin, salaryMax, setSalaryMax, "₹")}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Personal Details */}
-                  {activeFilterTab === "personal" && (
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                      {renderSelect("Gender", genderFilter, setGenderFilter, genderOptions)}
-                      {renderSelect("Marital Status", maritalFilter, setMaritalFilter, maritalStatusOptions)}
-                      {renderSelect("Blood Group", bloodGroupFilter, setBloodGroupFilter, bloodGroupOptions)}
-                      {renderSelect("Work Location", locationFilter, setLocationFilter, locationOptions)}
-                      {renderDateRange("Date of Birth", dobFrom, setDobFrom, dobTo, setDobTo)}
-                    </div>
-                  )}
-
-                  {/* Exit Details */}
-                  {activeFilterTab === "exit" && (
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                      {renderDateRange("Resignation Date", resignationDateFrom, setResignationDateFrom, resignationDateTo, setResignationDateTo)}
-                      {renderDateRange("Exit Date", exitDateFrom, setExitDateFrom, exitDateTo, setExitDateTo)}
-                    </div>
-                  )}
-
-                  {/* Statutory Eligibility */}
-                  {activeFilterTab === "statutory" && (
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                      {renderEligibilitySelect("PF Eligibility", pfFilter, setPfFilter)}
-                      {renderEligibilitySelect("ESI Healthcare Eligibility", esiFilter, setEsiFilter)}
-                      {renderEligibilitySelect("PT Eligibility", ptFilter, setPtFilter)}
-                      {renderEligibilitySelect("TDS Eligibility", tdsFilter, setTdsFilter)}
-                    </div>
+              {/* Experience Years Filter & Quick Preset Pills */}
+              {experienceLevelFilter ==="experienced" &&(
+                <div>
+                <div className="mb-1 flex items-center justify-between">
+                  <label className="text-[11px] font-medium text-slate-600">
+                    Experience (Years)
+                  </label>
+                  {experienceYearsMin && (
+                    <span className="text-[10px] font-semibold text-indigo-600">
+                      {experienceYearsMin}
+                      {experienceYearsMax ? `–${experienceYearsMax}` : "+"} yrs
+                    </span>
                   )}
                 </div>
-              </>
-            )}
+                <div className="grid grid-cols-2 gap-1.5">
+                  <input
+                    type="number"
+                    placeholder="Min Yrs (e.g. 5)"
+                    value={experienceYearsMin}
+                    onChange={(e) => {
+                      setExperienceYearsMin(e.target.value)
+                    }}
+                    min="0"
+                    className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus:border-indigo-500"
+                  />
+                  <input
+                    type="number"
+                    placeholder="Max Yrs"
+                    value={experienceYearsMax}
+                    onChange={(e) => {
+                      setExperienceYearsMax(e.target.value)
+                    }}
+                    min="0"
+                    className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus:border-indigo-500"
+                  />
+                </div>
+                {/* Quick year pills */}
+                <div className="mt-1.5 flex flex-wrap gap-1">
+                  {[
+                    { label: "1+ yr", min: "1", max: "" },
+                    { label: "3+ yrs", min: "3", max: "" },
+                    { label: "5+ yrs", min: "5", max: "" },
+                    { label: "8+ yrs", min: "8", max: "" },
+                    { label: "10+ yrs", min: "10", max: "" },
+                  ].map((preset) => {
+                    const isSelected =
+                      experienceYearsMin === preset.min &&
+                      experienceYearsMax === preset.max
+                    return (
+                      <button
+                        key={preset.label}
+                        type="button"
+                        onClick={() => {
+                          if (isSelected) {
+                            setExperienceYearsMin("")
+                            setExperienceYearsMax("")
+                          } else {
+                            setExperienceYearsMin(preset.min)
+                            setExperienceYearsMax(preset.max)
+                            setExperienceLevelFilter("experienced")
+                          }
+                        }}
+                        className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold transition ${
+                          isSelected
+                            ? "bg-indigo-600 text-white shadow-2xs"
+                            : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                        }`}
+                      >
+                        {preset.label}
+                      </button>
+                    )
+                  })}
+                </div>
+                </div>
+              )}
+ 
+
+              <div>
+                <label className="mb-1 block text-[11px] font-medium text-slate-600">Salary / CTC (₹)</label>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <input
+                    type="number"
+                    placeholder="Min"
+                    value={salaryMin}
+                    onChange={(e) => setSalaryMin(e.target.value)}
+                    className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus:border-indigo-500"
+                  />
+                  <input
+                    type="number"
+                    placeholder="Max"
+                    value={salaryMax}
+                    onChange={(e) => setSalaryMax(e.target.value)}
+                    className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus:border-indigo-500"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Column 4: Personal & Statutory */}
+            <div className="space-y-2.5">
+              <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1">
+                <ShieldCheck className="h-3.5 w-3.5 text-indigo-500" />
+                Personal & Statutory
+              </h4>
+              <div className="grid grid-cols-2 gap-1.5">
+                <div>
+                  <label className="mb-1 block text-[11px] font-medium text-slate-600">Gender</label>
+                  <select
+                    value={genderFilter}
+                    onChange={(e) => setGenderFilter(e.target.value)}
+                    className="w-full rounded-lg border border-slate-200 bg-white px-1.5 py-1 text-xs text-slate-700 outline-none"
+                  >
+                    <option value="all">All</option>
+                    {genderOptions.map((g) => (
+                      <option key={g} value={g}>{formatOptionLabel(g)}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-[11px] font-medium text-slate-600">Location</label>
+                  <select
+                    value={locationFilter}
+                    onChange={(e) => setLocationFilter(e.target.value)}
+                    className="w-full rounded-lg border border-slate-200 bg-white px-1.5 py-1 text-xs text-slate-700 outline-none"
+                  >
+                    <option value="all">All</option>
+                    {locationOptions.map((l) => (
+                      <option key={l} value={l}>{l}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-1.5">
+                <div>
+                  <label className="mb-1 block text-[11px] font-medium text-slate-600">Marital</label>
+                  <select
+                    value={maritalFilter}
+                    onChange={(e) => setMaritalFilter(e.target.value)}
+                    className="w-full rounded-lg border border-slate-200 bg-white px-1.5 py-1 text-xs text-slate-700 outline-none"
+                  >
+                    <option value="all">All</option>
+                    {maritalStatusOptions.map((m) => (
+                      <option key={m} value={m}>{formatOptionLabel(m)}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-[11px] font-medium text-slate-600">Blood Group</label>
+                  <select
+                    value={bloodGroupFilter}
+                    onChange={(e) => setBloodGroupFilter(e.target.value)}
+                    className="w-full rounded-lg border border-slate-200 bg-white px-1.5 py-1 text-xs text-slate-700 outline-none"
+                  >
+                    <option value="all">All</option>
+                    {bloodGroupOptions.map((b) => (
+                      <option key={b} value={b}>{b}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-1.5">
+                <div>
+                  <label className="mb-1 block text-[11px] font-medium text-slate-600">PF</label>
+                  <select
+                    value={pfFilter}
+                    onChange={(e) => setPfFilter(e.target.value)}
+                    className="w-full rounded-lg border border-slate-200 bg-white px-1.5 py-1 text-xs text-slate-700 outline-none"
+                  >
+                    <option value="all">All</option>
+                    <option value="yes">Eligible</option>
+                    <option value="no">Not</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-[11px] font-medium text-slate-600">ESI</label>
+                  <select
+                    value={esiFilter}
+                    onChange={(e) => setEsiFilter(e.target.value)}
+                    className="w-full rounded-lg border border-slate-200 bg-white px-1.5 py-1 text-xs text-slate-700 outline-none"
+                  >
+                    <option value="all">All</option>
+                    <option value="yes">Eligible</option>
+                    <option value="no">Not</option>
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-1.5">
+                <div>
+                  <label className="mb-1 block text-[11px] font-medium text-slate-600">PT</label>
+                  <select
+                    value={ptFilter}
+                    onChange={(e) => setPtFilter(e.target.value)}
+                    className="w-full rounded-lg border border-slate-200 bg-white px-1.5 py-1 text-xs text-slate-700 outline-none"
+                  >
+                    <option value="all">All</option>
+                    <option value="yes">Eligible</option>
+                    <option value="no">Not</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-[11px] font-medium text-slate-600">TDS</label>
+                  <select
+                    value={tdsFilter}
+                    onChange={(e) => setTdsFilter(e.target.value)}
+                    className="w-full rounded-lg border border-slate-200 bg-white px-1.5 py-1 text-xs text-slate-700 outline-none"
+                  >
+                    <option value="all">All</option>
+                    <option value="yes">Eligible</option>
+                    <option value="no">Not</option>
+                  </select>
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
-      ) : (
-        // Keep your existing other-sidebar-views JSX exactly as it is.
-        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-          {/* Keep the existing Filter Employees section here unchanged */}
-        </div>
-      )}
+        )}
+
+        {/* Tier 6: Active Filters Summary Chips Bar */}
+        {isFilterActive && (
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-slate-100 text-xs">
+            <div className="flex flex-wrap items-center gap-1.5 text-slate-600">
+              <Filter className="h-3.5 w-3.5 text-indigo-600 mr-0.5" />
+              <span className="font-semibold text-slate-700 mr-1">Active:</span>
+
+              {searchTerm && (
+                <span className="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+                  Search: &ldquo;{searchTerm}&rdquo;
+                  <button type="button" onClick={() => setSearchTerm("")} className="text-slate-400 hover:text-rose-600">
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              )}
+              {deptFilter !== "all" && (
+                <span className="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+                  Dept: {availableDepartments.find((d) => d.id === deptFilter)?.name || deptFilter}
+                  <button type="button" onClick={() => setDeptFilter("all")} className="text-slate-400 hover:text-rose-600">
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              )}
+              {designationFilter !== "all" && (
+                <span className="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+                  Designation: {designationFilter}
+                  <button type="button" onClick={() => setDesignationFilter("all")} className="text-slate-400 hover:text-rose-600">
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              )}
+              {eduQualificationFilter !== "all" && (
+                <span className="inline-flex items-center gap-1 rounded-lg bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700 border border-indigo-200">
+                  <GraduationCap className="h-3 w-3" />
+                  Edu: {eduQualificationFilter}
+                  <button type="button" onClick={() => setEduQualificationFilter("all")} className="text-slate-400 hover:text-rose-600">
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              )}
+              {prevCompanyFilter !== "all" && (
+                <span className="inline-flex items-center gap-1 rounded-lg bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800 border border-amber-200">
+                  <Building2 className="h-3 w-3" />
+                  Prev: {prevCompanyFilter}
+                  <button type="button" onClick={() => setPrevCompanyFilter("all")} className="text-slate-400 hover:text-rose-600">
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              )}
+              {shiftFilter !== "all" && (
+                <span className="inline-flex items-center gap-1 rounded-lg bg-purple-50 px-2 py-0.5 text-xs font-medium text-purple-700 border border-purple-200">
+                  Shift: {shiftFilter === "night" ? "Night" : "General"}
+                  <button type="button" onClick={() => setShiftFilter("all")} className="text-slate-400 hover:text-rose-600">
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              )}
+              {datePreset !== "all" && (
+                <span className="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+                  {formatOptionLabel(dateField)}: {datePreset === "this_month" ? "This Month" : datePreset === "past_30" ? "Past 30 Days" : datePreset === "this_year" ? "This Year" : `${fromDate || "Any"} - ${toDate || "Any"}`}
+                  <button type="button" onClick={() => { setDatePreset("all"); setFromDate(""); setToDate(""); }} className="text-slate-400 hover:text-rose-600">
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              )}
+              {statusFilter !== "all" && isAllSubmenu && (
+                <span className="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+                  Status: {formatOptionLabel(statusFilter)}
+                  <button type="button" onClick={() => setStatusFilter("all")} className="text-slate-400 hover:text-rose-600">
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              )}
+              {compFilter !== "all" && (
+                <span className="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+                  Company: {compFilter}
+                  <button type="button" onClick={() => setCompFilter("all")} className="text-slate-400 hover:text-rose-600">
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              )}
+              {locationFilter !== "all" && (
+                <span className="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+                  Location: {locationFilter}
+                  <button type="button" onClick={() => setLocationFilter("all")} className="text-slate-400 hover:text-rose-600">
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              )}
+              {prevDesignationFilter !== "all" && (
+                <span className="inline-flex items-center gap-1 rounded-lg bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800 border border-amber-200">
+                  <Briefcase className="h-3 w-3" />
+                  Prev Role: {prevDesignationFilter}
+                  <button type="button" onClick={() => setPrevDesignationFilter("all")} className="text-slate-400 hover:text-rose-600">
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              )}
+              {eduYearFilter !== "all" && (
+                <span className="inline-flex items-center gap-1 rounded-lg bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700 border border-indigo-200">
+                  <Calendar className="h-3 w-3" />
+                  Pass Year: {eduYearFilter}
+                  <button type="button" onClick={() => setEduYearFilter("all")} className="text-slate-400 hover:text-rose-600">
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              )}
+              {(experienceYearsMin || experienceYearsMax) && (
+                <span className="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+                  Exp: {experienceYearsMin || 0}{experienceYearsMax ? ` - ${experienceYearsMax}` : "+"} yrs
+                  <button type="button" onClick={() => { setExperienceYearsMin(""); setExperienceYearsMax(""); }} className="text-slate-400 hover:text-rose-600">
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              )}
+              {(salaryMin || salaryMax) && (
+                <span className="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+                  Salary: ₹{salaryMin || 0} - ₹{salaryMax || "Any"}
+                  <button type="button" onClick={() => { setSalaryMin(""); setSalaryMax(""); }} className="text-slate-400 hover:text-rose-600">
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={handleClearFilters}
+              className="inline-flex items-center gap-1 font-semibold text-rose-600 hover:text-rose-700 hover:underline shrink-0"
+            >
+              <RotateCcw className="h-3 w-3" />
+              Reset All Filters
+            </button>
+          </div>
+        )}
+      </div>
 
       {/* Employee directory results */}
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm shadow-[0_8px_30px_rgba(15,23,42,0.05)]">
@@ -1754,6 +2904,10 @@ export default function EmployeeTable({
                 <th className="sticky top-0 z-30 whitespace-nowrap border-r border-slate-300 border-b border-slate-200 bg-slate-100 px-4 py-3 font-bold text-slate-900">Department</th>
                 <th className="sticky top-0 z-30 whitespace-nowrap border-r border-slate-300 border-b border-slate-200 bg-slate-100 px-4 py-3 font-bold text-slate-900">Designation</th>
                 <th className="sticky top-0 z-30 whitespace-nowrap border-r border-slate-300 border-b border-slate-200 bg-slate-100 px-4 py-3 font-bold text-slate-900">Joining Date</th>
+                <th className="sticky top-0 z-30 whitespace-nowrap border-r border-slate-300 border-b border-slate-200 bg-slate-100 px-4 py-3 font-bold text-slate-900">Total Professional Experience</th>
+                <th className="sticky top-0 z-30 whitespace-nowrap border-r border-slate-300 border-b border-slate-200 bg-slate-100 px-4 py-3 font-bold text-slate-900">Experience Level</th>
+                <th className="sticky top-0 z-30 whitespace-nowrap border-r border-slate-300 border-b border-slate-200 bg-slate-100 px-4 py-3 font-bold text-slate-900">Education</th>
+                <th className="sticky top-0 z-30 whitespace-nowrap border-r border-slate-300 border-b border-slate-200 bg-slate-100 px-4 py-3 font-bold text-slate-900">Previous Work</th>
                 {isAllSubmenu && (
                   <>
                     {role !== "hr" && (
@@ -1770,8 +2924,8 @@ export default function EmployeeTable({
                     <th className="sticky top-0 z-30 whitespace-nowrap border-r border-slate-300 border-b border-slate-200 bg-slate-100 px-4 py-3 font-bold text-slate-900">Appointment Date</th>
                     <th className="sticky top-0 z-30 whitespace-nowrap border-r border-slate-300 border-b border-slate-200 bg-slate-100 px-4 py-3 font-bold text-slate-900">Confirmation Date</th>
                     <th className="sticky top-0 z-30 whitespace-nowrap border-r border-slate-300 border-b border-slate-200 bg-slate-100 px-4 py-3 font-bold text-slate-900">Probation Duration</th>
-                    <th className="sticky top-0 z-30 whitespace-nowrap border-r border-slate-300 border-b border-slate-200 bg-slate-100 px-4 py-3 font-bold text-slate-900">Experience Level</th>
-                    <th className="sticky top-0 z-30 whitespace-nowrap border-r border-slate-300 border-b border-slate-200 bg-slate-100 px-4 py-3 font-bold text-slate-900">Total Experience</th>
+                    {/* <th className="sticky top-0 z-30 whitespace-nowrap border-r border-slate-300 border-b border-slate-200 bg-slate-100 px-4 py-3 font-bold text-slate-900">Experience Level</th> */}
+                    {/* <th className="sticky top-0 z-30 whitespace-nowrap border-r border-slate-300 border-b border-slate-200 bg-slate-100 px-4 py-3 font-bold text-slate-900">Total Experience</th> */}
                     <th className="sticky top-0 z-30 whitespace-nowrap border-r border-slate-300 border-b border-slate-200 bg-slate-100 px-4 py-3 font-bold text-slate-900">Probation End Date</th>
                     <th className="sticky top-0 z-30 whitespace-nowrap border-r border-slate-300 border-b border-slate-200 bg-slate-100 px-4 py-3 font-bold text-slate-900">Notice Period (Days)</th>
                     <th className="sticky top-0 z-30 whitespace-nowrap border-r border-slate-300 border-b border-slate-200 bg-slate-100 px-4 py-3 font-bold text-slate-900">Notice Status</th>
@@ -1853,6 +3007,89 @@ export default function EmployeeTable({
                     </td>
                     <td className="whitespace-nowrap border-r border-slate-200 border-b border-slate-100 px-4 py-3 text-sm font-medium text-slate-700">{emp.designation || "-"}</td>
                     <td className="whitespace-nowrap border-r border-slate-200 border-b border-slate-100 px-4 py-3 text-xs font-medium text-slate-500">{formatDate(emp.joining_date)}</td>
+                    <td className="whitespace-nowrap border-r border-slate-200 border-b border-slate-100 px-4 py-3 text-xs font-medium text-slate-500">{formatTotalExperience(emp)}</td>
+                    <td className="whitespace-nowrap border-r border-slate-200 border-b border-slate-100 px-4 py-3">
+                      <span className="text-xs font-medium text-slate-700">
+                        {formatTotalExperience(emp) !== "-"
+                          ? (() => {
+                              const experience = formatTotalExperience(emp);
+                              const years = parseInt(experience.match(/(\d+)\s*Year/i)?.[1] || "0", 10);
+                              const months = parseInt(experience.match(/(\d+)\s*Month/i)?.[1] || "0", 10);
+
+                              return years >= 1 || months >= 12 ? "Experienced" : "Fresher";
+                            })()
+                          : "-"}
+                      </span>
+                    </td>
+                    <td className="whitespace-nowrap border-r border-slate-200 border-b border-slate-100 px-4 py-3">
+                      {(() => {
+                        const records = (emp as EmployeeFilterRecord).education_records || []
+                        if (records.length === 0) {
+                          return <span className="text-xs text-slate-400">—</span>
+                        }
+                        const primary = records[0]
+                        const title = primary.qualification_name || primary.qualification_type || primary.course || "Education"
+                        const sub = [primary.institution_name || primary.university, primary.year_of_passing].filter(Boolean).join(" • ")
+                        const tooltip = records.map((r) => 
+                          `${r.qualification_name || r.qualification_type || r.course || "Degree"}${r.institution_name ? ` at ${r.institution_name}` : ""}${r.year_of_passing ? ` (${r.year_of_passing})` : ""}`
+                        ).join("\n")
+
+                        return (
+                          <div className="flex items-center gap-1.5" title={tooltip}>
+                            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-indigo-50 text-indigo-600">
+                              <GraduationCap className="h-3.5 w-3.5" />
+                            </div>
+                            <div className="min-w-0 max-w-[180px]">
+                              <p className="truncate text-xs font-semibold text-slate-700">{title}</p>
+                              {sub && <p className="truncate text-[11px] text-slate-400">{sub}</p>}
+                            </div>
+                            {records.length > 1 && (
+                              <span className="shrink-0 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-600">
+                                +{records.length - 1}
+                              </span>
+                            )}
+                          </div>
+                        )
+                      })()}
+                    </td>
+                    <td className="whitespace-nowrap border-r border-slate-200 border-b border-slate-100 px-4 py-3">
+                      {(() => {
+                        const records = (emp as EmployeeFilterRecord).previous_employment_records || []
+                        if (records.length === 0) {
+                          if ((emp as EmployeeFilterRecord).experience_level === "fresher") {
+                            return (
+                              <span className="inline-flex rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
+                                Fresher
+                              </span>
+                            )
+                          }
+                          return <span className="text-xs text-slate-400">—</span>
+                        }
+                        const primary = records[0]
+                        const company = primary.company_name || "Previous Company"
+                        const roleTitle = primary.designation || ""
+                        const tooltip = records.map((r) => 
+                          `${r.designation ? `${r.designation} at ` : ""}${r.company_name || "Company"}${r.employment_start_date ? ` (${r.employment_start_date.slice(0, 4)} - ${r.employment_end_date ? r.employment_end_date.slice(0, 4) : "Present"})` : ""}`
+                        ).join("\n")
+
+                        return (
+                          <div className="flex items-center gap-1.5" title={tooltip}>
+                            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-amber-50 text-amber-600">
+                              <Building2 className="h-3.5 w-3.5" />
+                            </div>
+                            <div className="min-w-0 max-w-[180px]">
+                              <p className="truncate text-xs font-semibold text-slate-700">{company}</p>
+                              {roleTitle && <p className="truncate text-[11px] text-slate-400">{roleTitle}</p>}
+                            </div>
+                            {records.length > 1 && (
+                              <span className="shrink-0 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-600">
+                                +{records.length - 1}
+                              </span>
+                            )}
+                          </div>
+                        )
+                      })()}
+                    </td>
                     {isAllSubmenu && (() => {
                       const details = emp as EmployeeFilterRecord
                       const eligibility = (value?: boolean | null) => (
@@ -1876,8 +3113,26 @@ export default function EmployeeTable({
                           <td className="whitespace-nowrap border-r border-slate-200 border-b border-slate-100 px-4 py-3 text-xs text-slate-500">{formatDate(details.appointment_date)}</td>
                           <td className="whitespace-nowrap border-r border-slate-200 border-b border-slate-100 px-4 py-3 text-xs text-slate-500">{formatDate(details.confirmation_date)}</td>
                           <td className="whitespace-nowrap border-r border-slate-200 border-b border-slate-100 px-4 py-3 text-xs text-slate-600">{details.probation_duration != null ? `${details.probation_duration} months` : "—"}</td>
-                          <td className="whitespace-nowrap border-r border-slate-200 border-b border-slate-100 px-4 py-3 text-xs capitalize text-slate-600">{details.experience_level? details.experience_level === "fresher"? "Fresher": "Experienced": "—"}</td>
-                          <td className="whitespace-nowrap border-r border-slate-200 border-b border-slate-100 px-4 py-3 text-xs text-slate-600">{formatTotalExperience(emp)}</td>
+                          {/* <td className="whitespace-nowrap border-r border-slate-200 border-b border-slate-100 px-4 py-3">
+                            {(() => {
+                              const joiningDate = parseLocalDate(emp.joining_date);
+                              if (!joiningDate) return "—";
+
+                              const today = new Date();
+                              const currentDate = new Date(
+                                today.getFullYear(),
+                                today.getMonth(),
+                                today.getDate()
+                              );
+
+                              const lastWorkingDate = parseLocalDate(getLastWorkingDate(emp));
+                              const endDate = lastWorkingDate || currentDate;
+                              const months = getCompletedMonths(joiningDate, endDate);
+
+                              return months >= 12 ? "Experienced" : "Fresher";
+                            })()}
+                          </td> */}
+                          {/* <td className="whitespace-nowrap border-r border-slate-200 border-b border-slate-100 px-4 py-3 text-xs text-slate-600">{formatTotalExperience(emp)}</td> */}
                           <td className="whitespace-nowrap border-r border-slate-200 border-b border-slate-100 px-4 py-3 text-xs text-slate-500">{formatDate(details.probation_end_date)}</td>
                           <td className="whitespace-nowrap border-r border-slate-200 border-b border-slate-100 px-4 py-3 text-xs text-slate-600">{details.notice_period_days ?? "—"}</td>
                           <td className="whitespace-nowrap border-r border-slate-200 border-b border-slate-100 px-4 py-3 text-xs capitalize text-slate-600">{details.notice_status?.replace(/_/g, " ") || "—"}</td>
@@ -1919,7 +3174,7 @@ export default function EmployeeTable({
                 ))
               ) : (
                 <tr>
-                  <td colSpan={(isFilterActive ? 1 : 0) + 7 + (isAllSubmenu ? (role === "hr" ? 22 : 23) : 0) + (showExitDetails ? 2 : 0)} className="px-6 py-16 text-center">
+                  <td colSpan={(isFilterActive ? 1 : 0) + 9 + (isAllSubmenu ? (role === "hr" ? 22 : 23) : 0) + (showExitDetails ? 2 : 0)} className="px-6 py-16 text-center">
                     <div className="mx-auto flex max-w-sm flex-col items-center">
                       <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-400"><UserCircle className="h-6 w-6" /></div>
                       <p className="text-sm font-bold text-slate-800">No employees found</p>

@@ -69,6 +69,70 @@ const ID_DOCUMENT_TYPES = [
 ];
 
 // ======================================================
+// HR INFORMATIONAL NOTIFICATION
+// ======================================================
+
+async function notifyHRAboutCertification(
+  employeeId: string,
+  documentName: string
+) {
+  try {
+    const admin = await createAdminClient();
+
+    const { data: hrProfiles, error: hrError } = await admin
+      .from('profiles')
+      .select('id')
+      .eq('role', 'hr');
+
+    if (hrError) {
+      console.error(
+        'Failed to fetch HR profiles for certification notification:',
+        hrError
+      );
+      return;
+    }
+
+    if (!hrProfiles?.length) {
+      console.log(
+        'No HR profiles found for certification notification.'
+      );
+      return;
+    }
+
+    const notifications = hrProfiles.map((hr) => ({
+      recipient_user_id: hr.id,
+      employee_id: employeeId,
+      title: 'Professional Certification Uploaded',
+      message: `An employee uploaded a Professional Certification: ${documentName}.`,
+      type: 'document_upload',
+      is_read: false,
+    }));
+
+    const { error: notificationError } = await admin
+      .from('notifications')
+      .insert(notifications);
+
+    if (notificationError) {
+      console.error(
+        'Professional Certification notification failed:',
+        notificationError
+      );
+      return;
+    }
+
+    console.log(
+      'Professional Certification notifications sent to HR.'
+    );
+  } catch (error) {
+    // Notification failure must not undo a successful upload.
+    console.error(
+      'Professional Certification notification error:',
+      error
+    );
+  }
+}
+
+// ======================================================
 // EXTRACT AADHAAR NUMBER
 // ======================================================
 
@@ -892,6 +956,17 @@ export async function POST(request: Request) {
     }
 
     // ==================================================
+    // DOCUMENT TYPE FLAGS
+    // ==================================================
+
+    const isProfessionalCertification =
+      document_type.trim().toLowerCase() ===
+      'professional certification';
+
+    const isBankPassbook =
+      document_type.trim().toLowerCase() === 'bank passbook';
+
+    // ==================================================
     // EXTRACT TEXT + OCR
     // ==================================================
 
@@ -909,14 +984,17 @@ export async function POST(request: Request) {
         await file.arrayBuffer()
       );
 
-      const isPDF =
-        file.type === 'application/pdf' ||
-        file.name.toLowerCase().endsWith('.pdf');
+      // Professional Certification does not require OCR.
+      if (!isProfessionalCertification) {
+        const isPDF =
+          file.type === 'application/pdf' ||
+          file.name.toLowerCase().endsWith('.pdf');
 
-      if (isPDF) {
-        extractedText = await extractTextFromPDF(fileBuffer);
-      } else {
-        extractedText = await runOCR(fileBuffer);
+        if (isPDF) {
+          extractedText = await extractTextFromPDF(fileBuffer);
+        } else {
+          extractedText = await runOCR(fileBuffer);
+        }
       }
     } catch (extractionError) {
       console.error(
@@ -937,10 +1015,9 @@ export async function POST(request: Request) {
     // DOCUMENT TYPE VALIDATION
     // ==================================================
 
-    const isDocumentMatching = validateDocumentType(
-      document_type,
-      extractedText
-    );
+    const isDocumentMatching =
+      isProfessionalCertification ||
+      validateDocumentType(document_type, extractedText);
 
     if (!isDocumentMatching) {
       return NextResponse.json(
@@ -981,9 +1058,6 @@ export async function POST(request: Request) {
     // EXTRACT BANK DETAILS FROM A VALIDATED PASSBOOK
     // ==================================================
 
-    const isBankPassbook =
-      document_type.trim().toLowerCase() === 'bank passbook';
-
     if (isBankPassbook) {
       bankIFSC = extractIFSC(extractedText);
       bankAccountNumber = extractBankAccountNumber(extractedText);
@@ -1007,116 +1081,10 @@ export async function POST(request: Request) {
     }
 
     // ==================================================
-    // SUPABASE
+    // AUTHENTICATE USER AND AUTHORIZE EMPLOYEE ACCESS
     // ==================================================
 
     const supabase = await createClient();
-
-    const allowsMultiple = MULTIPLE_DOCUMENT_TYPES.includes(
-      document_type
-    );
-
-    const verificationRequired =
-      HR_VERIFICATION_DOCUMENT_TYPES.includes(document_type);
-
-    let requiresApproval = false;
-
-    let existingDocument: {
-      id?: string;
-      cloudinary_public_id?: string | null;
-      cloudinary_resource_type?: string | null;
-      [key: string]: unknown;
-    } | null = null;
-
-    if (!allowsMultiple) {
-      if (verificationRequired) {
-        const { data, error } = await supabase
-          .from('employee_documents')
-          .select('*')
-          .eq('employee_id', employee_id)
-          .eq('document_type', document_type)
-          .eq('verification_status', 'approved')
-          .order('uploaded_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
-        if (error) {
-          console.error(
-            'Failed to find approved document:',
-            error
-          );
-
-          return NextResponse.json(
-            { message: 'Failed to check the existing document' },
-            { status: 500 }
-          );
-        }
-
-        existingDocument = data;
-
-        requiresApproval = verificationRequired;
-
-        // Prevent duplicate uploads while HR verification is pending.
-        const {
-          data: pendingDocument,
-          error: pendingError,
-        } = await supabase
-          .from('employee_documents')
-          .select('id')
-          .eq('employee_id', employee_id)
-          .eq('document_type', document_type)
-          .eq('verification_status', 'pending')
-          .limit(1)
-          .maybeSingle();
-
-        if (pendingError) {
-          console.error(
-            'Failed to check pending document:',
-            pendingError
-          );
-
-          return NextResponse.json(
-            { message: 'Failed to check pending verification' },
-            { status: 500 }
-          );
-        }
-
-        if (pendingDocument) {
-          return NextResponse.json(
-            {
-              message:
-                'A document of this type is already awaiting HR approval.',
-            },
-            { status: 409 }
-          );
-        }
-      } else {
-        const { data, error } = await supabase
-          .from('employee_documents')
-          .select('*')
-          .eq('employee_id', employee_id)
-          .eq('document_type', document_type)
-          .maybeSingle();
-
-        if (error) {
-          console.error(
-            'Failed to find existing document:',
-            error
-          );
-
-          return NextResponse.json(
-            { message: 'Failed to check the existing document' },
-            { status: 500 }
-          );
-        }
-
-        existingDocument = data;
-      }
-    }
-
-    // ======================================================
-    // AUTHENTICATE USER AND AUTHORIZE EMPLOYEE ACCESS
-    // ======================================================
 
     const {
       data: { user },
@@ -1171,9 +1139,7 @@ export async function POST(request: Request) {
           { status: 403 }
         );
       }
-    } else if (role === 'hr' || role === 'ceo') {
-      // HR and CEO can upload documents for employees.
-    } else {
+    } else if (role !== 'hr' && role !== 'ceo') {
       return NextResponse.json(
         {
           error:
@@ -1181,6 +1147,123 @@ export async function POST(request: Request) {
         },
         { status: 403 }
       );
+    }
+
+    // ==================================================
+    // SUPABASE DOCUMENT SETTINGS
+    // ==================================================
+
+    const allowsMultiple = MULTIPLE_DOCUMENT_TYPES.includes(
+      document_type
+    );
+
+    // Professional Certification is intentionally NOT
+    // included in HR_VERIFICATION_DOCUMENT_TYPES.
+    const verificationRequired =
+      HR_VERIFICATION_DOCUMENT_TYPES.includes(document_type);
+
+    let requiresApproval = verificationRequired;
+
+    let existingDocument: {
+      id?: string;
+      cloudinary_public_id?: string | null;
+      cloudinary_resource_type?: string | null;
+      [key: string]: unknown;
+    } | null = null;
+
+    // ==================================================
+    // FIND EXISTING DOCUMENT
+    // ==================================================
+
+    if (!allowsMultiple) {
+      if (verificationRequired) {
+        const { data, error } = await supabase
+          .from('employee_documents')
+          .select('*')
+          .eq('employee_id', employee_id)
+          .eq('document_type', document_type)
+          .eq('verification_status', 'approved')
+          .order('uploaded_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (error) {
+          console.error(
+            'Failed to find approved document:',
+            error
+          );
+
+          return NextResponse.json(
+            { message: 'Failed to check the existing document' },
+            { status: 500 }
+          );
+        }
+
+        existingDocument = data;
+
+        // Sensitive documents continue to require HR approval.
+        requiresApproval = true;
+
+        // Prevent duplicate uploads while HR verification is pending.
+        const {
+          data: pendingDocument,
+          error: pendingError,
+        } = await supabase
+          .from('employee_documents')
+          .select('id')
+          .eq('employee_id', employee_id)
+          .eq('document_type', document_type)
+          .eq('verification_status', 'pending')
+          .limit(1)
+          .maybeSingle();
+
+        if (pendingError) {
+          console.error(
+            'Failed to check pending document:',
+            pendingError
+          );
+
+          return NextResponse.json(
+            { message: 'Failed to check pending verification' },
+            { status: 500 }
+          );
+        }
+
+        if (pendingDocument) {
+          return NextResponse.json(
+            {
+              message:
+                'A document of this type is already awaiting HR approval.',
+            },
+            { status: 409 }
+          );
+        }
+      } else {
+        // For Professional Certification and other direct-upload
+        // document types, find the latest existing record.
+        const { data, error } = await supabase
+          .from('employee_documents')
+          .select('*')
+          .eq('employee_id', employee_id)
+          .eq('document_type', document_type)
+          .order('uploaded_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (error) {
+          console.error(
+            'Failed to find existing document:',
+            error
+          );
+
+          return NextResponse.json(
+            { message: 'Failed to check the existing document' },
+            { status: 500 }
+          );
+        }
+
+        existingDocument = data;
+      }
     }
 
     // ======================================================
@@ -1613,7 +1696,7 @@ export async function POST(request: Request) {
       }
 
       // ======================================================
-      // NEW: SEND DOCUMENT UPLOAD NOTIFICATION TO HR
+      // SEND DOCUMENT UPLOAD NOTIFICATION TO HR
       // ======================================================
 
       try {
@@ -1672,7 +1755,6 @@ export async function POST(request: Request) {
 
       revalidatePath(`/dashboard/employees/${employee_id}`);
 
-      // Preserve the previously approved record and its file.
       return NextResponse.json(
         {
           message: `${document_type} uploaded and submitted for HR approval.`,
@@ -1690,7 +1772,7 @@ export async function POST(request: Request) {
     }
 
     // ==================================================
-    // REPLACE EXISTING DOCUMENT
+    // REPLACE EXISTING DIRECT-UPLOAD DOCUMENT
     // ==================================================
 
     if (existingDocument) {
@@ -1704,6 +1786,15 @@ export async function POST(request: Request) {
           document_url: uploadResult.secure_url,
           cloudinary_public_id: uploadResult.public_id,
           cloudinary_resource_type: uploadResult.resource_type,
+
+          // Professional Certification is directly saved.
+          // This is not an HR approval request.
+          ...(isProfessionalCertification
+            ? {
+                verification_status: 'approved',
+              }
+            : {}),
+
           ...identityFields,
         })
         .eq('id', existingDocument.id)
@@ -1729,6 +1820,8 @@ export async function POST(request: Request) {
             cleanupError
           );
         }
+
+        uploadResult = null;
 
         return NextResponse.json(
           {
@@ -1761,17 +1854,33 @@ export async function POST(request: Request) {
       }
 
       // ==================================================
+      // HR INFORMATIONAL NOTIFICATION
+      // ==================================================
+
+      if (isProfessionalCertification) {
+        await notifyHRAboutCertification(
+          employee_id,
+          document_name.trim()
+        );
+      }
+
+      // ==================================================
       // REVALIDATE
       // ==================================================
 
       revalidatePath(`/dashboard/employees/${employee_id}`);
 
       return NextResponse.json({
-        message: `${document_type} replaced successfully`,
+        message: isProfessionalCertification
+          ? 'Professional Certification replaced successfully.'
+          : `${document_type} replaced successfully`,
         url: uploadResult.secure_url,
         public_id: uploadResult.public_id,
         document: updatedDocument,
         replaced: true,
+        verificationStatus: isProfessionalCertification
+          ? 'approved'
+          : updatedDocument.verification_status ?? null,
         extractedDetails: {
           ...(identityNumber
             ? {
@@ -1823,6 +1932,14 @@ export async function POST(request: Request) {
             }
           : {}),
 
+        // Professional Certification is stored directly.
+        // It does not wait for HR approval.
+        ...(isProfessionalCertification
+          ? {
+              verification_status: 'approved',
+            }
+          : {}),
+
         ...(isBankPassbook
           ? {
               bank_name: bankName,
@@ -1858,6 +1975,8 @@ export async function POST(request: Request) {
         );
       }
 
+      uploadResult = null;
+
       return NextResponse.json(
         {
           error:
@@ -1868,17 +1987,33 @@ export async function POST(request: Request) {
     }
 
     // ==================================================
+    // HR INFORMATIONAL NOTIFICATION
+    // ==================================================
+
+    if (isProfessionalCertification) {
+      await notifyHRAboutCertification(
+        employee_id,
+        document_name.trim()
+      );
+    }
+
+    // ==================================================
     // SUCCESS
     // ==================================================
 
     revalidatePath(`/dashboard/employees/${employee_id}`);
 
     return NextResponse.json({
-      message: `${document_type} uploaded successfully`,
+      message: isProfessionalCertification
+        ? 'Professional Certification uploaded successfully.'
+        : `${document_type} uploaded successfully`,
       url: uploadResult.secure_url,
       public_id: uploadResult.public_id,
       document: documentRecord,
       replaced: false,
+      verificationStatus: isProfessionalCertification
+        ? 'approved'
+        : documentRecord.verification_status ?? null,
 
       extractedDetails: {
         ...(identityNumber
@@ -1903,7 +2038,7 @@ export async function POST(request: Request) {
             }
           : {}),
       },
-    });
+    }, { status: 201 });
   } catch (error: unknown) {
     console.error('Upload error:', error);
 

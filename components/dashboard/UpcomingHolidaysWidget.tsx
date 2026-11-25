@@ -122,7 +122,7 @@ export default function UpcomingHolidaysWidget({
 
       {/* Decorative Golden Temple / celebration illustration matching screenshot */}
       <div
-        className="pointer-events-none absolute -bottom-1 right-0 h-24 w-36 sm:h-28 sm:w-44 bg-[url('/calbanner.png')] bg-contain bg-no-repeat bg-right-bottom opacity-85"
+        className="pointer-events-none absolute -bottom-1 right-0 h-24 w-36 sm:h-28 sm:w-44"
         aria-hidden="true"
       />
       <div

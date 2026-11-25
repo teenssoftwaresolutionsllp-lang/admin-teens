@@ -3,6 +3,8 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
+  useRef,
   useState,
   useSyncExternalStore,
   type FormEvent,
@@ -16,7 +18,273 @@ import {
   FileText,
   Eye,
   X,
+  Search,
+  Filter,
+  Plus,
+  ChevronDown,
+  Mail,
+  Phone,
+  CheckCircle2,
+  Clock,
+  ArrowRight,
+  Sparkles,
+  Award,
+  Send,
+  History,
+  LayoutList,
+  Check,
 } from "lucide-react";
+import jobTitlesData from "@/data/employee_job_titles.json";
+
+const jobTitlesList: string[] = Array.from(
+  new Set(
+    (
+      (jobTitlesData as { departments?: Array<{ titles?: string[] }> })
+        ?.departments || []
+    ).flatMap((dept) => dept.titles || [])
+  )
+).sort((a, b) => a.localeCompare(b));
+
+const jobTitlesDepartments: Array<{ name: string; titles: string[] }> = (
+  (jobTitlesData as { departments?: Array<{ name: string; titles?: string[] }> })
+    ?.departments || []
+).map((dept) => ({
+  name: dept.name,
+  titles: Array.from(new Set(dept.titles || [])).sort((a, b) =>
+    a.localeCompare(b)
+  ),
+}));
+
+function SearchableDesignationSelect({
+  value,
+  onChange,
+  required = false,
+  placeholder = "Select designation / role...",
+  className = "",
+}: {
+  value: string;
+  onChange: (val: string) => void;
+  required?: boolean;
+  placeholder?: string;
+  className?: string;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(event.target as Node)
+      ) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const timer = window.setTimeout(() => {
+      inputRef.current?.focus();
+    }, 50);
+
+    return () => window.clearTimeout(timer);
+  }, [isOpen]);
+
+  const filteredDepartments = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) {
+      return jobTitlesDepartments;
+    }
+    return jobTitlesDepartments
+      .map((dept) => {
+        const matchesDept = dept.name.toLowerCase().includes(q);
+        const matchedTitles = dept.titles.filter((t) =>
+          t.toLowerCase().includes(q)
+        );
+        if (matchesDept) {
+          return dept;
+        }
+        return {
+          ...dept,
+          titles: matchedTitles,
+        };
+      })
+      .filter((dept) => dept.titles.length > 0);
+  }, [query]);
+
+  const totalMatches = useMemo(() => {
+    return filteredDepartments.reduce(
+      (sum, dept) => sum + dept.titles.length,
+      0
+    );
+  }, [filteredDepartments]);
+
+  const isSelected = Boolean(value && value.trim());
+
+  return (
+    <div className={`relative ${className}`} ref={containerRef}>
+      <input
+        type="text"
+        tabIndex={-1}
+        value={value}
+        required={required}
+        readOnly
+        className="sr-only"
+        aria-hidden="true"
+      />
+
+      <button
+        type="button"
+        onClick={() => setIsOpen((prev) => !prev)}
+        className={`flex w-full items-center justify-between rounded-xl border bg-white px-3 py-2 text-left text-sm transition outline-none ${
+          isOpen
+            ? "border-indigo-500 ring-2 ring-indigo-100"
+            : isSelected
+              ? "border-slate-300 text-slate-900 font-medium"
+              : "border-slate-200 text-slate-400 hover:border-slate-300"
+        }`}
+      >
+        <span
+          className={`truncate mr-2 ${
+            isSelected ? "text-slate-900 font-medium" : "text-slate-400"
+          }`}
+        >
+          {isSelected ? value : placeholder}
+        </span>
+        <div className="flex items-center gap-1.5 shrink-0">
+          {isSelected && (
+            <span
+              role="button"
+              tabIndex={0}
+              onClick={(e) => {
+                e.stopPropagation();
+                onChange("");
+              }}
+              className="rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-rose-600 transition"
+              title="Clear designation"
+            >
+              <X className="h-3.5 w-3.5" />
+            </span>
+          )}
+          <ChevronDown
+            className={`h-4 w-4 text-slate-400 transition-transform ${
+              isOpen ? "rotate-180 text-indigo-600" : ""
+            }`}
+          />
+        </div>
+      </button>
+
+      {isOpen && (
+        <div className="absolute left-0 top-full z-50 mt-1 max-h-72 w-full min-w-[280px] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl ring-1 ring-black/5 animate-in fade-in zoom-in-95 duration-100 flex flex-col">
+          <div className="border-b border-slate-100 bg-slate-50/90 p-2">
+            <div className="relative flex items-center rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 shadow-2xs focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-100">
+              <Search className="h-4 w-4 text-slate-400 shrink-0 mr-2" />
+              <input
+                ref={inputRef}
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search role or designation..."
+                className="w-full bg-transparent text-xs text-slate-900 outline-none placeholder:text-slate-400 font-normal"
+              />
+              {query && (
+                <button
+                  type="button"
+                  onClick={() => setQuery("")}
+                  className="p-0.5 text-slate-400 hover:text-slate-600"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+            <div className="flex items-center justify-between px-1 pt-1.5 text-[10px] text-slate-400 font-medium">
+              <span>
+                {query
+                  ? `Found ${totalMatches} matching roles`
+                  : "Type to search or browse by department"}
+              </span>
+              <span className="text-[9px] uppercase tracking-wider text-slate-400 font-semibold">
+                287 Roles
+              </span>
+            </div>
+          </div>
+
+          <div className="max-h-56 overflow-y-auto divide-y divide-slate-100/60 py-1">
+            {value && !jobTitlesList.includes(value) && (
+              <div className="py-1">
+                <div className="sticky top-0 z-5 bg-amber-50/95 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-amber-700 backdrop-blur-xs">
+                  Current Designation
+                </div>
+                <div className="px-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onChange(value);
+                      setIsOpen(false);
+                    }}
+                    className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-xs bg-indigo-50 font-semibold text-indigo-700"
+                  >
+                    <span className="truncate">{value}</span>
+                    <Check className="h-3.5 w-3.5 shrink-0 text-indigo-600" />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {totalMatches === 0 ? (
+              <div className="p-4 text-center">
+                <p className="text-xs font-semibold text-slate-600">
+                  No matching roles found
+                </p>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Try searching with another keyword
+                </p>
+              </div>
+            ) : (
+              filteredDepartments.map((dept) => (
+                <div key={dept.name} className="py-1">
+                  <div className="sticky top-0 z-5 bg-slate-50/95 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-indigo-600/90 backdrop-blur-xs">
+                    {dept.name}
+                  </div>
+                  <div className="px-1">
+                    {dept.titles.map((title) => {
+                      const optSelected = value === title;
+                      return (
+                        <button
+                          key={title}
+                          type="button"
+                          onClick={() => {
+                            onChange(title);
+                            setIsOpen(false);
+                          }}
+                          className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-xs transition ${
+                            optSelected
+                              ? "bg-indigo-50 font-semibold text-indigo-700"
+                              : "text-slate-700 hover:bg-slate-100 hover:text-slate-900"
+                          }`}
+                        >
+                          <span className="truncate">{title}</span>
+                          {optSelected && (
+                            <Check className="h-3.5 w-3.5 shrink-0 text-indigo-600" />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 type Department = {
   id: string;
@@ -62,6 +330,13 @@ type Candidate = {
   employee_record_id?: string | null;
   conversion_status?: "not_started" | "processing" | "completed" | "failed";
   joining_letter_send_status?: "not_started" | "sending" | "sent" | "failed";
+  timeline_history?: {
+    offer_sent_at?: string | null;
+    offer_accepted_at?: string | null;
+    onboarding_submitted_at?: string | null;
+    onboarding_verified_at?: string | null;
+    joining_letter_sent_at?: string | null;
+  };
 };
 
 const initialForm = {
@@ -89,10 +364,65 @@ const statusLabels: Record<string, string> = {
   offer_sent: "Offer Sent",
   offer_accepted: "Offer Accepted",
   offer_declined: "Offer Declined",
-  joining_letter_sent: "Joining Letter Sent",
-  joined: "Joined",
+
+  // These are lifecycle statuses after offer acceptance.
+  // They must not become additional offer-status categories.
+  joining_letter_sent: "Offer Accepted",
+  joined: "Offer Accepted",
+
+  // Preserve these separate terminal lifecycle outcomes.
   cancelled: "Cancelled",
   expired: "Expired",
+};
+
+/**
+ * Returns true while the candidate is within 10 calendar days
+ * after their actual joining date.
+ *
+ * Example:
+ * Joining date: 01 November
+ * Last visible date: 11 November
+ * Hidden from: 12 November
+ *
+ * Uses India Standard Time for the current date and date-only
+ * arithmetic to avoid UTC/timezone conversion errors.
+ */
+const shouldShowJoinedCandidate = (
+  joiningDate: string | null | undefined
+): boolean => {
+  if (!joiningDate) return true;
+
+  const datePart = joiningDate.slice(0, 10);
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
+    return true;
+  }
+
+  const [year, month, day] = datePart.split("-").map(Number);
+
+  const joinedDate = new Date(Date.UTC(year, month - 1, day));
+
+  if (
+    Number.isNaN(joinedDate.getTime()) ||
+    joinedDate.getUTCFullYear() !== year ||
+    joinedDate.getUTCMonth() !== month - 1 ||
+    joinedDate.getUTCDate() !== day
+  ) {
+    return true;
+  }
+
+  joinedDate.setUTCDate(joinedDate.getUTCDate() + 10);
+
+  const lastVisibleDate = joinedDate.toISOString().slice(0, 10);
+
+  const todayIndia = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+
+  return todayIndia <= lastVisibleDate;
 };
 
 const inputClass =
@@ -100,6 +430,7 @@ const inputClass =
 
 const labelClass =
   "block text-xs sm:text-sm font-semibold text-slate-700";
+
 
 export default function JoiningCandidates() {
   const router = useRouter();
@@ -123,6 +454,8 @@ export default function JoiningCandidates() {
   const [offerEditForm, setOfferEditForm] = useState({
     first_name: "",
     last_name: "",
+    personal_email: "",
+    mobile_number: "",
     gender: "",
     designation: "",
     department: "",
@@ -145,6 +478,38 @@ export default function JoiningCandidates() {
     useState<Candidate | null>(null);
 
   const [moveLoading, setMoveLoading] = useState(false);
+
+  // Modal state for adding candidate
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [selectedHistoryCandidate, setSelectedHistoryCandidate] =
+    useState<Candidate | null>(null);
+
+  // Table View Mode: "standard" vs "history"
+  const [tableViewMode, setTableViewMode] = useState<"standard" | "history">("standard");
+
+  // Milestone History Filter
+  const [milestoneFilter, setMilestoneFilter] = useState<
+    | "all"
+    | "offer_sent"
+    | "offer_accepted"
+    | "onboarding_completed"
+    | "onboarding_verified"
+    | "joining_letter_sent"
+  >("all");
+
+  // Pipeline Filter states
+  const [pipelineSearch, setPipelineSearch] = useState("");
+  const [pipelineStatus, setPipelineStatus] = useState("all");
+  const [pipelineDept, setPipelineDept] = useState("all");
+  const [pipelineExp, setPipelineExp] = useState("all");
+  const [pipelineDatePreset, setPipelineDatePreset] = useState<
+    "all" | "next_7" | "next_30" | "this_month" | "next_month" | "past" | "custom"
+  >("all");
+  const [pipelineDateFrom, setPipelineDateFrom] = useState("");
+  const [pipelineDateTo, setPipelineDateTo] = useState("");
+  const [pipelineSort, setPipelineSort] = useState<
+    "newest" | "joining_asc" | "joining_desc" | "name_asc" | "ctc_desc"
+  >("newest");
 
   const [toast, setToast] = useState<{
     type: "success" | "error";
@@ -265,6 +630,397 @@ export default function JoiningCandidates() {
     return () => window.clearTimeout(timer);
   }, [loadCandidates]);
 
+  // Overall pipeline metrics
+  const pipelineMetrics = useMemo(() => {
+    let selected = 0;
+    let offerSent = 0;
+    let offerAccepted = 0;
+    let offerDeclined = 0;
+
+    let offerSentAtCount = 0;
+    let offerAcceptedAtCount = 0;
+    let onboardingSubmittedCount = 0;
+    let onboardingVerifiedCount = 0;
+    let joiningLetterSentCount = 0;
+
+    // Exclude joined candidates after their 10-day visibility period.
+    // Their original records remain in candidates and are available
+    // in Timeline History View.
+    const activeCandidates = candidates.filter(
+      (candidate) =>
+        candidate.status !== "joined" ||
+        shouldShowJoinedCandidate(candidate.joining_date)
+    );
+
+    activeCandidates.forEach((candidate) => {
+      if (candidate.status === "selected") {
+        selected++;
+      } else if (candidate.status === "offer_sent") {
+        offerSent++;
+      } else if (
+        [
+          "offer_accepted",
+          "joining_letter_sent",
+          "joined",
+        ].includes(candidate.status)
+      ) {
+        offerAccepted++;
+      } else if (candidate.status === "offer_declined") {
+        offerDeclined++;
+      }
+
+      if (candidate.timeline_history?.offer_sent_at) {
+        offerSentAtCount++;
+      }
+
+      if (candidate.timeline_history?.offer_accepted_at) {
+        offerAcceptedAtCount++;
+      }
+
+      if (candidate.timeline_history?.onboarding_submitted_at) {
+        onboardingSubmittedCount++;
+      }
+
+      if (candidate.timeline_history?.onboarding_verified_at) {
+        onboardingVerifiedCount++;
+      }
+
+      if (candidate.timeline_history?.joining_letter_sent_at) {
+        joiningLetterSentCount++;
+      }
+    });
+
+    return {
+      total: activeCandidates.length,
+      selected,
+      offerSent,
+      offerAccepted,
+      offerDeclined,
+      offerSentAtCount,
+      offerAcceptedAtCount,
+      onboardingSubmittedCount,
+      onboardingVerifiedCount,
+      joiningLetterSentCount,
+    };
+  }, [candidates]);
+
+  // Pipeline Filtered Candidates
+  // Pipeline Filtered Candidates
+  const filteredPipelineCandidates = useMemo(() => {
+    const term = pipelineSearch.trim().toLowerCase();
+
+    const now = new Date();
+
+    const todayStr = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Kolkata",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(now);
+
+    const currentYear = Number(todayStr.slice(0, 4));
+    const currentMonth = Number(todayStr.slice(5, 7)) - 1;
+
+    const getIndiaDateString = (date: Date) =>
+      new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Kolkata",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).format(date);
+
+    const d7 = new Date(now);
+    d7.setDate(d7.getDate() + 7);
+    const in7DaysStr = getIndiaDateString(d7);
+
+    const d30 = new Date(now);
+    d30.setDate(d30.getDate() + 30);
+    const in30DaysStr = getIndiaDateString(d30);
+
+    const thisMonthStart =
+      `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-01`;
+
+    const thisMonthEnd = getIndiaDateString(
+      new Date(currentYear, currentMonth + 1, 0)
+    );
+
+    const nextMonthYear =
+      currentMonth === 11 ? currentYear + 1 : currentYear;
+
+    const nextMonthNum =
+      currentMonth === 11 ? 1 : currentMonth + 2;
+
+    const nextMonthStart =
+      `${nextMonthYear}-${String(nextMonthNum).padStart(2, "0")}-01`;
+
+    const nextMonthEnd = getIndiaDateString(
+      new Date(nextMonthYear, nextMonthNum, 0)
+    );
+
+    return candidates
+      .filter((c) => {
+        // Joined candidates older than 10 days:
+        // Hide only in Pipeline View.
+        // Keep all records accessible in Timeline History View.
+        if (
+          tableViewMode === "standard" &&
+          c.status === "joined" &&
+          !shouldShowJoinedCandidate(c.joining_date)
+        ) {
+          return false;
+        }
+
+        // Search
+        if (term) {
+          const fullName =
+            `${c.first_name || ""} ${c.last_name || ""}`.toLowerCase();
+
+          const email = (c.personal_email || "").toLowerCase();
+          const phone = (c.mobile_number || "").toLowerCase();
+          const desig = (c.designation || "").toLowerCase();
+          const dept = (c.department || "").toLowerCase();
+
+          const matches =
+            fullName.includes(term) ||
+            email.includes(term) ||
+            phone.includes(term) ||
+            desig.includes(term) ||
+            dept.includes(term);
+
+          if (!matches) return false;
+        }
+
+        // Offer Status
+        if (pipelineStatus !== "all") {
+          if (pipelineStatus === "offer_accepted") {
+            if (
+              ![
+                "offer_accepted",
+                "joining_letter_sent",
+                "joined",
+              ].includes(c.status)
+            ) {
+              return false;
+            }
+          } else if (c.status !== pipelineStatus) {
+            return false;
+          }
+        }
+
+        // Department
+        if (pipelineDept !== "all" && c.department !== pipelineDept) {
+          return false;
+        }
+
+        // Experience Level
+        if (pipelineExp !== "all" && c.experience_level !== pipelineExp) {
+          return false;
+        }
+
+        // Milestone History Filter
+        if (milestoneFilter !== "all") {
+          if (
+            milestoneFilter === "offer_sent" &&
+            !c.timeline_history?.offer_sent_at
+          ) {
+            return false;
+          }
+
+          if (
+            milestoneFilter === "offer_accepted" &&
+            !c.timeline_history?.offer_accepted_at
+          ) {
+            return false;
+          }
+
+          if (
+            milestoneFilter === "onboarding_completed" &&
+            !c.timeline_history?.onboarding_submitted_at
+          ) {
+            return false;
+          }
+
+          if (
+            milestoneFilter === "onboarding_verified" &&
+            !c.timeline_history?.onboarding_verified_at
+          ) {
+            return false;
+          }
+
+          if (
+            milestoneFilter === "joining_letter_sent" &&
+            !c.timeline_history?.joining_letter_sent_at
+          ) {
+            return false;
+          }
+        }
+
+        // Joining Date
+        const joiningDate = (c.joining_date || "").slice(0, 10);
+
+        if (pipelineDatePreset === "next_7") {
+          if (
+            !joiningDate ||
+            joiningDate < todayStr ||
+            joiningDate > in7DaysStr
+          ) {
+            return false;
+          }
+        } else if (pipelineDatePreset === "next_30") {
+          if (
+            !joiningDate ||
+            joiningDate < todayStr ||
+            joiningDate > in30DaysStr
+          ) {
+            return false;
+          }
+        } else if (pipelineDatePreset === "this_month") {
+          if (
+            !joiningDate ||
+            joiningDate < thisMonthStart ||
+            joiningDate > thisMonthEnd
+          ) {
+            return false;
+          }
+        } else if (pipelineDatePreset === "next_month") {
+          if (
+            !joiningDate ||
+            joiningDate < nextMonthStart ||
+            joiningDate > nextMonthEnd
+          ) {
+            return false;
+          }
+        } else if (pipelineDatePreset === "past") {
+          if (!joiningDate || joiningDate >= todayStr) {
+            return false;
+          }
+        } else if (pipelineDatePreset === "custom") {
+          if (pipelineDateFrom && joiningDate < pipelineDateFrom) {
+            return false;
+          }
+
+          if (pipelineDateTo && joiningDate > pipelineDateTo) {
+            return false;
+          }
+        }
+
+        return true;
+      })
+      .sort((a, b) => {
+        if (pipelineSort === "newest") {
+          return (
+            new Date(b.created_at).getTime() -
+            new Date(a.created_at).getTime()
+          );
+        }
+
+        if (pipelineSort === "joining_asc") {
+          const dateA = a.joining_date || "9999-99-99";
+          const dateB = b.joining_date || "9999-99-99";
+
+          return dateA.localeCompare(dateB);
+        }
+
+        if (pipelineSort === "joining_desc") {
+          const dateA = a.joining_date || "0000-00-00";
+          const dateB = b.joining_date || "0000-00-00";
+
+          return dateB.localeCompare(dateA);
+        }
+
+        if (pipelineSort === "name_asc") {
+          const nameA =
+            `${a.first_name || ""} ${a.last_name || ""}`
+              .trim()
+              .toLowerCase();
+
+          const nameB =
+            `${b.first_name || ""} ${b.last_name || ""}`
+              .trim()
+              .toLowerCase();
+
+          return nameA.localeCompare(nameB);
+        }
+
+        if (pipelineSort === "ctc_desc") {
+          const ctcA = Number(a.annual_ctc || 0);
+          const ctcB = Number(b.annual_ctc || 0);
+
+          return ctcB - ctcA;
+        }
+
+        return 0;
+      });
+  }, [
+    candidates,
+    pipelineSearch,
+    pipelineStatus,
+    pipelineDept,
+    pipelineExp,
+    pipelineDatePreset,
+    pipelineDateFrom,
+    pipelineDateTo,
+    pipelineSort,
+    milestoneFilter,
+    tableViewMode,
+  ]);
+
+  const activePipelineFiltersCount = [
+    pipelineSearch.trim() !== "",
+    pipelineStatus !== "all",
+    pipelineDept !== "all",
+    pipelineExp !== "all",
+    milestoneFilter !== "all",
+    pipelineDatePreset !== "all" || Boolean(pipelineDateFrom) || Boolean(pipelineDateTo),
+  ].filter(Boolean).length;
+
+  const resetPipelineFilters = () => {
+    setPipelineSearch("");
+    setPipelineStatus("all");
+    setPipelineDept("all");
+    setPipelineExp("all");
+    setMilestoneFilter("all");
+    setPipelineDatePreset("all");
+    setPipelineDateFrom("");
+    setPipelineDateTo("");
+    setPipelineSort("newest");
+  };
+
+  function formatCandidateCurrency(amount?: number | string | null) {
+    if (!amount) return "—";
+    const num = Number(amount);
+    if (isNaN(num)) return String(amount);
+    return new Intl.NumberFormat("en-IN", {
+      style: "currency",
+      currency: "INR",
+      maximumFractionDigits: 0,
+    }).format(num);
+  }
+
+  function formatTimelineDate(dateStr?: string | null) {
+    if (!dateStr) return null;
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return dateStr;
+      return d.toLocaleString("en-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+      });
+    } catch {
+      return dateStr;
+    }
+  }
+
+  function getInitials(firstName?: string | null, lastName?: string | null) {
+    const f = (firstName || "").trim()[0] || "";
+    const l = (lastName || "").trim()[0] || "";
+    return (f + l).toUpperCase() || "EC";
+  }
+
   function updateField(field: keyof typeof initialForm, value: string) {
     setForm((current) => ({ ...current, [field]: value }));
   }
@@ -305,6 +1061,24 @@ export default function JoiningCandidates() {
       months === 0
     ) {
       showToast("error", "Enter the candidate's total experience.");
+      return;
+    }
+
+    if (
+      !form.first_name.trim() ||
+      !form.last_name.trim() ||
+      !form.personal_email.trim() ||
+      !form.mobile_number.trim() ||
+      !form.gender ||
+      !form.designation.trim() ||
+      !form.department ||
+      !form.employment_type ||
+      !form.work_location
+    ) {
+      showToast(
+        "error",
+        "Complete all required personal and job fields, including designation."
+      );
       return;
     }
 
@@ -358,8 +1132,9 @@ export default function JoiningCandidates() {
 
       setForm(initialForm);
       await loadCandidates();
+      setIsCreateModalOpen(false);
 
-      showToast("success", "Joining candidate saved successfully.");
+      showToast("success", "Candidate offer setup saved successfully.");
     } catch (err) {
       showToast(
         "error",
@@ -414,6 +1189,8 @@ export default function JoiningCandidates() {
     setOfferEditForm({
       first_name: candidate.first_name ?? "",
       last_name: candidate.last_name ?? "",
+      personal_email: candidate.personal_email ?? "",
+      mobile_number: candidate.mobile_number ?? "",
       gender: candidate.gender ?? "",
       designation: candidate.designation ?? "",
       department: candidate.department ?? "",
@@ -467,6 +1244,8 @@ export default function JoiningCandidates() {
     if (
       !offerEditForm.first_name.trim() ||
       !offerEditForm.last_name.trim() ||
+      !offerEditForm.personal_email.trim() ||
+      !offerEditForm.mobile_number.trim() ||
       !offerEditForm.gender ||
       !offerEditForm.designation.trim() ||
       !offerEditForm.department ||
@@ -478,8 +1257,25 @@ export default function JoiningCandidates() {
       !offerEditForm.tds_eligible
     ) {
       setOfferEditError(
-        "Please complete all employment and statutory applicability details."
+        "Please complete all candidate, employment, and statutory details."
       );
+      return;
+    }
+
+    if (
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+        offerEditForm.personal_email.trim()
+      )
+    ) {
+      setOfferEditError("Enter a valid personal email address.");
+      return;
+    }
+
+    if (
+      offerEditForm.mobile_number.trim().length < 7 ||
+      offerEditForm.mobile_number.trim().length > 20
+    ) {
+      setOfferEditError("Enter a valid mobile number (7 to 20 digits).");
       return;
     }
 
@@ -530,6 +1326,8 @@ export default function JoiningCandidates() {
           ...offerEditForm,
           first_name: offerEditForm.first_name.trim(),
           last_name: offerEditForm.last_name.trim(),
+          personal_email: offerEditForm.personal_email.trim(),
+          mobile_number: offerEditForm.mobile_number.trim(),
           annual_ctc: Math.round(ctc * 100000),
           total_experience_years: years,
           total_experience_months: months,
@@ -688,50 +1486,259 @@ export default function JoiningCandidates() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-            Add Joining Candidate
+            Offers & Pre-Onboarding
           </h1>
 
           <p className="mt-1 text-xs text-slate-500 sm:text-sm">
-            Manage joining candidates and their offer letters.
+            Manage selected candidates, generate offer letters, and track candidate pre-onboarding.
           </p>
         </div>
 
-        <div className="flex items-center gap-3 rounded-2xl border border-slate-200/90 bg-white px-4 py-3 shadow-xs">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-indigo-100 bg-indigo-50 text-indigo-600">
-            <Users className="h-5 w-5" />
-          </div>
-
-          <div>
-            <p className="text-xs font-medium text-slate-500">
-              Total candidates
-            </p>
-            <p className="text-lg font-bold text-slate-900">
-              {candidates.length}
-            </p>
-          </div>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setIsCreateModalOpen(true)}
+            className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs sm:text-sm font-semibold text-white shadow-xs hover:bg-indigo-700 shadow-indigo-100 transition cursor-pointer"
+          >
+            <Plus className="h-4 w-4" />
+            <span>Add New Candidate</span>
+          </button>
         </div>
       </div>
 
-      {/* New candidate form */}
-      <section className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-sm sm:p-7">
-        <div className="mb-6 flex items-center gap-3">
-          <div className="rounded-xl border border-indigo-100 bg-indigo-50 p-2.5">
-            <UserPlus className="h-5 w-5 text-indigo-600" />
+      {/* KPI Metrics Cards (Clickable Filters) */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        {/* Total Candidates */}
+        <button
+          type="button"
+          onClick={() => setPipelineStatus("all")}
+          className={`relative overflow-hidden rounded-2xl border p-4 text-left shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md cursor-pointer ${
+            pipelineStatus === "all"
+              ? "border-indigo-400 bg-gradient-to-br from-indigo-100/90 via-white to-indigo-50/60 ring-2 ring-indigo-500 shadow-md"
+              : "border-indigo-100 bg-gradient-to-br from-indigo-50/70 via-white to-indigo-50/30 hover:border-indigo-300"
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wider text-indigo-700">
+              Total Pipeline
+            </span>
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-xs">
+              <Users className="h-4 w-4" />
+            </div>
+          </div>
+          <p className="mt-2 text-2xl sm:text-3xl font-extrabold text-slate-900">
+            {pipelineMetrics.total}
+          </p>
+          <div className="mt-1 flex items-center justify-between">
+            <span className="text-xs text-indigo-600/80 font-medium truncate">
+              Candidates in pre-onboarding
+            </span>
+            {pipelineStatus === "all" && (
+              <span className="shrink-0 rounded-full bg-indigo-600 px-2 py-0.5 text-[10px] font-bold text-white">
+                Active
+              </span>
+            )}
+          </div>
+        </button>
+
+        {/* Offers Sent */}
+        <button
+          type="button"
+          onClick={() =>
+            setPipelineStatus(
+              pipelineStatus === "offer_sent" ? "all" : "offer_sent"
+            )
+          }
+          className={`relative overflow-hidden rounded-2xl border p-4 text-left shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md cursor-pointer ${
+            pipelineStatus === "offer_sent"
+              ? "border-blue-400 bg-gradient-to-br from-blue-100/90 via-white to-blue-50/60 ring-2 ring-blue-500 shadow-md"
+              : "border-blue-100 bg-gradient-to-br from-blue-50/70 via-white to-blue-50/30 hover:border-blue-300"
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wider text-blue-700">
+              Offers Sent
+            </span>
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-blue-600 text-white shadow-xs">
+              <Send className="h-4 w-4" />
+            </div>
+          </div>
+          <p className="mt-2 text-2xl sm:text-3xl font-extrabold text-slate-900">
+            {pipelineMetrics.offerSent}
+          </p>
+          <div className="mt-1 flex items-center justify-between">
+            <span className="text-xs text-blue-600/80 font-medium truncate">
+              Awaiting candidate decision
+            </span>
+            {pipelineStatus === "offer_sent" && (
+              <span className="shrink-0 rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-bold text-white">
+                Active
+              </span>
+            )}
+          </div>
+        </button>
+
+        {/* Offers Accepted */}
+        <button
+          type="button"
+          onClick={() =>
+            setPipelineStatus(
+              pipelineStatus === "offer_accepted" ? "all" : "offer_accepted"
+            )
+          }
+          className={`relative overflow-hidden rounded-2xl border p-4 text-left shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md cursor-pointer ${
+            pipelineStatus === "offer_accepted"
+              ? "border-emerald-400 bg-gradient-to-br from-emerald-100/90 via-white to-emerald-50/60 ring-2 ring-emerald-500 shadow-md"
+              : "border-emerald-100 bg-gradient-to-br from-emerald-50/70 via-white to-emerald-50/30 hover:border-emerald-300"
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wider text-emerald-700">
+              Offers Accepted
+            </span>
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-xs">
+              <CheckCircle2 className="h-4 w-4" />
+            </div>
+          </div>
+          <p className="mt-2 text-2xl sm:text-3xl font-extrabold text-slate-900">
+            {pipelineMetrics.offerAccepted}
+          </p>
+          <div className="mt-1 flex items-center justify-between">
+            <span className="text-xs text-emerald-600/80 font-medium truncate">
+              Ready to move to Add Employee
+            </span>
+            {pipelineStatus === "offer_accepted" && (
+              <span className="shrink-0 rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-bold text-white">
+                Active
+              </span>
+            )}
+          </div>
+        </button>
+
+        {/* Offer Selected / Draft */}
+        <button
+          type="button"
+          onClick={() =>
+            setPipelineStatus(
+              pipelineStatus === "selected" ? "all" : "selected"
+            )
+          }
+          className={`relative overflow-hidden rounded-2xl border p-4 text-left shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md cursor-pointer ${
+            pipelineStatus === "selected"
+              ? "border-amber-400 bg-gradient-to-br from-amber-100/90 via-white to-amber-50/60 ring-2 ring-amber-500 shadow-md"
+              : "border-amber-100 bg-gradient-to-br from-amber-50/70 via-white to-amber-50/30 hover:border-amber-300"
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wider text-amber-700">
+              Selected
+            </span>
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-500 text-white shadow-xs">
+              <Clock className="h-4 w-4" />
+            </div>
+          </div>
+          <p className="mt-2 text-2xl sm:text-3xl font-extrabold text-slate-900">
+            {pipelineMetrics.selected}
+          </p>
+          <div className="mt-1 flex items-center justify-between">
+            <span className="text-xs text-amber-600/80 font-medium truncate">
+              Draft / offer not yet generated
+            </span>
+            {pipelineStatus === "selected" && (
+              <span className="shrink-0 rounded-full bg-amber-600 px-2 py-0.5 text-[10px] font-bold text-white">
+                Active
+              </span>
+            )}
+          </div>
+        </button>
+
+        {/* Offers Declined */}
+        <button
+          type="button"
+          onClick={() =>
+            setPipelineStatus(
+              pipelineStatus === "offer_declined" ? "all" : "offer_declined"
+            )
+          }
+          className={`relative overflow-hidden rounded-2xl border p-4 text-left shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md cursor-pointer ${
+            pipelineStatus === "offer_declined"
+              ? "border-red-400 bg-gradient-to-br from-red-100/90 via-white to-red-50/60 ring-2 ring-red-500 shadow-md"
+              : "border-red-100 bg-gradient-to-br from-red-50/70 via-white to-red-50/30 hover:border-red-300"
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wider text-red-700">
+              Offers Declined
+            </span>
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-red-600 text-white shadow-xs">
+              <X className="h-4 w-4" />
+            </div>
           </div>
 
-          <div>
-            <h2 className="font-semibold text-slate-900">
-              New Joining Candidate
-            </h2>
+          <p className="mt-2 text-2xl sm:text-3xl font-extrabold text-slate-900">
+            {pipelineMetrics.offerDeclined}
+          </p>
 
-            <p className="text-xs text-slate-500 sm:text-sm">
-              Add candidate and employment details. Saving a candidate does
-              not create an employee record or employee login.
-            </p>
+          <div className="mt-1 flex items-center justify-between">
+            <span className="text-xs text-red-600/80 font-medium truncate">
+              Candidates who declined the offer
+            </span>
+
+            {pipelineStatus === "offer_declined" && (
+              <span className="shrink-0 rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-bold text-white">
+                Active
+              </span>
+            )}
           </div>
-        </div>
+        </button>
+      </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+      {/* New Candidate & Offer Setup Modal */}
+      {isMounted &&
+        isCreateModalOpen &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[9990] flex items-center justify-center overflow-y-auto bg-slate-950/60 p-4 backdrop-blur-sm"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget && !saving) {
+                setIsCreateModalOpen(false);
+              }
+            }}
+          >
+            <div className="relative my-auto max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-2xl bg-white shadow-2xl border border-slate-200">
+              {/* Modal Header */}
+              <div className="sticky top-0 z-20 flex items-center justify-between border-b border-slate-200 bg-white px-6 py-4">
+                <div className="flex items-center gap-3">
+                  <div className="rounded-xl border border-indigo-100 bg-indigo-50 p-2.5">
+                    <UserPlus className="h-5 w-5 text-indigo-600" />
+                  </div>
+
+                  <div>
+                    <h2 className="font-bold text-slate-900 text-base sm:text-lg">
+                      New Candidate & Offer Setup
+                    </h2>
+
+                    <p className="text-xs text-slate-500">
+                      Add candidate and employment details. Saving a candidate does
+                      not create an employee record or employee login.
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setIsCreateModalOpen(false)}
+                  disabled={saving}
+                  className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition disabled:opacity-50"
+                  aria-label="Close candidate modal"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              {/* Form Body */}
+              <div className="p-6">
+                <form onSubmit={handleSubmit} className="space-y-6">
           <div>
             <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-500">
               Personal and job details
@@ -816,15 +1823,10 @@ export default function JoiningCandidates() {
 
               <label className={labelClass}>
                 Designation *
-                <input
-                  required
-                  maxLength={150}
+                <SearchableDesignationSelect
                   value={form.designation}
-                  onChange={(e) =>
-                    updateField("designation", e.target.value)
-                  }
-                  className={inputClass}
-                  placeholder="Job title"
+                  onChange={(val) => updateField("designation", val)}
+                  required
                 />
               </label>
 
@@ -1067,7 +2069,14 @@ export default function JoiningCandidates() {
             </p>
           </div>
 
-          <div className="flex justify-end border-t border-slate-100 pt-5">
+          <div className="flex justify-end gap-3 border-t border-slate-100 pt-5">
+            <button
+              type="button"
+              onClick={() => setIsCreateModalOpen(false)}
+              className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition"
+            >
+              Cancel
+            </button>
             <button
               type="submit"
               disabled={
@@ -1075,71 +2084,508 @@ export default function JoiningCandidates() {
                 departmentsLoading ||
                 departments.length === 0
               }
-              className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-6 py-2.5 text-sm font-semibold text-white shadow-xs transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <UserPlus className="h-4 w-4" />
-              {saving ? "Saving..." : "Save Candidate"}
+              {saving ? "Saving..." : "Save Candidate & Setup Offer"}
             </button>
           </div>
         </form>
-      </section>
+      </div>
+    </div>
+  </div>,
+  document.body
+)}
 
-      {/* Joining pipeline */}
-      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 p-5">
+      {/* Candidate Offers Pipeline Section */}
+      <section className="overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-sm space-y-4 p-5 sm:p-6">
+        {/* Section Header */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 pb-4">
           <div>
-            <h2 className="font-semibold text-slate-900">
-              Joining Pipeline
+            <h2 className="text-base sm:text-lg font-bold text-slate-900">
+              Candidate Offer Pipeline
             </h2>
-
-            <p className="mt-1 text-sm text-slate-500">
-              Candidates and their current offer status.
+            <p className="text-xs text-slate-500 font-medium">
+              Track candidate offer statuses, preview documents, and audit timeline history across candidates.
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={() => void loadCandidates()}
-            disabled={loading}
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-          >
-            <RefreshCw
-              className={`h-4 w-4 ${loading ? "animate-spin" : ""}`}
-            />
-            Refresh
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            {/* View Mode Toggle: Standard Pipeline vs Timeline History */}
+            <div className="inline-flex rounded-xl border border-slate-200 bg-slate-100/80 p-0.5 text-xs font-semibold">
+              <button
+                type="button"
+                onClick={() => setTableViewMode("standard")}
+                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 transition ${
+                  tableViewMode === "standard"
+                    ? "bg-white text-indigo-700 shadow-xs"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <LayoutList className="h-3.5 w-3.5" />
+                Pipeline View
+              </button>
+              <button
+                type="button"
+                onClick={() => setTableViewMode("history")}
+                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 transition ${
+                  tableViewMode === "history"
+                    ? "bg-white text-indigo-700 shadow-xs"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <History className="h-3.5 w-3.5" />
+                Timeline History View
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => void loadCandidates()}
+              disabled={loading}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-xs transition hover:bg-slate-50 disabled:opacity-50 self-start sm:self-auto"
+            >
+              <RefreshCw
+                className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`}
+              />
+              Refresh Pipeline
+            </button>
+          </div>
         </div>
 
+        {/* Filters Toolbar */}
+        <div className="space-y-3 rounded-xl border border-slate-100 bg-slate-50/60 p-3.5 sm:p-4">
+          {/* Top row: Search input + Status Tabs */}
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            {/* Search Input */}
+            <div className="relative flex-1 min-w-0 max-w-md">
+              <Search className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <input
+                type="text"
+                value={pipelineSearch}
+                onChange={(e) => setPipelineSearch(e.target.value)}
+                placeholder="Search candidate name, email, phone, role..."
+                className="w-full rounded-xl border border-slate-200 bg-white pl-10 pr-4 py-2 text-xs text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+              />
+              {pipelineSearch && (
+                <button
+                  type="button"
+                  onClick={() => setPipelineSearch("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Quick Status Tabs */}
+            <div className="flex flex-wrap items-center gap-1.5 overflow-x-auto pb-1 lg:pb-0">
+              {[
+                { id: "all", label: "Entire Pipeline", count: pipelineMetrics.total },
+                { id: "selected", label: "Selected", count: pipelineMetrics.selected },
+                { id: "offer_sent", label: "Offer Sent", count: pipelineMetrics.offerSent },
+                { id: "offer_accepted", label: "Offer Accepted", count: pipelineMetrics.offerAccepted },
+                { id: "offer_declined", label: "Offer Declined", count: pipelineMetrics.offerDeclined },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setPipelineStatus(tab.id)}
+                  className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition whitespace-nowrap ${
+                    pipelineStatus === tab.id
+                      ? "bg-indigo-600 text-white shadow-xs"
+                      : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-100"
+                  }`}
+                >
+                  {tab.label} ({tab.count})
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Second row: Dropdowns */}
+          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4 pt-1 border-t border-slate-200/60">
+            {/* Department Filter */}
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1">
+                Department
+              </label>
+              <select
+                value={pipelineDept}
+                onChange={(e) => setPipelineDept(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 outline-none transition focus:border-indigo-500"
+              >
+                <option value="all">All Departments</option>
+                {departments.map((dept) => (
+                  <option key={dept.id} value={dept.name}>
+                    {dept.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Experience Level Filter */}
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1">
+                Experience Level
+              </label>
+              <select
+                value={pipelineExp}
+                onChange={(e) => setPipelineExp(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 outline-none transition focus:border-indigo-500"
+              >
+                <option value="all">All Levels</option>
+                <option value="fresher">Fresher</option>
+                <option value="experienced">Experienced</option>
+              </select>
+            </div>
+
+            {/* Joining Date Period */}
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                Joining Date Period
+              </label>
+              <select
+                value={pipelineDatePreset}
+                onChange={(e) => {
+                  const val = e.target.value as typeof pipelineDatePreset;
+                  setPipelineDatePreset(val);
+                  if (val !== "custom") {
+                    setPipelineDateFrom("");
+                    setPipelineDateTo("");
+                  }
+                }}
+                className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 outline-none transition focus:border-indigo-500"
+              >
+                <option value="all">Any Time</option>
+                <option value="next_7">Upcoming 7 Days (Future)</option>
+                <option value="next_30">Upcoming 30 Days (Future)</option>
+                <option value="this_month">This Month</option>
+                <option value="next_month">Upcoming Month (Future)</option>
+                <option value="past">Past Dates (History)</option>
+                <option value="custom">Custom Range...</option>
+              </select>
+            </div>
+
+            {/* Sort By */}
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1">
+                Sort By
+              </label>
+              <select
+                value={pipelineSort}
+                onChange={(e) => setPipelineSort(e.target.value as typeof pipelineSort)}
+                className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 outline-none transition focus:border-indigo-500"
+              >
+                <option value="newest">Recently Added</option>
+                <option value="joining_asc">Joining Date (Earliest)</option>
+                <option value="joining_desc">Joining Date (Latest)</option>
+                <option value="name_asc">Name (A – Z)</option>
+                <option value="ctc_desc">Annual CTC (Highest)</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Custom Date Inputs if selected */}
+          {pipelineDatePreset === "custom" && (
+            <div className="flex flex-wrap items-center gap-3 pt-1">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-slate-500">From:</span>
+                <input
+                  type="date"
+                  value={pipelineDateFrom}
+                  onChange={(e) => setPipelineDateFrom(e.target.value)}
+                  className="rounded-xl border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700 outline-none focus:border-indigo-500"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-slate-500">To:</span>
+                <input
+                  type="date"
+                  value={pipelineDateTo}
+                  onChange={(e) => setPipelineDateTo(e.target.value)}
+                  className="rounded-xl border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700 outline-none focus:border-indigo-500"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Milestone Filter Row */}
+          <div className="pt-2 border-t border-slate-200/60">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap flex items-center gap-1.5">
+                <Clock className="h-3.5 w-3.5 text-indigo-500" />
+                Milestone Filter:
+              </span>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {([
+                  { id: "all", label: "All Lifecycle Stages", count: candidates.length },
+                  { id: "offer_sent", label: "Offer Sent", count: pipelineMetrics.offerSentAtCount },
+                  { id: "offer_accepted", label: "Offer Accepted", count: pipelineMetrics.offerAcceptedAtCount },
+                  { id: "onboarding_completed", label: "Onboarding Completed", count: pipelineMetrics.onboardingSubmittedCount },
+                  { id: "onboarding_verified", label: "Onboarding Verified", count: pipelineMetrics.onboardingVerifiedCount },
+                  { id: "joining_letter_sent", label: "Joining Letter Sent", count: pipelineMetrics.joiningLetterSentCount },
+                ] as const).map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setMilestoneFilter(item.id)}
+                    className={`rounded-lg px-2.5 py-1 text-xs transition ${
+                      milestoneFilter === item.id
+                        ? "bg-slate-900 text-white shadow-xs font-semibold"
+                        : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 font-medium"
+                    }`}
+                  >
+                    {item.label} ({item.count})
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Active filter count and reset button */}
+          {activePipelineFiltersCount > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-200/60 text-xs">
+              <div className="flex items-center gap-2 text-slate-600 font-medium">
+                <Filter className="h-3.5 w-3.5 text-indigo-600" />
+                <span>
+                  Showing <strong>{filteredPipelineCandidates.length}</strong> of{" "}
+                  <strong>{candidates.length}</strong> candidates
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={resetPipelineFilters}
+                className="inline-flex items-center gap-1 font-semibold text-rose-600 hover:text-rose-700 hover:underline"
+              >
+                <X className="h-3.5 w-3.5" />
+                Reset Pipeline Filters
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Pipeline Table */}
         {loading ? (
-          <p className="p-6 text-sm text-slate-500">
-            Loading candidates...
-          </p>
+          <div className="py-12 text-center text-sm text-slate-500 space-y-2">
+            <RefreshCw className="mx-auto h-6 w-6 animate-spin text-indigo-600" />
+            <p>Loading candidate offer pipeline...</p>
+          </div>
         ) : candidates.length === 0 ? (
-          <p className="p-6 text-sm text-slate-500">
-            No joining candidates yet. Add your first candidate above.
-          </p>
+          <div className="rounded-2xl border border-dashed border-slate-200 p-10 text-center space-y-3">
+            <UserPlus className="mx-auto h-8 w-8 text-slate-300" />
+            <h3 className="font-bold text-slate-800 text-sm sm:text-base">
+              No candidates in pipeline yet
+            </h3>
+            <p className="text-xs text-slate-500 max-w-md mx-auto">
+              Click the &quot;Add New Candidate&quot; button above to create candidate details and generate an offer letter.
+            </p>
+            <button
+              type="button"
+              onClick={() => setIsCreateModalOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-xs hover:bg-indigo-700 transition"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Add First Candidate
+            </button>
+          </div>
+        ) : filteredPipelineCandidates.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-slate-200 p-8 text-center space-y-2.5">
+            <Search className="mx-auto h-7 w-7 text-slate-300" />
+            <h3 className="font-bold text-slate-800 text-sm">
+              No candidates match your filters
+            </h3>
+            <p className="text-xs text-slate-500">
+              Try adjusting your search keywords, status, or date filters.
+            </p>
+            <button
+              type="button"
+              onClick={resetPipelineFilters}
+              className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:underline pt-1"
+            >
+              Clear Filters
+            </button>
+          </div>
+        ) : tableViewMode === "history" ? (
+          /* Multi-candidate Timeline History Table */
+          <div className="w-full overflow-x-auto rounded-xl border border-slate-200/80">
+            <table className="w-full min-w-[1100px] text-left text-xs sm:text-sm">
+              <thead className="border-b border-slate-200 bg-slate-50/80 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                <tr>
+                  <th className="min-w-[190px] whitespace-nowrap px-4 py-3.5">
+                    Candidate
+                  </th>
+                  <th className="min-w-[140px] whitespace-nowrap px-4 py-3.5">
+                    Profile Created
+                  </th>
+                  <th className="min-w-[150px] whitespace-nowrap px-4 py-3.5">
+                    Offer Sent
+                  </th>
+                  <th className="min-w-[150px] whitespace-nowrap px-4 py-3.5">
+                    Offer Accepted
+                  </th>
+                  <th className="min-w-[160px] whitespace-nowrap px-4 py-3.5">
+                    Onboarding Completed
+                  </th>
+                  <th className="min-w-[160px] whitespace-nowrap px-4 py-3.5">
+                    Onboarding Verified
+                  </th>
+                  <th className="min-w-[160px] whitespace-nowrap px-4 py-3.5">
+                    Joining Letter Sent
+                  </th>
+                  <th className="min-w-[110px] whitespace-nowrap px-4 py-3.5 text-right">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+
+              <tbody className="divide-y divide-slate-100">
+                {filteredPipelineCandidates.map((candidate) => (
+                  <tr
+                    key={candidate.id}
+                    className="transition-colors hover:bg-slate-50/70"
+                  >
+                    {/* Candidate */}
+                    <td className="px-4 py-3.5 align-middle">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-700 text-white font-bold text-xs shadow-xs">
+                          {getInitials(candidate.first_name, candidate.last_name)}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-bold text-slate-900 truncate">
+                            {candidate.first_name} {candidate.last_name}
+                          </p>
+                          <p className="text-[11px] text-indigo-600 font-medium truncate">
+                            {candidate.designation} · {candidate.department || "General"}
+                          </p>
+                        </div>
+                      </div>
+                    </td>
+
+                    {/* Profile Created */}
+                    <td className="px-4 py-3.5 align-middle">
+                      <div className="text-xs text-slate-700">
+                        {formatTimelineDate(candidate.created_at) || "—"}
+                      </div>
+                    </td>
+
+                    {/* Offer Sent */}
+                    <td className="px-4 py-3.5 align-middle">
+                      {candidate.timeline_history?.offer_sent_at ? (
+                        <div className="flex items-center gap-1.5 text-emerald-700">
+                          <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
+                          <span className="text-xs font-medium">
+                            {formatTimelineDate(candidate.timeline_history.offer_sent_at)}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500">
+                          <Clock className="h-3 w-3" /> Not Sent
+                        </span>
+                      )}
+                    </td>
+
+                    {/* Offer Accepted */}
+                    <td className="px-4 py-3.5 align-middle">
+                      {candidate.timeline_history?.offer_accepted_at ? (
+                        <div className="flex items-center gap-1.5 text-emerald-700">
+                          <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
+                          <span className="text-xs font-medium">
+                            {formatTimelineDate(candidate.timeline_history.offer_accepted_at)}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500">
+                          <Clock className="h-3 w-3" /> Awaiting
+                        </span>
+                      )}
+                    </td>
+
+                    {/* Onboarding Completed */}
+                    <td className="px-4 py-3.5 align-middle">
+                      {candidate.timeline_history?.onboarding_submitted_at ? (
+                        <div className="flex items-center gap-1.5 text-emerald-700">
+                          <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
+                          <span className="text-xs font-medium">
+                            {formatTimelineDate(candidate.timeline_history.onboarding_submitted_at)}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500">
+                          <Clock className="h-3 w-3" /> Pending
+                        </span>
+                      )}
+                    </td>
+
+                    {/* Onboarding Verified */}
+                    <td className="px-4 py-3.5 align-middle">
+                      {candidate.timeline_history?.onboarding_verified_at ? (
+                        <div className="flex items-center gap-1.5 text-emerald-700">
+                          <Award className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
+                          <span className="text-xs font-medium">
+                            {formatTimelineDate(candidate.timeline_history.onboarding_verified_at)}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500">
+                          <Clock className="h-3 w-3" /> Unverified
+                        </span>
+                      )}
+                    </td>
+
+                    {/* Joining Letter Sent */}
+                    <td className="px-4 py-3.5 align-middle">
+                      {candidate.timeline_history?.joining_letter_sent_at ? (
+                        <div className="flex items-center gap-1.5 text-emerald-700">
+                          <Sparkles className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
+                          <span className="text-xs font-medium">
+                            {formatTimelineDate(candidate.timeline_history.joining_letter_sent_at)}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500">
+                          <Clock className="h-3 w-3" /> Not Sent
+                        </span>
+                      )}
+                    </td>
+
+                    {/* Actions */}
+                    <td className="px-4 py-3.5 align-middle text-right">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedHistoryCandidate(candidate)}
+                        className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 shadow-xs hover:bg-slate-50 hover:text-indigo-600 transition"
+                        title="View Detailed History"
+                      >
+                        <History className="h-3.5 w-3.5 text-indigo-600" />
+                        <span>Timeline</span>
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         ) : (
-          <div className="w-full overflow-x-auto">
+          <div className="w-full overflow-x-auto rounded-xl border border-slate-200/80">
             <table className="w-full min-w-[1020px] text-left text-xs sm:text-sm">
               <thead className="border-b border-slate-200 bg-slate-50/80 text-[11px] font-bold uppercase tracking-wider text-slate-500">
                 <tr>
-                  <th className="min-w-[180px] whitespace-nowrap px-4 py-3.5">
+                  <th className="min-w-[190px] whitespace-nowrap px-4 py-3.5">
                     Candidate
                   </th>
                   <th className="min-w-[200px] whitespace-nowrap px-4 py-3.5">
-                    Contact
+                    Contact Details
                   </th>
-                  <th className="min-w-[150px] whitespace-nowrap px-4 py-3.5">
-                    Designation
+                  <th className="min-w-[160px] whitespace-nowrap px-4 py-3.5">
+                    Role & Dept
                   </th>
-                  <th className="min-w-[120px] whitespace-nowrap px-4 py-3.5">
-                    Department
-                  </th>
-                  <th className="min-w-[120px] whitespace-nowrap px-4 py-3.5">
+                  <th className="min-w-[130px] whitespace-nowrap px-4 py-3.5">
                     Annual CTC
                   </th>
                   <th className="min-w-[140px] whitespace-nowrap px-4 py-3.5">
-                    Status
+                    Offer Status
                   </th>
                   <th className="min-w-[260px] whitespace-nowrap px-4 py-3.5 text-right">
                     Actions
@@ -1148,52 +2594,66 @@ export default function JoiningCandidates() {
               </thead>
 
               <tbody className="divide-y divide-slate-100">
-                {candidates.map((candidate) => (
+                {filteredPipelineCandidates.map((candidate) => (
                   <tr
                     key={candidate.id}
                     className="transition-colors hover:bg-slate-50/70"
                   >
-                    <td className="px-4 py-3.5 align-top">
-                      <p className="font-bold text-slate-900">
-                        {candidate.first_name} {candidate.last_name}
+                    {/* Candidate */}
+                    <td className="px-4 py-3.5 align-middle">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-700 text-white font-bold text-xs shadow-xs">
+                          {getInitials(candidate.first_name, candidate.last_name)}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-bold text-slate-900 truncate">
+                            {candidate.first_name} {candidate.last_name}
+                          </p>
+                          <p className="text-[11px] text-slate-400 font-medium">
+                            Added {new Date(candidate.created_at).toLocaleDateString("en-IN")}
+                          </p>
+                        </div>
+                      </div>
+                    </td>
+
+                    {/* Contact */}
+                    <td className="px-4 py-3.5 align-middle">
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-1.5 text-xs text-slate-700">
+                          <Mail className="h-3 w-3 text-slate-400 shrink-0" />
+                          <span className="truncate max-w-[180px]">{candidate.personal_email}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-[11px] text-slate-400 font-mono">
+                          <Phone className="h-3 w-3 text-slate-400 shrink-0" />
+                          <span>{candidate.mobile_number}</span>
+                        </div>
+                      </div>
+                    </td>
+
+                    {/* Designation & Dept */}
+                    <td className="px-4 py-3.5 align-middle">
+                      <p className="font-semibold text-slate-800 text-xs">
+                        {candidate.designation}
                       </p>
-
-                      <p className="mt-0.5 text-xs text-slate-400">
-                        Added{" "}
-                        {new Date(candidate.created_at).toLocaleDateString(
-                          "en-IN"
-                        )}
+                      <p className="text-[11px] text-indigo-600 font-medium">
+                        {candidate.department || "Unassigned"}
                       </p>
                     </td>
 
-                    <td className="px-4 py-3.5 align-top">
-                      <p className="break-all text-xs font-medium text-slate-700 sm:text-sm">
-                        {candidate.personal_email}
+                    {/* Annual CTC */}
+                    <td className="px-4 py-3.5 align-middle">
+                      <p className="font-bold text-slate-900 text-xs">
+                        {formatCandidateCurrency(candidate.annual_ctc)}
                       </p>
-
-                      <p className="mt-0.5 font-mono text-xs text-slate-400">
-                        {candidate.mobile_number}
-                      </p>
+                      <span className="inline-block text-[10px] text-slate-400 capitalize">
+                        {candidate.experience_level === "fresher"
+                          ? "Fresher"
+                          : `${candidate.total_experience_years || 0}y ${candidate.total_experience_months || 0}m exp`}
+                      </span>
                     </td>
 
-                    <td className="px-4 py-3.5 align-top text-xs text-slate-700 sm:text-sm">
-                      {candidate.designation}
-                    </td>
-
-                    <td className="px-4 py-3.5 align-top text-xs text-slate-600 sm:text-sm">
-                      {candidate.department || (
-                        <span className="italic text-slate-400">
-                          Not set
-                        </span>
-                      )}
-                    </td>
-
-                    <td className="px-4 py-3.5 align-top text-xs font-semibold text-slate-800 sm:text-sm">
-                      ₹
-                      {Number(candidate.annual_ctc).toLocaleString("en-IN")}
-                    </td>
-
-                    <td className="px-4 py-3.5 align-top">
+                    {/* Status Badge */}
+                    <td className="px-4 py-3.5 align-middle">
                       <span
                         className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${
                           candidate.status === "joined"
@@ -1216,8 +2676,19 @@ export default function JoiningCandidates() {
                       </span>
                     </td>
 
-                    <td className="px-4 py-3.5 align-top">
+                    {/* Actions */}
+                    <td className="px-4 py-3.5 align-middle">
                       <div className="flex flex-wrap items-center justify-end gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedHistoryCandidate(candidate)}
+                          className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 shadow-xs hover:bg-slate-50 hover:text-indigo-600 transition"
+                          title="View Candidate Lifecycle History"
+                        >
+                          <History className="h-3.5 w-3.5 text-slate-500" />
+                          <span>History</span>
+                        </button>
+
                         {/* Offer actions */}
                         {offerDocuments[candidate.id] ? (
                           <button
@@ -1227,7 +2698,7 @@ export default function JoiningCandidates() {
                                 offerDocuments[candidate.id]
                               )
                             }
-                            className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-100"
+                            className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-xs transition hover:bg-slate-50"
                           >
                             <Eye className="h-3.5 w-3.5" />
                             View Offer
@@ -1239,7 +2710,7 @@ export default function JoiningCandidates() {
                               void handleGenerateOffer(candidate)
                             }
                             disabled={offerLoadingId === candidate.id}
-                            className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100 disabled:opacity-50"
+                            className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100 disabled:opacity-50"
                           >
                             <FileText className="h-3.5 w-3.5" />
                             {offerLoadingId === candidate.id
@@ -1257,7 +2728,7 @@ export default function JoiningCandidates() {
                               offerLoadingId === candidate.id ||
                               offerEditSaving
                             }
-                            className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-indigo-200 bg-white px-3 py-1.5 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-50 disabled:opacity-50"
+                            className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-indigo-200 bg-white px-3 py-1.5 text-xs font-semibold text-indigo-700 shadow-xs transition hover:bg-indigo-50 disabled:opacity-50"
                           >
                             {candidate.status === "offer_sent"
                               ? "Edit & Resend Offer"
@@ -1271,9 +2742,10 @@ export default function JoiningCandidates() {
                             onClick={() =>
                               setConfirmMoveCandidate(candidate)
                             }
-                            className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-indigo-700"
+                            className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl bg-indigo-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow-xs transition hover:bg-indigo-700"
                           >
-                            Move to Add Employee
+                            <span>Move to Add Employee</span>
+                            <ArrowRight className="h-3.5 w-3.5" />
                           </button>
                         )}
                       </div>
@@ -1370,6 +2842,40 @@ export default function JoiningCandidates() {
                     </label>
 
                     <label className={labelClass}>
+                      Personal email *
+                      <input
+                        type="email"
+                        value={offerEditForm.personal_email}
+                        onChange={(e) =>
+                          setOfferEditForm((v) => ({
+                            ...v,
+                            personal_email: e.target.value,
+                          }))
+                        }
+                        className={inputClass}
+                        placeholder="candidate@example.com"
+                        autoComplete="email"
+                      />
+                    </label>
+
+                    <label className={labelClass}>
+                      Mobile number *
+                      <input
+                        type="tel"
+                        value={offerEditForm.mobile_number}
+                        onChange={(e) =>
+                          setOfferEditForm((v) => ({
+                            ...v,
+                            mobile_number: e.target.value,
+                          }))
+                        }
+                        className={inputClass}
+                        placeholder="+91 98765 43210"
+                        autoComplete="tel"
+                      />
+                    </label>
+
+                    <label className={labelClass}>
                       Gender *
                       <select
                         value={offerEditForm.gender}
@@ -1393,16 +2899,15 @@ export default function JoiningCandidates() {
 
                     <label className={labelClass}>
                       Designation *
-                      <input
+                      <SearchableDesignationSelect
                         value={offerEditForm.designation}
-                        onChange={(e) =>
+                        onChange={(val) =>
                           setOfferEditForm((v) => ({
                             ...v,
-                            designation: e.target.value,
+                            designation: val,
                           }))
                         }
-                        className={inputClass}
-                        placeholder="Designation"
+                        required
                       />
                     </label>
 
@@ -1747,6 +3252,172 @@ export default function JoiningCandidates() {
                   className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {moveLoading ? "Moving Candidate..." : "Confirm & Continue"}
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
+
+      {/* Candidate Lifecycle History Modal */}
+      {isMounted &&
+        selectedHistoryCandidate &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[9995] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm animate-in fade-in duration-200"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) {
+                setSelectedHistoryCandidate(null);
+              }
+            }}
+          >
+            <div
+              className="relative my-auto w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl border border-slate-200"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50/70 px-6 py-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-100">
+                    <History className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-slate-900 text-base">
+                      Candidate Lifecycle History
+                    </h3>
+                    <p className="text-xs text-slate-500 font-medium">
+                      {selectedHistoryCandidate.first_name} {selectedHistoryCandidate.last_name} • {selectedHistoryCandidate.designation || "Candidate"}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedHistoryCandidate(null)}
+                  className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              {/* Timeline Milestones */}
+              <div className="p-6 space-y-6">
+                {[
+                  {
+                    id: "candidate_created",
+                    label: "Candidate Profile Created",
+                    description: "Candidate details and offer parameters registered in pipeline",
+                    timestamp: selectedHistoryCandidate.created_at,
+                    icon: UserPlus,
+                    isDone: Boolean(selectedHistoryCandidate.created_at),
+                  },
+                  {
+                    id: "offer_sent",
+                    label: "Offer Letter Sent",
+                    description: "Offer generated and dispatched to candidate's email",
+                    timestamp: selectedHistoryCandidate.timeline_history?.offer_sent_at,
+                    icon: Send,
+                    isDone: Boolean(selectedHistoryCandidate.timeline_history?.offer_sent_at),
+                  },
+                  {
+                    id: "offer_accepted",
+                    label: "Offer Accepted",
+                    description: "Candidate reviewed and officially accepted the offer",
+                    timestamp: selectedHistoryCandidate.timeline_history?.offer_accepted_at,
+                    icon: CheckCircle2,
+                    isDone: Boolean(selectedHistoryCandidate.timeline_history?.offer_accepted_at),
+                  },
+                  {
+                    id: "onboarding_completed",
+                    label: "Onboarding Completed",
+                    description: "Candidate submitted required profile, address, bank, and documents",
+                    timestamp: selectedHistoryCandidate.timeline_history?.onboarding_submitted_at,
+                    icon: FileText,
+                    isDone: Boolean(selectedHistoryCandidate.timeline_history?.onboarding_submitted_at),
+                  },
+                  {
+                    id: "onboarding_verified",
+                    label: "Onboarding Verified",
+                    description: "HR verified candidate identity, previous employment, and documents",
+                    timestamp: selectedHistoryCandidate.timeline_history?.onboarding_verified_at,
+                    icon: Award,
+                    isDone: Boolean(selectedHistoryCandidate.timeline_history?.onboarding_verified_at),
+                  },
+                  {
+                    id: "joining_letter_sent",
+                    label: "Joining Letter Sent",
+                    description: "Official joining & appointment letter dispatched to candidate",
+                    timestamp: selectedHistoryCandidate.timeline_history?.joining_letter_sent_at,
+                    icon: Sparkles,
+                    isDone: Boolean(selectedHistoryCandidate.timeline_history?.joining_letter_sent_at),
+                  },
+                ].map((step, idx, arr) => (
+                  <div key={step.id} className="relative flex items-start gap-4">
+                    {idx < arr.length - 1 && (
+                      <div
+                        className={`absolute left-5 top-10 h-full w-0.5 -ml-px ${
+                          step.isDone ? "bg-emerald-400" : "bg-slate-200"
+                        }`}
+                      />
+                    )}
+                    <div
+                      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border transition ${
+                        step.isDone
+                          ? "border-emerald-200 bg-emerald-50 text-emerald-600 shadow-xs"
+                          : "border-slate-200 bg-slate-50 text-slate-400"
+                      }`}
+                    >
+                      <step.icon className="h-5 w-5" />
+                    </div>
+                    <div className="flex-1 min-w-0 pt-0.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <p
+                          className={`text-sm font-bold ${
+                            step.isDone ? "text-slate-900" : "text-slate-500"
+                          }`}
+                        >
+                          {step.label}
+                        </p>
+                        <span
+                          className={`inline-flex shrink-0 items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            step.isDone
+                              ? "bg-emerald-100 text-emerald-800"
+                              : "bg-slate-100 text-slate-500"
+                          }`}
+                        >
+                          {step.isDone ? "Completed" : "Pending"}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-0.5">{step.description}</p>
+                      {step.timestamp ? (
+                        <p className="mt-1 text-xs font-semibold text-emerald-700 flex items-center gap-1.5">
+                          <Clock className="h-3 w-3" />
+                          <span>
+                            {new Date(step.timestamp).toLocaleString("en-IN", {
+                              day: "2-digit",
+                              month: "short",
+                              year: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                              hour12: true,
+                            })}
+                          </span>
+                        </p>
+                      ) : (
+                        <p className="mt-1 text-xs text-slate-400 italic">Not yet recorded</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Footer */}
+              <div className="border-t border-slate-100 bg-slate-50/50 px-6 py-3.5 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setSelectedHistoryCandidate(null)}
+                  className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 shadow-xs hover:bg-slate-50 transition"
+                >
+                  Close History
                 </button>
               </div>
             </div>

@@ -49,43 +49,6 @@ const money = (value: number) =>
     maximumFractionDigits: 2,
   })}`;
 
-function SalaryColumn({
-  title,
-  items,
-}: {
-  title: string;
-  items: PayslipItem[];
-}) {
-  return (
-    <section className="min-w-0 border border-slate-300">
-      <h3 className="border-b border-slate-300 bg-slate-100 px-3 py-2 text-sm font-bold">
-        {title}
-      </h3>
-
-      <div className="space-y-2 p-3">
-        {items.length === 0 ? (
-          <p className="text-xs text-slate-400">No items</p>
-        ) : (
-          items.map((item) => (
-            <div
-              key={item.key}
-              className="flex justify-between gap-2 text-xs"
-            >
-              <span className="min-w-0 text-slate-700">
-                {item.label}
-              </span>
-
-              <span className="shrink-0 font-mono font-medium">
-                {money(item.amount)}
-              </span>
-            </div>
-          ))
-        )}
-      </div>
-    </section>
-  );
-}
-
 export default function StandardPayslip({
   employee,
   month,
@@ -104,6 +67,25 @@ export default function StandardPayslip({
   netPay,
   remarks,
 }: StandardPayslipProps) {
+
+  // Hide Other Deduction and Advance from payslip display only.
+  // Original payroll calculations remain unchanged.
+  const visibleDeductions = deductions.filter((item) => {
+    const normalizedLabel = item.label.trim().toLowerCase();
+
+    return ![
+      "other deduction",
+      "advance",
+    ].includes(normalizedLabel);
+  });
+
+  // Find the maximum number of rows across all three columns.
+  const salaryRowCount = Math.max(
+    standardSalary.length,
+    earnings.length,
+    visibleDeductions.length
+  );
+
   return (
     <div
       id="standard-payslip"
@@ -217,7 +199,9 @@ export default function StandardPayslip({
               key={item.label}
               className="border border-slate-300 p-2"
             >
-              <p className="text-lg font-bold">{item.value}</p>
+              <p className="text-lg font-bold">
+                {item.value}
+              </p>
 
               <p className="text-[10px] text-slate-500">
                 {item.label}
@@ -227,46 +211,110 @@ export default function StandardPayslip({
         </div>
       </section>
 
-      {/* Three-Column Salary Breakdown */}
+      {/* Excel-Style Three-Column Salary Breakdown */}
       <section className="mt-5">
         <h3 className="mb-2 border-b border-slate-300 pb-1 text-sm font-bold">
           Salary Breakdown
         </h3>
 
-        <div className="grid grid-cols-3 gap-2">
-          <SalaryColumn
-            title="Standard Monthly Salary"
-            items={standardSalary}
-          />
+        <div className="overflow-x-auto">
+          <table className="w-full table-fixed border-collapse text-xs">
+            <thead>
+              <tr className="bg-slate-200">
+                <th className="w-1/3 border border-slate-400 px-2 py-2 text-left font-bold">
+                  Standard Monthly Salary
+                </th>
 
-          <SalaryColumn
-            title="Earnings"
-            items={earnings}
-          />
+                <th className="w-1/3 border border-slate-400 px-2 py-2 text-left font-bold">
+                  Earnings
+                </th>
 
-          <SalaryColumn
-            title="Deductions"
-            items={deductions}
-          />
+                <th className="w-1/3 border border-slate-400 px-2 py-2 text-left font-bold">
+                  Deductions
+                </th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {Array.from({
+                length: salaryRowCount,
+              }).map((_, index) => {
+                const columns = [
+                  standardSalary[index],
+                  earnings[index],
+                  visibleDeductions[index],
+                ];
+
+                return (
+                  <tr
+                    key={index}
+                    className="hover:bg-slate-50"
+                  >
+                    {columns.map((item, colIndex) => (
+                      <td
+                        key={colIndex}
+                        className="border border-slate-300 px-2 py-2 align-top"
+                      >
+                        {item ? (
+                          <div className="flex justify-between gap-2">
+                            <span className="break-words text-slate-700">
+                              {item.label}
+                            </span>
+
+                            <span className="shrink-0 text-right font-mono font-medium">
+                              {money(item.amount)}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-slate-300">
+                            -
+                          </span>
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+                );
+              })}
+
+              {salaryRowCount === 0 && (
+                <tr>
+                  <td
+                    colSpan={3}
+                    className="border border-slate-300 px-3 py-4 text-center text-slate-400"
+                  >
+                    No salary breakdown available
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </section>
 
       {/* Salary Totals */}
       <section className="mt-5 space-y-3 border border-slate-300 p-4">
-
         <div className="flex justify-between gap-3 text-sm">
           <span>Gross Earnings (Before Deductions)</span>
-          <strong>{money(grossSalaryBeforeLOP)}</strong>
+
+          <strong>
+            {money(grossSalaryBeforeLOP)}
+          </strong>
         </div>
 
         <div className="flex justify-between gap-3 text-sm">
           <span>Gross Deductions</span>
-          <strong>{money(grossDeductions)}</strong>
+
+          <strong>
+            {money(grossDeductions)}
+          </strong>
         </div>
 
         <div className="flex justify-between gap-3 border-t border-slate-300 pt-3 text-lg font-extrabold">
           <span>Net Pay</span>
-          <span>{money(netPay)}</span>
+
+          <span>
+            {money(netPay)}
+          </span>
         </div>
 
         {amountInWords && (
@@ -274,7 +322,6 @@ export default function StandardPayslip({
             <strong>Amount in Words:</strong> {amountInWords}
           </p>
         )}
-
       </section>
 
       {/* Remarks */}

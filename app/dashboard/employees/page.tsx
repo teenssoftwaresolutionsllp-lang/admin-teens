@@ -1,10 +1,10 @@
 import { createClient, createAdminClient } from "@/lib/supabase-server";
 import { DataStore } from "@/lib/data-store";
 import { redirect } from "next/navigation";
-import Link from "next/link";
+// import Link from "next/link";
 import EmployeeTable from "@/components/EmployeeTable";
 import JoiningEmployeesView from "@/components/admin/JoiningEmployeesView";
-import { Users, UserCheck, Clock, Building2, UserPlus } from "lucide-react";
+// import { Users, UserCheck, Clock, Building2, UserPlus } from "lucide-react";
 
 type EmployeesPageProps = {
   searchParams: Promise<{
@@ -105,6 +105,59 @@ export default async function EmployeesPage({
 
   const departments = dbDepartments ?? [];
 
+  // Batch-fetch education and previous employment records for all employees
+  const employeeIds = employees.map((emp) => emp.id);
+  const educationByEmployee: Record<string, Record<string, unknown>[]> = {};
+  const previousEmploymentByEmployee: Record<string, Record<string, unknown>[]> = {};
+
+  if (employeeIds.length > 0) {
+    const [educationRes, previousEmploymentRes] = await Promise.all([
+      adminClient
+        .from("employee_education")
+        .select("*")
+        .in("employee_id", employeeIds)
+        .order("year_of_passing", { ascending: false }),
+      adminClient
+        .from("employee_previous_employment")
+        .select("*")
+        .in("employee_id", employeeIds)
+        .order("employment_start_date", { ascending: false }),
+    ]);
+
+    if (educationRes.error) {
+      console.error("Failed to load employee education:", educationRes.error);
+    } else if (educationRes.data) {
+      educationRes.data.forEach((rec) => {
+        const empId = rec.employee_id as string;
+        if (!educationByEmployee[empId]) {
+          educationByEmployee[empId] = [];
+        }
+        educationByEmployee[empId].push(rec);
+      });
+    }
+
+    if (previousEmploymentRes.error) {
+      console.error(
+        "Failed to load employee previous employment:",
+        previousEmploymentRes.error
+      );
+    } else if (previousEmploymentRes.data) {
+      previousEmploymentRes.data.forEach((rec) => {
+        const empId = rec.employee_id as string;
+        if (!previousEmploymentByEmployee[empId]) {
+          previousEmploymentByEmployee[empId] = [];
+        }
+        previousEmploymentByEmployee[empId].push(rec);
+      });
+    }
+  }
+
+  const enrichedEmployees = employees.map((emp) => ({
+    ...emp,
+    education_records: educationByEmployee[emp.id] || [],
+    previous_employment_records: previousEmploymentByEmployee[emp.id] || [],
+  }));
+
   const today = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Kolkata",
     year: "numeric",
@@ -117,7 +170,7 @@ export default async function EmployeesPage({
   // ------------------------------------------
 
   const statusFilteredEmployees = selectedStatus
-    ? employees.filter((employee) => {
+    ? enrichedEmployees.filter((employee) => {
         const employeeStatus = normalizeStatus(
           employee.status
         );
@@ -214,7 +267,7 @@ export default async function EmployeesPage({
 
         return employeeStatus === selectedStatus;
       })
-    : employees;
+    : enrichedEmployees;
 
   // ------------------------------------------
   // 2. Apply department filter
@@ -268,30 +321,30 @@ export default async function EmployeesPage({
     )?.name || selectedDepartment;
 
   const pageTitle = selectedStatus === "active"
-    ? "All Employees"
+    ? "Employee Directory"
     : selectedStatus
       ? selectedStatus === "resigned"
         ? selectedNotice
           ? noticeTitles[selectedNotice] || "Resigned"
           : "Resigned"
-        : statusOptions[selectedStatus] || "All Employees"
+        : statusOptions[selectedStatus] || "Employee Directory"
       : selectedDepartment
         ? `${selectedDepartmentName} Employees`
-        : "All Employees";
+        : "Employee Directory";
 
   // Summary counts for KPI overview
-  const totalEmployeesCount = employees.length;
-  const activeEmployeesCount = employees.filter(
-    (emp) => normalizeStatus(emp.status) === "active"
-  ).length;
-  const onNoticeOrResignedCount = employees.filter((emp) => {
-    const s = normalizeStatus(emp.status);
-    const ns = normalizeStatus(
-      (emp as { notice_status?: string | null }).notice_status
-    );
-    return s === "on_notice" || s === "resigned" || ns === "notice_period";
-  }).length;
-  const totalDepartmentsCount = departments.length;
+  // const totalEmployeesCount = employees.length;
+  // const activeEmployeesCount = employees.filter(
+  //   (emp) => normalizeStatus(emp.status) === "active"
+  // ).length;
+  // const onNoticeOrResignedCount = employees.filter((emp) => {
+  //   const s = normalizeStatus(emp.status);
+  //   const ns = normalizeStatus(
+  //     (emp as { notice_status?: string | null }).notice_status
+  //   );
+  //   return s === "on_notice" || s === "resigned" || ns === "notice_period";
+  // }).length;
+  // const totalDepartmentsCount = departments.length;
 
   const isAllView = !selectedStatus || selectedStatus === "active";
 
@@ -315,7 +368,7 @@ export default async function EmployeesPage({
           </div>
           <p className="mt-1 text-xs sm:text-sm text-slate-500">
             {isAllView
-              ? "Comprehensive directory of all staff members, employment statuses, and team allocations."
+              ? "Comprehensive directory of all staff members, educational qualifications, previous company experience, and team allocations."
               : `Viewing employees filtered by ${pageTitle.toLowerCase()}.`}
           </p>
         </div>
@@ -323,7 +376,7 @@ export default async function EmployeesPage({
       </div>
 
       {/* KPI Overview Cards - Shown on All Employees view */}
-      {isAllView && (
+      {/* {isAllView && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="rounded-2xl border border-slate-200/90 bg-white p-4 sm:p-5 shadow-sm transition hover:shadow-md">
             <div className="flex items-center justify-between">
@@ -377,7 +430,7 @@ export default async function EmployeesPage({
             <p className="mt-1 text-[11px] text-slate-400">Across the organization</p>
           </div>
         </div>
-      )}
+      )} */}
 
       <EmployeeTable
         employees={filteredEmployees}

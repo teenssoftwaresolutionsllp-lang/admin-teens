@@ -1,0 +1,282 @@
+{
+  "country": "India",
+  "type": "IT_Software_Skills",
+  "version": "1.0",
+  "categories": [
+    {
+      "name": "Frontend Development",
+      "skills": [
+        "HTML5",
+        "CSS3",
+        "JavaScript",
+        "TypeScript",
+        "React.js",
+        "React Native",
+        "Angular",
+        "Vue.js",
+        "Next.js",
+        "Nuxt.js",
+        "Bootstrap",
+        "Tailwind CSS",
+        "Material UI",
+        "Redux",
+        "Redux Toolkit",
+        "jQuery",
+        "Webpack",
+        "Vite"
+      ]
+    },
+    {
+      "name": "Backend Development",
+      "skills": [
+        "Node.js",
+        "Express.js",
+        "Java",
+        "Spring Boot",
+        "Python",
+        "Django",
+        "Flask",
+        "FastAPI",
+        "C#",
+        "ASP.NET Core",
+        "PHP",
+        "Laravel",
+        "Ruby on Rails",
+        "Go",
+        "Golang",
+        ".NET"
+      ]
+    },
+    {
+      "name": "Mobile Development",
+      "skills": [
+        "Android",
+        "Kotlin",
+        "Java Android",
+        "iOS",
+        "Swift",
+        "SwiftUI",
+        "Flutter",
+        "Dart",
+        "React Native",
+        "Ionic",
+        "Xamarin"
+      ]
+    },
+    {
+      "name": "Database",
+      "skills": [
+        "MySQL",
+        "PostgreSQL",
+        "Oracle",
+        "SQL Server",
+        "MongoDB",
+        "Redis",
+        "Cassandra",
+        "DynamoDB",
+        "SQLite",
+        "MariaDB",
+        "Snowflake",
+        "BigQuery"
+      ]
+    },
+    {
+      "name": "Cloud",
+      "skills": [
+        "AWS",
+        "Microsoft Azure",
+        "Google Cloud Platform",
+        "AWS EC2",
+        "AWS S3",
+        "AWS Lambda",
+        "AWS RDS",
+        "AWS ECS",
+        "AWS EKS",
+        "Azure Functions",
+        "Azure DevOps",
+        "Azure Data Factory",
+        "Google Kubernetes Engine"
+      ]
+    },
+    {
+      "name": "DevOps & CI/CD",
+      "skills": [
+        "Git",
+        "GitHub",
+        "GitLab",
+        "Bitbucket",
+        "Jenkins",
+        "Docker",
+        "Kubernetes",
+        "Terraform",
+        "Ansible",
+        "Argo CD",
+        "Maven",
+        "Gradle",
+        "GitHub Actions",
+        "GitLab CI/CD",
+        "Azure Pipelines"
+      ]
+    },
+    {
+      "name": "Data & BI",
+      "skills": [
+        "Power BI",
+        "Tableau",
+        "Qlik Sense",
+        "Looker",
+        "Excel",
+        "DAX",
+        "Power Query",
+        "SQL",
+        "SSRS",
+        "SSIS",
+        "Databricks",
+        "Apache Spark",
+        "Hadoop",
+        "ETL",
+        "Data Warehousing"
+      ]
+    },
+    {
+      "name": "Data Science & AI",
+      "skills": [
+        "Python",
+        "Machine Learning",
+        "Deep Learning",
+        "Artificial Intelligence",
+        "Generative AI",
+        "Natural Language Processing",
+        "Computer Vision",
+        "TensorFlow",
+        "PyTorch",
+        "Scikit-learn",
+        "Pandas",
+        "NumPy",
+        "OpenAI API",
+        "LLM",
+        "RAG",
+        "LangChain",
+        "LlamaIndex"
+      ]
+    },
+    {
+      "name": "Testing & QA",
+      "skills": [
+        "Manual Testing",
+        "Automation Testing",
+        "Selenium",
+        "Playwright",
+        "Cypress",
+        "Appium",
+        "Postman",
+        "API Testing",
+        "Performance Testing",
+        "JMeter",
+        "TestNG",
+        "JUnit",
+        "Cucumber",
+        "BDD",
+        "Jira"
+      ]
+    },
+    {
+      "name": "Cybersecurity",
+      "skills": [
+        "Cybersecurity",
+        "Information Security",
+        "Network Security",
+        "Application Security",
+        "Cloud Security",
+        "SOC",
+        "SIEM",
+        "Splunk",
+        "Microsoft Sentinel",
+        "IAM",
+        "Vulnerability Management",
+        "Penetration Testing",
+        "OWASP"
+      ]
+    },
+    {
+      "name": "Networking & IT Support",
+      "skills": [
+        "IT Support",
+        "Technical Support",
+        "Help Desk",
+        "Service Desk",
+        "Windows Server",
+        "Linux",
+        "Networking",
+        "TCP/IP",
+        "DNS",
+        "DHCP",
+        "Active Directory",
+        "Microsoft 365",
+        "ITIL",
+        "ServiceNow"
+      ]
+    },
+    {
+      "name": "ERP & Enterprise Applications",
+      "skills": [
+        "SAP",
+        "SAP ABAP",
+        "SAP FICO",
+        "SAP MM",
+        "SAP SD",
+        "SAP HANA",
+        "Oracle ERP",
+        "Oracle Fusion",
+        "Workday",
+        "Salesforce",
+        "ServiceNow",
+        "Microsoft Dynamics 365"
+      ]
+    },
+    {
+      "name": "Project & Agile",
+      "skills": [
+        "Agile",
+        "Scrum",
+        "Scrum Master",
+        "Kanban",
+        "Jira",
+        "Confluence",
+        "Azure Boards",
+        "Project Management",
+        "Product Management",
+        "SAFe"
+      ]
+    },
+    {
+      "name": "UI/UX & Design",
+      "skills": [
+        "UI Design",
+        "UX Design",
+        "Figma",
+        "Adobe XD",
+        "Adobe Photoshop",
+        "Adobe Illustrator",
+        "Wireframing",
+        "Prototyping",
+        "Design Systems",
+        "User Research"
+      ]
+    },
+    {
+      "name": "Tools & Collaboration",
+      "skills": [
+        "Microsoft Teams",
+        "Slack",
+        "Zoom",
+        "Confluence",
+        "Jira",
+        "Notion",
+        "GitHub",
+        "GitLab",
+        "Postman"
+      ]
+    }
+  ]
+}

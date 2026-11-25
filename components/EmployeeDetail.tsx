@@ -70,6 +70,13 @@ export default function EmployeeDetail({ employee, documents, educationRecords,p
   const [exitLoginDays, setExitLoginDays] = useState("45");
   const [exitDocument, setExitDocument] = useState<File | null>(null);
 
+  const certificationDocuments = (documents || []).filter((doc) => {
+  return (
+    String(doc.document_type || "").toLowerCase() ===
+    "professional certification"
+  );
+});
+
   const maskString = (str?: string | null, visibleCount = 4) => {
     if (!str) return "N/A";
     if (str.length <= visibleCount) return str;
@@ -168,14 +175,46 @@ export default function EmployeeDetail({ employee, documents, educationRecords,p
     early_release_reason?: string | null;
   };
 
+  const educationDetails =
+  (employee as Employee & {
+    educational_details?: Record<string, string> | null;
+  }).educational_details || {};
+
+const educationSections = [
+  { title: "10th / SSC", prefix: "education_10th" },
+  { title: "12th / Intermediate", prefix: "education_12th" },
+  { title: "Graduation", prefix: "education_graduation" },
+  { title: "Post Graduation", prefix: "education_post_graduation" },
+  { title: "Diploma", prefix: "education_diploma" },
+];
+const getEducationValue = (value: unknown): string => {
+  if (value === null || value === undefined) {
+    return "";
+  }
+
+  return String(value).trim();
+};
+
+
+//   const educationDetails =
+//   (employee as Employee & {
+//     educational_details?: Record<string, string> | null;
+//   }).educational_details || {};
+
+// const educationSections = [
+//   { title: "10th", prefix: "education_10th" },
+//   { title: "12th", prefix: "education_12th" },
+//   { title: "Graduation", prefix: "education_graduation" },
+//   { title: "Post Graduation", prefix: "education_post_graduation" },
+//   { title: "Diploma", prefix: "education_diploma" },
+// ];
+
   const isOnNotice = noticeEmployee.notice_status === "notice_period" || employee.status?.toLowerCase() === "on_notice";
 
   const plannedLastWorkingDate = noticeEmployee.planned_last_working_date || calculatePlannedLastWorkingDate(
       noticeEmployee.resignation_date || resignationDate,
       noticeEmployee.notice_period_days ?? effectiveNoticeDays,
     );
-
-
 
   const loadGratuity = async () => {
     try {
@@ -198,11 +237,96 @@ export default function EmployeeDetail({ employee, documents, educationRecords,p
   };
 
   useEffect(() => {
-    if (activeTab === 9) {
+    if (activeTab === 10) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       void loadGratuity();
     }
   }, [activeTab]);
+
+  {/* Tab : Skills & Certification */}
+<div className={activeTab === 5 ? "block" : "hidden"}>
+  <div className="space-y-6">
+
+    {/* Professional Certification */}
+    <section className="rounded-xl border border-slate-200 p-5">
+      <h3 className="mb-4 text-sm font-bold uppercase tracking-wider text-slate-900">
+        Professional Certification
+      </h3>
+
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+
+        <div>
+          <label className="mb-1.5 block text-xs font-bold text-slate-700">
+            Certification Name
+          </label>
+        <div>
+  <label className="mb-1.5 block text-xs font-bold text-slate-700">
+    Certification Name
+  </label>
+  <p className="text-sm text-slate-900">
+    {employee.professional_certification_name || "Not provided"}
+  </p>
+</div>
+        </div>
+
+        <div>
+  <label className="mb-1.5 block text-xs font-bold text-slate-700">
+    Organization
+  </label>
+  <p className="text-sm text-slate-900">
+    {employee.professional_certification_organization || "Not provided"}
+  </p>
+</div>
+
+     <div>
+  <label className="mb-1.5 block text-xs font-bold text-slate-700">
+    Credential ID
+  </label>
+  <p className="text-sm text-slate-900">
+    {employee.professional_certification_credential_id || "Not provided"}
+  </p>
+</div>
+
+        <div>
+  <label className="mb-1.5 block text-xs font-bold text-slate-700">
+    Issue Date
+  </label>
+  <p className="text-sm text-slate-900">
+    {employee.professional_certification_issue_date || "Not provided"}
+  </p>
+</div>
+
+<div>
+  <label className="mb-1.5 block text-xs font-bold text-slate-700">
+    Expiry Date
+  </label>
+  <p className="text-sm text-slate-900">
+    {employee.professional_certification_expiry_date || "Not provided"}
+  </p>
+</div>
+      </div>
+    </section>
+
+    {/* Technical Skills */}
+    <section className="rounded-xl border border-slate-200 p-5">
+      <h3 className="mb-4 text-sm font-bold uppercase tracking-wider text-slate-900">
+        Technical Skills
+      </h3>
+
+      <div className="flex flex-wrap gap-2">
+  {(employee.technical_skills ?? []).map((skill, index) => (
+    <span
+      key={`${skill}-${index}`}
+      className="rounded-full bg-indigo-50 px-3 py-2 text-sm text-indigo-700"
+    >
+      {skill}
+    </span>
+  ))}
+</div>
+    </section>
+
+  </div>
+</div>
 
 const getEmployeeStatusLabel = () => {
   const status = String(employee.status || "").toLowerCase();
@@ -532,11 +656,12 @@ const getEmployeeStatusLabel = () => {
     { name: "Current Employment", icon: Briefcase },
     { name: "Previous Employment", icon: Briefcase },
     { name: "Education", icon: FileText },
+    { name: "Statutory", icon: File },
+    { name: "Skills & Certification", icon: FileText },
     { name: "Bank & Identity", icon: CreditCard },
     { name: "Address & Emergency", icon: MapPin },
     { name: "Documentation", icon: FileText },
     { name: "Accessory Management", icon: LaptopMinimal },
-    { name: "Statutory", icon: File },
     { name: "Gratuity", icon: Gift },
     ...(!isExitStatus ? [{ name: "Terminated", icon: DeleteIcon }] : []),
   ];
@@ -716,8 +841,124 @@ const getEmployeeStatusLabel = () => {
             </div>
           )}
 
+          {/* Skills & Certification */}
+          {activeTab === 5 && (
+            <div className="space-y-6">
+
+              {/* Professional Certification */}
+              <section className="rounded-xl border border-slate-200 bg-white p-5">
+                <h3 className="mb-4 text-sm font-bold uppercase tracking-wider text-slate-900">
+                  Professional Certification
+                </h3>
+
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <DetailTile
+                    label="Certification Name"
+                    value={employee.professional_certification_name}
+                  />
+
+                  <DetailTile
+                    label="Organization"
+                    value={employee.professional_certification_organization}
+                  />
+
+                  <DetailTile
+                    label="Credential ID"
+                    value={employee.professional_certification_credential_id}
+                  />
+
+                  <DetailTile
+                    label="Issue Date"
+                    value={formatDate(employee.professional_certification_issue_date)}
+                  />
+
+                  <DetailTile
+                    label="Expiry Date"
+                    value={formatDate(employee.professional_certification_expiry_date)}
+                  />
+                </div>
+              </section>
+
+              {/* Technical Skills */}
+              <section className="rounded-xl border border-slate-200 bg-white p-5">
+                <h3 className="mb-4 text-sm font-bold uppercase tracking-wider text-slate-900">
+                  Technical Skills
+                </h3>
+
+                <div className="flex flex-wrap gap-2">
+                  {Array.isArray(employee.technical_skills) &&
+                  employee.technical_skills.length > 0 ? (
+                    employee.technical_skills.map((skill, index) => (
+                      <span
+                        key={`${skill}-${index}`}
+                        className="rounded-full bg-blue-50 px-3 py-1.5 text-sm font-medium text-blue-700"
+                      >
+                        {skill}
+                      </span>
+                    ))
+                  ) : (
+                    <p className="text-sm text-slate-500">
+                      No technical skills added.
+                    </p>
+                  )}
+                </div>
+              </section>
+
+              {/* Uploaded Certification Documents */}
+              <section className="rounded-xl border border-slate-200 bg-white p-5">
+                <h3 className="mb-4 text-sm font-bold uppercase tracking-wider text-slate-900">
+                  Uploaded Certification
+                </h3>
+
+                {certificationDocuments.length > 0 ? (
+                  <div className="space-y-3">
+                    {certificationDocuments.map((doc) => (
+                      <div
+                        key={doc.id}
+                        className="flex flex-col justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center"
+                      >
+                        <div className="flex min-w-0 items-center gap-3">
+                          <div className="rounded-lg bg-indigo-100 p-3">
+                            <FileText className="h-5 w-5 text-indigo-600" />
+                          </div>
+
+                          <div className="min-w-0">
+                            <p className="break-words text-sm font-semibold text-slate-900">
+                              {doc.document_name || "Professional Certification"}
+                            </p>
+
+                            <p className="text-xs text-slate-500">
+                              Professional Certification
+                            </p>
+                          </div>
+                        </div>
+
+                        {doc.document_url && (
+                          <a
+                            href={doc.document_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-700"
+                          >
+                            <Eye className="h-4 w-4" />
+                            View Certificate
+                          </a>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-500">
+                    No certification document uploaded.
+                  </p>
+                )}
+              </section>
+
+            </div>
+          )}
+
           {/* Bank & Identity */}
-          {activeTab === 4 && (
+          {activeTab === 6 && (
             <div className="space-y-6">
               <div>
                 <h3 className="text-sm font-bold text-slate-900 mb-3 uppercase tracking-wider text-slate-400">Financial Details</h3>
@@ -742,9 +983,50 @@ const getEmployeeStatusLabel = () => {
           )}
 
           {/* Address & Emergency */}
-          {activeTab === 5 && (
+          {activeTab === 7 && (
             <div className="space-y-8">
 
+              {/* ================= COMMUNICATION ADDRESS ================= */}
+              <div className="pt-6 border-t border-slate-100">
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
+                    <MapPin className="w-4 h-4 text-blue-600" />
+                  </div>
+
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900">
+                      Communication Address
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                      Employee&apos;s current or temporary residential address
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div className="md:col-span-2 lg:col-span-3">
+                    <DetailTile
+                      label="Address"
+                      value={employee.temporary_address}
+                    />
+                  </div>
+
+                  <DetailTile
+                    label="City"
+                    value={employee.temporary_city}
+                  />
+
+                  <DetailTile
+                    label="State"
+                    value={employee.temporary_state}
+                  />
+
+                  <DetailTile
+                    label="Pincode"
+                    value={employee.temporary_pincode}
+                  />
+                </div>
+              </div>
               {/* ================= PERMANENT ADDRESS ================= */}
               <div>
                 <div className="flex items-center gap-2 mb-4">
@@ -788,47 +1070,7 @@ const getEmployeeStatusLabel = () => {
               </div>
 
 
-              {/* ================= COMMUNICATION ADDRESS ================= */}
-              <div className="pt-6 border-t border-slate-100">
-                <div className="flex items-center gap-2 mb-4">
-                  <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
-                    <MapPin className="w-4 h-4 text-blue-600" />
-                  </div>
-
-                  <div>
-                    <h3 className="text-sm font-bold text-slate-900">
-                      Communication Address
-                    </h3>
-                    <p className="text-xs text-slate-500">
-                      Employee&apos;s current or temporary residential address
-                    </p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <div className="md:col-span-2 lg:col-span-3">
-                    <DetailTile
-                      label="Address"
-                      value={employee.temporary_address}
-                    />
-                  </div>
-
-                  <DetailTile
-                    label="City"
-                    value={employee.temporary_city}
-                  />
-
-                  <DetailTile
-                    label="State"
-                    value={employee.temporary_state}
-                  />
-
-                  <DetailTile
-                    label="Pincode"
-                    value={employee.temporary_pincode}
-                  />
-                </div>
-              </div>
+              
 
 
               {/* ================= EMERGENCY CONTACTS ================= */}
@@ -931,7 +1173,7 @@ const getEmployeeStatusLabel = () => {
           )}
 
           {/* Documents */}
-          {activeTab === 6 && (
+          {activeTab === 8 && (
             <div>
               <DocumentUpload
                 employeeId={employee.id}
@@ -941,131 +1183,146 @@ const getEmployeeStatusLabel = () => {
             </div>
           )}
 
-          {/* Education - Read Only */}
+          {/* Education Details - Read Only */}
           {activeTab === 3 && (
             <div className="space-y-5">
-              <div>
-                <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400">
-                  Education Details
-                </h3>
-                <p className="mt-1 text-xs text-slate-500">
-                  Education records submitted during onboarding. These records are read-only.
-                </p>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-lg font-bold text-slate-800">
+                    Education Details
+                  </h3>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Academic qualifications submitted during onboarding.
+                  </p>
+                </div>
+
+                <span className="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700">
+                  {educationRecords.length} Qualifications
+                </span>
               </div>
 
               {educationRecords.length > 0 ? (
-                <div className="space-y-4">
-                  {educationRecords.map((record, index) => (
-                    <div
-                      key={String(record.id ?? index)}
-                      className="rounded-xl border border-slate-200 bg-white p-5"
-                    >
-                      <h4 className="mb-4 text-sm font-bold text-slate-900">
-                        {String(record.qualification_name || record.qualification_type || `Qualification ${index + 1}`)}
-                      </h4>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  {educationRecords.map((record, index) => {
+                    const getValue = (value: unknown): string =>
+                      value === null || value === undefined
+                        ? ""
+                        : String(value).trim();
 
-                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                        {record.qualification_type === "10th" && (
-                          <>
-                            {Boolean(record.institution_name) && (
-                              <DetailTile label="School Name" value={String(record.institution_name)} />
-                            )}
-                            {Boolean(record.board) && (
-                              <DetailTile label="Board" value={String(record.board)} />
-                            )}
-                          </>
+                    const qualification =
+                      getValue(record.qualification_name) ||
+                      getValue(record.qualification_type) ||
+                      `Education ${index + 1}`;
+
+                    const resultValue = getValue(record.result_value);
+                    const resultTotal = getValue(record.result_total);
+                    const resultType = getValue(record.result_type);
+
+                    const result =
+                      resultValue && resultTotal
+                        ? `${resultValue} / ${resultTotal}`
+                        : resultValue;
+
+                    const fields = [
+                      { label: "Course", value: getValue(record.course) },
+                      { label: "Specialization", value: getValue(record.specialization) },
+                      { label: "Stream", value: getValue(record.stream) },
+                      { label: "Institution / College", value: getValue(record.institution_name) },
+                      { label: "Board", value: getValue(record.board) },
+                      { label: "University", value: getValue(record.university) },
+                    ].filter((field) => field.value !== "");
+
+                    return (
+                      <div
+                        key={String(record.id ?? index)}
+                        className="flex flex-col rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition-all hover:border-blue-200 hover:shadow-md"
+                      >
+                        {/* Card Header */}
+                        <div className="mb-4 flex items-start gap-3">
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              width="21"
+                              height="21"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="1.8"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <path d="m22 10-10-5-10 5 10 5 10-5Z" />
+                              <path d="M6 12.5V17c3.5 2.5 8.5 2.5 12 0v-4.5" />
+                              <path d="M22 10v6" />
+                            </svg>
+                          </div>
+
+                          <div className="min-w-0 flex-1">
+                            <h4 className="text-sm font-bold text-slate-800">
+                              {qualification}
+                            </h4>
+                            <p className="mt-1 text-xs text-slate-400">
+                              Qualification {index + 1}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Passing Year */}
+                        {getValue(record.year_of_passing) && (
+                          <div className="mb-4 rounded-lg bg-slate-50 px-3 py-2">
+                            <p className="text-xs text-slate-400">Year of Passing</p>
+                            <p className="mt-1 text-sm font-semibold text-slate-700">
+                              {getValue(record.year_of_passing)}
+                            </p>
+                          </div>
                         )}
 
-                        {record.qualification_type === "12th" && (
-                          <>
-                            {Boolean(record.institution_name) && (
-                              <DetailTile label="College Name" value={String(record.institution_name)} />
-                            )}
-                            {Boolean(record.board) && (
-                              <DetailTile label="Board" value={String(record.board)} />
-                            )}
-                            {Boolean(record.stream) && (
-                              <DetailTile label="Stream" value={String(record.stream)} />
-                            )}
-                          </>
-                        )}
+                        {/* Academic Fields */}
+                        <div className="flex-1 space-y-3">
+                          {fields.map((field) => (
+                            <div
+                              key={field.label}
+                              className="border-b border-slate-100 pb-2 last:border-0"
+                            >
+                              <p className="text-xs font-medium text-slate-400">
+                                {field.label}
+                              </p>
+                              <p className="mt-1 break-words text-sm font-semibold text-slate-700">
+                                {field.value}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
 
-                        {(record.qualification_type === "Graduation" ||
-                          record.qualification_type === "Post Graduation") && (
-                          <>
-                            {Boolean(record.institution_name) && (
-                              <DetailTile label="Institution Name" value={String(record.institution_name)} />
-                            )}
-                            {Boolean(record.university) && (
-                              <DetailTile label="University" value={String(record.university)} />
-                            )}
-                            {Boolean(record.course) && (
-                              <DetailTile label="Course" value={String(record.course)} />
-                            )}
-                            {Boolean(record.specialization) && (
-                              <DetailTile label="Specialization" value={String(record.specialization)} />
-                            )}
-                          </>
-                        )}
-
-                        {record.qualification_type === "Other" && (
-                          <>
-                            {Boolean(record.institution_name) && (
-                              <DetailTile label="Institution Name" value={String(record.institution_name)} />
-                            )}
-                            {Boolean(record.board) && (
-                              <DetailTile label="Board / Issuing Authority" value={String(record.board)} />
-                            )}
-                          </>
-                        )}
-
-                        {record.qualification_type === "twelfth" && (
-                          <>
-                            {record.institution_name && <DetailTile label="College" value={record.institution_name as string} />}
-                            {record.board && <DetailTile label="Board" value={record.board as string} />}
-                            {record.stream && <DetailTile label="Stream" value={record.stream as string} />}
-                          </>
-                        )}
-
-                        {(record.qualification_type === "graduation" ||
-                          record.qualification_type === "post_graduation") && (
-                          <>
-                            {record.course && <DetailTile label="Course" value={record.course as string} />}
-                            {record.specialization && <DetailTile label="Specialization" value={record.specialization as string} />}
-                            {record.institution_name && <DetailTile label="Institution" value={record.institution_name as string} />}
-                            {record.university && <DetailTile label="University" value={record.university as string} />}
-                          </>
-                        )}
-
-                        {record.qualification_type === "other" && (
-                          <>
-                            {record.institution_name && <DetailTile label="Institution" value={record.institution_name as string} />}
-                            {record.board && <DetailTile label="Authority" value={record.board as string} />}
-                          </>
-                        )}
-
-                        {Boolean(record.year_of_passing) && (
-                          <DetailTile label="Year of Passing" value={record.year_of_passing as string} />
-                        )}
-
-                        {Boolean(record.result_type) && (
-                          <DetailTile label="Result Type" value={record.result_type as string} />
-                        )}
-
-                        {Boolean(record.result_value) && (
-                          <DetailTile
-                            label="Result"
-                            value={`${record.result_value}${record.result_total ? ` / ${record.result_total}` : ""}`}
-                          />
+                        {/* Result */}
+                        {(result || resultType) && (
+                          <div className="mt-4 border-t border-slate-100 pt-4">
+                            <p className="mb-2 text-xs font-medium text-slate-400">
+                              Academic Result
+                            </p>
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <span className="text-xs font-medium text-slate-500">
+                                {resultType || "Result"}
+                              </span>
+                              {result && (
+                                <span className="rounded-lg bg-emerald-50 px-3 py-1.5 text-sm font-bold text-emerald-700">
+                                  {result}
+                                </span>
+                              )}
+                            </div>
+                          </div>
                         )}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : (
-                <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center">
-                  <p className="text-sm text-slate-500">
-                    No education records available.
+                <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-10 text-center">
+                  <p className="text-sm font-semibold text-slate-600">
+                    No Education Records
+                  </p>
+                  <p className="mt-1 text-xs text-slate-400">
+                    Your submitted academic qualifications will appear here.
                   </p>
                 </div>
               )}
@@ -1117,8 +1374,7 @@ const getEmployeeStatusLabel = () => {
             </div>
           )}
 
-          {/* Tab 7: Accessory Management*/}
-          {activeTab === 7 && (
+          {activeTab === 9 && (
             <div className="space-y-6">
 
               {/* Main Accessory */}
@@ -1185,8 +1441,8 @@ const getEmployeeStatusLabel = () => {
             </div>
           )}
 
-          {/* {tab : options to selct eligabilty of pt ,tds} */}
-          {activeTab === 8 && (
+          {/* {tab 2: options to selct eligabilty of pt ,tds} */}
+          {activeTab === 4 && (
             <div className="space-y-6">
 
               <div>
@@ -1264,7 +1520,7 @@ const getEmployeeStatusLabel = () => {
           )}
 
           {/* ================= GRATUITY ================= */}
-          {activeTab === 9 && (
+          {activeTab === 10 && (
             <div className="space-y-6">
 
               {/* HEADER */}
@@ -1472,7 +1728,7 @@ const getEmployeeStatusLabel = () => {
           )}
 
           {/* Delete */}
-          {!isExitStatus && activeTab === 10 && (
+          {!isExitStatus && activeTab === 11 && (
             <div className="space-y-6">
               {isOnNotice && (
                 <div className="rounded-xl border border-amber-200 bg-amber-50 p-5 space-y-4">

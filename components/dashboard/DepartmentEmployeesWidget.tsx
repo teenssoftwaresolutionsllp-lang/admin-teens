@@ -253,7 +253,7 @@ export default function DepartmentEmployeesWidget({
 
             {/* Department Legend */}
             <div className="w-full min-w-0 flex-1 space-y-2.5 max-h-[175px] overflow-y-auto pr-1">
-              {departmentData.slice(0, 5).map((department) => {
+              {departmentData.map((department) => {
                 const isSelected = selectedDepartment === department.name;
                 return (
                   <button
