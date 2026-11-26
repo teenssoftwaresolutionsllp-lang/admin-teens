@@ -626,7 +626,7 @@ export default async function DashboardPage({
             {/* Welcome content */}
             <div className="relative z-10 flex h-full items-center px-6 sm:px-9">
               <div className="max-w-[58%]">
-                <h1 className="text-[27px] font-extrabold tracking-tight text-[#101a49] sm:text-[34px]">
+                <h1 className="text-[27px] font-extrabold tracking-tight uppercase text-[#101a49] sm:text-[34px]">
                   Welcome Back, {profile?.full_name || "HR"}! <span>👋</span>
                 </h1>
 

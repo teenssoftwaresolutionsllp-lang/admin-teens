@@ -728,19 +728,21 @@ async function main() {
     console.log("No new attendance records to insert.");
   }
 
-  // 8. Build the notification summary from attendance records
-  // created by this automation. This also supports notification retries.
+  // 8. Build and send daily absence summaries to HR, CEO,
+  // and each employee's assigned reporting manager.
+
   const automationReasons = [
     "No attendance or approved leave on working day.",
     "Approved single-day half-day leave; no attendance punch.",
   ];
 
-  const { data: automatedAttendance, error: summaryError } = await supabase
-    .from("attendance_logs")
-    .select("status")
-    .eq("attendance_date", attendanceDate)
-    .not("absence_marked_at", "is", null)
-    .in("absence_reason", automationReasons);
+  const { data: automatedAttendance, error: summaryError } =
+    await supabase
+      .from("attendance_logs")
+      .select("employee_id, status")
+      .eq("attendance_date", attendanceDate)
+      .not("absence_marked_at", "is", null)
+      .in("absence_reason", automationReasons);
 
   if (summaryError) {
     throw new Error(
@@ -750,46 +752,254 @@ async function main() {
 
   const summaryRows = automatedAttendance ?? [];
 
-  const summaryAbsent = summaryRows.filter(
-    (row) => row.status === "absent"
-  ).length;
-
-  const summaryHalfDay = summaryRows.filter(
-    (row) => row.status === "half_day"
-  ).length;
-
   if (summaryRows.length > 0) {
-    const { data: recipients, error: recipientError } = await supabase
-      .from("profiles")
-      .select("id, role")
-      .in("role", ["hr", "ceo"]);
+    const summaryAbsent = summaryRows.filter(
+      (row) => row.status === "absent"
+    ).length;
 
-    if (recipientError) {
-      throw new Error(
-        `Could not fetch HR/CEO recipients: ${recipientError.message}`
-      );
-    }
+    const summaryHalfDay = summaryRows.filter(
+      (row) => row.status === "half_day"
+    ).length;
 
     const title = "Daily Attendance Absence Summary";
     const type = "attendance_absence";
-    const message =
+
+    const desiredNotifications: {
+      employee_id: null;
+      recipient_user_id: string;
+      title: string;
+      message: string;
+      type: string;
+      is_read: boolean;
+    }[] = [];
+
+    // ------------------------------------------------
+    // A. Company-wide summary for HR and CEO.
+    // ------------------------------------------------
+
+    const { data: hrCeoRecipients, error: hrCeoError } =
+      await supabase
+        .from("profiles")
+        .select("id, role")
+        .in("role", ["hr", "ceo"]);
+
+    if (hrCeoError) {
+      throw new Error(
+        `Could not fetch HR/CEO recipients: ${hrCeoError.message}`
+      );
+    }
+
+    const companyMessage =
       `${summaryAbsent} employee(s) marked absent and ` +
       `${summaryHalfDay} employee(s) marked half-day for ${attendanceDate}.`;
 
-    const recipientIds = (recipients ?? []).map(
-      (recipient) => recipient.id
+    for (const recipient of hrCeoRecipients ?? []) {
+      desiredNotifications.push({
+        employee_id: null,
+        recipient_user_id: recipient.id,
+        title,
+        message: companyMessage,
+        type,
+        is_read: false,
+      });
+    }
+
+    // ------------------------------------------------
+    // B. Resolve reporting managers for affected employees.
+    // ------------------------------------------------
+
+    const affectedEmployeeIds = [
+      ...new Set(summaryRows.map((row) => row.employee_id)),
+    ];
+
+    const { data: affectedEmployees, error: affectedError } =
+      await supabase
+        .from("employees")
+        .select("id, employee_id, reporting_manager_id")
+        .in("id", affectedEmployeeIds);
+
+    if (affectedError) {
+      throw new Error(
+        `Could not fetch employee reporting managers: ${affectedError.message}`
+      );
+    }
+
+    const employeeAssignmentMap = new Map(
+      (affectedEmployees ?? []).map((employee) => [
+        employee.id,
+        {
+          employeeCode: employee.employee_id,
+          reportingManagerId: employee.reporting_manager_id,
+        },
+      ])
     );
 
-    if (recipientIds.length > 0) {
-      // Check whether this exact daily summary already exists.
+    const reportingManagerEmployeeIds = [
+      ...new Set(
+        (affectedEmployees ?? [])
+          .map((employee) => employee.reporting_manager_id)
+          .filter((id): id is string => Boolean(id))
+      ),
+    ];
+
+    const managerUserMap = new Map<string, string>();
+
+    if (reportingManagerEmployeeIds.length > 0) {
+      const { data: managers, error: managerError } =
+        await supabase
+          .from("employees")
+          .select("id, user_id, is_reporting_manager")
+          .in("id", reportingManagerEmployeeIds)
+          .eq("is_reporting_manager", true);
+
+      if (managerError) {
+        throw new Error(
+          `Could not validate reporting managers: ${managerError.message}`
+        );
+      }
+
+      const validManagerUserIds = [
+        ...new Set(
+          (managers ?? [])
+            .map((manager) => manager.user_id)
+            .filter((id): id is string => Boolean(id))
+        ),
+      ];
+
+      // Verify manager user IDs exist in profiles.
+      // Do not filter by HR/CEO role: reporting managers
+      // normally have the employee role.
+      const validProfileIds = new Set<string>();
+
+      if (validManagerUserIds.length > 0) {
+        const { data: managerProfiles, error: profileError } =
+          await supabase
+            .from("profiles")
+            .select("id")
+            .in("id", validManagerUserIds);
+
+        if (profileError) {
+          throw new Error(
+            `Could not validate manager profiles: ${profileError.message}`
+          );
+        }
+
+        for (const profile of managerProfiles ?? []) {
+          validProfileIds.add(profile.id);
+        }
+      }
+
+      for (const manager of managers ?? []) {
+        if (
+          manager.user_id &&
+          validProfileIds.has(manager.user_id)
+        ) {
+          managerUserMap.set(manager.id, manager.user_id);
+        }
+      }
+    }
+
+    // ------------------------------------------------
+    // C. Calculate individual reporting-manager summaries.
+    // ------------------------------------------------
+
+    const managerSummaryMap = new Map<
+      string,
+      { absent: number; halfDay: number }
+    >();
+
+    const reviewEmployees = new Set<string>();
+
+    for (const row of summaryRows) {
+      const assignment = employeeAssignmentMap.get(row.employee_id);
+
+      if (!assignment?.reportingManagerId) {
+        reviewEmployees.add(assignment?.employeeCode ?? row.employee_id);
+
+        console.warn(
+          `REVIEW: ${assignment?.employeeCode ?? row.employee_id} has no reporting manager. No manager notification sent.`
+        );
+
+        continue;
+      }
+
+      const managerUserId = managerUserMap.get(
+        assignment.reportingManagerId
+      );
+
+      if (!managerUserId) {
+        reviewEmployees.add(assignment.employeeCode);
+
+        console.warn(
+          `REVIEW: ${assignment.employeeCode} has an invalid or unlinked reporting manager. No manager notification sent.`
+        );
+
+        continue;
+      }
+
+      const counts = managerSummaryMap.get(managerUserId) ?? {
+        absent: 0,
+        halfDay: 0,
+      };
+
+      if (row.status === "absent") {
+        counts.absent++;
+      } else if (row.status === "half_day") {
+        counts.halfDay++;
+      }
+
+      managerSummaryMap.set(managerUserId, counts);
+    }
+
+    // ------------------------------------------------
+    // D. Create one summary notification per manager.
+    // ------------------------------------------------
+
+    for (const [managerUserId, counts] of managerSummaryMap) {
+      const managerMessage =
+        `${counts.absent} employee(s) marked absent and ` +
+        `${counts.halfDay} employee(s) marked half-day ` +
+        `among your reporting employees for ${attendanceDate}.`;
+
+      desiredNotifications.push({
+        employee_id: null,
+        recipient_user_id: managerUserId,
+        title,
+        message: managerMessage,
+        type,
+        is_read: false,
+      });
+    }
+
+    // ------------------------------------------------
+    // E. Prevent duplicate notifications.
+    // ------------------------------------------------
+
+    const recipientIds = [
+      ...new Set(
+        desiredNotifications.map(
+          (notification) => notification.recipient_user_id
+        )
+      ),
+    ];
+
+    const messages = [
+      ...new Set(
+        desiredNotifications.map(
+          (notification) => notification.message
+        )
+      ),
+    ];
+
+    if (desiredNotifications.length > 0) {
       const { data: existingNotifications, error: existingError } =
         await supabase
           .from("notifications")
-          .select("recipient_user_id")
+          .select("recipient_user_id, message")
           .eq("title", title)
           .eq("type", type)
-          .eq("message", message)
-          .in("recipient_user_id", recipientIds);
+          .in("recipient_user_id", recipientIds)
+          .in("message", messages);
 
       if (existingError) {
         throw new Error(
@@ -799,20 +1009,17 @@ async function main() {
 
       const alreadyNotified = new Set(
         (existingNotifications ?? []).map(
-          (notification) => notification.recipient_user_id
+          (notification) =>
+            `${notification.recipient_user_id}::${notification.message}`
         )
       );
 
-      const notificationRows = (recipients ?? [])
-        .filter((recipient) => !alreadyNotified.has(recipient.id))
-        .map((recipient) => ({
-          employee_id: null,
-          recipient_user_id: recipient.id,
-          title,
-          message,
-          type,
-          is_read: false,
-        }));
+      const notificationRows = desiredNotifications.filter(
+        (notification) =>
+          !alreadyNotified.has(
+            `${notification.recipient_user_id}::${notification.message}`
+          )
+      );
 
       if (notificationRows.length > 0) {
         const { error: notificationError } = await supabase
@@ -825,23 +1032,36 @@ async function main() {
           );
         }
 
+        const managerNotificationCount = notificationRows.filter(
+          (row) =>
+            managerSummaryMap.has(row.recipient_user_id)
+        ).length;
+
+        const companyNotificationCount =
+          notificationRows.length - managerNotificationCount;
+
         console.log(
-          `Created ${notificationRows.length} HR/CEO notification(s).`
+          `Created ${companyNotificationCount} HR/CEO summary notification(s).`
+        );
+
+        console.log(
+          `Created ${managerNotificationCount} reporting-manager summary notification(s).`
         );
       } else {
         console.log(
-          "HR/CEO notifications already exist. No duplicates created."
+          "All daily summary notifications already exist. No duplicates created."
         );
       }
-    } else {
-      console.warn("No HR or CEO profiles found for notifications.");
     }
+
+    console.log(
+      `Employees requiring reporting-manager review: ${reviewEmployees.size}`
+    );
   } else {
     console.log(
       "No automation-created attendance records found for notification."
     );
   }
-
   console.log("Daily attendance job finished.");
 
 }
