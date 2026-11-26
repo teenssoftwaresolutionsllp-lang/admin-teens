@@ -34,6 +34,14 @@ type Employee = {
   retained_shift_start_time: string | null;
   retained_shift_end_time: string | null;
   shift_type: string | null;
+  reporting_manager_id: string | null;
+};
+
+type ManagerEmployee = {
+  id: string;
+  employee_id: string;
+  user_id: string | null;
+  is_reporting_manager: boolean;
 };
 
 type Project = {
@@ -148,7 +156,7 @@ async function main() {
   const { data: employees, error: employeeError } = await supabase
     .from("employees")
     .select(
-      "id, employee_id, first_name, last_name, status, joining_date, exit_date, planned_last_working_date, project_id, retained_calendar_id, retained_shift_start_time, retained_shift_end_time, shift_type"
+      "id, employee_id, first_name, last_name, status, joining_date, exit_date, planned_last_working_date, project_id, retained_calendar_id, retained_shift_start_time, retained_shift_end_time, shift_type, reporting_manager_id"
     )
     .in("status", ["active", "on_notice"])
     .lte("joining_date", today)
@@ -429,24 +437,74 @@ async function main() {
   const leaveRows = (leaves ?? []) as Leave[];
 
   // ---------------------------------------------------------
-  // 10. FETCH HR AND CEO NOTIFICATION RECIPIENTS
+  // 10. FETCH ASSIGNED REPORTING MANAGERS
   // ---------------------------------------------------------
 
-  const { data: recipients, error: recipientError } = await supabase
-    .from("profiles")
-    .select("id, role")
-    .in("role", ["hr", "ceo"]);
+  const reportingManagerIds = [
+    ...new Set(
+      eligibleEmployees
+        .map((employee) => employee.reporting_manager_id)
+        .filter((id): id is string => Boolean(id))
+    ),
+  ];
 
-  if (recipientError) {
-    throw recipientError;
+  const managerRecipientMap = new Map<string, string>();
+
+  if (reportingManagerIds.length) {
+    // Fetch only employees explicitly assigned as reporting managers.
+    const { data: managers, error: managerError } = await supabase
+      .from("employees")
+      .select("id, employee_id, user_id, is_reporting_manager")
+      .in("id", reportingManagerIds)
+      .eq("is_reporting_manager", true);
+
+    if (managerError) {
+      throw managerError;
+    }
+
+    const managerRows = (managers ?? []) as ManagerEmployee[];
+
+    // A manager must have a linked user account.
+    const managerUserIds = [
+      ...new Set(
+        managerRows
+          .map((manager) => manager.user_id)
+          .filter((id): id is string => Boolean(id))
+      ),
+    ];
+
+    // Validate that each manager user account exists in profiles.
+    // Do not filter by role: reporting managers can have role "employee".
+    const { data: managerProfiles, error: managerProfileError } =
+      managerUserIds.length
+        ? await supabase
+            .from("profiles")
+            .select("id")
+            .in("id", managerUserIds)
+        : { data: [], error: null };
+
+    if (managerProfileError) {
+      throw managerProfileError;
+    }
+
+    const validProfileIds = new Set(
+      (managerProfiles ?? []).map((profile) => profile.id)
+    );
+
+    // Map reporting-manager employee ID to its valid profile ID.
+    for (const manager of managerRows) {
+      if (
+        manager.user_id &&
+        validProfileIds.has(manager.user_id)
+      ) {
+        managerRecipientMap.set(manager.id, manager.user_id);
+      }
+    }
   }
 
-  const recipientRows = (recipients ?? []) as Recipient[];
-
-  if (!recipientRows.length) {
-    console.log("No HR/CEO notification recipients found.");
-    return;
-  }
+  console.log(
+    `Reporting managers resolved: ${managerRecipientMap.size}`
+  );
 
   // ---------------------------------------------------------
   // 11. PROCESS EMPLOYEES AND ATTENDANCE DATES
@@ -640,47 +698,68 @@ async function main() {
       );
 
       // -----------------------------------------------------
-      // INSERT NOTIFICATIONS FOR HR AND CEO
+      // SEND NOTIFICATION ONLY TO ASSIGNED REPORTING MANAGER
       // -----------------------------------------------------
 
-      for (const recipient of recipientRows) {
-        const { data: existing, error: duplicateError } = await supabase
-          .from("notifications")
-          .select("id")
-          .eq("employee_id", employee.id)
-          .eq("recipient_user_id", recipient.id)
-          .eq("title", title)
-          .eq("message", message)
-          .limit(1);
+      const reportingManagerId = employee.reporting_manager_id;
 
-        if (duplicateError) {
-          throw duplicateError;
-        }
-
-        // Prevent duplicate notifications.
-        if (existing?.length) {
-          continue;
-        }
-
-        if (execute) {
-          const { error: insertError } = await supabase
-            .from("notifications")
-            .insert({
-              employee_id: employee.id,
-              recipient_user_id: recipient.id,
-              title,
-              message,
-              type: "attendance",
-              is_read: false,
-            });
-
-          if (insertError) {
-            throw insertError;
-          }
-        }
-
-        created++;
+      if (!reportingManagerId) {
+        console.log(
+          `REVIEW: ${employee.employee_id} has no reporting manager assigned. Notification not sent.`
+        );
+        skipped++;
+        continue;
       }
+
+      const recipientUserId =
+        managerRecipientMap.get(reportingManagerId);
+
+      if (!recipientUserId) {
+        console.log(
+          `REVIEW: ${employee.employee_id} has an invalid or unavailable reporting manager (${reportingManagerId}). Notification not sent.`
+        );
+        skipped++;
+        continue;
+      }
+
+      // Check for an existing notification for this employee
+      // and this employee's reporting manager only.
+      const { data: existing, error: duplicateError } = await supabase
+        .from("notifications")
+        .select("id")
+        .eq("employee_id", employee.id)
+        .eq("recipient_user_id", recipientUserId)
+        .eq("title", title)
+        .eq("message", message)
+        .limit(1);
+
+      if (duplicateError) {
+        throw duplicateError;
+      }
+
+      // Prevent duplicate notifications.
+      if (existing?.length) {
+        continue;
+      }
+
+      if (execute) {
+        const { error: insertError } = await supabase
+          .from("notifications")
+          .insert({
+            employee_id: employee.id,
+            recipient_user_id: recipientUserId,
+            title,
+            message,
+            type: "attendance",
+            is_read: false,
+          });
+
+        if (insertError) {
+          throw insertError;
+        }
+      }
+
+      created++;
     }
   }
 

@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import {
   Calendar,
   CalendarDays,
-  CalendarRange,
   RefreshCw,
   UserRound,
   Mail,
@@ -30,10 +29,6 @@ import {
   IndianRupee,
   GraduationCap,
   ArrowUpDown,
-  ChevronRight,
-  Eye,
-  Check,
-  AlertCircle,
 } from "lucide-react";
 
 type JoiningCandidate = {
